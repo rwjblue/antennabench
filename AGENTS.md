@@ -20,6 +20,9 @@ jj-commit-default: auto
 
 ## Rust Conventions
 
+- Prefer workspace-managed dependency versions: define shared third-party
+  dependencies in the root `Cargo.toml` and reference them from member crates
+  with `workspace = true`.
 - Prefer `thiserror` for library crate error types.
 - Prefer `anyhow` for application code, CLIs, test harnesses, and other
   top-level orchestration where typed public errors are not part of the API.
