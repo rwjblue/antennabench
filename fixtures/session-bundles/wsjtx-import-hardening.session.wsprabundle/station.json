@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "session_id": "session-wsjtx-import-hardening",
+  "callsign": "N1RWJ",
+  "grid": "FN42",
+  "power_watts": 5.0,
+  "operator_notes": "WSJT-X import hardening fixture"
+}
