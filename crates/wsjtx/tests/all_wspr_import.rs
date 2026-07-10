@@ -35,3 +35,40 @@ fn parse_line_reports_too_few_fields() {
     assert_eq!(issue.line_number, 7);
     assert_eq!(issue.kind, AllWsprLineIssueKind::TooFewFields { actual: 3 });
 }
+
+#[test]
+fn parse_text_collects_malformed_lines_without_losing_valid_decodes() {
+    let input = include_str!("../../../fixtures/wsjtx/all_wspr_mixed_quality.txt");
+
+    let parsed = parse_all_wspr_text(input);
+
+    assert_eq!(parsed.decodes.len(), 2);
+    assert_eq!(parsed.decodes[0].tx_call, "K1ABC");
+    assert_eq!(parsed.decodes[1].tx_call, "VE3ZZZ");
+
+    insta::assert_debug_snapshot!(
+        parsed.issues.iter().map(|issue| (&issue.line_number, &issue.kind)).collect::<Vec<_>>(),
+        @r###"
+    [
+        (
+            2,
+            TooFewFields {
+                actual: 5,
+            },
+        ),
+        (
+            3,
+            InvalidSnr {
+                value: "xx",
+            },
+        ),
+        (
+            5,
+            UnsupportedBand {
+                frequency_hz: 99999999,
+            },
+        ),
+    ]
+    "###
+    );
+}
