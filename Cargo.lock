@@ -19,6 +19,7 @@ dependencies = [
  "insta",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
