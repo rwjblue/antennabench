@@ -718,6 +718,180 @@ fn parsed_import_uses_parsed_raw_lines_as_source_of_truth() {
 }
 
 #[test]
+fn import_preserves_edge_case_nonblank_lines_and_observes_only_valid_rows() {
+    let input = include_str!("../../../fixtures/wsjtx/all_wspr_edge_cases.txt");
+
+    let import = import_all_wspr_text(input, import_config("edge-cases")).unwrap();
+
+    assert_eq!(import.wsjtx_records.len(), 14);
+    assert_eq!(import.observations.len(), 3);
+    assert_eq!(import.issues.len(), 11);
+
+    let imported_lines: Vec<&str> = import
+        .wsjtx_records
+        .iter()
+        .map(|record| record.raw["line"].as_str().unwrap())
+        .collect();
+    let expected_lines: Vec<&str> = input.lines().filter(|line| !line.is_empty()).collect();
+    assert_eq!(imported_lines, expected_lines);
+
+    let decode_record_ids: Vec<&str> = import
+        .wsjtx_records
+        .iter()
+        .filter(|record| record.message_type == "all_wspr_decode")
+        .map(|record| record.record_id.as_str())
+        .collect();
+    assert_eq!(
+        decode_record_ids,
+        vec![
+            "edge-cases-wsjtx-000001",
+            "edge-cases-wsjtx-000003",
+            "edge-cases-wsjtx-000015",
+        ]
+    );
+
+    let malformed_record_ids: Vec<&str> = import
+        .wsjtx_records
+        .iter()
+        .filter(|record| record.message_type == "all_wspr_malformed")
+        .map(|record| record.record_id.as_str())
+        .collect();
+    assert_eq!(
+        malformed_record_ids,
+        vec![
+            "edge-cases-wsjtx-000004",
+            "edge-cases-wsjtx-000005",
+            "edge-cases-wsjtx-000006",
+            "edge-cases-wsjtx-000007",
+            "edge-cases-wsjtx-000008",
+            "edge-cases-wsjtx-000009",
+            "edge-cases-wsjtx-000010",
+            "edge-cases-wsjtx-000011",
+            "edge-cases-wsjtx-000012",
+            "edge-cases-wsjtx-000013",
+            "edge-cases-wsjtx-000014",
+        ]
+    );
+
+    let observation_ids: Vec<&str> = import
+        .observations
+        .iter()
+        .map(|observation| observation.observation_id.as_str())
+        .collect();
+    assert_eq!(
+        observation_ids,
+        vec![
+            "edge-cases-obs-000001",
+            "edge-cases-obs-000003",
+            "edge-cases-obs-000015",
+        ]
+    );
+
+    assert!(
+        !import
+            .wsjtx_records
+            .iter()
+            .any(|record| record.record_id == "edge-cases-wsjtx-000002"),
+        "blank fixture line 2 should not produce a WSJT-X record"
+    );
+    assert!(
+        !import
+            .observations
+            .iter()
+            .any(|observation| observation.observation_id == "edge-cases-obs-000002"),
+        "blank fixture line 2 should not produce an observation"
+    );
+
+    let malformed_summary: Vec<_> = import
+        .wsjtx_records
+        .iter()
+        .filter(|record| record.message_type == "all_wspr_malformed")
+        .map(|record| {
+            json!({
+                "record_id": record.record_id,
+                "timestamp": record.meta.timestamp,
+                "line": record.raw["line"],
+                "error": record.raw["error"],
+            })
+        })
+        .collect();
+
+    insta::assert_json_snapshot!(
+        malformed_summary,
+        @r###"
+        [
+          {
+            "error": "invalid callsign: BAD",
+            "line": "260709 1904 -20 0.00 14.095600 BAD EM12 37 0",
+            "record_id": "edge-cases-wsjtx-000004",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid grid: ZZ99",
+            "line": "260709 1906 -20 0.00 14.095600 K1ABC ZZ99 37 0",
+            "record_id": "edge-cases-wsjtx-000005",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "unsupported band for frequency 99999999 Hz",
+            "line": "260709 1908 -12 0.10 99.999999 BADBAND FN42 23 0",
+            "record_id": "edge-cases-wsjtx-000006",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid SNR: xx",
+            "line": "260709 1910 xx -0.12 14.095640 W3AAA FM19 30 -1",
+            "record_id": "edge-cases-wsjtx-000007",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid DT: nope",
+            "line": "260709 1912 -24 nope 14.095640 W3AAA FM19 30 -1",
+            "record_id": "edge-cases-wsjtx-000008",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid frequency: notafreq",
+            "line": "260709 1914 -24 -0.12 notafreq W3AAA FM19 30 -1",
+            "record_id": "edge-cases-wsjtx-000009",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid power: QRP",
+            "line": "260709 1916 -24 -0.12 14.095640 W3AAA FM19 QRP -1",
+            "record_id": "edge-cases-wsjtx-000010",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid drift: drift",
+            "line": "260709 1918 -24 -0.12 14.095640 W3AAA FM19 30 drift",
+            "record_id": "edge-cases-wsjtx-000011",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid date: 260230",
+            "line": "260230 1920 -24 -0.12 14.095640 W3AAA FM19 30 -1",
+            "record_id": "edge-cases-wsjtx-000012",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "invalid time: 2460",
+            "line": "260709 2460 -24 -0.12 14.095640 W3AAA FM19 30 -1",
+            "record_id": "edge-cases-wsjtx-000013",
+            "timestamp": "2026-07-09T19:59:55Z"
+          },
+          {
+            "error": "too few fields: expected at least 9, got 3",
+            "line": "260709 1924 -18",
+            "record_id": "edge-cases-wsjtx-000014",
+            "timestamp": "2026-07-09T19:59:55Z"
+          }
+        ]
+        "###
+    );
+}
+
+#[test]
 fn appends_imported_records_then_normalizes_and_validates_bundle() {
     let mut bundle = sample_bundle();
     let input = "\
