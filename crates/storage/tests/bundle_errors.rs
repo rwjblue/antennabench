@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+
+use antennabench_core::normalize_bundle;
 use antennabench_storage::{BundleStore, BundleStoreError};
 
 #[test]
@@ -55,6 +58,51 @@ fn read_validated_returns_validation_error_for_parseable_invalid_bundle() {
         }
         other => panic!("expected validation error, got {other:?}"),
     }
+}
+
+#[test]
+fn read_normalized_validated_repairs_stale_alignment_annotations_before_validation() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
+    let expected = BundleStore::new(&fixture).read_validated().unwrap();
+    let mut stale = expected.clone();
+
+    let missing_annotation = observation_mut(&mut stale, "obs-001");
+    missing_annotation.slot_id = None;
+    missing_annotation.slot_label = None;
+    missing_annotation.slot_confidence = None;
+
+    let stale_annotation = observation_mut(&mut stale, "obs-005");
+    stale_annotation.slot_id = Some("slot-001".to_string());
+    stale_annotation.slot_label = Some("A".to_string());
+    stale_annotation.slot_confidence = Some(0.95);
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let bundle_path = tempdir.path().join("stale.session.wsprabundle");
+    BundleStore::new(&bundle_path).write(&stale).unwrap();
+
+    let error = BundleStore::new(&bundle_path).read_validated().unwrap_err();
+    match error {
+        BundleStoreError::Validation { .. } => {}
+        other => panic!("expected validation error, got {other:?}"),
+    }
+
+    let repaired = BundleStore::new(&bundle_path)
+        .read_normalized_validated()
+        .unwrap();
+    assert_eq!(repaired, normalize_bundle(stale));
+    assert_eq!(repaired, expected);
+}
+
+fn observation_mut<'a>(
+    bundle: &'a mut antennabench_core::BundleContents,
+    observation_id: &str,
+) -> &'a mut antennabench_core::ObservationRecord {
+    bundle
+        .observations
+        .iter_mut()
+        .find(|observation| observation.observation_id == observation_id)
+        .unwrap_or_else(|| panic!("missing observation {observation_id}"))
 }
 
 fn write_minimal_bundle_files(bundle_path: &std::path::Path) {

@@ -6,7 +6,8 @@ use std::{
 };
 
 use antennabench_core::{
-    validate_bundle, BundleContents, BundleFiles, BundleManifest, BundleValidationError,
+    normalize_bundle, validate_bundle, BundleContents, BundleFiles, BundleManifest,
+    BundleValidationError,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
@@ -71,8 +72,16 @@ impl BundleStore {
         })
     }
 
+    /// Reads a bundle and validates persisted annotations exactly as stored.
     pub fn read_validated(&self) -> Result<BundleContents, BundleStoreError> {
         let bundle = self.read()?;
+        validate_bundle(&bundle)?;
+        Ok(bundle)
+    }
+
+    /// Reads a bundle, regenerates observation slot annotations, then validates it.
+    pub fn read_normalized_validated(&self) -> Result<BundleContents, BundleStoreError> {
+        let bundle = normalize_bundle(self.read()?);
         validate_bundle(&bundle)?;
         Ok(bundle)
     }

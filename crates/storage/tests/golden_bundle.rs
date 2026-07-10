@@ -14,6 +14,10 @@ fn imports_exports_and_regenerates_minimal_whole_station_alignment() {
         .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
 
     let imported = BundleStore::new(&fixture).read_validated().unwrap();
+    let normalized_imported = BundleStore::new(&fixture)
+        .read_normalized_validated()
+        .unwrap();
+    assert_eq!(normalized_imported, imported);
 
     assert_eq!(imported.manifest.schema_version, 1);
     assert_eq!(imported.manifest.session_id, SESSION_ID);
