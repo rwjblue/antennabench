@@ -213,6 +213,39 @@ fn reports_duplicate_ids_unknown_references_bad_windows_and_invalid_confidence()
 }
 
 #[test]
+fn out_of_order_non_overlapping_slots_do_not_report_overlap() {
+    let mut bundle = valid_bundle();
+    bundle.schedule.slots[1].starts_at =
+        bundle.schedule.slots[0].starts_at - chrono::Duration::seconds(180);
+    bundle.schedule.slots[1].duration_seconds = 60;
+
+    let error = validate_bundle(&bundle).unwrap_err();
+    let window_issues = error
+        .issues()
+        .iter()
+        .filter(|issue| {
+            matches!(
+                issue,
+                BundleValidationIssue::SlotWindowOutOfOrder { .. }
+                    | BundleValidationIssue::SlotWindowOverlap { .. }
+            )
+        })
+        .collect::<Vec<_>>();
+
+    insta::assert_debug_snapshot!(
+        window_issues,
+        @r###"
+    [
+        SlotWindowOutOfOrder {
+            previous_slot_id: "slot-001",
+            slot_id: "slot-002",
+        },
+    ]
+    "###
+    );
+}
+
+#[test]
 fn reports_persisted_alignment_annotation_mismatches() {
     let mut bundle = valid_bundle();
     let observation = &mut bundle.observations[0];

@@ -376,7 +376,8 @@ fn validate_schedule_references_and_windows(
 
             let previous_ends_at =
                 previous.starts_at + Duration::seconds(i64::from(previous.duration_seconds));
-            if slot.starts_at < previous_ends_at {
+            let slot_ends_at = slot.starts_at + Duration::seconds(i64::from(slot.duration_seconds));
+            if slot.starts_at < previous_ends_at && previous.starts_at < slot_ends_at {
                 issues.push(BundleValidationIssue::SlotWindowOverlap {
                     previous_slot_id: previous.slot_id.clone(),
                     previous_ends_at,
