@@ -48,6 +48,10 @@ pub enum AllWsprLineIssueKind {
     InvalidDt { value: String },
     #[error("invalid frequency: {value}")]
     InvalidFrequency { value: String },
+    #[error("invalid callsign: {value}")]
+    InvalidCallsign { value: String },
+    #[error("invalid grid: {value}")]
+    InvalidGrid { value: String },
     #[error("unsupported band for frequency {frequency_hz} Hz")]
     UnsupportedBand { frequency_hz: u64 },
     #[error("invalid power: {value}")]
@@ -129,6 +133,8 @@ pub fn parse_all_wspr_line(
         value,
     })
     .map_err(|kind| issue(line_number, raw_line.clone(), kind))?;
+    let tx_call = parse_callsign(line_number, &raw_line, fields[5])?;
+    let tx_grid = parse_grid(line_number, &raw_line, fields[6])?;
 
     Ok(AllWsprDecode {
         line_number,
@@ -139,8 +145,8 @@ pub fn parse_all_wspr_line(
         frequency_hz,
         frequency_mhz_text: fields[4].to_string(),
         band,
-        tx_call: fields[5].to_ascii_uppercase(),
-        tx_grid: fields[6].to_ascii_uppercase(),
+        tx_call,
+        tx_grid,
         tx_power_dbm,
         tx_power_watts: dbm_to_watts(tx_power_dbm),
         drift_hz_per_minute,
@@ -207,6 +213,54 @@ fn parse_f64(value: &str) -> Option<f64> {
         .parse::<f64>()
         .ok()
         .filter(|parsed| parsed.is_finite())
+}
+
+fn parse_callsign(
+    line_number: usize,
+    raw_line: &str,
+    value: &str,
+) -> Result<String, AllWsprLineIssue> {
+    let callsign = value.to_ascii_uppercase();
+    let valid_length = (3..=12).contains(&callsign.len());
+    let valid_chars = callsign.bytes().all(|byte| byte.is_ascii_alphanumeric());
+    let has_letter = callsign.bytes().any(|byte| byte.is_ascii_alphabetic());
+    let has_digit = callsign.bytes().any(|byte| byte.is_ascii_digit());
+
+    if valid_length && valid_chars && has_letter && has_digit {
+        Ok(callsign)
+    } else {
+        Err(issue(
+            line_number,
+            raw_line.to_string(),
+            AllWsprLineIssueKind::InvalidCallsign {
+                value: value.to_string(),
+            },
+        ))
+    }
+}
+
+fn parse_grid(line_number: usize, raw_line: &str, value: &str) -> Result<String, AllWsprLineIssue> {
+    let grid = value.to_ascii_uppercase();
+    let bytes = grid.as_bytes();
+    let is_valid = matches!(bytes.len(), 4 | 6)
+        && matches!(bytes[0], b'A'..=b'R')
+        && matches!(bytes[1], b'A'..=b'R')
+        && bytes[2].is_ascii_digit()
+        && bytes[3].is_ascii_digit()
+        && (bytes.len() == 4
+            || (matches!(bytes[4], b'A'..=b'X') && matches!(bytes[5], b'A'..=b'X')));
+
+    if is_valid {
+        Ok(grid)
+    } else {
+        Err(issue(
+            line_number,
+            raw_line.to_string(),
+            AllWsprLineIssueKind::InvalidGrid {
+                value: value.to_string(),
+            },
+        ))
+    }
 }
 
 pub fn dbm_to_watts(dbm: i16) -> f32 {

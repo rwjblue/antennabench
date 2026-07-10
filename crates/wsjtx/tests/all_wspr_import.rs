@@ -59,6 +59,27 @@ fn parse_line_reports_too_few_fields() {
 }
 
 #[test]
+fn parse_line_reports_invalid_wspr_identity_fields() {
+    let invalid_call =
+        parse_all_wspr_line(8, "260709 2002 -18 0.07 14.095600 BAD EM12 37 0").unwrap_err();
+    assert_eq!(
+        invalid_call.kind,
+        AllWsprLineIssueKind::InvalidCallsign {
+            value: "BAD".to_string(),
+        }
+    );
+
+    let invalid_grid =
+        parse_all_wspr_line(9, "260709 2002 -18 0.07 14.095600 K1ABC ZZ99 37 0").unwrap_err();
+    assert_eq!(
+        invalid_grid.kind,
+        AllWsprLineIssueKind::InvalidGrid {
+            value: "ZZ99".to_string(),
+        }
+    );
+}
+
+#[test]
 fn parse_text_collects_malformed_lines_without_losing_valid_decodes() {
     let input = include_str!("../../../fixtures/wsjtx/all_wspr_mixed_quality.txt");
 
