@@ -1,14 +1,43 @@
 # AntennaBench
 
-AntennaBench is a local-first antenna comparison and profiling app for WSPR experiments.
+AntennaBench is a local-first antenna comparison and profiling app for WSPR
+experiments.
 
-The first implementation slice focuses on the durable session bundle: JSON and JSONL files that preserve station details, antennas, schedules, operator events, observations, adapter inputs, propagation snapshots, and analysis metadata. SQLite, UI state, reports, and hosted publishing are derived from the bundle rather than being the source of truth.
+The project is currently building the core bundle model and validation
+pipeline. The durable source of truth is a portable session bundle made from
+JSON and JSONL files. SQLite indexes, UI state, generated reports, charts, and
+hosted publishing artifacts are derived from that bundle.
 
-First build slice scope:
+## Current Status
 
-- Rust workspace foundation.
-- Core bundle schema crate.
-- Filesystem bundle import/export crate.
-- Golden fixture and round-trip tests for a minimal whole-station A/B session.
+Implemented:
 
-Planned later slices include the desktop app, WSJT-X companion adapter, rig-control adapters, public spot imports, analysis/report generation, and hosted report viewing.
+- Rust workspace with `antennabench-core` and `antennabench-storage`.
+- Canonical bundle model for station, antennas, schedules, operator events,
+  observations, adapter records, propagation snapshots, and analysis metadata.
+- Filesystem read/write support for `.session.wsprabundle` directories.
+- Deterministic schedule slot alignment and observation annotation.
+- Strict bundle validation for schema/session drift, duplicate IDs, references,
+  slot windows, confidence ranges, and stale alignment annotations.
+- Bundle normalization that repairs missing or stale observation slot
+  annotations before validation.
+- Golden fixture coverage for a minimal whole-station A/B session.
+
+Not implemented yet:
+
+- Desktop UI.
+- WSJT-X live UDP/log adapter.
+- Rig control.
+- Public spot fetching.
+- Statistical analysis and report generation.
+- Hosted report viewing or publishing.
+
+## Documentation
+
+Evergreen project docs live in [docs/](docs/README.md). Start there for the
+product shape, architecture, bundle format, development workflow, roadmap, and
+project decisions.
+
+Agent planning files under `docs/superpowers/` are intentionally ignored. They
+are useful working notes while agents execute tasks, but they are not maintained
+as project documentation.
