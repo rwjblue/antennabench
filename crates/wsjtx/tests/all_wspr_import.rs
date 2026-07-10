@@ -80,6 +80,150 @@ fn parse_line_reports_invalid_wspr_identity_fields() {
 }
 
 #[test]
+fn parses_multiband_valid_rows_into_supported_bands() {
+    let input = include_str!("../../../fixtures/wsjtx/all_wspr_multiband_valid.txt");
+
+    let parsed = parse_all_wspr_text(input);
+
+    assert!(parsed.issues.is_empty());
+    assert_eq!(parsed.decodes.len(), 12);
+
+    let bands: Vec<Band> = parsed.decodes.iter().map(|decode| decode.band).collect();
+    assert_eq!(
+        bands,
+        vec![
+            Band::M160,
+            Band::M80,
+            Band::M60,
+            Band::M40,
+            Band::M30,
+            Band::M20,
+            Band::M17,
+            Band::M15,
+            Band::M12,
+            Band::M10,
+            Band::M6,
+            Band::M2,
+        ]
+    );
+
+    insta::assert_debug_snapshot!(
+        parsed
+            .decodes
+            .iter()
+            .map(|decode| (
+                decode.line_number,
+                decode.timestamp.to_rfc3339(),
+                decode.frequency_hz,
+                decode.band,
+                decode.tx_call.as_str(),
+                decode.tx_grid.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        @r###"
+        [
+            (
+                1,
+                "2026-07-09T18:00:00+00:00",
+                1838100,
+                M160,
+                "W1AW",
+                "FN31",
+            ),
+            (
+                2,
+                "2026-07-09T18:02:00+00:00",
+                3570100,
+                M80,
+                "K1ABC",
+                "EM12",
+            ),
+            (
+                3,
+                "2026-07-09T18:04:00+00:00",
+                5288700,
+                M60,
+                "VE3ZZZ",
+                "FN03",
+            ),
+            (
+                4,
+                "2026-07-09T18:06:00+00:00",
+                7040100,
+                M40,
+                "W3AAA",
+                "FM19",
+            ),
+            (
+                5,
+                "2026-07-09T18:08:00+00:00",
+                10140200,
+                M30,
+                "N0CALL",
+                "EN34",
+            ),
+            (
+                6,
+                "2026-07-09T18:10:00+00:00",
+                14095600,
+                M20,
+                "N1RWJ",
+                "FN42",
+            ),
+            (
+                7,
+                "2026-07-09T18:12:00+00:00",
+                18106100,
+                M17,
+                "G4ABC",
+                "IO91",
+            ),
+            (
+                8,
+                "2026-07-09T18:14:00+00:00",
+                21094600,
+                M15,
+                "JA1ABC",
+                "PM95",
+            ),
+            (
+                9,
+                "2026-07-09T18:16:00+00:00",
+                24924600,
+                M12,
+                "VK2ABC",
+                "QF56",
+            ),
+            (
+                10,
+                "2026-07-09T18:18:00+00:00",
+                28124600,
+                M10,
+                "ZS6ABC",
+                "KG44",
+            ),
+            (
+                11,
+                "2026-07-09T18:20:00+00:00",
+                50293000,
+                M6,
+                "K9XYZ",
+                "EN52",
+            ),
+            (
+                12,
+                "2026-07-09T18:22:00+00:00",
+                144489000,
+                M2,
+                "N7ABC",
+                "CN87",
+            ),
+        ]
+        "###
+    );
+}
+
+#[test]
 fn parse_text_collects_malformed_lines_without_losing_valid_decodes() {
     let input = include_str!("../../../fixtures/wsjtx/all_wspr_mixed_quality.txt");
 
