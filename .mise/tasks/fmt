@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Check Rust formatting"
+
+set -euo pipefail
+
+cargo fmt --all --check

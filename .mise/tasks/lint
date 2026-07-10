@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Run Rust lints"
+
+set -euo pipefail
+
+cargo clippy --workspace --all-targets --all-features -- -D warnings
