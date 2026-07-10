@@ -1,8 +1,8 @@
 use antennabench_core::{
     validate_bundle, AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, BundleContents,
-    BundleFiles, BundleManifest, ExperimentMode, ObservationKind, ObservationRecord, OperatorEvent,
-    OperatorEventType, PlannedSlot, PropagationRecord, RecordMeta, RecordSource, RigRecord,
-    Schedule, SessionGoal, Station, WsjtXRecord,
+    BundleFiles, BundleManifest, BundleValidationIssue, ExperimentMode, ObservationKind,
+    ObservationRecord, OperatorEvent, OperatorEventType, PlannedSlot, PropagationRecord,
+    RecordMeta, RecordSource, RigRecord, Schedule, SessionGoal, Station, WsjtXRecord,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -14,6 +14,202 @@ fn accepts_a_valid_bundle() {
     let bundle = valid_bundle();
 
     validate_bundle(&bundle).unwrap();
+}
+
+#[test]
+fn reports_schema_version_and_session_id_mismatches() {
+    let mut bundle = valid_bundle();
+    bundle.station.schema_version = 2;
+    bundle.schedule.session_id = "other-session".to_string();
+    bundle.events[0].meta.schema_version = 2;
+    bundle.observations[0].meta.session_id = "other-session".to_string();
+    bundle.wsjtx[0].meta.session_id = "other-session".to_string();
+    bundle.analysis.schema_version = 2;
+
+    let error = validate_bundle(&bundle).unwrap_err();
+    let non_alignment_issues = error
+        .issues()
+        .iter()
+        .filter(|issue| {
+            !matches!(
+                issue,
+                BundleValidationIssue::AlignmentAnnotationMismatch { .. }
+            )
+        })
+        .collect::<Vec<_>>();
+
+    insta::assert_debug_snapshot!(
+        non_alignment_issues,
+        @r###"
+    [
+        UnexpectedSchemaVersion {
+            file: Station,
+            record_id: None,
+            expected: 1,
+            actual: 2,
+        },
+        SessionIdMismatch {
+            file: Schedule,
+            record_id: None,
+            expected: "session-validation-test",
+            actual: "other-session",
+        },
+        UnexpectedSchemaVersion {
+            file: Analysis,
+            record_id: None,
+            expected: 1,
+            actual: 2,
+        },
+        UnexpectedSchemaVersion {
+            file: Events,
+            record_id: Some(
+                "event-001",
+            ),
+            expected: 1,
+            actual: 2,
+        },
+        SessionIdMismatch {
+            file: Observations,
+            record_id: Some(
+                "obs-001",
+            ),
+            expected: "session-validation-test",
+            actual: "other-session",
+        },
+        SessionIdMismatch {
+            file: WsjtX,
+            record_id: Some(
+                "wsjtx-001",
+            ),
+            expected: "session-validation-test",
+            actual: "other-session",
+        },
+    ]
+    "###
+    );
+}
+
+#[test]
+fn reports_duplicate_ids_unknown_references_bad_windows_and_invalid_confidence() {
+    let mut bundle = valid_bundle();
+    let starts_at = bundle.schedule.slots[0].starts_at;
+    bundle.schedule.slots.push(planned_slot(
+        "slot-002",
+        3,
+        starts_at + chrono::Duration::seconds(60),
+        "missing-antenna",
+    ));
+    bundle.events.push(operator_event(
+        "event-001",
+        "missing-slot",
+        OperatorEventType::Switched,
+        starts_at + chrono::Duration::seconds(10),
+    ));
+    bundle.observations.push(observation(
+        "obs-001",
+        starts_at + chrono::Duration::seconds(90),
+        Some("missing-slot"),
+        Some("A"),
+        Some(1.5),
+    ));
+    bundle.wsjtx.push(WsjtXRecord {
+        meta: record_meta(starts_at, RecordSource::WsjtxLog),
+        record_id: "wsjtx-001".to_string(),
+        message_type: "status_snapshot".to_string(),
+        raw: json!({}),
+    });
+    bundle.rig.push(RigRecord {
+        meta: record_meta(starts_at, RecordSource::RigAdapter),
+        record_id: "rig-001".to_string(),
+        status: "duplicate".to_string(),
+        frequency_hz: None,
+        mode: None,
+        raw: json!({}),
+    });
+    bundle.propagation.push(PropagationRecord {
+        meta: record_meta(starts_at, RecordSource::ImportedFile),
+        record_id: "prop-001".to_string(),
+        observed_at: starts_at,
+        solar_flux_f107: None,
+        sunspot_number: None,
+        kp_index: None,
+        a_index: None,
+        solar_wind_speed_kms: None,
+        bz_nt: None,
+        alerts: Vec::new(),
+        daylight_state: None,
+        raw: json!({}),
+    });
+
+    let error = validate_bundle(&bundle).unwrap_err();
+    let non_alignment_issues = error
+        .issues()
+        .iter()
+        .filter(|issue| {
+            !matches!(
+                issue,
+                BundleValidationIssue::AlignmentAnnotationMismatch { .. }
+            )
+        })
+        .collect::<Vec<_>>();
+
+    insta::assert_debug_snapshot!(
+        non_alignment_issues,
+        @r###"
+    [
+        DuplicateId {
+            kind: Slot,
+            id: "slot-002",
+        },
+        DuplicateId {
+            kind: OperatorEvent,
+            id: "event-001",
+        },
+        DuplicateId {
+            kind: Observation,
+            id: "obs-001",
+        },
+        DuplicateId {
+            kind: WsjtXRecord,
+            id: "wsjtx-001",
+        },
+        DuplicateId {
+            kind: RigRecord,
+            id: "rig-001",
+        },
+        DuplicateId {
+            kind: PropagationRecord,
+            id: "prop-001",
+        },
+        UnknownAntennaLabel {
+            slot_id: "slot-002",
+            antenna_label: "missing-antenna",
+        },
+        SlotWindowOutOfOrder {
+            previous_slot_id: "slot-002",
+            slot_id: "slot-002",
+        },
+        SlotWindowOverlap {
+            previous_slot_id: "slot-002",
+            previous_ends_at: 2026-07-10T20:04:00Z,
+            slot_id: "slot-002",
+            starts_at: 2026-07-10T20:01:00Z,
+        },
+        UnknownEventSlot {
+            event_id: "event-001",
+            slot_id: "missing-slot",
+        },
+        UnknownObservationSlot {
+            observation_id: "obs-001",
+            slot_id: "missing-slot",
+        },
+        InvalidSlotConfidence {
+            observation_id: "obs-001",
+            slot_confidence: 1.5,
+        },
+    ]
+    "###
+    );
 }
 
 fn valid_bundle() -> BundleContents {
