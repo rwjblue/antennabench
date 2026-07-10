@@ -11,6 +11,9 @@ Current crates:
   and validation.
 - `crates/storage`: filesystem read/write APIs for `.session.wsprabundle`
   directories.
+- `crates/wsjtx`: offline WSJT-X companion import helpers for WSPR
+  `ALL_WSPR.TXT`-style logs, producing raw adapter records and local decode
+  observations.
 
 Planned crates and apps:
 
@@ -19,7 +22,6 @@ Planned crates and apps:
 - `crates/analysis`: report summaries, effect sizes, confidence, and evidence
   quality.
 - `crates/report`: report model and chart-ready structures.
-- `crates/wsjtx`: WSJT-X companion adapter.
 - `crates/rig`: rig-control adapters.
 - `crates/public-spots`: WSPRnet, WSPR.live, and imported spot adapters.
 

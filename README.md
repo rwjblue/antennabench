@@ -21,12 +21,14 @@ Implemented:
   slot windows, confidence ranges, and stale alignment annotations.
 - Bundle normalization that repairs missing or stale observation slot
   annotations before validation.
+- Offline WSJT-X WSPR log import crate for `ALL_WSPR.TXT`-style rows, raw
+  `wsjtx.jsonl` preservation, and local decode observation conversion.
 - Golden fixture coverage for a minimal whole-station A/B session.
 
 Not implemented yet:
 
 - Desktop UI.
-- WSJT-X live UDP/log adapter.
+- WSJT-X live UDP adapter.
 - Rig control.
 - Public spot fetching.
 - Statistical analysis and report generation.

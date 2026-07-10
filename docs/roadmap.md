@@ -11,13 +11,14 @@ The current implementation focus is the bundle-first Rust foundation:
 - schedule slot alignment
 - strict validation
 - normalization before validation
+- offline WSJT-X WSPR log import from `ALL_WSPR.TXT`-style logs
 - golden fixture coverage
 
 ## Next
 
 Likely next slices:
 
-- WSJT-X companion import path for UDP status/decode messages and logs.
+- WSJT-X live UDP status/decode companion path.
 - More realistic bundle fixtures from sample WSPR sessions.
 - Analysis model for conservative A/B summaries.
 - Report model and chart-ready data.

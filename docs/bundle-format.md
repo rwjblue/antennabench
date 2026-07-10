@@ -37,12 +37,19 @@ The implemented schema version is `1`.
 - `events.jsonl`: operator events such as session start, switched, missed slot,
   bad slot, note added, and session end.
 - `observations.jsonl`: local decodes, public reports, and imported spots.
-- `wsjtx.jsonl`: raw or near-raw WSJT-X adapter records.
+- `wsjtx.jsonl`: raw or near-raw WSJT-X adapter records, including
+  `all_wspr_decode` for parsed decode rows and `all_wspr_malformed` for
+  preserved lines that could not become observations.
 - `rig.jsonl`: rig adapter state.
 - `propagation.jsonl`: time-scoped propagation context.
 
 Every JSONL record includes `meta` with schema version, session id, timestamp,
 and source.
+
+Offline WSJT-X WSPR log import preserves every nonblank imported line in
+`wsjtx.jsonl`. Valid `ALL_WSPR.TXT`-style decode rows also produce
+`observations.jsonl` local decodes. Malformed rows are retained as adapter
+records with issue details and do not produce observations.
 
 ## Observation Slot Annotations
 
