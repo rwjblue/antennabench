@@ -1,7 +1,7 @@
 use antennabench_core::{
-    align_schedule_slots, Band, ExperimentMode, ObservationKind, ObservationRecord, OperatorEvent,
-    OperatorEventType, PlannedSlot, RecordMeta, RecordSource, Schedule, SessionGoal,
-    SlotAlignmentPolicy,
+    align_schedule_slots, apply_slot_assignments, Band, ExperimentMode, ObservationKind,
+    ObservationRecord, OperatorEvent, OperatorEventType, PlannedSlot, RecordMeta, RecordSource,
+    Schedule, SessionGoal, SlotAlignmentPolicy,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -331,6 +331,41 @@ fn assigns_bad_missed_and_late_switch_observations_conservatively() {
         ]
         "###
     );
+}
+
+#[test]
+fn applies_slot_assignments_to_observation_records_without_changing_raw_observations() {
+    let starts_at = Utc.with_ymd_and_hms(2026, 7, 10, 20, 0, 0).unwrap();
+    let schedule = schedule_with_slots(starts_at);
+    let events = vec![operator_event(
+        "event-001",
+        "slot-001",
+        OperatorEventType::Switched,
+        starts_at + chrono::Duration::seconds(3),
+    )];
+    let observations = vec![observation(
+        "obs-good-a",
+        starts_at + chrono::Duration::seconds(60),
+        Band::M20,
+    )];
+
+    let result = align_schedule_slots(
+        &schedule,
+        &events,
+        &observations,
+        SlotAlignmentPolicy::default(),
+    );
+    let annotated = apply_slot_assignments(&observations, &result.observation_assignments);
+
+    assert_eq!(observations[0].slot_id, None);
+    assert_eq!(observations[0].slot_label, None);
+    assert_eq!(observations[0].slot_confidence, None);
+
+    assert_eq!(annotated[0].slot_id, Some("slot-001".to_string()));
+    assert_eq!(annotated[0].slot_label, Some("A".to_string()));
+    assert_eq!(annotated[0].slot_confidence, Some(0.95));
+    assert_eq!(annotated[0].raw, observations[0].raw);
+    assert_eq!(annotated[0].snr_db, observations[0].snr_db);
 }
 
 fn schedule_with_slots(starts_at: chrono::DateTime<Utc>) -> Schedule {
