@@ -2,5 +2,6 @@
 /.DS_Store
 /.idea/
 /.vscode/
+/AGENTS.override.md
 *.swp
 *.swo
