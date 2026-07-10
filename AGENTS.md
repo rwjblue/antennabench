@@ -18,6 +18,13 @@ jj-commit-default: auto
 - Implementation plans live under `docs/superpowers/plans/`.
 - Do not implement from a plan until the user approves it.
 
+## Rust Conventions
+
+- Prefer `thiserror` for library crate error types.
+- Prefer `anyhow` for application code, CLIs, test harnesses, and other
+  top-level orchestration where typed public errors are not part of the API.
+- Prefer `insta` for snapshot tests, using inline snapshots.
+
 ## Validation
 
 - Before declaring Rust changes complete, run:
