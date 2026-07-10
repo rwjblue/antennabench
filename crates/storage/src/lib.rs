@@ -5,7 +5,9 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use antennabench_core::{BundleContents, BundleFiles, BundleManifest};
+use antennabench_core::{
+    validate_bundle, BundleContents, BundleFiles, BundleManifest, BundleValidationError,
+};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
@@ -67,6 +69,12 @@ impl BundleStore {
             analysis: read_json(&paths.analysis)?,
             manifest,
         })
+    }
+
+    pub fn read_validated(&self) -> Result<BundleContents, BundleStoreError> {
+        let bundle = self.read()?;
+        validate_bundle(&bundle)?;
+        Ok(bundle)
     }
 
     fn bundle_paths(&self, files: &BundleFiles) -> Result<ResolvedBundlePaths, BundleStoreError> {
@@ -278,6 +286,12 @@ pub enum BundleStoreError {
 
     #[error("bundle root must be a directory path and cannot be a symlink: {path}")]
     InvalidBundleRoot { path: PathBuf },
+
+    #[error(transparent)]
+    Validation {
+        #[from]
+        source: BundleValidationError,
+    },
 }
 
 fn create_directory(path: &Path) -> Result<(), BundleStoreError> {

@@ -34,6 +34,29 @@ fn invalid_jsonl_returns_parse_error_with_path() {
     }
 }
 
+#[test]
+fn read_validated_returns_validation_error_for_parseable_invalid_bundle() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let bundle_path = tempdir.path().join("invalid-bundle.session.wsprabundle");
+    std::fs::create_dir_all(bundle_path.join("attachments")).unwrap();
+    write_minimal_bundle_files(&bundle_path);
+    std::fs::write(
+        bundle_path.join("events.jsonl"),
+        r#"{"meta":{"schema_version":1,"session_id":"session-invalid-jsonl","timestamp":"2026-07-09T20:00:00Z","source":"operator"},"event_id":"event-001","slot_id":"missing-slot","event_type":"switched","note":null}
+"#,
+    )
+    .unwrap();
+
+    let error = BundleStore::new(&bundle_path).read_validated().unwrap_err();
+
+    match error {
+        BundleStoreError::Validation { source } => {
+            assert_eq!(source.issues().len(), 1);
+        }
+        other => panic!("expected validation error, got {other:?}"),
+    }
+}
+
 fn write_minimal_bundle_files(bundle_path: &std::path::Path) {
     std::fs::write(
         bundle_path.join("manifest.json"),
