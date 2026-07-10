@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "session_id": "session-2026-07-09-n1rwj-20m",
+  "antennas": [
+    {
+      "label": "A",
+      "facets": ["vertical"],
+      "height_m": 7.0,
+      "radial_count": 16,
+      "radial_length_m": 5.0,
+      "orientation_degrees": null,
+      "tuner": "manual",
+      "feedline": "RG-8X",
+      "notes": "Temporary ground-mounted vertical"
+    },
+    {
+      "label": "B",
+      "facets": ["dipole"],
+      "height_m": 9.0,
+      "radial_count": null,
+      "radial_length_m": null,
+      "orientation_degrees": 70.0,
+      "tuner": null,
+      "feedline": "RG-58",
+      "notes": "Inverted vee"
+    }
+  ]
+}

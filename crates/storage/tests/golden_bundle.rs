@@ -1,0 +1,44 @@
+use std::path::PathBuf;
+
+use antennabench_core::{
+    AnalysisStatus, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
+};
+use antennabench_storage::BundleStore;
+
+const SESSION_ID: &str = "session-2026-07-09-n1rwj-20m";
+
+#[test]
+fn imports_and_exports_minimal_whole_station_bundle() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
+
+    let imported = BundleStore::new(&fixture).read().unwrap();
+
+    assert_eq!(imported.manifest.schema_version, 1);
+    assert_eq!(imported.manifest.session_id, SESSION_ID);
+    assert_eq!(imported.station.callsign, "N1RWJ");
+    assert_eq!(imported.station.grid, "FN42");
+    assert_eq!(imported.antennas.antennas.len(), 2);
+    assert_eq!(imported.schedule.mode, ExperimentMode::WholeStationAb);
+    assert_eq!(imported.schedule.goal, SessionGoal::GeneralCoverage);
+    assert_eq!(imported.schedule.slots.len(), 2);
+    assert_eq!(imported.events.len(), 2);
+    assert_eq!(imported.observations.len(), 2);
+    assert_eq!(
+        imported.observations[0].observation_kind,
+        ObservationKind::LocalDecode
+    );
+    assert_eq!(imported.observations[1].meta.source, RecordSource::Wsprnet);
+    assert_eq!(imported.wsjtx.len(), 1);
+    assert_eq!(imported.rig.len(), 1);
+    assert_eq!(imported.propagation.len(), 1);
+    assert_eq!(imported.analysis.status, AnalysisStatus::NotRun);
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let exported = tempdir.path().join("exported.session.wsprabundle");
+    BundleStore::new(&exported).write(&imported).unwrap();
+
+    let reimported = BundleStore::new(&exported).read().unwrap();
+
+    assert_eq!(reimported, imported);
+}

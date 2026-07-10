@@ -1,0 +1,2 @@
+{"meta":{"schema_version":1,"session_id":"session-2026-07-09-n1rwj-20m","timestamp":"2026-07-09T20:00:03Z","source":"operator"},"event_id":"event-001","slot_id":"slot-001","event_type":"switched","note":"A connected"}
+{"meta":{"schema_version":1,"session_id":"session-2026-07-09-n1rwj-20m","timestamp":"2026-07-09T20:02:04Z","source":"operator"},"event_id":"event-002","slot_id":"slot-002","event_type":"switched","note":"B connected"}
