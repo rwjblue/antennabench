@@ -1,6 +1,7 @@
 use antennabench_core::{
-    align_schedule_slots, Band, ExperimentMode, OperatorEvent, OperatorEventType, PlannedSlot,
-    RecordMeta, RecordSource, Schedule, SessionGoal, SlotAlignmentPolicy,
+    align_schedule_slots, Band, ExperimentMode, ObservationKind, ObservationRecord, OperatorEvent,
+    OperatorEventType, PlannedSlot, RecordMeta, RecordSource, Schedule, SessionGoal,
+    SlotAlignmentPolicy,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -122,6 +123,216 @@ fn derives_actual_slot_state_from_operator_events() {
     );
 }
 
+#[test]
+fn assigns_observations_with_guard_boundary_band_and_outside_reasons() {
+    let starts_at = Utc.with_ymd_and_hms(2026, 7, 10, 20, 0, 0).unwrap();
+    let schedule = schedule_with_slots(starts_at);
+    let events = vec![
+        operator_event(
+            "event-001",
+            "slot-001",
+            OperatorEventType::Switched,
+            starts_at + chrono::Duration::seconds(3),
+        ),
+        operator_event(
+            "event-002",
+            "slot-002",
+            OperatorEventType::Switched,
+            starts_at + chrono::Duration::seconds(123),
+        ),
+    ];
+    let observations = vec![
+        observation(
+            "obs-good-a",
+            starts_at + chrono::Duration::seconds(60),
+            Band::M20,
+        ),
+        observation(
+            "obs-boundary-a",
+            starts_at + chrono::Duration::seconds(118),
+            Band::M20,
+        ),
+        observation(
+            "obs-guard-b",
+            starts_at + chrono::Duration::seconds(125),
+            Band::M20,
+        ),
+        observation(
+            "obs-wrong-band",
+            starts_at + chrono::Duration::seconds(70),
+            Band::M40,
+        ),
+        observation(
+            "obs-outside",
+            starts_at - chrono::Duration::seconds(5),
+            Band::M20,
+        ),
+    ];
+
+    let result = align_schedule_slots(
+        &schedule,
+        &events,
+        &observations,
+        SlotAlignmentPolicy::default(),
+    );
+
+    insta::assert_json_snapshot!(
+        result.observation_assignments.iter().map(|assignment| {
+            json!({
+                "observation_id": &assignment.observation_id,
+                "slot_id": &assignment.slot_id,
+                "slot_label": &assignment.slot_label,
+                "confidence": snapshot_confidence(assignment.confidence),
+                "reason": &assignment.reason,
+            })
+        }).collect::<Vec<_>>(),
+        @r###"
+        [
+          {
+            "confidence": 0.95,
+            "observation_id": "obs-good-a",
+            "reason": "interior",
+            "slot_id": "slot-001",
+            "slot_label": "A"
+          },
+          {
+            "confidence": 0.6,
+            "observation_id": "obs-boundary-a",
+            "reason": "near_boundary",
+            "slot_id": "slot-001",
+            "slot_label": "A"
+          },
+          {
+            "confidence": 0.25,
+            "observation_id": "obs-guard-b",
+            "reason": "guard_time",
+            "slot_id": "slot-002",
+            "slot_label": "B"
+          },
+          {
+            "confidence": 0.0,
+            "observation_id": "obs-wrong-band",
+            "reason": "band_mismatch",
+            "slot_id": null,
+            "slot_label": null
+          },
+          {
+            "confidence": 0.0,
+            "observation_id": "obs-outside",
+            "reason": "outside_schedule",
+            "slot_id": null,
+            "slot_label": null
+          }
+        ]
+        "###
+    );
+}
+
+#[test]
+fn assigns_bad_missed_and_late_switch_observations_conservatively() {
+    let starts_at = Utc.with_ymd_and_hms(2026, 7, 10, 20, 0, 0).unwrap();
+    let schedule = schedule_with_slots(starts_at);
+    let events = vec![
+        operator_event(
+            "event-001",
+            "slot-001",
+            OperatorEventType::Switched,
+            starts_at + chrono::Duration::seconds(3),
+        ),
+        operator_event(
+            "event-002",
+            "slot-002",
+            OperatorEventType::BadSlot,
+            starts_at + chrono::Duration::seconds(140),
+        ),
+        operator_event(
+            "event-003",
+            "slot-003",
+            OperatorEventType::MissedSlot,
+            starts_at + chrono::Duration::seconds(250),
+        ),
+        operator_event(
+            "event-004",
+            "slot-004",
+            OperatorEventType::Switched,
+            starts_at + chrono::Duration::seconds(385),
+        ),
+    ];
+    let observations = vec![
+        observation(
+            "obs-bad",
+            starts_at + chrono::Duration::seconds(180),
+            Band::M20,
+        ),
+        observation(
+            "obs-missed",
+            starts_at + chrono::Duration::seconds(300),
+            Band::M20,
+        ),
+        observation(
+            "obs-before-late-switch",
+            starts_at + chrono::Duration::seconds(370),
+            Band::M20,
+        ),
+        observation(
+            "obs-after-late-switch",
+            starts_at + chrono::Duration::seconds(390),
+            Band::M20,
+        ),
+    ];
+
+    let result = align_schedule_slots(
+        &schedule,
+        &events,
+        &observations,
+        SlotAlignmentPolicy::default(),
+    );
+
+    insta::assert_json_snapshot!(
+        result.observation_assignments.iter().map(|assignment| {
+            json!({
+                "observation_id": &assignment.observation_id,
+                "slot_id": &assignment.slot_id,
+                "slot_label": &assignment.slot_label,
+                "confidence": snapshot_confidence(assignment.confidence),
+                "reason": &assignment.reason,
+            })
+        }).collect::<Vec<_>>(),
+        @r###"
+        [
+          {
+            "confidence": 0.0,
+            "observation_id": "obs-bad",
+            "reason": "bad_slot",
+            "slot_id": "slot-002",
+            "slot_label": null
+          },
+          {
+            "confidence": 0.0,
+            "observation_id": "obs-missed",
+            "reason": "missed_slot",
+            "slot_id": "slot-003",
+            "slot_label": null
+          },
+          {
+            "confidence": 0.1,
+            "observation_id": "obs-before-late-switch",
+            "reason": "before_observed_switch",
+            "slot_id": "slot-004",
+            "slot_label": null
+          },
+          {
+            "confidence": 0.7,
+            "observation_id": "obs-after-late-switch",
+            "reason": "late_switch",
+            "slot_id": "slot-004",
+            "slot_label": "B"
+          }
+        ]
+        "###
+    );
+}
+
 fn schedule_with_slots(starts_at: chrono::DateTime<Utc>) -> Schedule {
     Schedule {
         schema_version: 1,
@@ -193,4 +404,41 @@ fn operator_event(
         event_type,
         note: None,
     }
+}
+
+fn observation(
+    observation_id: &str,
+    timestamp: chrono::DateTime<Utc>,
+    band: Band,
+) -> ObservationRecord {
+    ObservationRecord {
+        meta: RecordMeta {
+            schema_version: 1,
+            session_id: SESSION_ID.to_string(),
+            timestamp,
+            source: RecordSource::Wsprnet,
+        },
+        observation_id: observation_id.to_string(),
+        observation_kind: ObservationKind::PublicReport,
+        band,
+        frequency_hz: None,
+        mode: Some("WSPR".to_string()),
+        reporter_call: None,
+        heard_call: None,
+        reporter_grid: None,
+        heard_grid: None,
+        distance_km: None,
+        azimuth_degrees: None,
+        snr_db: None,
+        drift_hz_per_minute: None,
+        power_watts: None,
+        slot_id: None,
+        slot_label: None,
+        slot_confidence: None,
+        raw: json!({}),
+    }
+}
+
+fn snapshot_confidence(confidence: f32) -> f64 {
+    (f64::from(confidence) * 100.0).round() / 100.0
 }
