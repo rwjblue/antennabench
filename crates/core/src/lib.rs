@@ -1,4 +1,4 @@
-mod alignment;
+pub mod alignment;
 mod model;
 
 pub use alignment::*;
