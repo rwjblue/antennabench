@@ -1,5 +1,8 @@
 use antennabench_core::{
-    Band, BundleContents, ObservationKind, ObservationRecord, RecordSource, WsjtXRecord,
+    normalize_bundle, validate_bundle, AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band,
+    BundleContents, BundleFiles, BundleManifest, ExperimentMode, ObservationKind,
+    ObservationRecord, OperatorEvent, OperatorEventType, PlannedSlot, RecordMeta, RecordSource,
+    Schedule, SessionGoal, Station, WsjtXRecord,
 };
 use antennabench_wsjtx::{
     append_wsjtx_import, import_all_wspr_text, import_parsed_all_wspr_text, parse_all_wspr_line,
@@ -451,4 +454,203 @@ fn parsed_import_uses_parsed_raw_lines_as_source_of_truth() {
     );
     assert_eq!(import.wsjtx_records[1].raw["line"], "bad line with too few");
     assert_eq!(import.issues[0].raw_line, "bad line with too few");
+}
+
+#[test]
+fn appends_imported_records_then_normalizes_and_validates_bundle() {
+    let mut bundle = sample_bundle();
+    let input = "\
+260709 2001 -18 0.07 14.095600 K1ABC EM12 37 0
+260709 2003 -24 -0.12 14.095640 W3AAA FM19 30 -1
+";
+    let import = import_all_wspr_text(input, import_config("normalization")).unwrap();
+
+    append_wsjtx_import(&mut bundle, import);
+    let normalized = normalize_bundle(bundle);
+    validate_bundle(&normalized).unwrap();
+
+    let imported_annotations: Vec<_> = normalized
+        .observations
+        .iter()
+        .filter(|observation| observation.observation_id.starts_with("normalization-obs-"))
+        .map(|observation| {
+            assert_eq!(observation.slot_confidence, Some(0.95));
+            json!({
+                "observation_id": observation.observation_id,
+                "slot_id": observation.slot_id,
+                "slot_label": observation.slot_label,
+                "slot_confidence": observation.slot_confidence.map(snapshot_confidence),
+            })
+        })
+        .collect();
+
+    assert_eq!(imported_annotations.len(), 2);
+    assert_eq!(
+        imported_annotations[0]["slot_id"],
+        json!("slot-001"),
+        "first imported observation should normalize to slot-001"
+    );
+    assert_eq!(
+        imported_annotations[0]["slot_label"],
+        json!("A"),
+        "first imported observation should normalize to antenna A"
+    );
+    assert_eq!(
+        imported_annotations[1]["slot_id"],
+        json!("slot-002"),
+        "second imported observation should normalize to slot-002"
+    );
+    assert_eq!(
+        imported_annotations[1]["slot_label"],
+        json!("B"),
+        "second imported observation should normalize to antenna B"
+    );
+
+    insta::assert_json_snapshot!(
+        imported_annotations,
+        @r###"
+        [
+          {
+            "observation_id": "normalization-obs-000001",
+            "slot_confidence": 0.95,
+            "slot_id": "slot-001",
+            "slot_label": "A"
+          },
+          {
+            "observation_id": "normalization-obs-000002",
+            "slot_confidence": 0.95,
+            "slot_id": "slot-002",
+            "slot_label": "B"
+          }
+        ]
+        "###
+    );
+}
+
+fn sample_bundle() -> BundleContents {
+    let starts_at = Utc.with_ymd_and_hms(2026, 7, 9, 20, 0, 0).unwrap();
+
+    BundleContents {
+        manifest: BundleManifest {
+            schema_version: 1,
+            session_id: SESSION_ID.to_string(),
+            created_at: starts_at - chrono::Duration::seconds(60),
+            app_version: "0.1.0".to_string(),
+            files: BundleFiles::default(),
+        },
+        station: Station {
+            schema_version: 1,
+            session_id: SESSION_ID.to_string(),
+            callsign: "N1RWJ".to_string(),
+            grid: "FN42".to_string(),
+            power_watts: Some(5.0),
+            operator_notes: None,
+        },
+        antennas: AntennasFile {
+            schema_version: 1,
+            session_id: SESSION_ID.to_string(),
+            antennas: vec![
+                Antenna {
+                    label: "A".to_string(),
+                    facets: vec!["vertical".to_string()],
+                    height_m: None,
+                    radial_count: None,
+                    radial_length_m: None,
+                    orientation_degrees: None,
+                    tuner: None,
+                    feedline: None,
+                    notes: None,
+                },
+                Antenna {
+                    label: "B".to_string(),
+                    facets: vec!["dipole".to_string()],
+                    height_m: None,
+                    radial_count: None,
+                    radial_length_m: None,
+                    orientation_degrees: None,
+                    tuner: None,
+                    feedline: None,
+                    notes: None,
+                },
+            ],
+        },
+        schedule: Schedule {
+            schema_version: 1,
+            session_id: SESSION_ID.to_string(),
+            mode: ExperimentMode::WholeStationAb,
+            goal: SessionGoal::GeneralCoverage,
+            slots: vec![
+                planned_slot("slot-001", 1, starts_at, "A"),
+                planned_slot(
+                    "slot-002",
+                    2,
+                    starts_at + chrono::Duration::seconds(120),
+                    "B",
+                ),
+            ],
+        },
+        events: vec![
+            operator_event(
+                "event-001",
+                "slot-001",
+                starts_at + chrono::Duration::seconds(3),
+            ),
+            operator_event(
+                "event-002",
+                "slot-002",
+                starts_at + chrono::Duration::seconds(123),
+            ),
+        ],
+        observations: Vec::new(),
+        wsjtx: Vec::new(),
+        rig: Vec::new(),
+        propagation: Vec::new(),
+        analysis: AnalysisFile {
+            schema_version: 1,
+            session_id: SESSION_ID.to_string(),
+            generated_at: None,
+            status: AnalysisStatus::NotRun,
+            notes: Vec::new(),
+        },
+    }
+}
+
+fn planned_slot(
+    slot_id: &str,
+    sequence_number: u32,
+    starts_at: chrono::DateTime<Utc>,
+    antenna_label: &str,
+) -> PlannedSlot {
+    PlannedSlot {
+        slot_id: slot_id.to_string(),
+        sequence_number,
+        starts_at,
+        duration_seconds: 120,
+        guard_seconds: 15,
+        band: Band::M20,
+        antenna_label: antenna_label.to_string(),
+    }
+}
+
+fn operator_event(
+    event_id: &str,
+    slot_id: &str,
+    timestamp: chrono::DateTime<Utc>,
+) -> OperatorEvent {
+    OperatorEvent {
+        meta: RecordMeta {
+            schema_version: 1,
+            session_id: SESSION_ID.to_string(),
+            timestamp,
+            source: RecordSource::Operator,
+        },
+        event_id: event_id.to_string(),
+        slot_id: Some(slot_id.to_string()),
+        event_type: OperatorEventType::Switched,
+        note: None,
+    }
+}
+
+fn snapshot_confidence(confidence: f32) -> f64 {
+    (f64::from(confidence) * 100.0).round() / 100.0
 }
