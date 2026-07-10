@@ -3,5 +3,6 @@
 /.idea/
 /.vscode/
 /AGENTS.override.md
+/docs/superpowers/
 *.swp
 *.swo

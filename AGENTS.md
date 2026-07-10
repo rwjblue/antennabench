@@ -14,9 +14,18 @@ jj-commit-default: auto
 
 ## Planning
 
-- Specs live under `docs/superpowers/specs/`.
-- Implementation plans live under `docs/superpowers/plans/`.
+- Evergreen project docs live under `docs/` and are the maintained source of
+  truth for architecture, bundle format, development workflow, and roadmap.
+- `docs/superpowers/` contains temporary agent planning artifacts. These files
+  may be useful while work is in progress, but they are not authoritative and
+  should not be treated as current documentation.
 - Do not implement from a plan until the user approves it.
+- When implementation changes project behavior, update the relevant evergreen
+  doc in the same change when practical.
+- Prefer documenting stable concepts and invariants over copying detailed plan
+  steps or generated code.
+- Tests, fixtures, and public APIs are the source of truth for implemented
+  behavior when docs and code disagree.
 
 ## Rust Conventions
 
