@@ -21,6 +21,24 @@
       "guard_seconds": 15,
       "band": "20m",
       "antenna_label": "B"
+    },
+    {
+      "slot_id": "slot-003",
+      "sequence_number": 3,
+      "starts_at": "2026-07-09T20:04:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "20m",
+      "antenna_label": "A"
+    },
+    {
+      "slot_id": "slot-004",
+      "sequence_number": 4,
+      "starts_at": "2026-07-09T20:06:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "20m",
+      "antenna_label": "B"
     }
   ]
 }

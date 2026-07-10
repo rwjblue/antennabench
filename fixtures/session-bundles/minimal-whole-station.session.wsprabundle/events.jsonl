@@ -1,2 +1,4 @@
 {"meta":{"schema_version":1,"session_id":"session-2026-07-09-n1rwj-20m","timestamp":"2026-07-09T20:00:03Z","source":"operator"},"event_id":"event-001","slot_id":"slot-001","event_type":"switched","note":"A connected"}
-{"meta":{"schema_version":1,"session_id":"session-2026-07-09-n1rwj-20m","timestamp":"2026-07-09T20:02:04Z","source":"operator"},"event_id":"event-002","slot_id":"slot-002","event_type":"switched","note":"B connected"}
+{"meta":{"schema_version":1,"session_id":"session-2026-07-09-n1rwj-20m","timestamp":"2026-07-09T20:02:20Z","source":"operator"},"event_id":"event-002","slot_id":"slot-002","event_type":"bad_slot","note":"High SWR during B slot"}
+{"meta":{"schema_version":1,"session_id":"session-2026-07-09-n1rwj-20m","timestamp":"2026-07-09T20:04:00Z","source":"operator"},"event_id":"event-003","slot_id":"slot-003","event_type":"missed_slot","note":"Operator missed the A switch prompt"}
+{"meta":{"schema_version":1,"session_id":"session-2026-07-09-n1rwj-20m","timestamp":"2026-07-09T20:06:25Z","source":"operator"},"event_id":"event-004","slot_id":"slot-004","event_type":"switched","note":"B connected late"}
