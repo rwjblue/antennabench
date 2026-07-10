@@ -1,0 +1,1 @@
+Keep the crates directory present so Cargo workspace globs can be empty before crate manifests exist.
