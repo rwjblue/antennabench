@@ -212,6 +212,43 @@ fn reports_duplicate_ids_unknown_references_bad_windows_and_invalid_confidence()
     );
 }
 
+#[test]
+fn reports_persisted_alignment_annotation_mismatches() {
+    let mut bundle = valid_bundle();
+    let observation = &mut bundle.observations[0];
+    observation.slot_id = Some("slot-002".to_string());
+    observation.slot_label = Some("B".to_string());
+    observation.slot_confidence = Some(0.25);
+
+    let error = validate_bundle(&bundle).unwrap_err();
+
+    insta::assert_debug_snapshot!(
+        error.issues(),
+        @r###"
+    [
+        AlignmentAnnotationMismatch {
+            observation_id: "obs-001",
+            field: SlotId,
+            expected: "Some(\"slot-001\")",
+            actual: "Some(\"slot-002\")",
+        },
+        AlignmentAnnotationMismatch {
+            observation_id: "obs-001",
+            field: SlotLabel,
+            expected: "Some(\"A\")",
+            actual: "Some(\"B\")",
+        },
+        AlignmentAnnotationMismatch {
+            observation_id: "obs-001",
+            field: SlotConfidence,
+            expected: "Some(0.95)",
+            actual: "Some(0.25)",
+        },
+    ]
+    "###
+    );
+}
+
 fn valid_bundle() -> BundleContents {
     let starts_at = Utc.with_ymd_and_hms(2026, 7, 10, 20, 0, 0).unwrap();
 

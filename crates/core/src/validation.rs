@@ -4,7 +4,9 @@ use chrono::Duration;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::{BundleContents, PlannedSlot, SCHEMA_VERSION};
+use crate::{
+    align_schedule_slots, BundleContents, PlannedSlot, SlotAlignmentPolicy, SCHEMA_VERSION,
+};
 
 #[derive(Debug, Error, Clone, PartialEq)]
 #[error("bundle validation failed with one or more issues")]
@@ -268,6 +270,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
     validate_schedule_references_and_windows(&mut issues, bundle);
     validate_event_and_observation_references(&mut issues, bundle);
     validate_slot_confidence_ranges(&mut issues, bundle);
+    validate_alignment_annotations(&mut issues, bundle);
 
     issues
 }
@@ -435,4 +438,77 @@ fn validate_slot_confidence_ranges(
             }
         }
     }
+}
+
+fn validate_alignment_annotations(
+    issues: &mut Vec<BundleValidationIssue>,
+    bundle: &BundleContents,
+) {
+    let alignment = align_schedule_slots(
+        &bundle.schedule,
+        &bundle.events,
+        &bundle.observations,
+        SlotAlignmentPolicy::default(),
+    );
+    for (observation, assignment) in bundle
+        .observations
+        .iter()
+        .zip(alignment.observation_assignments.iter())
+    {
+        if observation.slot_id != assignment.slot_id {
+            push_alignment_annotation_mismatch(
+                issues,
+                observation.observation_id.as_str(),
+                AlignmentAnnotationField::SlotId,
+                format!("{:?}", assignment.slot_id),
+                format!("{:?}", observation.slot_id),
+            );
+        }
+
+        if observation.slot_label != assignment.slot_label {
+            push_alignment_annotation_mismatch(
+                issues,
+                observation.observation_id.as_str(),
+                AlignmentAnnotationField::SlotLabel,
+                format!("{:?}", assignment.slot_label),
+                format!("{:?}", observation.slot_label),
+            );
+        }
+
+        let expected_slot_confidence = Some(assignment.confidence);
+        if !slot_confidence_matches(observation.slot_confidence, expected_slot_confidence) {
+            push_alignment_annotation_mismatch(
+                issues,
+                observation.observation_id.as_str(),
+                AlignmentAnnotationField::SlotConfidence,
+                format!("{:?}", expected_slot_confidence),
+                format!("{:?}", observation.slot_confidence),
+            );
+        }
+    }
+}
+
+fn slot_confidence_matches(actual: Option<f32>, expected: Option<f32>) -> bool {
+    const SLOT_CONFIDENCE_TOLERANCE: f32 = 0.000_001;
+
+    match (actual, expected) {
+        (Some(actual), Some(expected)) => (actual - expected).abs() <= SLOT_CONFIDENCE_TOLERANCE,
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn push_alignment_annotation_mismatch(
+    issues: &mut Vec<BundleValidationIssue>,
+    observation_id: &str,
+    field: AlignmentAnnotationField,
+    expected: String,
+    actual: String,
+) {
+    issues.push(BundleValidationIssue::AlignmentAnnotationMismatch {
+        observation_id: observation_id.to_string(),
+        field,
+        expected,
+        actual,
+    });
 }
