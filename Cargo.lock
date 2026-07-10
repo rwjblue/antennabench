@@ -39,9 +39,11 @@ name = "antennabench-wsjtx"
 version = "0.1.0"
 dependencies = [
  "antennabench-core",
+ "antennabench-storage",
  "chrono",
  "insta",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 

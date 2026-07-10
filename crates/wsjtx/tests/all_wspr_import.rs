@@ -23,6 +23,16 @@ fn import_config(import_id: &str) -> WsjtxImportConfig {
     }
 }
 
+fn hardening_import_config() -> WsjtxImportConfig {
+    WsjtxImportConfig {
+        session_id: "session-wsjtx-import-hardening".to_string(),
+        import_id: "edge-cases".to_string(),
+        station_callsign: "N1RWJ".to_string(),
+        station_grid: "FN42".to_string(),
+        imported_at: Utc.with_ymd_and_hms(2026, 7, 9, 19, 59, 55).unwrap(),
+    }
+}
+
 #[test]
 fn parses_all_wspr_decode_rows() {
     let input = include_str!("../../../fixtures/wsjtx/all_wspr_sample.txt");
@@ -889,6 +899,36 @@ fn import_preserves_edge_case_nonblank_lines_and_observes_only_valid_rows() {
         ]
         "###
     );
+}
+
+#[test]
+fn generated_edge_case_import_matches_canonical_fixture_bundle() {
+    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/wsjtx-import-hardening.session.wsprabundle");
+    let canonical = antennabench_storage::BundleStore::new(&fixture)
+        .read_validated()
+        .unwrap();
+
+    let mut generated = canonical.clone();
+    generated.observations.clear();
+    generated.wsjtx.clear();
+
+    let input = include_str!("../../../fixtures/wsjtx/all_wspr_edge_cases.txt");
+    let import = import_all_wspr_text(input, hardening_import_config()).unwrap();
+    append_wsjtx_import(&mut generated, import);
+    let generated = normalize_bundle(generated);
+    validate_bundle(&generated).unwrap();
+    let tempdir = tempfile::tempdir().unwrap();
+    let generated_fixture = tempdir
+        .path()
+        .join("generated-edge-cases.session.wsprabundle");
+    let generated_store = antennabench_storage::BundleStore::new(&generated_fixture);
+    generated_store.write(&generated).unwrap();
+    let generated = generated_store.read_validated().unwrap();
+
+    assert_eq!(generated.wsjtx, canonical.wsjtx);
+    assert_eq!(generated.observations, canonical.observations);
+    assert_eq!(generated, canonical);
 }
 
 #[test]
