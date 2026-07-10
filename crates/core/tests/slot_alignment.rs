@@ -25,10 +25,28 @@ fn derives_actual_slot_state_from_operator_events() {
             starts_at + chrono::Duration::seconds(140),
         ),
         operator_event(
+            "event-002-switch",
+            "slot-002",
+            OperatorEventType::Switched,
+            starts_at + chrono::Duration::seconds(125),
+        ),
+        operator_event(
+            "event-002-missed",
+            "slot-002",
+            OperatorEventType::MissedSlot,
+            starts_at + chrono::Duration::seconds(130),
+        ),
+        operator_event(
             "event-003",
             "slot-003",
             OperatorEventType::MissedSlot,
             starts_at + chrono::Duration::seconds(240),
+        ),
+        operator_event(
+            "event-003-switch",
+            "slot-003",
+            OperatorEventType::Switched,
+            starts_at + chrono::Duration::seconds(243),
         ),
         operator_event(
             "event-004",
@@ -89,6 +107,15 @@ fn derives_actual_slot_state_from_operator_events() {
             "switch_delay_seconds": 25,
             "switch_event_id": "event-004",
             "usable_start": "2026-07-10T20:06:25Z"
+          },
+          {
+            "actual_label": "A",
+            "planned_label": "A",
+            "slot_id": "slot-005",
+            "status": "planned_no_switch_event",
+            "switch_delay_seconds": null,
+            "switch_event_id": null,
+            "usable_start": "2026-07-10T20:08:15Z"
           }
         ]
         "###
@@ -120,6 +147,12 @@ fn schedule_with_slots(starts_at: chrono::DateTime<Utc>) -> Schedule {
                 4,
                 starts_at + chrono::Duration::seconds(360),
                 "B",
+            ),
+            planned_slot(
+                "slot-005",
+                5,
+                starts_at + chrono::Duration::seconds(480),
+                "A",
             ),
         ],
     }
