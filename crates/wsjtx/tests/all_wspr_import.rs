@@ -261,6 +261,102 @@ fn parse_text_collects_malformed_lines_without_losing_valid_decodes() {
 }
 
 #[test]
+fn parse_text_reports_all_edge_case_issue_kinds_and_ignores_blank_lines() {
+    let input = include_str!("../../../fixtures/wsjtx/all_wspr_edge_cases.txt");
+
+    let parsed = parse_all_wspr_text(input);
+
+    assert_eq!(parsed.decodes.len(), 3);
+    assert_eq!(
+        parsed
+            .decodes
+            .iter()
+            .map(|decode| decode.line_number)
+            .collect::<Vec<_>>(),
+        vec![1, 3, 15]
+    );
+    assert_eq!(parsed.decodes[1].extra_fields, vec!["0.19", "2"]);
+
+    insta::assert_debug_snapshot!(
+        parsed
+            .issues
+            .iter()
+            .map(|issue| (&issue.line_number, &issue.kind))
+            .collect::<Vec<_>>(),
+        @r###"
+        [
+            (
+                4,
+                InvalidCallsign {
+                    value: "BAD",
+                },
+            ),
+            (
+                5,
+                InvalidGrid {
+                    value: "ZZ99",
+                },
+            ),
+            (
+                6,
+                UnsupportedBand {
+                    frequency_hz: 99999999,
+                },
+            ),
+            (
+                7,
+                InvalidSnr {
+                    value: "xx",
+                },
+            ),
+            (
+                8,
+                InvalidDt {
+                    value: "nope",
+                },
+            ),
+            (
+                9,
+                InvalidFrequency {
+                    value: "notafreq",
+                },
+            ),
+            (
+                10,
+                InvalidPower {
+                    value: "QRP",
+                },
+            ),
+            (
+                11,
+                InvalidDrift {
+                    value: "drift",
+                },
+            ),
+            (
+                12,
+                InvalidDate {
+                    value: "260230",
+                },
+            ),
+            (
+                13,
+                InvalidTime {
+                    value: "2460",
+                },
+            ),
+            (
+                14,
+                TooFewFields {
+                    actual: 3,
+                },
+            ),
+        ]
+        "###
+    );
+}
+
+#[test]
 fn imports_valid_lines_into_raw_wsjtx_records_and_observations() {
     let input = include_str!("../../../fixtures/wsjtx/all_wspr_sample.txt");
 
