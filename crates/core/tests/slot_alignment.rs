@@ -343,11 +343,16 @@ fn applies_slot_assignments_to_observation_records_without_changing_raw_observat
         OperatorEventType::Switched,
         starts_at + chrono::Duration::seconds(3),
     )];
-    let observations = vec![observation(
+    let mut observations = vec![observation(
         "obs-good-a",
         starts_at + chrono::Duration::seconds(60),
         Band::M20,
     )];
+    observations[0].snr_db = Some(-12.5);
+    observations[0].raw = json!({
+        "spot": "original",
+        "sequence": 1,
+    });
 
     let result = align_schedule_slots(
         &schedule,
@@ -364,8 +369,8 @@ fn applies_slot_assignments_to_observation_records_without_changing_raw_observat
     assert_eq!(annotated[0].slot_id, Some("slot-001".to_string()));
     assert_eq!(annotated[0].slot_label, Some("A".to_string()));
     assert_eq!(annotated[0].slot_confidence, Some(0.95));
-    assert_eq!(annotated[0].raw, observations[0].raw);
-    assert_eq!(annotated[0].snr_db, observations[0].snr_db);
+    assert_eq!(annotated[0].raw, json!({"spot": "original", "sequence": 1}));
+    assert_eq!(annotated[0].snr_db, Some(-12.5));
 }
 
 fn schedule_with_slots(starts_at: chrono::DateTime<Utc>) -> Schedule {
