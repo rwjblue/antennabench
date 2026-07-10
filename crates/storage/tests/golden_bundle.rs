@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use antennabench_core::{
-    align_schedule_slots, apply_slot_assignments, AlignedSlotStatus, AnalysisStatus,
-    ExperimentMode, ObservationKind, RecordSource, SessionGoal, SlotAlignmentPolicy,
+    align_schedule_slots, apply_slot_assignments, validate_bundle, AlignedSlotStatus,
+    AnalysisStatus, ExperimentMode, ObservationKind, RecordSource, SessionGoal, SlotAlignmentPolicy,
 };
 use antennabench_storage::BundleStore;
 
@@ -14,6 +14,7 @@ fn imports_exports_and_regenerates_minimal_whole_station_alignment() {
         .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
 
     let imported = BundleStore::new(&fixture).read().unwrap();
+    validate_bundle(&imported).unwrap();
 
     assert_eq!(imported.manifest.schema_version, 1);
     assert_eq!(imported.manifest.session_id, SESSION_ID);
