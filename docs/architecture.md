@@ -17,7 +17,8 @@ Current crates:
 - `crates/analysis`: conservative, descriptive A/B evidence summaries derived
   in memory from validated bundle contents and core schedule alignment.
 - `crates/report`: deterministic, renderer-neutral report data derived in
-  memory from one bundle and its analysis summary.
+  memory from one bundle and its analysis summary, plus standalone local HTML
+  rendering from that report boundary.
 
 Planned crates and apps:
 
@@ -63,6 +64,13 @@ band evidence counts, and slot usable/excluded counts. The model is serializable
 but renderer-neutral: it contains no generated prose, winner logic, generic
 chart configuration, or rendering output.
 
+`render_standalone_html()` accepts only a `SessionReport`. It does not read or
+reanalyze a bundle and does not persist output into one. The renderer produces a
+complete deterministic HTML document with embedded CSS, a restrictive content
+security policy, no scripts or external resources, and accessible tables beside
+its CSS visualizations. Every report-provided string is HTML-escaped; bundle
+text is never accepted as markup, script, a template, or a style value.
+
 ## Alignment
 
 Schedule alignment is pure core logic. It derives actual slot state from planned
@@ -78,10 +86,10 @@ SQLite indexes, UI state, generated reports, charts, and hosted publishing
 artifacts are derived. They can be rebuilt from the bundle and should not become
 the canonical record of a session.
 
-Analysis summaries and session reports are currently derived in memory and are
-not persisted. `analysis.json` remains bundle metadata rather than a serialized
-analysis summary or report. Report construction does not change the bundle
-format or schema version.
+Analysis summaries, session reports, and rendered HTML are derived and are not
+persisted in the bundle. `analysis.json` remains bundle metadata rather than a
+serialized analysis summary or report. Report construction and rendering do
+not change the bundle format or schema version.
 
 ## Integration Seams
 

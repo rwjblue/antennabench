@@ -78,6 +78,17 @@ normalizes, validates, exports, reopens, analyzes, and builds report data from
 the bundle. The test pins important scenario counts without snapshotting the
 entire fixture.
 
+Standalone report-renderer tests use the same canonical sample to verify
+determinism, offline-only document structure, accessible chart tables, and all
+report sections. Separate hostile-string and empty-data cases pin escaping and
+honest unavailable states without loading a browser or making network requests.
+
+To generate the canonical sample as an untracked verification artifact:
+
+```bash
+cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-sample.html
+```
+
 For documentation-only changes, inspect the rendered intent and verify the diff
 is limited to the requested files.
 
