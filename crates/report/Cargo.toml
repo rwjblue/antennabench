@@ -1,0 +1,18 @@
+[package]
+name = "antennabench-report"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+antennabench-analysis = { path = "../analysis" }
+antennabench-core = { path = "../core" }
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+antennabench-storage = { path = "../storage" }
+insta = { workspace = true }

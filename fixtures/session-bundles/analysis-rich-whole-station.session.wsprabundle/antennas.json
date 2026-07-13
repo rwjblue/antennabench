@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "session_id": "session-2026-07-12-n1rwj-analysis-rich",
+  "antennas": [
+    {
+      "label": "A",
+      "facets": ["vertical", "ground_mounted"],
+      "height_m": 7.0,
+      "radial_count": 16,
+      "radial_length_m": 5.0,
+      "orientation_degrees": 0.0,
+      "tuner": "manual",
+      "feedline": "RG-8X",
+      "notes": "Ground-mounted quarter-wave vertical"
+    },
+    {
+      "label": "B",
+      "facets": ["dipole", "inverted_vee"],
+      "height_m": 9.0,
+      "radial_count": null,
+      "radial_length_m": null,
+      "orientation_degrees": 70.0,
+      "tuner": "automatic",
+      "feedline": "RG-58",
+      "notes": "Center-fed inverted vee"
+    }
+  ]
+}

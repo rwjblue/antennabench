@@ -3,16 +3,17 @@
 AntennaBench is a local-first antenna comparison and profiling app for WSPR
 experiments.
 
-The project is currently building the core bundle model and validation
-pipeline. The durable source of truth is a portable session bundle made from
-JSON and JSONL files. SQLite indexes, UI state, generated reports, charts, and
-hosted publishing artifacts are derived from that bundle.
+The project is currently building the bundle-first Rust foundation and local
+report data model. The durable source of truth is a portable session bundle
+made from JSON and JSONL files. SQLite indexes, UI state, generated reports,
+charts, and hosted publishing artifacts are derived from that bundle.
 
 ## Current Status
 
 Implemented:
 
-- Rust workspace with core, storage, WSJT-X import, and analysis library crates.
+- Rust workspace with core, storage, WSJT-X import, analysis, and report library
+  crates.
 - Canonical bundle model for station, antennas, schedules, operator events,
   observations, adapter records, propagation snapshots, and analysis metadata.
 - Filesystem read/write support for `.session.wsprabundle` directories.
@@ -26,7 +27,11 @@ Implemented:
 - Conservative in-memory A/B evidence summaries with observation eligibility,
   exclusion reasons, per-antenna/band/slot counts, SNR descriptive statistics,
   and insufficient/weak/moderate evidence-quality labels.
-- Golden fixture coverage for a minimal whole-station A/B session.
+- Deterministic, in-memory report data derived from one bundle, with session
+  context, conservative evidence sections, typed notices, and concrete
+  renderer-neutral rows for antenna SNR, band evidence, and slot evidence.
+- Fixture coverage for minimal, WSJT-X import-hardening, and balanced
+  analysis-rich whole-station sessions.
 
 Not implemented yet:
 
@@ -34,7 +39,8 @@ Not implemented yet:
 - WSJT-X live UDP adapter.
 - Rig control.
 - Public spot fetching.
-- Winner selection, advanced statistical analysis, and report generation.
+- Winner selection and advanced statistical analysis.
+- HTML, Markdown, PDF, image, and chart rendering.
 - Hosted report viewing or publishing.
 
 ## Documentation

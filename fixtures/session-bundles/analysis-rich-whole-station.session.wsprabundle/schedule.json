@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "session_id": "session-2026-07-12-n1rwj-analysis-rich",
+  "mode": "whole_station_ab",
+  "goal": "general_coverage",
+  "slots": [
+    {
+      "slot_id": "slot-001",
+      "sequence_number": 1,
+      "starts_at": "2026-07-12T20:00:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "20m",
+      "antenna_label": "A"
+    },
+    {
+      "slot_id": "slot-002",
+      "sequence_number": 2,
+      "starts_at": "2026-07-12T20:02:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "20m",
+      "antenna_label": "B"
+    },
+    {
+      "slot_id": "slot-003",
+      "sequence_number": 3,
+      "starts_at": "2026-07-12T20:04:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "20m",
+      "antenna_label": "A"
+    },
+    {
+      "slot_id": "slot-004",
+      "sequence_number": 4,
+      "starts_at": "2026-07-12T20:06:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "20m",
+      "antenna_label": "B"
+    },
+    {
+      "slot_id": "slot-005",
+      "sequence_number": 5,
+      "starts_at": "2026-07-12T20:08:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "40m",
+      "antenna_label": "A"
+    },
+    {
+      "slot_id": "slot-006",
+      "sequence_number": 6,
+      "starts_at": "2026-07-12T20:10:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "40m",
+      "antenna_label": "B"
+    },
+    {
+      "slot_id": "slot-007",
+      "sequence_number": 7,
+      "starts_at": "2026-07-12T20:12:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "40m",
+      "antenna_label": "A"
+    },
+    {
+      "slot_id": "slot-008",
+      "sequence_number": 8,
+      "starts_at": "2026-07-12T20:14:00Z",
+      "duration_seconds": 120,
+      "guard_seconds": 15,
+      "band": "40m",
+      "antenna_label": "B"
+    }
+  ]
+}
