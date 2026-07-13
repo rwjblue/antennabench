@@ -1,6 +1,6 @@
 # Roadmap
 
-Last reviewed: 2026-07-10
+Last reviewed: 2026-07-13
 
 ## Current
 
@@ -12,6 +12,8 @@ The current implementation focus is the bundle-first Rust foundation:
 - strict validation
 - normalization before validation
 - offline WSJT-X WSPR log import from `ALL_WSPR.TXT`-style logs
+- in-memory conservative A/B summaries with descriptive SNR statistics and
+  insufficient/weak/moderate evidence-quality labels
 - golden fixture coverage
 
 ## Next
@@ -20,7 +22,6 @@ Likely next slices:
 
 - WSJT-X live UDP status/decode companion path.
 - More realistic bundle fixtures from sample WSPR sessions.
-- Analysis model for conservative A/B summaries.
 - Report model and chart-ready data.
 - Desktop workflow skeleton around session setup, run prompts, import/export,
   and local report viewing.
@@ -29,6 +30,7 @@ Likely next slices:
 
 Later tracks:
 
+- Advanced statistics and winner-selection methods.
 - Rig-control adapters.
 - Public spot source adapters.
 - Hosted report viewer and upload validation.

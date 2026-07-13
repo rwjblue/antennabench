@@ -12,7 +12,7 @@ hosted publishing artifacts are derived from that bundle.
 
 Implemented:
 
-- Rust workspace with `antennabench-core` and `antennabench-storage`.
+- Rust workspace with core, storage, WSJT-X import, and analysis library crates.
 - Canonical bundle model for station, antennas, schedules, operator events,
   observations, adapter records, propagation snapshots, and analysis metadata.
 - Filesystem read/write support for `.session.wsprabundle` directories.
@@ -23,6 +23,9 @@ Implemented:
   annotations before validation.
 - Offline WSJT-X WSPR log import crate for `ALL_WSPR.TXT`-style rows, raw
   `wsjtx.jsonl` preservation, and local decode observation conversion.
+- Conservative in-memory A/B evidence summaries with observation eligibility,
+  exclusion reasons, per-antenna/band/slot counts, SNR descriptive statistics,
+  and insufficient/weak/moderate evidence-quality labels.
 - Golden fixture coverage for a minimal whole-station A/B session.
 
 Not implemented yet:
@@ -31,7 +34,7 @@ Not implemented yet:
 - WSJT-X live UDP adapter.
 - Rig control.
 - Public spot fetching.
-- Statistical analysis and report generation.
+- Winner selection, advanced statistical analysis, and report generation.
 - Hosted report viewing or publishing.
 
 ## Documentation

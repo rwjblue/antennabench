@@ -12,6 +12,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "antennabench-analysis"
+version = "0.1.0"
+dependencies = [
+ "antennabench-core",
+ "antennabench-storage",
+ "insta",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "antennabench-core"
 version = "0.1.0"
 dependencies = [
