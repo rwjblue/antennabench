@@ -43,6 +43,7 @@ dependencies = [
  "chrono",
  "insta",
  "serde",
+ "tempfile",
  "thiserror",
 ]
 

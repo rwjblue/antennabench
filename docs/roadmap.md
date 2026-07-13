@@ -18,14 +18,14 @@ The current implementation focus is the bundle-first Rust foundation:
   insufficient/weak/moderate evidence-quality labels
 - deterministic, renderer-neutral report data with session context,
   conservative evidence sections, typed notices, and concrete chart-ready rows
+- a realistic, purpose-built synthetic canonical sample-report session spanning
+  two antennas, two bands, usable and excluded evidence, and missing data
 - golden fixture coverage
 
 ## Next
 
 Likely next slices:
 
-- A realistic canonical sample-report session
-  ([#3](https://github.com/rwjblue/antennabench/issues/3)).
 - Standalone local HTML report rendering
   ([#4](https://github.com/rwjblue/antennabench/issues/4)).
 - A desktop workflow skeleton around session setup, run prompts, import/export,

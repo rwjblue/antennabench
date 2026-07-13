@@ -92,13 +92,20 @@ Strict validation currently checks:
 Use `BundleStore::read_normalized_validated()` when importing a bundle that may
 have missing or stale observation annotations.
 
-## Fixture
+## Fixtures
 
-The canonical fixture is:
+The canonical sample-report input is:
 
 ```text
-fixtures/session-bundles/minimal-whole-station.session.wsprabundle/
+fixtures/session-bundles/canonical-sample-report.session.wsprabundle/
 ```
 
-It represents a minimal whole-station A/B session with switched, bad, missed,
-and late-switch slot examples.
+It is a purpose-built, redistribution-safe synthetic whole-station A/B session
+with two antennas and two bands. It retains source-shaped local and imported
+inputs, representative operator events, exclusions, and missing optional data.
+It is the designated input for sample rendering; it is not evidence for an
+antenna winner or a scientifically valid comparison.
+
+Fixture provenance, synthetic-data policy, demonstrated cases, and the roles of
+the smaller focused fixtures are maintained in
+`fixtures/session-bundles/README.md`.

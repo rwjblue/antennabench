@@ -72,6 +72,12 @@ under `fixtures/wsjtx/udp/`; no operator capture or third-party spot data is
 committed. Loopback UDP coverage verifies only the receiver boundary. It does
 not require WSJT-X or network access during the test suite.
 
+The canonical sample-report bundle is purpose-built synthetic data documented
+under `fixtures/session-bundles/`. Its focused integration test reads,
+normalizes, validates, exports, reopens, analyzes, and builds report data from
+the bundle. The test pins important scenario counts without snapshotting the
+entire fixture.
+
 For documentation-only changes, inspect the rendered intent and verify the diff
 is limited to the requested files.
 
