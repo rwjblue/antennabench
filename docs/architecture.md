@@ -19,10 +19,12 @@ Current crates:
 - `crates/report`: deterministic, renderer-neutral report data derived in
   memory from one bundle and its analysis summary, plus standalone local HTML
   rendering from that report boundary.
+- `apps/desktop`: a Tauri 2 application shell with a static HTML/CSS/JavaScript
+  frontend and explicit workflow navigation for setup, active runs, bundle
+  transfer, and local reports.
 
 Planned crates and apps:
 
-- `apps/desktop`: desktop application shell.
 - `apps/web`: hosted report viewer and publishing surface.
 - `crates/rig`: optional rig-observation or control adapters.
 - `crates/public-spots`: source-neutral public and imported spot adapters.
@@ -90,6 +92,20 @@ Analysis summaries, session reports, and rendered HTML are derived and are not
 persisted in the bundle. `analysis.json` remains bundle metadata rather than a
 serialized analysis summary or report. Report construction and rendering do
 not change the bundle format or schema version.
+
+## Desktop Shell Boundary
+
+The desktop application is a thin Tauri host around static, framework-free web
+assets. Its current JavaScript owns disposable workflow navigation only. It
+does not model bundle contents, invoke domain behavior, persist UI state, or
+register any Rust commands.
+
+The main webview is named explicitly in one capability with an empty permission
+list. The scaffold has no filesystem, dialog, shell, network, or plugin
+authority, and its content security policy permits only bundled local assets.
+Future bundle opening and export slices must add narrow Rust orchestration and
+only the permissions their native selection flows require; general filesystem
+access must not move into the frontend.
 
 ## Integration Seams
 

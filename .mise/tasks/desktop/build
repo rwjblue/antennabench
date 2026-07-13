@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Build the desktop shell without packaging"
+
+set -euo pipefail
+
+cd apps/desktop
+cargo tauri build --debug --no-bundle

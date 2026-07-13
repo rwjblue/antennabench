@@ -17,6 +17,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
       - name: Set up mise
         uses: jdx/mise-action@v4
         with:

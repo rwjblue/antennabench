@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-shell",
+  "description": "Navigation-only capability for the main AntennaBench shell; no frontend commands are permitted.",
+  "windows": ["main"],
+  "permissions": []
+}

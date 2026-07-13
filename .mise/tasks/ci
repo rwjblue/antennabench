@@ -4,6 +4,7 @@
 
 set -euo pipefail
 
+mise run desktop:test
 mise run fmt
 mise run lint
 mise run test

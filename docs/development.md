@@ -2,6 +2,9 @@
 
 This repo uses Rust, Cargo, and Jujutsu (`jj`).
 
+The desktop shell also uses Tauri 2 and plain JavaScript. Node is used only for
+the frontend's dependency-free state tests.
+
 ## Version Control
 
 Use `jj` workflows. Do not create worktrees unless explicitly requested.
@@ -91,6 +94,39 @@ cargo run -p antennabench-report --example render_canonical_sample -- /tmp/anten
 
 For documentation-only changes, inspect the rendered intent and verify the diff
 is limited to the requested files.
+
+## Desktop Development
+
+The currently supported desktop development platform is macOS. Install Xcode
+Command Line Tools (or Xcode) before building Tauri, then let Mise install the
+pinned Rust, Node, and Tauri CLI versions:
+
+```bash
+xcode-select --install
+mise install
+```
+
+The desktop-specific commands are:
+
+```bash
+mise run desktop:test
+mise run desktop:build
+mise run desktop:dev
+```
+
+`desktop:test` exercises pure JavaScript workflow transitions. `desktop:build`
+builds a debug application without producing installer bundles, and
+`desktop:dev` launches the static shell with Tauri's development server.
+
+For a manual launch smoke check, run `mise run desktop:dev`, confirm the window
+opens on Session setup, navigate through Active run, Import / export, and Local
+report, then verify every unfinished action is visibly unavailable. Stop the
+development process with Control-C. No network, account, bundle, or external
+service is needed for this check.
+
+The main webview currently has an explicit empty capability: it cannot invoke
+filesystem, dialog, shell, network, plugin, or application commands. Any future
+capability expansion must stay coupled to a focused Rust orchestration slice.
 
 ## Documentation Updates
 
