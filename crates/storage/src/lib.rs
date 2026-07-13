@@ -12,6 +12,10 @@ use antennabench_core::{
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
+mod lossless_copy;
+
+pub use lossless_copy::BundleCopyError;
+
 #[derive(Debug, Clone)]
 pub struct BundleStore {
     root: PathBuf,

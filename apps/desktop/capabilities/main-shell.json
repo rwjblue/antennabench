@@ -1,7 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-shell",
-  "description": "Main shell capability limited to native open-session orchestration and its derived report.",
+  "description": "Main shell capability limited to opening, losslessly exporting, and reporting active sessions.",
   "windows": ["main"],
-  "permissions": ["allow-open-session-bundle", "allow-active-session-report"]
+  "permissions": [
+    "allow-open-session-bundle",
+    "allow-export-active-session",
+    "allow-active-session-report"
+  ]
 }

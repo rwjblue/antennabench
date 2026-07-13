@@ -106,11 +106,15 @@
             <p class="lede">Bundle operations will stay behind narrow Rust services. The webview receives no general filesystem authority.</p>
             <div class="action-list">
               <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report without changing the source.</p></div><button class="primary-action" type="button" data-open-session>Choose bundle</button></article>
-              <article><div><span>Export</span><h2>Copy the active bundle</h2><p>Preserve the original durable files and attachments losslessly.</p></div><button type="button" disabled>Planned in #18</button></article>
+              <article><div><span>Export</span><h2>Copy the active bundle</h2><p>Preserve the original durable files and attachments losslessly.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
             </div>
             <div class="open-feedback" data-open-feedback hidden role="status" aria-live="polite">
               <span class="feedback-mark" aria-hidden="true"></span>
               <div><strong data-feedback-message></strong><p data-feedback-detail></p></div>
+            </div>
+            <div class="open-feedback" data-export-feedback hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div><strong data-export-feedback-message></strong><p data-export-feedback-detail></p></div>
             </div>
           </section>
 

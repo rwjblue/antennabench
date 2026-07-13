@@ -32,9 +32,9 @@ Implemented:
   renderer-neutral rows for antenna SNR, band evidence, and slot evidence.
 - Standalone offline HTML report rendering with embedded styling, accessible
   chart tables, restrictive content security policy, and hostile-text escaping.
-- A Tauri desktop shell that opens existing directory bundles through one
-  narrow Rust command, validates and analyzes them without mutation, and shows
-  the local report in an isolated frame.
+- A Tauri desktop shell that opens existing directory bundles, validates and
+  analyzes them without mutation, shows the local report in an isolated frame,
+  and exports verified lossless copies through narrow Rust commands.
 - Fixture coverage for minimal, WSJT-X import-hardening, and balanced
   analysis-rich whole-station sessions.
 

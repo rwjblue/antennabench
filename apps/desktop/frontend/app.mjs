@@ -8,6 +8,10 @@ export function initialState(workflow = "setup") {
       session: null,
       error: null,
       notice: null,
+      exportStatus: "idle",
+      exportError: null,
+      exportNotice: null,
+      exportedBundleName: null,
     },
     workflow,
   );
@@ -49,6 +53,10 @@ export function openSessionSucceeded(state, session) {
     session,
     error: null,
     notice: null,
+    exportStatus: "idle",
+    exportError: null,
+    exportNotice: null,
+    exportedBundleName: null,
   };
 }
 
@@ -63,6 +71,46 @@ export function openSessionCancelled(state) {
 
 export function openSessionFailed(state, error) {
   return { ...state, openStatus: "error", error: normalizeOpenError(error), notice: null };
+}
+
+export function beginExportSession(state) {
+  return {
+    ...state,
+    exportStatus: "loading",
+    exportError: null,
+    exportNotice: null,
+    exportedBundleName: null,
+  };
+}
+
+export function exportSessionSucceeded(state, bundleName) {
+  return {
+    ...state,
+    exportStatus: "ready",
+    exportError: null,
+    exportNotice: null,
+    exportedBundleName: bundleName,
+  };
+}
+
+export function exportSessionCancelled(state) {
+  return {
+    ...state,
+    exportStatus: "idle",
+    exportError: null,
+    exportNotice: "cancelled",
+    exportedBundleName: null,
+  };
+}
+
+export function exportSessionFailed(state, error) {
+  return {
+    ...state,
+    exportStatus: "error",
+    exportError: normalizeOpenError(error),
+    exportNotice: null,
+    exportedBundleName: null,
+  };
 }
 
 export function normalizeOpenError(error) {
@@ -94,15 +142,23 @@ export function invokeActiveSessionReport(invoke) {
   return invoke("active_session_report");
 }
 
+export function invokeExportSession(invoke) {
+  return invoke("export_active_session");
+}
+
 function mount(root, browserWindow) {
   let state = initialState(workflowFromHash(browserWindow.location.hash));
   const navigation = [...root.querySelectorAll("[data-workflow]")];
   const panels = [...root.querySelectorAll("[data-panel]")];
   const openButton = root.querySelector("[data-open-session]");
+  const exportButton = root.querySelector("[data-export-session]");
   const transferStatus = root.querySelector("[data-transfer-status]");
   const openFeedback = root.querySelector("[data-open-feedback]");
   const feedbackMessage = root.querySelector("[data-feedback-message]");
   const feedbackDetail = root.querySelector("[data-feedback-detail]");
+  const exportFeedback = root.querySelector("[data-export-feedback]");
+  const exportFeedbackMessage = root.querySelector("[data-export-feedback-message]");
+  const exportFeedbackDetail = root.querySelector("[data-export-feedback-detail]");
   const reportStatus = root.querySelector("[data-report-status]");
   const reportPlaceholder = root.querySelector("[data-report-placeholder]");
   const reportViewer = root.querySelector("[data-report-viewer]");
@@ -126,6 +182,13 @@ function mount(root, browserWindow) {
 
     openButton.disabled = state.openStatus === "loading";
     openButton.textContent = state.openStatus === "loading" ? "Opening…" : "Choose bundle";
+    const exportLoading = state.exportStatus === "loading";
+    exportButton.disabled = state.session === null || state.openStatus === "loading" || exportLoading;
+    exportButton.textContent = state.session === null
+      ? "Open a bundle first"
+      : exportLoading
+        ? "Exporting…"
+        : "Export copy";
     transferStatus.textContent = transferStatusText(state);
     transferStatus.classList.toggle("muted", state.openStatus !== "ready");
 
@@ -136,6 +199,15 @@ function mount(root, browserWindow) {
       feedbackMessage.textContent = feedback.message;
       feedbackDetail.textContent = feedback.detail;
       feedbackDetail.hidden = feedback.detail.length === 0;
+    }
+
+    const exportFeedbackState = exportFeedbackModel(state);
+    exportFeedback.hidden = exportFeedbackState === null;
+    if (exportFeedbackState) {
+      exportFeedback.dataset.kind = exportFeedbackState.kind;
+      exportFeedbackMessage.textContent = exportFeedbackState.message;
+      exportFeedbackDetail.textContent = exportFeedbackState.detail;
+      exportFeedbackDetail.hidden = exportFeedbackState.detail.length === 0;
     }
 
     const hasSession = state.session !== null;
@@ -197,6 +269,31 @@ function mount(root, browserWindow) {
     render();
   });
 
+  exportButton.addEventListener("click", async () => {
+    state = beginExportSession(state);
+    render();
+
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") {
+        throw new Error("The native desktop bridge is unavailable.");
+      }
+
+      const outcome = await invokeExportSession(invoke);
+      if (outcome.status === "cancelled") {
+        state = exportSessionCancelled(state);
+      } else if (outcome.status === "exported" && outcome.bundleName) {
+        state = exportSessionSucceeded(state, outcome.bundleName);
+      } else {
+        throw new Error("The desktop command returned an unexpected response.");
+      }
+    } catch (error) {
+      state = exportSessionFailed(state, error);
+    }
+
+    render();
+  });
+
   render();
 }
 
@@ -224,6 +321,32 @@ function openFeedbackModel(state) {
       kind: "ready",
       message: `${state.session.bundleName} is ready.`,
       detail: "Its local report was rebuilt in memory from the source bundle.",
+    };
+  }
+  return null;
+}
+
+function exportFeedbackModel(state) {
+  if (state.exportStatus === "loading") {
+    return {
+      kind: "loading",
+      message: "Copying and verifying the active bundle…",
+      detail: "Original durable files and attachments are preserved byte-for-byte.",
+    };
+  }
+  if (state.exportError) return { kind: "error", ...state.exportError };
+  if (state.exportNotice === "cancelled") {
+    return {
+      kind: "cancelled",
+      message: "Export cancelled.",
+      detail: "The active session was not changed.",
+    };
+  }
+  if (state.exportedBundleName) {
+    return {
+      kind: "ready",
+      message: `${state.exportedBundleName} was exported and verified.`,
+      detail: "The original bundle remains the active session.",
     };
   }
   return null;

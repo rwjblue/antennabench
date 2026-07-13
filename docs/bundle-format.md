@@ -92,6 +92,20 @@ Strict validation currently checks:
 Use `BundleStore::read_normalized_validated()` when importing a bundle that may
 have missing or stale observation annotations.
 
+## Lossless Copies
+
+`BundleStore::copy_losslessly_to()` creates a new bundle directory from an
+existing normalized-valid source, but copies the source representation instead
+of serializing the normalized in-memory model. Manifest-declared durable root
+files and the complete nested `attachments/` tree retain their original bytes.
+The source is never modified.
+
+The destination must not already exist or be inside the source; lossless copy
+never overwrites or merges. Symbolic links and non-file/non-directory
+filesystem entries are rejected. If copying or verification fails, the newly
+created destination is removed when it remains safe to do so. A completed copy
+is reopened through `read_normalized_validated()` before success is returned.
+
 ## Fixtures
 
 The canonical sample-report input is:

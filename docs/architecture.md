@@ -104,20 +104,28 @@ state.
 The allowlisted `open_session_bundle` application command owns the native
 directory picker and composes storage, normalization, validation, report
 construction, and standalone HTML rendering in Rust. It returns only a small
-session summary. A second read-only `active_session_report` command supplies the
-already-derived document to the report surface. The frontend receives no path
-and has no general filesystem or dialog command permission. The dialog plugin
-is registered for native Rust use, but its frontend permissions are not
-granted. The only retained backend state is the selected source reference and
-derived active-session presentation; opening does not write to the bundle.
+session summary. The read-only `active_session_report` command supplies the
+already-derived document to the report surface. `export_active_session` owns a
+native save dialog and asks storage to create and verify a lossless copy of the
+active source. It returns only the destination bundle name and does not replace
+the active session.
+
+Lossless export copies the original durable root-file bytes and complete nested
+attachments tree rather than serializing normalized in-memory state. Existing
+destinations, symbolic links, and unsupported filesystem entries are rejected;
+an incomplete new destination is rolled back safely after copy or verification
+failure. The frontend receives no paths and has no general filesystem or dialog
+command permission. The dialog plugin is registered for native Rust use, but
+its frontend permissions are not granted. The only retained backend state is
+the selected source reference and derived active-session presentation; opening
+and exporting do not write to the source bundle.
 
 The report document is displayed through a sandboxed `srcdoc` frame without
 script, same-origin, navigation, or network authority. The trusted report
 renderer already emits no scripts or external resources and supplies its own
 restrictive content security policy. The containing shell also denies network
 connections and grants the frame only the access needed to display this local
-document. Future export slices must extend this boundary through another
-focused Rust command rather than moving filesystem access into JavaScript.
+document.
 
 ## Integration Seams
 

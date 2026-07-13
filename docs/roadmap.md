@@ -20,20 +20,11 @@ The current implementation focus is the bundle-first Rust foundation:
   conservative evidence sections, typed notices, and concrete chart-ready rows
 - deterministic standalone local HTML rendering with embedded visualizations,
   table fallbacks, escaped report text, and no network-loaded runtime
-- a minimal Tauri 2 desktop shell with static workflow navigation and no
-  privileged webview commands
+- a minimal Tauri 2 desktop shell that opens local bundles, renders their report,
+  and exports verified lossless copies through narrowly allowlisted commands
 - a realistic, purpose-built synthetic canonical sample-report session spanning
   two antennas, two bands, usable and excluded evidence, and missing data
 - golden fixture coverage
-
-## Next
-
-Likely next slices under the desktop workflow tracker:
-
-- Open, normalize, validate, and view an existing session bundle locally
-  ([#17](https://github.com/rwjblue/antennabench/issues/17)).
-- Export the active bundle losslessly
-  ([#18](https://github.com/rwjblue/antennabench/issues/18)).
 
 ## Later
 

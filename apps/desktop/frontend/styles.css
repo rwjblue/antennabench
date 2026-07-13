@@ -118,6 +118,9 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .action-list button.primary-action { border-color: #245451; color: #fff; background: #245451; cursor: pointer; }
 .action-list button.primary-action:hover { background: #173b38; }
 .action-list button.primary-action:disabled { border-color: #a5b4af; color: #f4f6f4; background: #8da09a; cursor: wait; }
+.action-list button.secondary-action:not(:disabled) { border-color: #245451; color: #245451; background: #fff; cursor: pointer; }
+.action-list button.secondary-action:not(:disabled):hover { color: #fff; background: #245451; }
+.action-list button.secondary-action:disabled { cursor: not-allowed; }
 
 .boundary-note { display: grid; grid-template-columns: 140px 1fr; gap: 22px; margin-top: 26px; padding: 18px 20px; border-left: 3px solid #70c5b8; border-radius: 0 12px 12px 0; background: #eef4ef; }
 .boundary-note strong { color: #315d57; font-size: 0.82rem; }

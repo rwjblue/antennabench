@@ -1,6 +1,8 @@
 mod open_session;
 
-use open_session::{active_session_report, open_session_bundle, ActiveSessionState};
+use open_session::{
+    active_session_report, export_active_session, open_session_bundle, ActiveSessionState,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -9,6 +11,7 @@ pub fn run() {
         .manage(ActiveSessionState::default())
         .invoke_handler(tauri::generate_handler![
             open_session_bundle,
+            export_active_session,
             active_session_report
         ])
         .run(tauri::generate_context!())

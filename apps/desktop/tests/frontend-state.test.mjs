@@ -3,9 +3,14 @@ import test from "node:test";
 
 import {
   WORKFLOWS,
+  beginExportSession,
   beginOpenSession,
+  exportSessionCancelled,
+  exportSessionFailed,
+  exportSessionSucceeded,
   initialState,
   invokeActiveSessionReport,
+  invokeExportSession,
   invokeOpenSession,
   openSessionCancelled,
   openSessionFailed,
@@ -22,6 +27,10 @@ test("the shell starts in session setup", () => {
     session: null,
     error: null,
     notice: null,
+    exportStatus: "idle",
+    exportError: null,
+    exportNotice: null,
+    exportedBundleName: null,
   });
 });
 
@@ -59,21 +68,68 @@ test("typed native failures retain friendly and technical context", () => {
   });
 });
 
+test("exporting has independent loading and success state", () => {
+  const active = openSessionSucceeded(initialState("transfer"), {
+    sessionId: "session-1",
+  });
+  const loading = beginExportSession(active);
+  const exported = exportSessionSucceeded(
+    loading,
+    "session-1-copy.session.wsprabundle",
+  );
+
+  assert.equal(loading.exportStatus, "loading");
+  assert.equal(loading.session, active.session);
+  assert.equal(exported.exportStatus, "ready");
+  assert.equal(
+    exported.exportedBundleName,
+    "session-1-copy.session.wsprabundle",
+  );
+  assert.equal(exported.session, active.session);
+});
+
+test("export cancellation and typed errors do not replace the active session", () => {
+  const active = openSessionSucceeded(initialState("transfer"), {
+    sessionId: "session-1",
+  });
+  const cancelled = exportSessionCancelled(beginExportSession(active));
+  const failed = exportSessionFailed(beginExportSession(active), {
+    kind: "destination",
+    message: "A file or directory already exists at that destination.",
+    detail: "/tmp/existing.session.wsprabundle",
+  });
+
+  assert.equal(cancelled.exportStatus, "idle");
+  assert.equal(cancelled.exportNotice, "cancelled");
+  assert.equal(cancelled.session, active.session);
+  assert.equal(failed.exportStatus, "error");
+  assert.equal(failed.exportError.kind, "destination");
+  assert.equal(failed.session, active.session);
+});
+
 test("the frontend invokes only the narrow session commands", async () => {
   const calls = [];
   const invoke = async (...args) => {
     calls.push(args);
     return args[0] === "open_session_bundle"
       ? { status: "opened", session: { sessionId: "session-1" } }
-      : "<!doctype html>";
+      : args[0] === "active_session_report"
+        ? "<!doctype html>"
+        : { status: "exported", bundleName: "session-1-copy.session.wsprabundle" };
   };
 
   const result = await invokeOpenSession(invoke);
   const report = await invokeActiveSessionReport(invoke);
+  const exported = await invokeExportSession(invoke);
 
-  assert.deepEqual(calls, [["open_session_bundle"], ["active_session_report"]]);
+  assert.deepEqual(calls, [
+    ["open_session_bundle"],
+    ["active_session_report"],
+    ["export_active_session"],
+  ]);
   assert.equal(result.status, "opened");
   assert.equal(report, "<!doctype html>");
+  assert.equal(exported.status, "exported");
 });
 
 test("each declared workflow can become active without mutating prior state", () => {

@@ -114,7 +114,7 @@ mise run desktop:build
 mise run desktop:dev
 ```
 
-`desktop:test` exercises the Rust open-session orchestration and pure JavaScript
+`desktop:test` exercises the Rust open/export orchestration and pure JavaScript
 workflow transitions. `desktop:build` builds a debug application without
 producing installer bundles, and `desktop:dev` launches the static shell with
 Tauri's development server.
@@ -127,16 +127,30 @@ session, and display the complete standalone report. Return to Import / export,
 start another open, and cancel the native picker; the active report should stay
 available and cancellation should be shown as a normal outcome. Selecting a
 directory that is not a `.session.wsprabundle` should instead show a friendly
-selection error with technical context. Stop the development process with
-Control-C and use `jj status` to confirm the source fixture was not changed.
+selection error with technical context.
 
-The main webview capability allows only `open_session_bundle` and the read-only
-`active_session_report`. The first command owns native directory selection and
-all filesystem/domain work, returning a small summary; the second returns only
-the already-derived report document. No dialog-plugin or filesystem-plugin
-permission is granted to JavaScript; this is intentional even though the native
-dialog plugin is registered. The local report is loaded into a sandboxed frame
-and neither the shell nor report is given network authority.
+For the export smoke check, return to Import / export and export the active
+bundle to a new path such as
+`/tmp/canonical-sample-report-copy.session.wsprabundle`. Confirm the loading and
+success states, then open that new copy and confirm the same report appears.
+Cancel a second export and confirm cancellation is a normal outcome and the
+active report remains available. Stop the development process with Control-C,
+then verify byte-for-byte tree preservation and an unchanged source:
+
+```bash
+diff -rq fixtures/session-bundles/canonical-sample-report.session.wsprabundle \
+  /tmp/canonical-sample-report-copy.session.wsprabundle
+jj status
+```
+
+The main webview capability allows only `open_session_bundle`,
+`export_active_session`, and the read-only `active_session_report`. The first
+two commands own native selection and all filesystem/domain work; the report
+command returns only the already-derived document. No dialog-plugin or
+filesystem-plugin permission is granted to JavaScript; this is intentional
+even though the native dialog plugin is registered. The local report is loaded
+into a sandboxed frame and neither the shell nor report is given network
+authority.
 
 ## Documentation Updates
 
