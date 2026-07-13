@@ -1,9 +1,11 @@
-//! Offline parsers for WSJT-X files.
-//!
-//! This crate currently focuses on importing local `ALL_WSPR.TXT` decode rows.
+//! WSJT-X companion adapters for offline WSPR logs and live UDP messages.
 
 mod all_wspr;
 mod import;
+mod live;
+mod protocol;
 
 pub use all_wspr::*;
 pub use import::*;
+pub use live::*;
+pub use protocol::*;

@@ -220,26 +220,40 @@ fn parse_callsign(
     raw_line: &str,
     value: &str,
 ) -> Result<String, AllWsprLineIssue> {
+    normalize_wspr_callsign(value).ok_or_else(|| {
+        issue(
+            line_number,
+            raw_line.to_string(),
+            AllWsprLineIssueKind::InvalidCallsign {
+                value: value.to_string(),
+            },
+        )
+    })
+}
+
+fn parse_grid(line_number: usize, raw_line: &str, value: &str) -> Result<String, AllWsprLineIssue> {
+    normalize_maidenhead_grid(value).ok_or_else(|| {
+        issue(
+            line_number,
+            raw_line.to_string(),
+            AllWsprLineIssueKind::InvalidGrid {
+                value: value.to_string(),
+            },
+        )
+    })
+}
+
+pub fn normalize_wspr_callsign(value: &str) -> Option<String> {
     let callsign = value.to_ascii_uppercase();
     let valid_length = (3..=12).contains(&callsign.len());
     let valid_chars = callsign.bytes().all(|byte| byte.is_ascii_alphanumeric());
     let has_letter = callsign.bytes().any(|byte| byte.is_ascii_alphabetic());
     let has_digit = callsign.bytes().any(|byte| byte.is_ascii_digit());
 
-    if valid_length && valid_chars && has_letter && has_digit {
-        Ok(callsign)
-    } else {
-        Err(issue(
-            line_number,
-            raw_line.to_string(),
-            AllWsprLineIssueKind::InvalidCallsign {
-                value: value.to_string(),
-            },
-        ))
-    }
+    (valid_length && valid_chars && has_letter && has_digit).then_some(callsign)
 }
 
-fn parse_grid(line_number: usize, raw_line: &str, value: &str) -> Result<String, AllWsprLineIssue> {
+pub fn normalize_maidenhead_grid(value: &str) -> Option<String> {
     let grid = value.to_ascii_uppercase();
     let bytes = grid.as_bytes();
     let is_valid = matches!(bytes.len(), 4 | 6)
@@ -250,17 +264,7 @@ fn parse_grid(line_number: usize, raw_line: &str, value: &str) -> Result<String,
         && (bytes.len() == 4
             || (matches!(bytes[4], b'A'..=b'X') && matches!(bytes[5], b'A'..=b'X')));
 
-    if is_valid {
-        Ok(grid)
-    } else {
-        Err(issue(
-            line_number,
-            raw_line.to_string(),
-            AllWsprLineIssueKind::InvalidGrid {
-                value: value.to_string(),
-            },
-        ))
-    }
+    is_valid.then_some(grid)
 }
 
 pub fn dbm_to_watts(dbm: i16) -> f32 {

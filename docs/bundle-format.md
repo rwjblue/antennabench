@@ -39,7 +39,8 @@ The implemented schema version is `1`.
 - `observations.jsonl`: local decodes, public reports, and imported spots.
 - `wsjtx.jsonl`: raw or near-raw WSJT-X adapter records, including
   `all_wspr_decode` for parsed decode rows and `all_wspr_malformed` for
-  preserved lines that could not become observations.
+  preserved lines that could not become observations. Live companion records
+  use `udp_heartbeat`, `udp_status`, `udp_wspr_decode`, and `udp_close`.
 - `rig.jsonl`: rig adapter state.
 - `propagation.jsonl`: time-scoped propagation context.
 
@@ -50,6 +51,18 @@ Offline WSJT-X WSPR log import preserves every nonblank imported line in
 `wsjtx.jsonl`. Valid `ALL_WSPR.TXT`-style decode rows also produce
 `observations.jsonl` local decodes. Malformed rows are retained as adapter
 records with issue details and do not produce observations.
+
+Live WSJT-X ingestion preserves the complete UDP datagram as lowercase hex plus
+its parsed known fields. Supported heartbeat, status, WSPR decode, and close
+messages become `wsjtx.jsonl` records. Unknown message types are ignored, and
+compatible fields appended after the known message layout are left in the
+preserved datagram without changing bundle schema version 1.
+
+Only new, on-air, nonduplicate WSPR decodes from a client whose latest status is
+in WSPR mode and matches the session station callsign and grid become local
+observations. Replayed, off-air, duplicate, semantically invalid, or
+insufficiently identified decodes remain auditable WSJT-X records without an
+observation.
 
 ## Observation Slot Annotations
 

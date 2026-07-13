@@ -67,6 +67,11 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+The WSJT-X live adapter tests use purpose-built protocol datagrams documented
+under `fixtures/wsjtx/udp/`; no operator capture or third-party spot data is
+committed. Loopback UDP coverage verifies only the receiver boundary. It does
+not require WSJT-X or network access during the test suite.
+
 For documentation-only changes, inspect the rendered intent and verify the diff
 is limited to the requested files.
 

@@ -12,6 +12,8 @@ The current implementation focus is the bundle-first Rust foundation:
 - strict validation
 - normalization before validation
 - offline WSJT-X WSPR log import from `ALL_WSPR.TXT`-style logs
+- live WSJT-X schema 2/3 UDP heartbeat, status, and WSPR decode ingestion with
+  auditable raw datagrams and conservative observation production
 - in-memory conservative A/B summaries with descriptive SNR statistics and
   insufficient/weak/moderate evidence-quality labels
 - deterministic, renderer-neutral report data with session context,
@@ -22,7 +24,6 @@ The current implementation focus is the bundle-first Rust foundation:
 
 Likely next slices:
 
-- WSJT-X live UDP status/decode companion path.
 - More realistic bundle fixtures from sample WSPR sessions.
 - Desktop workflow skeleton around session setup, run prompts, import/export,
   and local report viewing.

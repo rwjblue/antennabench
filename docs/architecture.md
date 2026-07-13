@@ -11,9 +11,9 @@ Current crates:
   and validation.
 - `crates/storage`: filesystem read/write APIs for `.session.wsprabundle`
   directories.
-- `crates/wsjtx`: offline WSJT-X companion import helpers for WSPR
-  `ALL_WSPR.TXT`-style logs, producing raw adapter records and local decode
-  observations.
+- `crates/wsjtx`: offline WSPR `ALL_WSPR.TXT` import plus a live WSJT-X UDP
+  companion boundary, producing preserved adapter records and eligible local
+  decode observations.
 - `crates/analysis`: conservative, descriptive A/B evidence summaries derived
   in memory from validated bundle contents and core schedule alignment.
 - `crates/report`: deterministic, renderer-neutral report data derived in
@@ -82,3 +82,31 @@ Analysis summaries and session reports are currently derived in memory and are
 not persisted. `analysis.json` remains bundle metadata rather than a serialized
 analysis summary or report. Report construction does not change the bundle
 format or schema version.
+
+## Live WSJT-X Boundary
+
+The live adapter accepts official WSJT-X network-message schemas 2 and 3. It
+parses heartbeat, the status prefix through station identity, WSPRDecode, and
+close messages. Unknown message types and compatible trailing fields are
+ignored for behavior while supported datagrams are retained exactly as hex in
+bundle-ready `WsjtXRecord` values.
+
+The parser is pure. `LiveWsjtxIngest` owns the small per-client state machine
+for schema/version identity, current status, duplicate suppression, and client
+lifecycle. A close message or a gap longer than three heartbeat periods resets
+status and duplicate state. The synchronous UDP receiver only binds, receives,
+timestamps, and exposes explicit shutdown; orchestration remains the future
+desktop application's responsibility.
+
+WSPRDecode carries a time-of-day rather than a date. The adapter reconstructs
+UTC by choosing the closest of the receipt date and its adjacent dates, using
+the supplied session start only as a deterministic tie-breaker. This handles
+midnight rollover without inventing a durable clock source. Decode and receipt
+times remain available in the preserved raw data.
+
+Observation production is deliberately conservative: `New` must be true,
+`Off air` false, the datagram must not be a duplicate in the current client
+generation, and current status must identify the configured station in WSPR
+mode. Status transmitting/receiving/decoding values are tracked and preserved
+but do not gate a decode because WSJT-X status transitions and completed decode
+delivery need not occur in the same instant.
