@@ -115,6 +115,9 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .card h2, .action-list h2, .empty-state h2, .report-placeholder h2 { margin-bottom: 9px; color: #1c403d; font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; font-weight: 500; }
 .card p, .action-list p, .empty-state p, .report-placeholder p { color: #697873; font-size: 0.86rem; line-height: 1.6; }
 .card button, .empty-state button, .action-list button { position: relative; z-index: 1; border: 1px solid #d7dcd5; border-radius: 9px; padding: 9px 11px; color: #89918c; background: #f4f5f1; font-size: 0.73rem; font-weight: 700; }
+.action-list button.primary-action { border-color: #245451; color: #fff; background: #245451; cursor: pointer; }
+.action-list button.primary-action:hover { background: #173b38; }
+.action-list button.primary-action:disabled { border-color: #a5b4af; color: #f4f6f4; background: #8da09a; cursor: wait; }
 
 .boundary-note { display: grid; grid-template-columns: 140px 1fr; gap: 22px; margin-top: 26px; padding: 18px 20px; border-left: 3px solid #70c5b8; border-radius: 0 12px 12px 0; background: #eef4ef; }
 .boundary-note strong { color: #315d57; font-size: 0.82rem; }
@@ -129,10 +132,27 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .action-list article > div > span { display: block; margin-bottom: 8px; color: #9b6a2b; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .action-list p { margin-bottom: 0; }
 
+.open-feedback { display: grid; grid-template-columns: 12px 1fr; gap: 13px; margin-top: 16px; padding: 16px 18px; border: 1px solid #c9d7d1; border-radius: 14px; background: #eef4ef; }
+.feedback-mark { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: #3d9889; box-shadow: 0 0 0 4px rgba(61, 152, 137, 0.12); }
+.open-feedback strong { display: block; color: #315d57; font-size: 0.86rem; }
+.open-feedback p { margin: 4px 0 0; color: #62736f; font-size: 0.76rem; line-height: 1.5; overflow-wrap: anywhere; }
+.open-feedback[data-kind="error"] { border-color: #e0b7ad; background: #faece8; }
+.open-feedback[data-kind="error"] .feedback-mark { background: #b6543f; box-shadow: 0 0 0 4px rgba(182, 84, 63, 0.12); }
+.open-feedback[data-kind="error"] strong { color: #793728; }
+.open-feedback[data-kind="cancelled"] .feedback-mark { background: #8b938d; box-shadow: 0 0 0 4px rgba(139, 147, 141, 0.12); }
+
 .report-placeholder { display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 38px; min-height: 360px; padding: 44px; border: 1px solid #d8ddd6; border-radius: 22px; background: #fff; }
 .report-bars { display: flex; align-items: end; justify-content: center; gap: 13px; height: 170px; padding: 24px; border-radius: 15px; background: #edf2ed; }
 .report-bars span { width: 24px; border-radius: 6px 6px 2px 2px; background: #70c5b8; }
 .report-bars span:nth-child(1) { height: 42%; }.report-bars span:nth-child(2) { height: 68%; }.report-bars span:nth-child(3) { height: 52%; }.report-bars span:nth-child(4) { height: 84%; background: #f0b35a; }
+
+.report-viewer { overflow: hidden; border: 1px solid #d8ddd6; border-radius: 18px; background: #fff; box-shadow: 0 10px 30px rgba(40, 63, 59, 0.07); }
+.report-context { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 19px; border-bottom: 1px solid #d8ddd6; background: #eef4ef; }
+.report-context div { display: grid; gap: 3px; }
+.report-context span { color: #77857f; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; }
+.report-context strong { color: #315d57; font-size: 0.82rem; overflow-wrap: anywhere; }
+.report-context p { margin: 0; color: #62736f; font-size: 0.72rem; text-align: right; }
+.report-viewer iframe { display: block; width: 100%; min-height: 680px; border: 0; background: #fff; }
 
 [hidden] { display: none !important; }
 
@@ -156,4 +176,6 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
   .status-chip { justify-self: start; }
   .boundary-note, .report-placeholder { grid-template-columns: 1fr; }
   .action-list article { align-items: flex-start; flex-direction: column; }
+  .report-context { align-items: flex-start; flex-direction: column; }
+  .report-context p { text-align: left; }
 }

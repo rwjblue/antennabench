@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-shell",
-  "description": "Navigation-only capability for the main AntennaBench shell; no frontend commands are permitted.",
+  "description": "Main shell capability limited to native open-session orchestration and its derived report.",
   "windows": ["main"],
-  "permissions": []
+  "permissions": ["allow-open-session-bundle", "allow-active-session-report"]
 }

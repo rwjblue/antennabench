@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # -*- mode: sh; sh-shell: bash; -*-
-#MISE description="Run desktop frontend state tests"
+#MISE description="Run desktop Rust and frontend state tests"
 
 set -euo pipefail
 
 node --test apps/desktop/tests/*.test.mjs
+cargo test -p antennabench-desktop --lib

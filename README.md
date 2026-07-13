@@ -30,17 +30,21 @@ Implemented:
 - Deterministic, in-memory report data derived from one bundle, with session
   context, conservative evidence sections, typed notices, and concrete
   renderer-neutral rows for antenna SNR, band evidence, and slot evidence.
+- Standalone offline HTML report rendering with embedded styling, accessible
+  chart tables, restrictive content security policy, and hostile-text escaping.
+- A Tauri desktop shell that opens existing directory bundles through one
+  narrow Rust command, validates and analyzes them without mutation, and shows
+  the local report in an isolated frame.
 - Fixture coverage for minimal, WSJT-X import-hardening, and balanced
   analysis-rich whole-station sessions.
 
 Not implemented yet:
 
-- Desktop UI.
 - WSJT-X live UDP adapter.
 - Rig control.
 - Public spot fetching.
 - Winner selection and advanced statistical analysis.
-- HTML, Markdown, PDF, image, and chart rendering.
+- Markdown, PDF, and image rendering.
 - Hosted report viewing or publishing.
 
 ## Documentation

@@ -96,16 +96,28 @@ not change the bundle format or schema version.
 ## Desktop Shell Boundary
 
 The desktop application is a thin Tauri host around static, framework-free web
-assets. Its current JavaScript owns disposable workflow navigation only. It
-does not model bundle contents, invoke domain behavior, persist UI state, or
-register any Rust commands.
+assets. Its JavaScript owns disposable workflow and loading state plus the small
+summary returned for an active session. It does not model bundle contents,
+normalize evidence, analyze observations, render report markup, or persist UI
+state.
 
-The main webview is named explicitly in one capability with an empty permission
-list. The scaffold has no filesystem, dialog, shell, network, or plugin
-authority, and its content security policy permits only bundled local assets.
-Future bundle opening and export slices must add narrow Rust orchestration and
-only the permissions their native selection flows require; general filesystem
-access must not move into the frontend.
+The allowlisted `open_session_bundle` application command owns the native
+directory picker and composes storage, normalization, validation, report
+construction, and standalone HTML rendering in Rust. It returns only a small
+session summary. A second read-only `active_session_report` command supplies the
+already-derived document to the report surface. The frontend receives no path
+and has no general filesystem or dialog command permission. The dialog plugin
+is registered for native Rust use, but its frontend permissions are not
+granted. The only retained backend state is the selected source reference and
+derived active-session presentation; opening does not write to the bundle.
+
+The report document is displayed through a sandboxed `srcdoc` frame without
+script, same-origin, navigation, or network authority. The trusted report
+renderer already emits no scripts or external resources and supplies its own
+restrictive content security policy. The containing shell also denies network
+connections and grants the frame only the access needed to display this local
+document. Future export slices must extend this boundary through another
+focused Rust command rather than moving filesystem access into JavaScript.
 
 ## Integration Seams
 

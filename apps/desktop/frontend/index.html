@@ -101,23 +101,39 @@
           <section class="workflow-panel" data-panel="transfer" aria-labelledby="transfer-title" hidden>
             <div class="panel-heading">
               <div><p class="eyebrow">Move durable evidence</p><h1 id="transfer-title">Import / export</h1></div>
-              <span class="status-chip muted">No bundle open</span>
+              <span class="status-chip muted" data-transfer-status>No bundle open</span>
             </div>
             <p class="lede">Bundle operations will stay behind narrow Rust services. The webview receives no general filesystem authority.</p>
             <div class="action-list">
-              <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report.</p></div><button type="button" disabled>Planned in #17</button></article>
+              <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report without changing the source.</p></div><button class="primary-action" type="button" data-open-session>Choose bundle</button></article>
               <article><div><span>Export</span><h2>Copy the active bundle</h2><p>Preserve the original durable files and attachments losslessly.</p></div><button type="button" disabled>Planned in #18</button></article>
+            </div>
+            <div class="open-feedback" data-open-feedback hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div><strong data-feedback-message></strong><p data-feedback-detail></p></div>
             </div>
           </section>
 
           <section class="workflow-panel" data-panel="report" aria-labelledby="report-title" hidden>
             <div class="panel-heading">
               <div><p class="eyebrow">Review the evidence</p><h1 id="report-title">Local report</h1></div>
-              <span class="status-chip muted">Unavailable</span>
+              <span class="status-chip muted" data-report-status>Unavailable</span>
             </div>
-            <div class="report-placeholder">
+            <div class="report-placeholder" data-report-placeholder>
               <div class="report-bars" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-              <div><h2>Open a valid session to view its report</h2><p>Issue #17 will compose the existing storage and report crates without moving analysis or rendering logic into JavaScript.</p></div>
+              <div><h2>Open a valid session to view its report</h2><p>Choose a directory bundle from Import / export. AntennaBench reads, normalizes, validates, analyzes, and renders it locally.</p></div>
+            </div>
+            <div class="report-viewer" data-report-viewer hidden>
+              <div class="report-context">
+                <div><span>Active source</span><strong data-report-bundle></strong></div>
+                <p data-report-summary></p>
+              </div>
+              <iframe
+                data-report-frame
+                title="AntennaBench session report"
+                sandbox=""
+                referrerpolicy="no-referrer"
+              ></iframe>
             </div>
           </section>
         </main>

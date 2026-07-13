@@ -114,19 +114,29 @@ mise run desktop:build
 mise run desktop:dev
 ```
 
-`desktop:test` exercises pure JavaScript workflow transitions. `desktop:build`
-builds a debug application without producing installer bundles, and
-`desktop:dev` launches the static shell with Tauri's development server.
+`desktop:test` exercises the Rust open-session orchestration and pure JavaScript
+workflow transitions. `desktop:build` builds a debug application without
+producing installer bundles, and `desktop:dev` launches the static shell with
+Tauri's development server.
 
 For a manual launch smoke check, run `mise run desktop:dev`, confirm the window
-opens on Session setup, navigate through Active run, Import / export, and Local
-report, then verify every unfinished action is visibly unavailable. Stop the
-development process with Control-C. No network, account, bundle, or external
-service is needed for this check.
+opens on Session setup, and navigate to Import / export. Choose
+`fixtures/session-bundles/canonical-sample-report.session.wsprabundle`. The UI
+should show its loading state, navigate to Local report, summarize the selected
+session, and display the complete standalone report. Return to Import / export,
+start another open, and cancel the native picker; the active report should stay
+available and cancellation should be shown as a normal outcome. Selecting a
+directory that is not a `.session.wsprabundle` should instead show a friendly
+selection error with technical context. Stop the development process with
+Control-C and use `jj status` to confirm the source fixture was not changed.
 
-The main webview currently has an explicit empty capability: it cannot invoke
-filesystem, dialog, shell, network, plugin, or application commands. Any future
-capability expansion must stay coupled to a focused Rust orchestration slice.
+The main webview capability allows only `open_session_bundle` and the read-only
+`active_session_report`. The first command owns native directory selection and
+all filesystem/domain work, returning a small summary; the second returns only
+the already-derived report document. No dialog-plugin or filesystem-plugin
+permission is granted to JavaScript; this is intentional even though the native
+dialog plugin is registered. The local report is loaded into a sandboxed frame
+and neither the shell nor report is given network authority.
 
 ## Documentation Updates
 
