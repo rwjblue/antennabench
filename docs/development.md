@@ -28,10 +28,25 @@ local plan must not be the only record of unfinished work. Material expansion
 of public behavior, durable schemas, or architectural scope requires user
 direction rather than an implicit issue rewrite.
 
-Before closing an implementation issue, record the delivered behavior, the
-Jujutsu change or commit, verification results, documentation updates, and any
-follow-up issues discovered. Use the templates under `.github/ISSUE_TEMPLATE/`
-for agent-ready implementation and decision work.
+When an issue is explicitly handed to an agent, the agent should confirm its
+dependencies, replace `agent-ready` with `in-progress`, and inspect the current
+checkout before planning or implementing. Label changes are managed by the
+agent through GitHub; they are not state transitions performed by a bot.
+
+If implementation becomes blocked on a product or architectural choice, the
+agent should apply `needs-decision`, explain the concrete blocker and viable
+choices, and leave the issue open. Partially implemented work must not be closed
+as complete.
+
+Before closing an implementation issue, land the work and record the delivered
+behavior, Jujutsu change or commit, verification results, documentation updates,
+and any follow-up issues discovered. The agent should close the focused issue
+and update any parent tracking issue. If work is only committed locally, the
+issue remains open.
+
+Use the templates under `.github/ISSUE_TEMPLATE/` for agent-ready implementation
+and decision work. Implementation issues begin with `agent-ready` and
+`enhancement`; decision tasks begin with `agent-ready` and `decision`.
 
 ## Rust Conventions
 

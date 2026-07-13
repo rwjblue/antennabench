@@ -2,7 +2,7 @@
 name: Implementation decision
 about: Resolve a choice that materially affects an implementation slice
 title: "Decision: "
-labels: ""
+labels: "agent-ready, decision"
 assignees: ""
 ---
 
@@ -53,4 +53,5 @@ unless this issue explicitly authorizes them.
 
 ## Result
 
-Record the selected option, rationale, consequences, and follow-up issues.
+Record the selected option, rationale, consequences, and follow-up issues. Close
+this issue and update any parent tracking issue once the decision is durable.

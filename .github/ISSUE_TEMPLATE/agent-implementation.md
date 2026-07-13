@@ -2,7 +2,7 @@
 name: Agent-ready implementation
 about: Define a bounded implementation slice that can be handed directly to an agent
 title: ""
-labels: ""
+labels: "agent-ready, enhancement"
 assignees: ""
 ---
 
@@ -69,5 +69,6 @@ choice becomes necessary.
 
 ## Completion evidence
 
-Record the delivered behavior, Jujutsu change or commit, verification commands
-and results, documentation updates, and follow-up issues before closing.
+After the work is landed, record the delivered behavior, Jujutsu change or
+commit, verification commands and results, documentation updates, and follow-up
+issues. Close this issue and update any parent tracking issue.

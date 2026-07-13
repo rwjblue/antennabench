@@ -34,6 +34,19 @@ jj-commit-default: auto
 - Tests, fixtures, and public APIs are the source of truth for implemented
   behavior when docs and code disagree.
 
+## Issue Workflow
+
+When explicitly handed a GitHub issue:
+
+- Treat the issue as approved scope and confirm its dependencies are satisfied.
+- Replace `agent-ready` with `in-progress` and inspect the current checkout
+  before planning or implementing.
+- Stay within the issue contract; request direction for material expansion.
+- Run the required verification and land the work before completion.
+- Post completion evidence, close the issue, and update its tracking issue.
+- If blocked by a product or architecture choice, apply `needs-decision`,
+  explain the blocker, and leave the issue open.
+
 ## Rust Conventions
 
 - Prefer workspace-managed dependency versions: define shared third-party
