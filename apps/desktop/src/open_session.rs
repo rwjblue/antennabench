@@ -298,28 +298,16 @@ fn build_active_session(
     })
 }
 
-#[tauri::command]
-pub(crate) async fn open_session_bundle(
-    app: AppHandle,
-    state: State<'_, ActiveSessionState>,
-) -> Result<OpenSessionOutcome, SessionErrorPayload> {
-    let Some(selection) = app
-        .dialog()
-        .file()
-        .set_title("Open an AntennaBench session bundle")
-        .set_can_create_directories(false)
-        .blocking_pick_folder()
-    else {
+fn open_session_with_selection<F>(
+    state: &ActiveSessionState,
+    select: F,
+) -> Result<OpenSessionOutcome, SessionErrorPayload>
+where
+    F: FnOnce() -> Result<Option<PathBuf>, SessionErrorPayload>,
+{
+    let Some(path) = select()? else {
         return Ok(OpenSessionOutcome::Cancelled);
     };
-
-    let path = selection.into_path().map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Selection,
-            "The selected directory is not available as a local path.",
-            error.to_string(),
-        )
-    })?;
     let session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
     let summary = session.summary.clone();
 
@@ -332,11 +320,13 @@ pub(crate) async fn open_session_bundle(
     Ok(OpenSessionOutcome::Opened { session: summary })
 }
 
-#[tauri::command]
-pub(crate) async fn export_active_session(
-    app: AppHandle,
-    state: State<'_, ActiveSessionState>,
-) -> Result<ExportSessionOutcome, SessionErrorPayload> {
+fn export_active_session_with_selection<F>(
+    state: &ActiveSessionState,
+    select: F,
+) -> Result<ExportSessionOutcome, SessionErrorPayload>
+where
+    F: FnOnce(&Path) -> Result<Option<PathBuf>, SessionErrorPayload>,
+{
     let source = {
         let active = state.0.lock().map_err(|_| {
             SessionErrorPayload::report_pipeline("active session state is unavailable")
@@ -348,36 +338,15 @@ pub(crate) async fn export_active_session(
             .map_err(SessionErrorPayload::from)?
     };
 
-    let mut dialog = app
-        .dialog()
-        .file()
-        .set_title("Export an AntennaBench session bundle copy")
-        .set_file_name(suggested_export_name(&source))
-        .set_can_create_directories(true)
-        .add_filter("AntennaBench session bundle", &["wsprabundle"]);
-    if let Some(parent) = source.parent() {
-        dialog = dialog.set_directory(parent);
-    }
-
-    let Some(selection) = dialog.blocking_save_file() else {
+    let Some(destination) = select(&source)? else {
         return Ok(ExportSessionOutcome::Cancelled);
     };
-    let destination = selection.into_path().map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Destination,
-            "The selected destination is not available as a local path.",
-            error.to_string(),
-        )
-    })?;
     let bundle_name = export_bundle(&source, &destination).map_err(SessionErrorPayload::from)?;
 
     Ok(ExportSessionOutcome::Exported { bundle_name })
 }
 
-#[tauri::command]
-pub(crate) fn active_session_report(
-    state: State<'_, ActiveSessionState>,
-) -> Result<String, SessionErrorPayload> {
+fn active_session_report_for(state: &ActiveSessionState) -> Result<String, SessionErrorPayload> {
     let active = state
         .0
         .lock()
@@ -402,6 +371,69 @@ pub(crate) fn active_session_report(
     Ok(session.report_html.clone())
 }
 
+#[tauri::command]
+pub(crate) async fn open_session_bundle(
+    app: AppHandle,
+    state: State<'_, ActiveSessionState>,
+) -> Result<OpenSessionOutcome, SessionErrorPayload> {
+    open_session_with_selection(state.inner(), || {
+        let Some(selection) = app
+            .dialog()
+            .file()
+            .set_title("Open an AntennaBench session bundle")
+            .set_can_create_directories(false)
+            .blocking_pick_folder()
+        else {
+            return Ok(None);
+        };
+
+        selection.into_path().map(Some).map_err(|error| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Selection,
+                "The selected directory is not available as a local path.",
+                error.to_string(),
+            )
+        })
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn export_active_session(
+    app: AppHandle,
+    state: State<'_, ActiveSessionState>,
+) -> Result<ExportSessionOutcome, SessionErrorPayload> {
+    export_active_session_with_selection(state.inner(), |source| {
+        let mut dialog = app
+            .dialog()
+            .file()
+            .set_title("Export an AntennaBench session bundle copy")
+            .set_file_name(suggested_export_name(source))
+            .set_can_create_directories(true)
+            .add_filter("AntennaBench session bundle", &["wsprabundle"]);
+        if let Some(parent) = source.parent() {
+            dialog = dialog.set_directory(parent);
+        }
+
+        let Some(selection) = dialog.blocking_save_file() else {
+            return Ok(None);
+        };
+        selection.into_path().map(Some).map_err(|error| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Destination,
+                "The selected destination is not available as a local path.",
+                error.to_string(),
+            )
+        })
+    })
+}
+
+#[tauri::command]
+pub(crate) fn active_session_report(
+    state: State<'_, ActiveSessionState>,
+) -> Result<String, SessionErrorPayload> {
+    active_session_report_for(state.inner())
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, io, path::Path};
@@ -412,7 +444,9 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        copy_error_payload, export_bundle, open_bundle, report_error_payload, SessionErrorKind,
+        active_session_report_for, copy_error_payload, export_active_session_with_selection,
+        export_bundle, open_bundle, open_session_with_selection, report_error_payload,
+        ActiveSessionState, ExportSessionOutcome, OpenSessionOutcome, SessionErrorKind,
         SessionErrorPayload,
     };
 
@@ -584,5 +618,125 @@ mod tests {
 
         assert_eq!(destination.kind, SessionErrorKind::Destination);
         assert_eq!(verification.kind, SessionErrorKind::Verification);
+    }
+
+    #[test]
+    fn desktop_e2e_canonical_workflow_is_lossless_and_non_mutating() {
+        let temp = TempDir::new().expect("create isolated desktop workflow directory");
+        let source = copy_fixture(&temp);
+        let destination = temp.path().join("exported.session.wsprabundle");
+        let before = snapshot_files(&source).expect("snapshot source before desktop workflow");
+        let state = ActiveSessionState::default();
+
+        println!("desktop-e2e phase=open source={}", source.display());
+        let opened = open_session_with_selection(&state, || Ok(Some(source.clone())))
+            .expect("open canonical source through desktop orchestration");
+        let OpenSessionOutcome::Opened { session } = opened else {
+            panic!("deterministic source selection unexpectedly cancelled");
+        };
+        assert_eq!(session.session_id, "session-canonical-sample-2026-03-14");
+
+        println!("desktop-e2e phase=report session_id={}", session.session_id);
+        let source_report = active_session_report_for(&state)
+            .expect("derive active report through desktop orchestration");
+        assert!(source_report.starts_with("<!doctype html>"));
+
+        println!(
+            "desktop-e2e phase=export destination={}",
+            destination.display()
+        );
+        let exported = export_active_session_with_selection(&state, |active_source| {
+            assert_eq!(active_source, source);
+            Ok(Some(destination.clone()))
+        })
+        .expect("export canonical source through desktop orchestration");
+        assert_eq!(
+            exported,
+            ExportSessionOutcome::Exported {
+                bundle_name: "exported.session.wsprabundle".into()
+            }
+        );
+        assert_eq!(
+            snapshot_files(&destination).expect("snapshot exported desktop bundle"),
+            before,
+            "exported tree and file bytes must equal the selected source"
+        );
+        assert_eq!(
+            snapshot_files(&source).expect("snapshot source after desktop export"),
+            before,
+            "the desktop workflow must not mutate its source"
+        );
+
+        println!(
+            "desktop-e2e phase=reopen destination={}",
+            destination.display()
+        );
+        let reopened = open_session_with_selection(&state, || Ok(Some(destination.clone())))
+            .expect("reopen exported bundle through desktop orchestration");
+        let OpenSessionOutcome::Opened {
+            session: reopened_session,
+        } = reopened
+        else {
+            panic!("deterministic exported selection unexpectedly cancelled");
+        };
+        assert_eq!(reopened_session.session_id, session.session_id);
+        assert_eq!(
+            active_session_report_for(&state).expect("view report after exported bundle reopen"),
+            source_report
+        );
+        assert_eq!(
+            snapshot_files(&source).expect("snapshot source after exported bundle reopen"),
+            before,
+            "reopening the export must not mutate the original source"
+        );
+        println!("desktop-e2e result=passed files={}", before.len());
+    }
+
+    #[test]
+    fn desktop_e2e_cancellation_is_a_normal_outcome() {
+        let state = ActiveSessionState::default();
+        assert_eq!(
+            open_session_with_selection(&state, || Ok(None)).expect("cancel opening"),
+            OpenSessionOutcome::Cancelled
+        );
+
+        let fixture = canonical_fixture();
+        open_session_with_selection(&state, || Ok(Some(fixture)))
+            .expect("open canonical source before cancellation checks");
+        let report = active_session_report_for(&state).expect("capture active report");
+        assert_eq!(
+            open_session_with_selection(&state, || Ok(None)).expect("cancel replacement open"),
+            OpenSessionOutcome::Cancelled
+        );
+        assert_eq!(
+            export_active_session_with_selection(&state, |_| Ok(None))
+                .expect("cancel active export"),
+            ExportSessionOutcome::Cancelled
+        );
+        assert_eq!(
+            active_session_report_for(&state).expect("retain report after cancellations"),
+            report
+        );
+        println!("desktop-e2e result=cancelled-normal active_report=retained");
+    }
+
+    #[test]
+    fn desktop_e2e_failure_is_typed_and_diagnostic() {
+        let temp = TempDir::new().expect("create isolated invalid desktop fixture");
+        let source = copy_fixture(&temp);
+        fs::write(source.join("station.json"), b"{not json")
+            .expect("make desktop fixture deterministically invalid");
+        let state = ActiveSessionState::default();
+
+        let error = open_session_with_selection(&state, || Ok(Some(source.clone())))
+            .expect_err("reject invalid JSON through desktop orchestration");
+
+        println!(
+            "desktop-e2e result=typed-failure kind={:?} detail={}",
+            error.kind, error.detail
+        );
+        assert_eq!(error.kind, SessionErrorKind::JsonParse);
+        assert!(error.detail.contains("station.json"));
+        assert!(active_session_report_for(&state).is_err());
     }
 }

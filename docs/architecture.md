@@ -120,6 +120,15 @@ its frontend permissions are not granted. The only retained backend state is
 the selected source reference and derived active-session presentation; opening
 and exporting do not write to the source bundle.
 
+Native open/save pickers are thin path-selection adapters around private Rust
+orchestration functions. The unattended desktop integration test substitutes
+only that selection result, then exercises the same storage, validation,
+analysis, report, active-state, export-verification, and reopen code used by the
+Tauri commands. This seam adds no webview command, permission, path argument, or
+release-only behavior. Native picker presentation and OS path handoff remain a
+small optional interactive platform smoke; domain and workflow regression
+coverage runs without a window or foreground input.
+
 The report document is displayed through a sandboxed `srcdoc` frame without
 script, same-origin, navigation, or network authority. The trusted report
 renderer already emits no scripts or external resources and supplies its own

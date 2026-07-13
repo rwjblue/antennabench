@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Run the unattended desktop open/report/export/reopen workflow"
+
+set -euo pipefail
+
+log_dir="target/desktop-e2e"
+log_file="$log_dir/last-run.log"
+mkdir -p "$log_dir"
+
+{
+  echo "desktop-e2e: deterministic Rust desktop boundary; no window or native picker is launched"
+  /usr/bin/time -p cargo test -p antennabench-desktop --lib desktop_e2e -- --nocapture
+} 2>&1 | tee "$log_file"

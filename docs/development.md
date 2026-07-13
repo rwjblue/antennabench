@@ -109,39 +109,46 @@ mise install
 The desktop-specific commands are:
 
 ```bash
+mise run desktop:e2e
 mise run desktop:test
 mise run desktop:build
 mise run desktop:dev
 ```
 
-`desktop:test` exercises the Rust open/export orchestration and pure JavaScript
-workflow transitions. `desktop:build` builds a debug application without
-producing installer bundles, and `desktop:dev` launches the static shell with
-Tauri's development server.
+`desktop:e2e` is the routine desktop workflow check for agents and developers.
+It injects deterministic open/save selections immediately below the native
+picker adapter, then runs the production Rust open, normalized validation,
+analysis, report rendering, active-session state, lossless export verification,
+and reopen path. It asserts source non-mutation and exported tree/byte equality,
+and separately covers normal open/export cancellation and a typed malformed-JSON
+failure. Temporary sources and destinations are isolated and automatically
+removed. The task does not launch Tauri, create a window, take focus, or send
+keyboard or pointer input.
 
-For a manual launch smoke check, run `mise run desktop:dev`, confirm the window
-opens on Session setup, and navigate to Import / export. Choose
-`fixtures/session-bundles/canonical-sample-report.session.wsprabundle`. The UI
-should show its loading state, navigate to Local report, summarize the selected
-session, and display the complete standalone report. Return to Import / export,
-start another open, and cancel the native picker; the active report should stay
-available and cancellation should be shown as a normal outcome. Selecting a
-directory that is not a `.session.wsprabundle` should instead show a friendly
-selection error with technical context.
+The task streams phase diagnostics to the terminal and overwrites the bounded
+`target/desktop-e2e/last-run.log` artifact on every run. CI runs the same task,
+so failures retain the selected phase, fixture path, typed error kind, technical
+detail, and Rust assertion context in both the artifact and job log.
 
-For the export smoke check, return to Import / export and export the active
-bundle to a new path such as
-`/tmp/canonical-sample-report-copy.session.wsprabundle`. Confirm the loading and
-success states, then open that new copy and confirm the same report appears.
-Cancel a second export and confirm cancellation is a normal outcome and the
-active report remains available. Stop the development process with Control-C,
-then verify byte-for-byte tree preservation and an unchanged source:
+On the 2026-07-13 macOS development machine, the warm task completed in 0.42 s.
+The prior issue #18 foreground smoke took 3 min 49 s from application relaunch
+through cleanup (2 min 49 s from opening the first picker through the final
+cancellation). The unattended path is therefore more than 400 times faster
+than the interactive workflow while covering the canonical behavior more
+deterministically.
 
-```bash
-diff -rq fixtures/session-bundles/canonical-sample-report.session.wsprabundle \
-  /tmp/canonical-sample-report-copy.session.wsprabundle
-jj status
-```
+`desktop:test` retains the focused Rust and pure JavaScript tests.
+`desktop:build` builds a debug application without producing installer bundles,
+and `desktop:dev` launches the static shell with Tauri's development server.
+
+The remaining native-picker smoke is optional release/platform verification,
+not routine regression testing. Run `mise run desktop:dev`, confirm the window
+opens, and verify only that the open and save pickers appear, cancellation
+returns to the app normally, and selecting the canonical fixture hands a local
+directory path to the app. The unattended test owns open → report → export →
+reopen semantics, error behavior, preservation assertions, and diagnostics; do
+not repeat those checks with coordinate-driven automation. Stop the development
+process with Control-C and use `jj status` to confirm the fixture was unchanged.
 
 The main webview capability allows only `open_session_bundle`,
 `export_active_session`, and the read-only `active_session_report`. The first

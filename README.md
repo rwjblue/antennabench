@@ -35,6 +35,9 @@ Implemented:
 - A Tauri desktop shell that opens existing directory bundles, validates and
   analyzes them without mutation, shows the local report in an isolated frame,
   and exports verified lossless copies through narrow Rust commands.
+- An unattended desktop integration path that verifies canonical open, report,
+  lossless export, cancellation, typed failure, and reopen behavior without
+  launching a window or taking foreground input.
 - Fixture coverage for minimal, WSJT-X import-hardening, and balanced
   analysis-rich whole-station sessions.
 
