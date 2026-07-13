@@ -16,10 +16,17 @@ jj-commit-default: auto
 
 - Evergreen project docs live under `docs/` and are the maintained source of
   truth for architecture, bundle format, development workflow, and roadmap.
+- GitHub Issues are the durable source of truth for unfinished work and open
+  implementation decisions.
 - `docs/superpowers/` contains temporary agent planning artifacts. These files
   may be useful while work is in progress, but they are not authoritative and
-  should not be treated as current documentation.
+  should not be treated as current documentation or the only record of planned
+  work.
 - Do not implement from a plan until the user approves it.
+- An explicitly handed-off, agent-ready GitHub issue is approved implementation
+  scope. The `agent-ready` label alone does not authorize work to begin.
+- Stop and request direction before materially expanding an approved issue's
+  public behavior, durable schema, or architectural scope.
 - When implementation changes project behavior, update the relevant evergreen
   doc in the same change when practical.
 - Prefer documenting stable concepts and invariants over copying detailed plan

@@ -14,6 +14,16 @@ plans.
 - [Decisions](decisions/): short records of project decisions that should remain
   easy to find.
 
+## Work Tracking
+
+The roadmap stays intentionally high-level. GitHub Issues are the durable source
+of truth for unfinished work and open implementation decisions. Agent-ready
+implementation and decision templates live under `.github/ISSUE_TEMPLATE/`.
+
+Detailed agent plans under `docs/superpowers/` may elaborate on an approved
+issue while work is active, but they are ignored scratch artifacts and must not
+be the only record of intended work.
+
 ## Source Of Truth
 
 Code, tests, fixtures, and public APIs are authoritative for implemented
@@ -21,4 +31,4 @@ behavior. These docs summarize that behavior and should be updated when project
 behavior changes.
 
 Agent planning artifacts under `docs/superpowers/` are ignored and ephemeral.
-Do not treat them as current documentation.
+Do not treat them as current documentation or as the durable work tracker.
