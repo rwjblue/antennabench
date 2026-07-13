@@ -23,8 +23,8 @@ Planned crates and apps:
 
 - `apps/desktop`: desktop application shell.
 - `apps/web`: hosted report viewer and publishing surface.
-- `crates/rig`: rig-control adapters.
-- `crates/public-spots`: WSPRnet, WSPR.live, and imported spot adapters.
+- `crates/rig`: optional rig-observation or control adapters.
+- `crates/public-spots`: source-neutral public and imported spot adapters.
 
 ## Data Flow
 
@@ -82,6 +82,45 @@ Analysis summaries and session reports are currently derived in memory and are
 not persisted. `analysis.json` remains bundle metadata rather than a serialized
 analysis summary or report. Report construction does not change the bundle
 format or schema version.
+
+## Integration Seams
+
+External systems should enter through narrow adapters so their availability,
+payload shape, and failure behavior do not become experiment-model invariants.
+The durable boundaries are:
+
+- WSPR integration produces preserved adapter records and eligible
+  observations; WSJT-X companion mode is first, while native implementations
+  may be added later.
+- Rig integration is optional. A session remains runnable with manual switching
+  and no rig adapter.
+- Public-spot and propagation sources preserve provenance and raw or near-raw
+  inputs before normalizing supported values into bundle records.
+- Local stores, disposable indexes, and publishers consume the session bundle;
+  they do not replace it as the evidence source of truth.
+
+These seams describe responsibilities, not approved provider or library
+choices. Public-spot source and polling policy is tracked by
+[#13](https://github.com/rwjblue/antennabench/issues/13), and the first optional
+rig-control milestone by
+[#14](https://github.com/rwjblue/antennabench/issues/14).
+
+## Hosted Trust Boundary
+
+A hosted viewer may accept only a bounded session-bundle representation. The
+ingress boundary must enforce structural, semantic, path/archive, and size
+limits before analysis or rendering. Original uploaded evidence remains
+auditable; normalized data, metadata, report pages, charts, and indexes remain
+derived and replaceable.
+
+Hosted output is rendered by trusted application code. Bundle-provided HTML,
+JavaScript, templates, and other executable content are never rendering inputs,
+and all operator-authored or imported text is treated as untrusted. Fixed-bundle
+rendering tests and malformed, hostile, oversized, and archive-abuse cases belong
+at this boundary. Platform services and the exact upload/storage lifecycle are
+deferred to [#11](https://github.com/rwjblue/antennabench/issues/11); identity,
+authorization, visibility, and moderation are deferred to
+[#12](https://github.com/rwjblue/antennabench/issues/12).
 
 ## Live WSJT-X Boundary
 

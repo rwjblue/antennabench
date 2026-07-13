@@ -24,20 +24,30 @@ The current implementation focus is the bundle-first Rust foundation:
 
 Likely next slices:
 
-- More realistic bundle fixtures from sample WSPR sessions.
-- Desktop workflow skeleton around session setup, run prompts, import/export,
-  and local report viewing.
+- A realistic canonical sample-report session
+  ([#3](https://github.com/rwjblue/antennabench/issues/3)).
+- Standalone local HTML report rendering
+  ([#4](https://github.com/rwjblue/antennabench/issues/4)).
+- A desktop workflow skeleton around session setup, run prompts, import/export,
+  and local report viewing
+  ([#5](https://github.com/rwjblue/antennabench/issues/5)).
 
 ## Later
 
 Later tracks:
 
-- Advanced statistics and winner-selection methods.
-- HTML, Markdown, PDF, image, and chart rendering.
-- Rig-control adapters.
-- Public spot source adapters.
-- Hosted report viewer and upload validation.
-- Account and publishing flow.
+- Propagation snapshot acquisition and normalization
+  ([#6](https://github.com/rwjblue/antennabench/issues/6)).
+- A rebuildable local SQLite/index boundary
+  ([#7](https://github.com/rwjblue/antennabench/issues/7)).
+- Advanced analysis, conclusion language, and future chart-ready report data
+  ([#15](https://github.com/rwjblue/antennabench/issues/15)).
+- Optional rig observation or control
+  ([#14](https://github.com/rwjblue/antennabench/issues/14)).
+- Public spot source and polling integration
+  ([#13](https://github.com/rwjblue/antennabench/issues/13)).
+- Safe hosted report viewing, upload validation, identity, and publishing
+  ([#10](https://github.com/rwjblue/antennabench/issues/10)).
 - Native WSPR or mobile-specific operation.
 - Public discovery and callsign-oriented browsing.
 
