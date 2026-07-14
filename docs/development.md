@@ -118,10 +118,12 @@ by:
 mise run supply-chain
 ```
 
-The repository-owned Rust advisory, license, source, wildcard, and exception
-gate is tracked by [#59](https://github.com/rwjblue/antennabench/issues/59).
-Dependabot alerts, CodeQL, Action restrictions, and the main ruleset require
-the explicit owner action in
+The repository-owned Rust advisory, license, source, wildcard, duplicate, and
+exception gates run through `mise run dependency-policy` and
+`mise run advisory-fresh`. `mise run release-preflight` combines those gates
+with the workflow/tool-pin checks and always fetches the RustSec database.
+Dependabot alerts, CodeQL, Action restrictions, and the main ruleset still
+require the explicit owner action in
 [#60](https://github.com/rwjblue/antennabench/issues/60). See
 [Supply-Chain Updates](supply-chain.md) for the review and update procedure.
 
@@ -134,6 +136,12 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 ```
+
+`mise run ci` additionally runs toolchain, workflow-input, exception-expiry,
+license, source, wildcard, and duplicate policy. It deliberately does not make
+ordinary CI depend on a fresh network advisory fetch; the separate read-only
+Rust supply-chain workflow supplies that gate on dependency pull requests,
+every main push, daily, on demand, and as the reusable release preflight.
 
 The WSJT-X live adapter tests use purpose-built protocol datagrams documented
 under `fixtures/wsjtx/udp/`; no operator capture or third-party spot data is

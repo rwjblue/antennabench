@@ -25,6 +25,12 @@ Repository-owner settings and rulesets are explicit follow-up work. This
 decision does not enable a setting, create a credential, or weaken the signed
 release boundary.
 
+Implementation status (2026-07-14): issues #58 and #59 implement the
+repository-owned Action/update and Rust policy gates. The inventory below is
+the pre-implementation snapshot retained as decision evidence. Current
+commands, baseline results, exceptions, and operating procedures are maintained
+in [Supply-Chain Updates](../supply-chain.md).
+
 ## Current Inventory
 
 The repository was inspected on 2026-07-14:

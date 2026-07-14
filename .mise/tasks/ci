@@ -6,6 +6,7 @@ set -euo pipefail
 
 mise run toolchain
 mise run supply-chain
+mise run dependency-policy
 mise run desktop:e2e
 mise run desktop:frontend-test
 mise run fmt

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "id": "glib-variant-str-iterator-unsoundness",
+      "category": "unsound",
+      "severity": "high",
+      "identity": "RUSTSEC-2024-0429",
+      "package": {
+        "name": "glib",
+        "version": "0.18.5"
+      },
+      "reachability": "The crate is Linux-only Tauri GTK infrastructure; AntennaBench has no direct VariantStr or VariantStrIter calls, but framework reachability cannot be excluded.",
+      "rationale": "The fix requires glib 0.20 or newer while Tauri's current GTK dependency remains on the incompatible glib 0.18 line.",
+      "mitigation": "Avoid the affected iterator API, retain Linux CI coverage, and track a Tauri or GTK upgrade in issue 83 before the exception expires.",
+      "owner": "@rwjblue",
+      "issue": "https://github.com/rwjblue/antennabench/issues/83",
+      "approved_on": "2026-07-14",
+      "expires_on": "2026-08-13",
+      "enforcement_reference": "RUSTSEC-2024-0429"
+    },
+    {
+      "id": "webpki-roots-cdla-permissive-2",
+      "category": "license",
+      "severity": "informational",
+      "identity": "CDLA-Permissive-2.0",
+      "package": {
+        "name": "webpki-roots",
+        "version": "1.0.8"
+      },
+      "reachability": "The root data is used by reqwest and hyper-rustls when the optional NOAA HTTPS adapter performs a live request.",
+      "rationale": "This is the only locked license outside the general allowlist and it is restricted to the exact CA-root data crate version.",
+      "mitigation": "Track distribution notice obligations in issue 82 and retain the license text or select a reviewed native-root strategy before expiry.",
+      "owner": "@rwjblue",
+      "issue": "https://github.com/rwjblue/antennabench/issues/82",
+      "approved_on": "2026-07-14",
+      "expires_on": "2026-10-12",
+      "enforcement_reference": "webpki-roots@1.0.8"
+    }
+  ]
+}

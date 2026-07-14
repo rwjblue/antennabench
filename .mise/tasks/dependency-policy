@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Run deterministic Rust license, source, and dependency policy"
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$repo_root"
+
+node --test scripts/validate-dependency-exceptions.test.mjs
+node scripts/validate-dependency-exceptions.mjs
+cargo deny --locked check bans licenses sources

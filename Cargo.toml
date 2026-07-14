@@ -8,6 +8,7 @@ edition = "2021"
 rust-version = "1.96.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rwjblue/antennabench"
+publish = false
 
 [workspace.dependencies]
 chrono = { version = "0.4.38", default-features = false, features = ["clock", "serde", "std"] }

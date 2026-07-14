@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Fetch RustSec and fail closed on fresh advisory policy"
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$repo_root"
+
+node scripts/validate-dependency-exceptions.mjs
+cargo deny --locked check advisories

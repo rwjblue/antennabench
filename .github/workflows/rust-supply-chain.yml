@@ -1,0 +1,42 @@
+name: Fresh Rust supply-chain preflight
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "**/Cargo.toml"
+      - ".mise/config.toml"
+      - "deny.toml"
+      - ".github/dependency-exceptions.json"
+      - ".github/workflows/rust-supply-chain.yml"
+      - ".mise/tasks/advisory-fresh"
+      - ".mise/tasks/dependency-policy"
+      - ".mise/tasks/release-preflight"
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 11 * * *"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Fresh non-secret supply-chain preflight
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Run release-grade supply-chain preflight
+        run: mise run release-preflight

@@ -162,6 +162,7 @@ export function validateRepository(root) {
   for (const pattern of [
     /^node = "\d+\.\d+\.\d+"$/m,
     /^rust = \{ version = "\d+\.\d+\.\d+", components = \["rustfmt", "clippy"\] \}$/m,
+    /^"cargo:cargo-deny" = \{ version = "\d+\.\d+\.\d+", locked = true \}$/m,
     /^"cargo:tauri-cli" = \{ version = "\d+\.\d+\.\d+", locked = true \}$/m,
   ]) {
     if (!pattern.test(mise)) errors.push(".mise/config.toml: tools must use exact reviewed pins");

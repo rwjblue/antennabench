@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run the non-secret release supply-chain preflight"
+set -euo pipefail
+
+mise run supply-chain
+mise run dependency-policy
+mise run advisory-fresh
