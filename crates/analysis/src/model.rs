@@ -5,12 +5,16 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::AnalysisResourceError;
+
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum AnalysisError {
     #[error("bundle is not valid for analysis")]
     InvalidBundle(#[from] BundleValidationError),
     #[error("observation {observation_id} has a non-finite SNR")]
     NonFiniteSnr { observation_id: String },
+    #[error(transparent)]
+    Resource(#[from] AnalysisResourceError),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -22,7 +22,7 @@ fn upgraded_v2_fixtures_analyze_and_render_through_the_shared_projection() {
             .unwrap();
         let bundle = store.read_normalized_validated().unwrap();
         let report = build_report(&bundle).unwrap();
-        let html = render_standalone_html(&report);
+        let html = render_standalone_html(&report).unwrap();
         assert_eq!(report.context.session_id, bundle.manifest.session_id);
         assert!(html.contains(&bundle.manifest.session_id));
     }

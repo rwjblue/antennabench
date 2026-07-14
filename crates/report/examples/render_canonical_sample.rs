@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join("../../fixtures/session-bundles/canonical-sample-report.session.wsprabundle");
     let bundle = BundleStore::new(fixture).read_normalized_validated()?;
     let report = build_report(&bundle)?;
-    let html = render_standalone_html(&report);
+    let html = render_standalone_html(&report)?;
 
     fs::write(&output, html)?;
     println!("wrote {}", output.display());

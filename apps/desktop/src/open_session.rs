@@ -15,8 +15,48 @@ use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use thiserror::Error;
 
+const SESSION_SUMMARY_IPC_BYTES: u64 = 64 * 1024;
+const REPORT_DOCUMENT_IPC_BYTES: u64 = 16 * 1024 * 1024;
+
 #[derive(Default)]
-pub(crate) struct ActiveSessionState(Mutex<Option<ActiveSession>>);
+pub(crate) struct ActiveSessionState(Mutex<DesktopState>);
+
+#[derive(Default)]
+struct DesktopState {
+    active: Option<ActiveSession>,
+    export_source: Option<PathBuf>,
+    foreground_busy: bool,
+}
+
+struct ForegroundGuard<'a>(&'a ActiveSessionState);
+
+impl ActiveSessionState {
+    fn begin_foreground(&self) -> Result<ForegroundGuard<'_>, SessionErrorPayload> {
+        let mut state = self.0.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+        if state.foreground_busy {
+            return Err(SessionErrorPayload::resource(
+                SessionErrorKind::Busy,
+                "resource.operation.busy",
+                "foreground",
+                1,
+                Some(2),
+                "operations",
+            ));
+        }
+        state.foreground_busy = true;
+        Ok(ForegroundGuard(self))
+    }
+}
+
+impl Drop for ForegroundGuard<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut state) = self.0 .0.lock() {
+            state.foreground_busy = false;
+        }
+    }
+}
 
 #[derive(Debug)]
 struct ActiveSession {
@@ -65,6 +105,9 @@ pub(crate) enum SessionErrorKind {
     Analysis,
     ReportPipeline,
     Verification,
+    Resource,
+    Busy,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -88,6 +131,24 @@ impl SessionErrorPayload {
             SessionErrorKind::ReportPipeline,
             "The local report could not be prepared.",
             detail,
+        )
+    }
+
+    fn resource(
+        kind: SessionErrorKind,
+        code: &str,
+        stage: &str,
+        limit: u64,
+        observed: Option<u64>,
+        unit: &str,
+    ) -> Self {
+        Self::new(
+            kind,
+            "The local operation was stopped by its resource policy.",
+            format!(
+                "code={code} stage={stage} limit={limit} observed={} unit={unit} complete=false",
+                observed.map_or_else(|| "unknown".to_string(), |value| value.to_string())
+            ),
         )
     }
 }
@@ -227,6 +288,27 @@ fn report_error_payload(error: ReportError) -> SessionErrorPayload {
             "The session evidence could not be analyzed.",
             error.to_string(),
         ),
+        ReportError::Resource(error) => {
+            let diagnostic = error.diagnostic;
+            let kind = if diagnostic.code == "resource.operation.cancelled" {
+                SessionErrorKind::Cancelled
+            } else {
+                SessionErrorKind::Resource
+            };
+            SessionErrorPayload::resource(
+                kind,
+                diagnostic.code,
+                &format!("{:?}", diagnostic.stage),
+                diagnostic.limit,
+                diagnostic.observed,
+                diagnostic.unit,
+            )
+        }
+        ReportError::Serialization { message } => SessionErrorPayload::new(
+            SessionErrorKind::ReportPipeline,
+            "The local report could not be serialized.",
+            message,
+        ),
     }
 }
 
@@ -331,7 +413,7 @@ fn build_active_session(
     validation: &BundleValidationReport,
 ) -> Result<ActiveSession, OpenSessionError> {
     let report = build_report_with_validation(bundle, validation)?;
-    let report_html = render_standalone_html(&report);
+    let report_html = render_standalone_html(&report)?;
 
     Ok(ActiveSession {
         source,
@@ -355,17 +437,40 @@ fn open_session_with_selection<F>(
 where
     F: FnOnce() -> Result<Option<PathBuf>, SessionErrorPayload>,
 {
+    let _foreground = state.begin_foreground()?;
     let Some(path) = select()? else {
         return Ok(OpenSessionOutcome::Cancelled);
     };
+    if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(bundle_suffix)
+        .is_some()
+    {
+        state
+            .0
+            .lock()
+            .map_err(|_| {
+                SessionErrorPayload::report_pipeline("active session state is unavailable")
+            })?
+            .export_source = Some(path.clone());
+    }
     let session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
     let summary = session.summary.clone();
+    check_ipc_payload(
+        &OpenSessionOutcome::Opened {
+            session: summary.clone(),
+        },
+        SESSION_SUMMARY_IPC_BYTES,
+        "session_summary",
+    )?;
 
     let mut active = state
         .0
         .lock()
         .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
-    *active = Some(session);
+    active.active = Some(session);
+    active.export_source = Some(path);
 
     Ok(OpenSessionOutcome::Opened { session: summary })
 }
@@ -377,13 +482,16 @@ fn export_active_session_with_selection<F>(
 where
     F: FnOnce(&Path) -> Result<Option<PathBuf>, SessionErrorPayload>,
 {
+    let _foreground = state.begin_foreground()?;
     let source = {
         let active = state.0.lock().map_err(|_| {
             SessionErrorPayload::report_pipeline("active session state is unavailable")
         })?;
         active
+            .active
             .as_ref()
             .map(|session| session.source.clone())
+            .or_else(|| active.export_source.clone())
             .ok_or(ExportSessionError::NoActiveSession)
             .map_err(SessionErrorPayload::from)?
     };
@@ -397,11 +505,12 @@ where
 }
 
 fn active_session_report_for(state: &ActiveSessionState) -> Result<String, SessionErrorPayload> {
+    let _foreground = state.begin_foreground()?;
     let active = state
         .0
         .lock()
         .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
-    let session = active.as_ref().ok_or_else(|| {
+    let session = active.active.as_ref().ok_or_else(|| {
         SessionErrorPayload::report_pipeline("no active session report is available")
     })?;
 
@@ -418,7 +527,40 @@ fn active_session_report_for(state: &ActiveSessionState) -> Result<String, Sessi
         ));
     }
 
+    if session.report_html.len() as u64 > REPORT_DOCUMENT_IPC_BYTES {
+        return Err(SessionErrorPayload::resource(
+            SessionErrorKind::Resource,
+            "resource.desktop.ipc_bytes",
+            "report_document",
+            REPORT_DOCUMENT_IPC_BYTES,
+            Some(session.report_html.len() as u64),
+            "bytes",
+        ));
+    }
+
     Ok(session.report_html.clone())
+}
+
+fn check_ipc_payload(
+    payload: &impl Serialize,
+    limit: u64,
+    role: &'static str,
+) -> Result<(), SessionErrorPayload> {
+    let bytes = serde_json::to_vec(payload).map_err(|error| {
+        SessionErrorPayload::report_pipeline(format!("IPC serialization failed: {error}"))
+    })?;
+    if bytes.len() as u64 > limit {
+        Err(SessionErrorPayload::resource(
+            SessionErrorKind::Resource,
+            "resource.desktop.ipc_bytes",
+            role,
+            limit,
+            Some(bytes.len() as u64),
+            "bytes",
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -497,10 +639,11 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        active_session_report_for, copy_error_payload, export_active_session_with_selection,
-        export_bundle, open_bundle, open_session_with_selection, report_error_payload,
-        ActiveSessionState, ExportSessionOutcome, OpenSessionOutcome, SessionErrorKind,
-        SessionErrorPayload,
+        active_session_report_for, check_ipc_payload, copy_error_payload,
+        export_active_session_with_selection, export_bundle, open_bundle,
+        open_session_with_selection, report_error_payload, ActiveSessionState,
+        ExportSessionOutcome, OpenSessionOutcome, SessionErrorKind, SessionErrorPayload,
+        REPORT_DOCUMENT_IPC_BYTES,
     };
 
     fn canonical_fixture() -> std::path::PathBuf {
@@ -643,6 +786,32 @@ mod tests {
     }
 
     #[test]
+    fn desktop_busy_and_ipc_boundaries_are_typed_at_n_minus_one_n_and_n_plus_one() {
+        let state = ActiveSessionState::default();
+        let guard = state.begin_foreground().unwrap();
+        let busy = active_session_report_for(&state).unwrap_err();
+        assert_eq!(busy.kind, SessionErrorKind::Busy);
+        assert!(busy.detail.contains("resource.operation.busy"));
+        drop(guard);
+
+        let payload = "bounded-payload";
+        let bytes = serde_json::to_vec(payload).unwrap().len() as u64;
+        let below = check_ipc_payload(&payload, bytes - 1, "test_summary").unwrap_err();
+        assert_eq!(below.kind, SessionErrorKind::Resource);
+        assert!(below.detail.contains("resource.desktop.ipc_bytes"));
+        check_ipc_payload(&payload, bytes, "test_summary").unwrap();
+        check_ipc_payload(&payload, bytes + 1, "test_summary").unwrap();
+
+        open_session_with_selection(&state, || Ok(Some(canonical_fixture()))).unwrap();
+        state.0.lock().unwrap().active.as_mut().unwrap().report_html =
+            "x".repeat(REPORT_DOCUMENT_IPC_BYTES as usize + 1);
+        let oversized = active_session_report_for(&state).unwrap_err();
+        assert_eq!(oversized.kind, SessionErrorKind::Resource);
+        assert!(oversized.detail.contains("resource.desktop.ipc_bytes"));
+        assert!(oversized.detail.contains("report_document"));
+    }
+
+    #[test]
     fn exported_copy_reopens_through_the_desktop_import_path() {
         let temp = TempDir::new().unwrap();
         let source = copy_fixture(&temp);
@@ -672,6 +841,33 @@ mod tests {
 
         assert_eq!(destination.kind, SessionErrorKind::Destination);
         assert_eq!(verification.kind, SessionErrorKind::Verification);
+    }
+
+    #[test]
+    fn lossless_export_is_available_without_a_derived_report() {
+        let temp = TempDir::new().unwrap();
+        let source = copy_fixture(&temp);
+        let destination = temp.path().join("resource-safe-copy.session.wsprabundle");
+        let state = ActiveSessionState::default();
+        state.0.lock().unwrap().export_source = Some(source.clone());
+
+        let outcome = export_active_session_with_selection(&state, |selected| {
+            assert_eq!(selected, source);
+            Ok(Some(destination.clone()))
+        })
+        .expect("storage-safe export does not require report eligibility");
+
+        assert_eq!(
+            outcome,
+            ExportSessionOutcome::Exported {
+                bundle_name: "resource-safe-copy.session.wsprabundle".into()
+            }
+        );
+        assert_eq!(
+            snapshot_files(&source).unwrap(),
+            snapshot_files(&destination).unwrap()
+        );
+        assert!(active_session_report_for(&state).is_err());
     }
 
     #[test]

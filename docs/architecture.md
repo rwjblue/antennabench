@@ -189,8 +189,14 @@ fingerprints; and NOAA responses use HTTPS/same-host redirect rules, bounded
 headers, streamed decoded-body accounting, expected JSON media, cancellation,
 and incomplete quarantine metadata. A queue, rate, client, or duplicate-state
 breach produces one explicit acquisition gap and stops only that receiver.
-Analysis/report/desktop enforcement remains tracked by
-[#57](https://github.com/rwjblue/antennabench/issues/57). Hosted upload and archive
+Analysis preflights every collection and simultaneous-live-entry phase, checks
+cancellation during long scans, and rejects cross-product-shaped allocation
+plans. Renderer-neutral reports count repeated rows before projection, fall
+back to an explicitly labeled aggregate overview with complete per-family
+omission counts, and stream deterministic serialization and standalone HTML
+through checked byte writers. Desktop state retains one summary/report pair,
+admits one foreground operation, caps both IPC payloads, and keeps storage-safe
+lossless export independent from report eligibility. Hosted upload and archive
 limits remain a separate decision in
 [#11](https://github.com/rwjblue/antennabench/issues/11).
 

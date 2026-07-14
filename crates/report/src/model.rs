@@ -9,8 +9,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ReportResourceError;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionReport {
+    #[serde(default, skip_serializing_if = "ReportCompleteness::is_full_detail")]
+    pub completeness: ReportCompleteness,
     pub context: SessionContext,
     pub evidence: EvidenceSections,
     pub comparison: ReportComparisonData,
@@ -18,6 +22,20 @@ pub struct SessionReport {
     pub notices: Vec<ReportNotice>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub eligibility_exclusions: Vec<EligibilityExclusionCount>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportCompleteness {
+    #[default]
+    FullDetail,
+    BoundedOverview,
+}
+
+impl ReportCompleteness {
+    fn is_full_detail(&self) -> bool {
+        *self == Self::FullDetail
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,7 +144,7 @@ pub struct SlotEvidenceSection {
     pub evidence: ReportEvidenceSummary,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReportChartData {
     pub antenna_snr: Vec<AntennaSnrRow>,
     pub band_evidence_counts: Vec<BandEvidenceCountRow>,
@@ -158,16 +176,41 @@ pub struct SlotEvidenceCountRow {
     pub observation_counts: ObservationCounts,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReportNotice {
     NoScheduledSlots,
     NoUsableObservations,
     NoUsableSnrSamples,
+    DetailOmitted {
+        family: ReportDetailFamily,
+        row_count: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportDetailFamily {
+    Schedule,
+    AntennaContext,
+    AntennaEvidence,
+    BandEvidence,
+    SlotEvidence,
+    ComparisonBlocks,
+    PathOverlap,
+    ComparisonTimeline,
+    PairedObservations,
+    PathSummaries,
+    Strata,
+    Charts,
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ReportError {
     #[error(transparent)]
     Analysis(#[from] AnalysisError),
+    #[error(transparent)]
+    Resource(#[from] ReportResourceError),
+    #[error("report model serialization failed: {message}")]
+    Serialization { message: String },
 }

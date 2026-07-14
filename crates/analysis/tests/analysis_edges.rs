@@ -1,11 +1,73 @@
 use std::path::PathBuf;
 
 use antennabench_analysis::{
-    summarize_bundle, AnalysisError, EligibilityExclusionCategory, EvidenceQuality,
+    summarize_bundle, summarize_bundle_with_resources, AnalysisCancellationToken, AnalysisError,
+    AnalysisResourceLimits, EligibilityExclusionCategory, EvidenceQuality,
     ObservationExclusionReason,
 };
-use antennabench_core::{normalize_bundle, Band, BundleContents, ObservationKind};
+use antennabench_core::{
+    normalize_bundle, validate_bundle_report, Band, BundleContents, ObservationKind,
+};
 use antennabench_storage::BundleStore;
+
+#[test]
+fn analysis_resource_boundaries_are_checked_before_collections_and_honor_cancellation() {
+    let bundle = fixture_bundle();
+    let validation = validate_bundle_report(&bundle);
+    let observations = bundle.observations.len() as u64;
+
+    let below = summarize_bundle_with_resources(
+        &bundle,
+        &validation,
+        AnalysisResourceLimits::testing(observations - 1, 1_000_000),
+        &AnalysisCancellationToken::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        below,
+        AnalysisError::Resource(ref error)
+            if error.diagnostic.code == "resource.analysis.collection_entries"
+                && error.diagnostic.role == "observations"
+    ));
+
+    for limit in [observations, observations + 1] {
+        summarize_bundle_with_resources(
+            &bundle,
+            &validation,
+            AnalysisResourceLimits::testing(limit, 1_000_000),
+            &AnalysisCancellationToken::default(),
+        )
+        .expect("N and N+1 collection budgets accept N observations");
+    }
+
+    let live = summarize_bundle_with_resources(
+        &bundle,
+        &validation,
+        AnalysisResourceLimits::testing(500_000, 1),
+        &AnalysisCancellationToken::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        live,
+        AnalysisError::Resource(ref error)
+            if error.diagnostic.code == "resource.analysis.live_entries"
+    ));
+
+    let cancellation = AnalysisCancellationToken::default();
+    cancellation.cancel();
+    let cancelled = summarize_bundle_with_resources(
+        &bundle,
+        &validation,
+        AnalysisResourceLimits::testing(500_000, 1_000_000),
+        &cancellation,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        cancelled,
+        AnalysisError::Resource(ref error)
+            if error.diagnostic.code == "resource.operation.cancelled"
+    ));
+}
 
 #[test]
 fn reports_every_exclusion_reason_exactly_once() {

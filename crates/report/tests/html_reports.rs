@@ -10,8 +10,8 @@ use chrono::Duration;
 fn renders_the_canonical_report_as_deterministic_offline_html() {
     let report = canonical_report();
 
-    let first = render_standalone_html(&report);
-    let second = render_standalone_html(&report);
+    let first = render_standalone_html(&report).unwrap();
+    let second = render_standalone_html(&report).unwrap();
 
     assert_eq!(first, second);
     assert!(first.starts_with("<!doctype html><html lang=\"en\">"));
@@ -123,7 +123,7 @@ fn escapes_every_untrusted_report_string() {
         row.remote_path = hostile.clone();
     }
 
-    let html = render_standalone_html(&report);
+    let html = render_standalone_html(&report).unwrap();
 
     assert!(!html.contains(&hostile));
     assert!(!html.contains("<script>"));
@@ -162,7 +162,7 @@ fn renders_empty_and_unavailable_data_as_explicit_states() {
         ReportNotice::NoUsableSnrSamples,
     ];
 
-    let html = render_standalone_html(&report);
+    let html = render_standalone_html(&report).unwrap();
 
     for state in [
         "No scheduled slots are available; schedule comparisons cannot be shown.",
@@ -193,7 +193,7 @@ fn renders_every_evidence_coverage_value_with_non_comparative_explanation() {
         report.evidence.evidence_quality = coverage;
         report.evidence.antennas[0].evidence_quality = coverage;
 
-        let html = render_standalone_html(&report);
+        let html = render_standalone_html(&report).unwrap();
 
         assert!(html.contains(&format!(
             "Evidence coverage: <span class=\"badge\">{label}</span>"
@@ -239,7 +239,7 @@ fn renders_every_comparison_availability_before_difference_output() {
         let mut report = paired_report(false);
         report.comparison.availability = availability;
 
-        let html = render_standalone_html(&report);
+        let html = render_standalone_html(&report).unwrap();
         let availability_position = html
             .find("Comparison availability")
             .expect("availability should render");
@@ -265,7 +265,7 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
         .diagnostics
         .conflicting_duplicate_group_count = 2;
 
-    let html = render_standalone_html(&report);
+    let html = render_standalone_html(&report).unwrap();
 
     for section in [
         "Coverage and data-quality counts",
@@ -335,7 +335,7 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     second_stratum.right_azimuth_degrees = Some(12.0);
     report.comparison.paired_rows.push(second_stratum);
 
-    let html = render_standalone_html(&report);
+    let html = render_standalone_html(&report).unwrap();
 
     assert!(html.contains("Location unavailable"));
     assert!(html.contains("Unique paths in stratum"));
@@ -350,7 +350,7 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     assert!(!html.contains("http://"));
     assert!(!html.contains("https://"));
 
-    let empty = render_standalone_html(&canonical_report());
+    let empty = render_standalone_html(&canonical_report()).unwrap();
     assert!(empty.contains("No paired rows are available for location views."));
 }
 

@@ -7,10 +7,11 @@ use antennabench_core::{
 
 use crate::{
     summary::{ClassifiedObservation, ObservationDisposition},
-    ComparisonAvailability, ComparisonBlock, ComparisonBlockEligibility, ComparisonDiagnostics,
-    ComparisonOrder, ComparisonSide, ComparisonStratum, ComparisonTimelineRow, DeltaOrientation,
-    PairedComparisonAnalysis, PairedObservationRow, PairedPathSummary, PairedStratumSummary,
-    PathDirection, PathOverlapRow, SignalMode,
+    AnalysisBudget, AnalysisError, AnalysisResourceStage, ComparisonAvailability, ComparisonBlock,
+    ComparisonBlockEligibility, ComparisonDiagnostics, ComparisonOrder, ComparisonSide,
+    ComparisonStratum, ComparisonTimelineRow, DeltaOrientation, PairedComparisonAnalysis,
+    PairedObservationRow, PairedPathSummary, PairedStratumSummary, PathDirection, PathOverlapRow,
+    SignalMode,
 };
 
 type StratumKey = (u8, u8, String, u8, u8);
@@ -20,13 +21,17 @@ pub(crate) fn analyze_paired_comparison(
     bundle: &BundleContents,
     aligned_slots: &[AlignedSlot],
     observations: &[ClassifiedObservation<'_>],
-) -> PairedComparisonAnalysis {
+    budget: &AnalysisBudget<'_>,
+) -> Result<PairedComparisonAnalysis, AnalysisError> {
     let labels = scheduled_labels(bundle);
     if bundle.schedule.mode == ExperimentMode::SingleAntennaProfiling {
-        return unavailable(ComparisonAvailability::NotApplicable, labels);
+        return Ok(unavailable(ComparisonAvailability::NotApplicable, labels));
     }
     if labels.len() != 2 {
-        return unavailable(ComparisonAvailability::UnsupportedComparisonShape, labels);
+        return Ok(unavailable(
+            ComparisonAvailability::UnsupportedComparisonShape,
+            labels,
+        ));
     }
 
     let left_label = labels[0].clone();
@@ -74,7 +79,12 @@ pub(crate) fn analyze_paired_comparison(
         .collect::<HashMap<_, _>>();
     let mut groups = BTreeMap::<GroupKey, PairGroup<'_>>::new();
 
-    for classified in observations {
+    for (work_index, classified) in observations.iter().enumerate() {
+        budget.checkpoint(
+            AnalysisResourceStage::Compare,
+            "comparison_grouping",
+            work_index,
+        )?;
         if matches!(classified.disposition, ObservationDisposition::Excluded(_)) {
             diagnostics.excluded_observation_count += 1;
         }
@@ -145,7 +155,13 @@ pub(crate) fn analyze_paired_comparison(
     let mut overlap_accumulators = BTreeMap::<(StratumKey, String), OverlapAccumulator>::new();
     let mut stratum_accumulators = BTreeMap::<StratumKey, StratumAccumulator>::new();
 
-    for ((key, block_index, remote_path), mut group) in groups {
+    for (work_index, ((key, block_index, remote_path), mut group)) in groups.into_iter().enumerate()
+    {
+        budget.checkpoint(
+            AnalysisResourceStage::Compare,
+            "comparison_pairing",
+            work_index,
+        )?;
         let stratum = stratum_from_key(&key);
         let block = &blocks[block_index];
         let left = group.left.resolve();
@@ -273,7 +289,7 @@ pub(crate) fn analyze_paired_comparison(
         ComparisonAvailability::DescriptivePairsAvailable
     };
 
-    PairedComparisonAnalysis {
+    Ok(PairedComparisonAnalysis {
         availability,
         left_label: Some(left_label.clone()),
         right_label: Some(right_label.clone()),
@@ -288,7 +304,7 @@ pub(crate) fn analyze_paired_comparison(
         paired_rows,
         path_summaries,
         strata,
-    }
+    })
 }
 
 fn unavailable(

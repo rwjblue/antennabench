@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, fmt::Write};
+use std::{
+    collections::BTreeSet,
+    fmt::{self, Write},
+};
 
 use antennabench_analysis::{
     ComparisonAvailability, ComparisonOrder, ComparisonSide, ComparisonStratum,
@@ -12,13 +15,15 @@ use antennabench_core::{
 use chrono::{SecondsFormat, Utc};
 
 use crate::{
-    AntennaEvidenceSection, BandEvidenceSection, ReportEvidenceSummary, ReportNotice,
-    SessionReport, SlotEvidenceSection, UsableObservationKindCounts,
+    check_cancelled, report_resource_error, AntennaEvidenceSection, BandEvidenceSection,
+    ReportCancellationToken, ReportDetailFamily, ReportError, ReportEvidenceSummary, ReportNotice,
+    ReportResourceLimits, ReportResourceStage, SessionReport, SlotEvidenceSection,
+    UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
     ($output:expr, $($argument:tt)*) => {
-        write!($output, $($argument)*).expect("writing to a String cannot fail")
+        write!($output, $($argument)*).expect("checked HTML writer records failures")
     };
 }
 
@@ -31,8 +36,21 @@ const STYLES: &str = r#"
 /// Renders a deterministic, standalone HTML document from renderer-neutral
 /// report data. The output contains no scripts, external resources, or
 /// unescaped report strings.
-pub fn render_standalone_html(report: &SessionReport) -> String {
-    let mut out = String::with_capacity(32_768);
+pub fn render_standalone_html(report: &SessionReport) -> Result<String, ReportError> {
+    render_standalone_html_with_resources(
+        report,
+        REPORT_RESOURCE_LIMITS,
+        &ReportCancellationToken::default(),
+    )
+}
+
+pub fn render_standalone_html_with_resources(
+    report: &SessionReport,
+    limits: ReportResourceLimits,
+    cancellation: &ReportCancellationToken,
+) -> Result<String, ReportError> {
+    check_cancelled(cancellation, ReportResourceStage::Render, "standalone_html")?;
+    let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
     out.push_str(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
 <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
@@ -59,10 +77,90 @@ pub fn render_standalone_html(report: &SessionReport) -> String {
     render_slot_section(&mut out, report);
 
     out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
-    out
+    out.finish().map_err(ReportError::from)
 }
 
-fn render_eligibility(out: &mut String, report: &SessionReport) {
+struct CheckedHtmlWriter<'a> {
+    output: String,
+    limit: u64,
+    observed: u64,
+    failure: Option<crate::ReportResourceError>,
+    cancellation: &'a ReportCancellationToken,
+    last_cancellation_check: u64,
+}
+
+impl<'a> CheckedHtmlWriter<'a> {
+    fn new(limit: u64, cancellation: &'a ReportCancellationToken) -> Self {
+        Self {
+            output: String::with_capacity(32_768.min(limit as usize)),
+            limit,
+            observed: 0,
+            failure: None,
+            cancellation,
+            last_cancellation_check: 0,
+        }
+    }
+
+    fn push_str(&mut self, value: &str) {
+        if self.failure.is_some() {
+            return;
+        }
+        let observed = self.output.len() as u64 + value.len() as u64;
+        self.observed = observed;
+        if observed > self.limit {
+            self.failure = Some(report_resource_error(
+                "resource.report.html_bytes",
+                ReportResourceStage::Render,
+                "standalone_html",
+                self.limit,
+                Some(observed),
+                "bytes",
+            ));
+            return;
+        }
+        if observed.saturating_sub(self.last_cancellation_check) >= 64 * 1024 {
+            self.last_cancellation_check = observed;
+            if self.cancellation.is_cancelled() {
+                self.failure = Some(report_resource_error(
+                    "resource.operation.cancelled",
+                    ReportResourceStage::Render,
+                    "standalone_html",
+                    0,
+                    Some(observed),
+                    "checkpoints",
+                ));
+                return;
+            }
+        }
+        self.output.push_str(value);
+    }
+
+    fn finish(self) -> Result<String, crate::ReportResourceError> {
+        if let Some(failure) = self.failure {
+            Err(failure)
+        } else if self.cancellation.is_cancelled() {
+            Err(report_resource_error(
+                "resource.operation.cancelled",
+                ReportResourceStage::Render,
+                "standalone_html",
+                0,
+                Some(self.observed),
+                "checkpoints",
+            ))
+        } else {
+            Ok(self.output)
+        }
+    }
+}
+
+impl fmt::Write for CheckedHtmlWriter<'_> {
+    fn write_str(&mut self, value: &str) -> fmt::Result {
+        self.push_str(value);
+        Ok(())
+    }
+}
+
+fn render_eligibility(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     if report.eligibility_exclusions.is_empty() {
         return;
     }
@@ -101,18 +199,18 @@ fn eligibility_scope(value: EligibilityScope) -> &'static str {
     }
 }
 
-fn render_notices(out: &mut String, notices: &[ReportNotice]) {
+fn render_notices(out: &mut CheckedHtmlWriter<'_>, notices: &[ReportNotice]) {
     if notices.is_empty() {
         return;
     }
     out.push_str("<section class=\"panel\" aria-labelledby=\"notices-title\"><h2 id=\"notices-title\">Data notices</h2>");
     for notice in notices {
-        write_html!(out, "<p class=\"notice\">{}</p>", notice_text(*notice));
+        write_html!(out, "<p class=\"notice\">{}</p>", notice_text(notice));
     }
     out.push_str("</section>");
 }
 
-fn render_context(out: &mut String, report: &SessionReport) {
+fn render_context(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let context = &report.context;
     out.push_str("<section class=\"panel\" aria-labelledby=\"context-title\"><h2 id=\"context-title\">Session context</h2><dl class=\"facts\">");
     fact(out, "Callsign", &context.station.callsign);
@@ -220,7 +318,7 @@ fn render_context(out: &mut String, report: &SessionReport) {
     out.push_str("</section>");
 }
 
-fn render_schedule_table(out: &mut String, report: &SessionReport) {
+fn render_schedule_table(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Schedule overview</h3>");
     if report.context.schedule.slots.is_empty() {
         out.push_str("<p class=\"empty\">No scheduled slots are available.</p>");
@@ -233,7 +331,7 @@ fn render_schedule_table(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_overall(out: &mut String, report: &SessionReport) {
+fn render_overall(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<section class=\"panel\" aria-labelledby=\"evidence-title\"><h2 id=\"evidence-title\">Evidence overview</h2>");
     write_html!(
         out,
@@ -245,7 +343,7 @@ fn render_overall(out: &mut String, report: &SessionReport) {
     out.push_str("</section>");
 }
 
-fn render_comparison(out: &mut String, report: &SessionReport) {
+fn render_comparison(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let comparison = &report.comparison;
     out.push_str("<section class=\"panel\" aria-labelledby=\"comparison-title\"><h2 id=\"comparison-title\">Paired comparison diagnostics</h2>");
     write_html!(
@@ -273,7 +371,7 @@ fn render_comparison(out: &mut String, report: &SessionReport) {
     out.push_str("</section>");
 }
 
-fn render_comparison_diagnostics(out: &mut String, report: &SessionReport) {
+fn render_comparison_diagnostics(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let diagnostics = report.comparison.diagnostics;
     out.push_str("<h3>Coverage and data-quality counts</h3><dl class=\"stat-grid\">");
     comparison_stat(out, "Blocks", diagnostics.block_count);
@@ -325,7 +423,7 @@ fn render_comparison_diagnostics(out: &mut String, report: &SessionReport) {
     out.push_str("</dl>");
 }
 
-fn comparison_stat(out: &mut String, label: &str, value: usize) {
+fn comparison_stat(out: &mut CheckedHtmlWriter<'_>, label: &str, value: usize) {
     write_html!(
         out,
         "<div class=\"stat\"><dt>{}</dt><dd>{}</dd></div>",
@@ -334,7 +432,7 @@ fn comparison_stat(out: &mut String, label: &str, value: usize) {
     );
 }
 
-fn render_overlap(out: &mut String, report: &SessionReport) {
+fn render_overlap(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Path overlap and missingness</h3>");
     if report.comparison.overlap_rows.is_empty() {
         out.push_str("<p class=\"empty\">No path-level overlap rows are available.</p>");
@@ -354,7 +452,7 @@ fn render_overlap(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_comparison_timeline(out: &mut String, report: &SessionReport) {
+fn render_comparison_timeline(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Data-quality timeline</h3>");
     if report.comparison.timeline_rows.is_empty() {
         out.push_str("<p class=\"empty\">No comparison timeline rows are available.</p>");
@@ -388,11 +486,11 @@ fn render_comparison_timeline(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn timeline_table_row(out: &mut String, row: &ComparisonTimelineRow) {
+fn timeline_table_row(out: &mut CheckedHtmlWriter<'_>, row: &ComparisonTimelineRow) {
     write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.block_index + 1, yes_no(row.block_eligible), row.sequence_number, escape_html(&row.slot_id), timestamp(row.starts_at), band(row.band), escape_html(row.actual_label.as_deref().unwrap_or("Not recorded")), row.side.map(comparison_side).unwrap_or("Unavailable"), slot_status(row.status), row.total_observation_count, row.usable_observation_count, row.excluded_observation_count, row.missing_snr_count, row.missing_or_invalid_mode_count, row.ambiguous_path_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
 }
 
-fn render_paired_differences(out: &mut String, report: &SessionReport) {
+fn render_paired_differences(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Paired difference distribution</h3>");
     let rows = &report.comparison.paired_rows;
     if rows.is_empty() {
@@ -422,7 +520,7 @@ fn render_paired_differences(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_paired_snr_time(out: &mut String, report: &SessionReport) {
+fn render_paired_snr_time(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Paired SNR over time</h3>");
     let rows = &report.comparison.paired_rows;
     if rows.is_empty() {
@@ -451,7 +549,7 @@ fn render_paired_snr_time(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_location_views(out: &mut String, report: &SessionReport) {
+fn render_location_views(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Distance and azimuth path context</h3><p class=\"notice\">Distance and azimuth describe only the remote paths observed in these paired rows. Missing location stays visible, and geographic concentration limits how broadly these paths represent other distances or directions.</p>");
     if report.comparison.paired_rows.is_empty() {
         out.push_str("<p class=\"empty\">No paired rows are available for location views.</p>");
@@ -483,7 +581,7 @@ fn render_location_views(out: &mut String, report: &SessionReport) {
     }
 }
 
-fn render_geographic_coverage(out: &mut String, rows: &[&PairedObservationRow]) {
+fn render_geographic_coverage(out: &mut CheckedHtmlWriter<'_>, rows: &[&PairedObservationRow]) {
     let unique_paths = rows
         .iter()
         .map(|row| row.remote_path.as_str())
@@ -517,7 +615,7 @@ fn render_geographic_coverage(out: &mut String, rows: &[&PairedObservationRow]) 
     out.push_str("</dl>");
 }
 
-fn render_distance_view(out: &mut String, rows: &[&PairedObservationRow]) {
+fn render_distance_view(out: &mut CheckedHtmlWriter<'_>, rows: &[&PairedObservationRow]) {
     out.push_str("<h4>Observed distance</h4>");
     let maximum = rows
         .iter()
@@ -540,7 +638,7 @@ fn render_distance_view(out: &mut String, rows: &[&PairedObservationRow]) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_azimuth_view(out: &mut String, rows: &[&PairedObservationRow]) {
+fn render_azimuth_view(out: &mut CheckedHtmlWriter<'_>, rows: &[&PairedObservationRow]) {
     out.push_str("<h4>Observed azimuth</h4><div class=\"comparison-chart\" aria-hidden=\"true\">");
     for row in rows {
         match row_azimuth(row).filter(|_| location_available(row)) {
@@ -629,7 +727,7 @@ fn optional_measure_f64(value: Option<f64>, unit: &str) -> String {
         .unwrap_or_else(not_available)
 }
 
-fn render_stratum_summaries(out: &mut String, report: &SessionReport) {
+fn render_stratum_summaries(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Stratum descriptive summaries</h3>");
     if report.comparison.strata.is_empty() {
         out.push_str("<p class=\"empty\">No comparison strata are available.</p>");
@@ -657,7 +755,7 @@ fn render_stratum_summaries(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_antenna_section(out: &mut String, report: &SessionReport) {
+fn render_antenna_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<section class=\"panel\" aria-labelledby=\"antenna-title\"><h2 id=\"antenna-title\">Antenna evidence</h2>");
     render_snr_chart(out, report);
     if report.evidence.antennas.is_empty() {
@@ -672,7 +770,7 @@ fn render_antenna_section(out: &mut String, report: &SessionReport) {
     out.push_str("</section>");
 }
 
-fn render_band_section(out: &mut String, report: &SessionReport) {
+fn render_band_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<section class=\"panel\" aria-labelledby=\"band-title\"><h2 id=\"band-title\">Band evidence</h2>");
     render_band_chart(out, report);
     if report.evidence.bands.is_empty() {
@@ -687,7 +785,7 @@ fn render_band_section(out: &mut String, report: &SessionReport) {
     out.push_str("</section>");
 }
 
-fn render_slot_section(out: &mut String, report: &SessionReport) {
+fn render_slot_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<section class=\"panel\" aria-labelledby=\"slot-title\"><h2 id=\"slot-title\">Slot evidence</h2>");
     render_slot_chart(out, report);
     if report.evidence.slots.is_empty() {
@@ -702,7 +800,7 @@ fn render_slot_section(out: &mut String, report: &SessionReport) {
     out.push_str("</section>");
 }
 
-fn render_snr_chart(out: &mut String, report: &SessionReport) {
+fn render_snr_chart(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Antenna SNR visualization</h3>");
     let rows = &report.chart_data.antenna_snr;
     let bounds = rows
@@ -753,7 +851,7 @@ fn render_snr_chart(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_band_chart(out: &mut String, report: &SessionReport) {
+fn render_band_chart(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Band usable and excluded counts</h3>");
     let rows = &report.chart_data.band_evidence_counts;
     count_chart(
@@ -771,7 +869,7 @@ fn render_band_chart(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn render_slot_chart(out: &mut String, report: &SessionReport) {
+fn render_slot_chart(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<h3>Slot usable and excluded counts</h3>");
     let rows = &report.chart_data.slot_evidence_counts;
     count_chart(
@@ -793,7 +891,10 @@ fn render_slot_chart(out: &mut String, report: &SessionReport) {
     out.push_str("</tbody></table></div>");
 }
 
-fn count_chart(out: &mut String, rows: impl IntoIterator<Item = (String, ObservationCounts)>) {
+fn count_chart(
+    out: &mut CheckedHtmlWriter<'_>,
+    rows: impl IntoIterator<Item = (String, ObservationCounts)>,
+) {
     let rows = rows.into_iter().collect::<Vec<_>>();
     if rows.is_empty() {
         out.push_str("<p class=\"empty\">No chart rows are available.</p>");
@@ -809,12 +910,12 @@ fn count_chart(out: &mut String, rows: impl IntoIterator<Item = (String, Observa
     out.push_str("</div>");
 }
 
-fn evidence_summary(out: &mut String, evidence: &ReportEvidenceSummary) {
+fn evidence_summary(out: &mut CheckedHtmlWriter<'_>, evidence: &ReportEvidenceSummary) {
     let counts = evidence.observation_counts;
     write_html!(out, "<dl class=\"stat-grid\"><div class=\"stat\"><dt>Total observations</dt><dd>{}</dd></div><div class=\"stat\"><dt>Usable</dt><dd>{}</dd></div><div class=\"stat\"><dt>Excluded</dt><dd>{}</dd></div><div class=\"stat\"><dt>Usable kinds</dt><dd>{}</dd></div><div class=\"stat\"><dt>Exclusions</dt><dd>{}</dd></div><div class=\"stat\"><dt>SNR statistics</dt><dd>{}</dd></div></dl>", counts.total, counts.usable, counts.excluded, kinds_text(evidence.usable_observation_kinds), exclusions_text(evidence), snr_text(evidence.snr));
 }
 
-fn evidence_row(out: &mut String, row: &AntennaEvidenceSection) {
+fn evidence_row(out: &mut CheckedHtmlWriter<'_>, row: &AntennaEvidenceSection) {
     write_html!(
         out,
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
@@ -828,7 +929,7 @@ fn evidence_row(out: &mut String, row: &AntennaEvidenceSection) {
     );
 }
 
-fn band_evidence_row(out: &mut String, row: &BandEvidenceSection) {
+fn band_evidence_row(out: &mut CheckedHtmlWriter<'_>, row: &BandEvidenceSection) {
     write_html!(
         out,
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
@@ -840,7 +941,7 @@ fn band_evidence_row(out: &mut String, row: &BandEvidenceSection) {
     );
 }
 
-fn slot_evidence_row(out: &mut String, row: &SlotEvidenceSection) {
+fn slot_evidence_row(out: &mut CheckedHtmlWriter<'_>, row: &SlotEvidenceSection) {
     let actual = row.actual_label.as_deref().unwrap_or("Not recorded");
     write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{} / {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.sequence_number, escape_html(&row.slot_id), band(row.band), escape_html(&row.planned_label), escape_html(actual), slot_status(row.status), counts_text(row.evidence.observation_counts), exclusions_text(&row.evidence), snr_text(row.evidence.snr));
 }
@@ -899,7 +1000,7 @@ fn snr_text(snr: Option<SnrStatistics>) -> String {
     .unwrap_or_else(|| "Not available".to_string())
 }
 
-fn fact(out: &mut String, label: &str, value: &str) {
+fn fact(out: &mut CheckedHtmlWriter<'_>, label: &str, value: &str) {
     write_html!(
         out,
         "<div class=\"fact\"><dt>{}</dt><dd>{}</dd></div>",
@@ -908,7 +1009,7 @@ fn fact(out: &mut String, label: &str, value: &str) {
     );
 }
 
-fn detail(out: &mut String, label: &str, value: &str) {
+fn detail(out: &mut CheckedHtmlWriter<'_>, label: &str, value: &str) {
     write_html!(out, "<dt>{}</dt><dd>{}</dd>", label, escape_html(value));
 }
 
@@ -1116,16 +1217,42 @@ fn exclusion_reason(value: ObservationExclusionReason) -> &'static str {
         ObservationExclusionReason::DuplicateEvidence => "Duplicate evidence",
     }
 }
-fn notice_text(value: ReportNotice) -> &'static str {
+fn notice_text(value: &ReportNotice) -> String {
     match value {
         ReportNotice::NoScheduledSlots => {
-            "No scheduled slots are available; schedule comparisons cannot be shown."
+            "No scheduled slots are available; schedule comparisons cannot be shown.".to_string()
         }
         ReportNotice::NoUsableObservations => {
             "No observations met the current evidence rules; no usable counts are inferred."
+                .to_string()
         }
         ReportNotice::NoUsableSnrSamples => {
             "No usable SNR samples are available; SNR statistics are shown as unavailable."
+                .to_string()
         }
+        ReportNotice::DetailOmitted { family, row_count } => {
+            format!(
+                "Bounded overview: full {} detail is omitted ({} rows); no rows were sampled.",
+                detail_family(*family),
+                row_count
+            )
+        }
+    }
+}
+
+fn detail_family(value: ReportDetailFamily) -> &'static str {
+    match value {
+        ReportDetailFamily::Schedule => "schedule",
+        ReportDetailFamily::AntennaContext => "antenna context",
+        ReportDetailFamily::AntennaEvidence => "antenna evidence",
+        ReportDetailFamily::BandEvidence => "band evidence",
+        ReportDetailFamily::SlotEvidence => "slot evidence",
+        ReportDetailFamily::ComparisonBlocks => "comparison block",
+        ReportDetailFamily::PathOverlap => "path overlap",
+        ReportDetailFamily::ComparisonTimeline => "comparison timeline",
+        ReportDetailFamily::PairedObservations => "paired observation",
+        ReportDetailFamily::PathSummaries => "path summary",
+        ReportDetailFamily::Strata => "comparison stratum",
+        ReportDetailFamily::Charts => "chart",
     }
 }

@@ -170,6 +170,16 @@ timeout, header, content-length, streamed body, media, encoding, quarantine, and
 cancellation outcomes. All network tests use injected transports or loopback;
 the verification suite never depends on a live NOAA or WSJT-X service.
 
+Analysis/report resource tests inject tiny profiles around N-1/N/N+1 to pin
+per-collection and aggregate-live entry failures, cancellation checkpoints,
+full-detail versus bounded-overview projection, complete omission-family
+counts, model serialization, and checked HTML escape expansion. Desktop unit
+tests independently pin the 64 KiB summary and 16 MiB document IPC boundaries,
+the typed foreground-busy result, prior-presentation retention, and lossless
+export without a derived report. Production entry points always select the
+fixed `local-standard-v1` values; injection exists only in explicit test-facing
+APIs.
+
 Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, accessible chart tables, and all
 report sections. Separate hostile-string and empty-data cases pin escaping and

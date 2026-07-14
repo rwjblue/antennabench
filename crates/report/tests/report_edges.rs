@@ -1,8 +1,103 @@
 use std::path::PathBuf;
 
-use antennabench_core::normalize_bundle;
-use antennabench_report::{build_report, render_standalone_html, ReportNotice};
+use antennabench_core::{normalize_bundle, validate_bundle_report};
+use antennabench_report::{
+    build_report, build_report_with_resources, render_standalone_html,
+    render_standalone_html_with_resources, ReportCancellationToken, ReportCompleteness,
+    ReportError, ReportNotice, ReportResourceLimits, REPORT_RESOURCE_LIMITS,
+};
 use antennabench_storage::BundleStore;
+
+#[test]
+fn report_rows_fall_back_to_a_complete_unsampled_overview() {
+    let bundle = minimal_fixture_bundle();
+    let validation = validate_bundle_report(&bundle);
+    let full = build_report(&bundle).unwrap();
+    let overview = build_report_with_resources(
+        &bundle,
+        &validation,
+        ReportResourceLimits::testing(1, 8 * 1024 * 1024, 16 * 1024 * 1024),
+        &ReportCancellationToken::default(),
+    )
+    .unwrap();
+
+    assert_eq!(overview.completeness, ReportCompleteness::BoundedOverview);
+    assert_eq!(overview.evidence.overall, full.evidence.overall);
+    assert_eq!(overview.comparison.diagnostics, full.comparison.diagnostics);
+    assert!(overview.context.schedule.slots.is_empty());
+    assert!(overview.evidence.slots.is_empty());
+    assert!(overview.comparison.paired_rows.is_empty());
+    assert!(overview.notices.iter().any(|notice| matches!(
+        notice,
+        ReportNotice::DetailOmitted { row_count, .. } if *row_count > 0
+    )));
+    let html = render_standalone_html(&overview).unwrap();
+    assert!(html.contains("Bounded overview"));
+    assert!(html.contains("no rows were sampled"));
+}
+
+#[test]
+fn report_model_html_and_cancellation_boundaries_are_typed_and_never_partial() {
+    let bundle = minimal_fixture_bundle();
+    let validation = validate_bundle_report(&bundle);
+    let full = build_report(&bundle).unwrap();
+    let full_model_bytes = serde_json::to_vec(&full).unwrap().len() as u64;
+    let fallback = build_report_with_resources(
+        &bundle,
+        &validation,
+        ReportResourceLimits::testing(25_000, full_model_bytes - 1, 16 * 1024 * 1024),
+        &ReportCancellationToken::default(),
+    )
+    .unwrap();
+    assert_eq!(fallback.completeness, ReportCompleteness::BoundedOverview);
+
+    let too_small = build_report_with_resources(
+        &bundle,
+        &validation,
+        ReportResourceLimits::testing(1, 1, 16 * 1024 * 1024),
+        &ReportCancellationToken::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        too_small,
+        ReportError::Resource(ref error)
+            if error.diagnostic.code == "resource.report.model_bytes"
+    ));
+
+    let html = render_standalone_html(&full).unwrap();
+    let html_bytes = html.len() as u64;
+    for limit in [html_bytes, html_bytes + 1] {
+        let rendered = render_standalone_html_with_resources(
+            &full,
+            ReportResourceLimits::testing(25_000, 8 * 1024 * 1024, limit),
+            &ReportCancellationToken::default(),
+        )
+        .unwrap();
+        assert_eq!(rendered, html);
+    }
+    let over = render_standalone_html_with_resources(
+        &full,
+        ReportResourceLimits::testing(25_000, 8 * 1024 * 1024, html_bytes - 1),
+        &ReportCancellationToken::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        over,
+        ReportError::Resource(ref error)
+            if error.diagnostic.code == "resource.report.html_bytes"
+    ));
+
+    let cancellation = ReportCancellationToken::default();
+    cancellation.cancel();
+    let cancelled =
+        render_standalone_html_with_resources(&full, REPORT_RESOURCE_LIMITS, &cancellation)
+            .unwrap_err();
+    assert!(matches!(
+        cancelled,
+        ReportError::Resource(ref error)
+            if error.diagnostic.code == "resource.operation.cancelled"
+    ));
+}
 
 #[test]
 fn discloses_stale_annotation_without_hiding_unrelated_evidence() {
@@ -10,7 +105,7 @@ fn discloses_stale_annotation_without_hiding_unrelated_evidence() {
     bundle.observations[0].slot_label = Some("B".to_string());
 
     let report = build_report(&bundle).expect("stale annotation should be narrowly excluded");
-    let html = render_standalone_html(&report);
+    let html = render_standalone_html(&report).unwrap();
 
     assert_eq!(report.eligibility_exclusions.len(), 1);
     assert!(html.contains("Evidence eligibility disclosures"));

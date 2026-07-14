@@ -8,10 +8,12 @@ use antennabench_core::{
 };
 
 use crate::{
-    comparison::analyze_paired_comparison, AnalysisError, AnalysisSummary, AntennaEvidenceSummary,
-    BandEvidenceSummary, EligibilityExclusionCategory, EligibilityExclusionCount, EligibilityScope,
-    EvidenceEligibility, EvidenceQuality, EvidenceSummary, ExclusionCount, ObservationCounts,
-    ObservationExclusionReason, ObservationKindCount, SlotEvidenceSummary, SnrStatistics,
+    comparison::analyze_paired_comparison, AnalysisBudget, AnalysisCancellationToken,
+    AnalysisError, AnalysisResourceLimits, AnalysisResourceStage, AnalysisSummary,
+    AntennaEvidenceSummary, BandEvidenceSummary, EligibilityExclusionCategory,
+    EligibilityExclusionCount, EligibilityScope, EvidenceEligibility, EvidenceQuality,
+    EvidenceSummary, ExclusionCount, ObservationCounts, ObservationExclusionReason,
+    ObservationKindCount, SlotEvidenceSummary, SnrStatistics, ANALYSIS_RESOURCE_LIMITS,
 };
 
 const MINIMUM_USABLE_CONFIDENCE: f32 = 0.70;
@@ -63,10 +65,56 @@ pub fn summarize_bundle_with_report(
     bundle: &BundleContents,
     validation: &BundleValidationReport,
 ) -> Result<AnalysisSummary, AnalysisError> {
+    summarize_bundle_with_resources(
+        bundle,
+        validation,
+        ANALYSIS_RESOURCE_LIMITS,
+        &AnalysisCancellationToken::default(),
+    )
+}
+
+pub fn summarize_bundle_with_resources(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+    limits: AnalysisResourceLimits,
+    cancellation: &AnalysisCancellationToken,
+) -> Result<AnalysisSummary, AnalysisError> {
+    let budget = AnalysisBudget::new(limits, cancellation);
     if validation.diagnostics().iter().any(is_fatal_for_analysis) {
         return Err(BundleValidationError::from_report(validation.clone()).into());
     }
+    let input_entries = bundle.schedule.slots.len()
+        + bundle.events.len()
+        + bundle.observations.len()
+        + bundle.antennas.antennas.len();
+    for (role, entries) in [
+        ("schedule_slots", bundle.schedule.slots.len()),
+        ("operator_events", bundle.events.len()),
+        ("observations", bundle.observations.len()),
+        ("antennas", bundle.antennas.antennas.len()),
+    ] {
+        budget.collection(AnalysisResourceStage::Plan, role, entries)?;
+    }
+    budget.live(
+        AnalysisResourceStage::Plan,
+        "analysis_projection",
+        input_entries as u64,
+    )?;
     let plan = EligibilityPlan::from_report(validation);
+    let plan_entries = plan.excluded_observations.len()
+        + plan.excluded_slots.len()
+        + plan.excluded_events.len()
+        + plan.eligibility.exclusions.len();
+    budget.collection(
+        AnalysisResourceStage::Plan,
+        "eligibility_plan",
+        plan_entries,
+    )?;
+    budget.live(
+        AnalysisResourceStage::Plan,
+        "projection_and_eligibility",
+        (input_entries + plan_entries) as u64,
+    )?;
     let mut analysis_bundle = bundle.clone();
     sanitize_analysis_fields(&mut analysis_bundle, validation);
     analysis_bundle.schedule.slots = bundle
@@ -103,44 +151,86 @@ pub fn summarize_bundle_with_report(
         &analysis_bundle.observations,
         SlotAlignmentPolicy::default(),
     );
-    let observations = analysis_bundle
+    budget.collection(
+        AnalysisResourceStage::Align,
+        "aligned_slots",
+        alignment.slots.len(),
+    )?;
+    budget.collection(
+        AnalysisResourceStage::Align,
+        "observation_assignments",
+        alignment.observation_assignments.len(),
+    )?;
+    let alignment_entries = alignment.slots.len() + alignment.observation_assignments.len();
+    budget.live(
+        AnalysisResourceStage::Align,
+        "projection_plan_alignment",
+        (input_entries + plan_entries + alignment_entries) as u64,
+    )?;
+    budget.collection(
+        AnalysisResourceStage::Aggregate,
+        "classified_observations",
+        analysis_bundle.observations.len(),
+    )?;
+    budget.live(
+        AnalysisResourceStage::Aggregate,
+        "analysis_classification",
+        (input_entries + plan_entries + alignment_entries + analysis_bundle.observations.len())
+            as u64,
+    )?;
+    let mut observations = Vec::with_capacity(analysis_bundle.observations.len());
+    for (index, (observation, assignment)) in analysis_bundle
         .observations
         .iter()
         .zip(&alignment.observation_assignments)
         .enumerate()
-        .map(|(index, (observation, assignment))| {
-            debug_assert_eq!(observation.observation_id, assignment.observation_id);
-            ClassifiedObservation {
-                observation,
-                assignment,
-                disposition: plan
-                    .excluded_observations
-                    .get(&index)
-                    .copied()
-                    .map(ObservationDisposition::Excluded)
-                    .unwrap_or_else(|| classify_assignment(assignment)),
-            }
-        })
-        .collect::<Vec<_>>();
+    {
+        budget.checkpoint(
+            AnalysisResourceStage::Aggregate,
+            "classify_observations",
+            index,
+        )?;
+        debug_assert_eq!(observation.observation_id, assignment.observation_id);
+        observations.push(ClassifiedObservation {
+            observation,
+            assignment,
+            disposition: plan
+                .excluded_observations
+                .get(&index)
+                .copied()
+                .map(ObservationDisposition::Excluded)
+                .unwrap_or_else(|| classify_assignment(assignment)),
+        });
+    }
 
-    let overall = aggregate(observations.iter().copied()).finish();
+    budget.cancelled(AnalysisResourceStage::Aggregate, "overall_evidence")?;
+    let overall = aggregate(observations.iter().copied(), &budget, "overall_evidence")?.finish();
+    budget.collection(
+        AnalysisResourceStage::Aggregate,
+        "antenna_summaries",
+        bundle.antennas.antennas.len(),
+    )?;
     let antennas = bundle
         .antennas
         .antennas
         .iter()
-        .map(|antenna| {
-            let aggregate = aggregate(observations.iter().copied().filter(|classified| {
-                classified.assignment.slot_label.as_deref() == Some(antenna.label.as_str())
-            }));
+        .map(|antenna| -> Result<_, AnalysisError> {
+            let aggregate = aggregate(
+                observations.iter().copied().filter(|classified| {
+                    classified.assignment.slot_label.as_deref() == Some(antenna.label.as_str())
+                }),
+                &budget,
+                "antenna_evidence",
+            )?;
             let contributing_slot_count = aggregate.contributing_slots.len();
-            AntennaEvidenceSummary {
+            Ok(AntennaEvidenceSummary {
                 antenna_label: antenna.label.clone(),
                 contributing_slot_count,
                 evidence_quality: evidence_quality(aggregate.usable, contributing_slot_count),
                 evidence: aggregate.finish(),
-            }
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, AnalysisError>>()?;
     let bands = BANDS
         .iter()
         .copied()
@@ -155,24 +245,58 @@ pub fn summarize_bundle_with_report(
                     .iter()
                     .any(|observation| observation.band == *band)
         })
-        .map(|band| BandEvidenceSummary {
-            band,
-            evidence: aggregate(
-                observations
-                    .iter()
-                    .copied()
-                    .filter(|classified| classified.observation.band == band),
-            )
-            .finish(),
+        .map(|band| -> Result<_, AnalysisError> {
+            Ok(BandEvidenceSummary {
+                band,
+                evidence: aggregate(
+                    observations
+                        .iter()
+                        .copied()
+                        .filter(|classified| classified.observation.band == band),
+                    &budget,
+                    "band_evidence",
+                )?
+                .finish(),
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, AnalysisError>>()?;
+    budget.collection(
+        AnalysisResourceStage::Aggregate,
+        "slot_summaries",
+        alignment.slots.len(),
+    )?;
     let slots = alignment
         .slots
         .iter()
-        .map(|slot| summarize_slot(slot, &observations))
-        .collect();
+        .map(|slot| summarize_slot(slot, &observations, &budget))
+        .collect::<Result<Vec<_>, AnalysisError>>()?;
     let evidence_quality = session_evidence_quality(&analysis_bundle, &antennas);
-    let comparison = analyze_paired_comparison(&analysis_bundle, &alignment.slots, &observations);
+    let comparison_upper_bound = observations
+        .len()
+        .saturating_mul(5)
+        .saturating_add(alignment.slots.len().saturating_mul(2));
+    budget.live(
+        AnalysisResourceStage::Compare,
+        "comparison_intermediates",
+        (input_entries
+            + plan_entries
+            + alignment_entries
+            + observations.len()
+            + comparison_upper_bound) as u64,
+    )?;
+    budget.cancelled(AnalysisResourceStage::Compare, "paired_comparison")?;
+    let comparison =
+        analyze_paired_comparison(&analysis_bundle, &alignment.slots, &observations, &budget)?;
+    for (role, entries) in [
+        ("comparison_blocks", comparison.blocks.len()),
+        ("comparison_overlap_rows", comparison.overlap_rows.len()),
+        ("comparison_timeline_rows", comparison.timeline_rows.len()),
+        ("comparison_paired_rows", comparison.paired_rows.len()),
+        ("comparison_path_summaries", comparison.path_summaries.len()),
+        ("comparison_strata", comparison.strata.len()),
+    ] {
+        budget.collection(AnalysisResourceStage::Compare, role, entries)?;
+    }
 
     Ok(AnalysisSummary {
         session_id: bundle.manifest.session_id.clone(),
@@ -410,19 +534,24 @@ fn observation_reason_rank(reason: ObservationExclusionReason) -> u8 {
 fn summarize_slot(
     slot: &AlignedSlot,
     observations: &[ClassifiedObservation<'_>],
-) -> SlotEvidenceSummary {
-    SlotEvidenceSummary {
+    budget: &AnalysisBudget<'_>,
+) -> Result<SlotEvidenceSummary, AnalysisError> {
+    Ok(SlotEvidenceSummary {
         slot_id: slot.slot_id.clone(),
         sequence_number: slot.sequence_number,
         band: slot.band,
         planned_label: slot.planned_label.clone(),
         actual_label: slot.actual_label.clone(),
         status: slot.status,
-        evidence: aggregate(observations.iter().copied().filter(|classified| {
-            classified.assignment.slot_id.as_deref() == Some(slot.slot_id.as_str())
-        }))
+        evidence: aggregate(
+            observations.iter().copied().filter(|classified| {
+                classified.assignment.slot_id.as_deref() == Some(slot.slot_id.as_str())
+            }),
+            budget,
+            "slot_evidence",
+        )?
         .finish(),
-    }
+    })
 }
 
 fn session_evidence_quality(
@@ -577,12 +706,15 @@ impl EvidenceAggregate {
 
 fn aggregate<'a>(
     observations: impl IntoIterator<Item = ClassifiedObservation<'a>>,
-) -> EvidenceAggregate {
+    budget: &AnalysisBudget<'_>,
+    role: &'static str,
+) -> Result<EvidenceAggregate, AnalysisError> {
     let mut aggregate = EvidenceAggregate::default();
-    for observation in observations {
+    for (index, observation) in observations.into_iter().enumerate() {
+        budget.checkpoint(AnalysisResourceStage::Aggregate, role, index)?;
         aggregate.add(observation);
     }
-    aggregate
+    Ok(aggregate)
 }
 
 fn snr_statistics(samples: &[f64]) -> Option<SnrStatistics> {

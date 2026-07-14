@@ -1,6 +1,10 @@
 mod comparison;
 mod model;
+mod resource;
 mod summary;
 
 pub use model::*;
-pub use summary::{summarize_bundle, summarize_bundle_with_report};
+pub use resource::*;
+pub use summary::{
+    summarize_bundle, summarize_bundle_with_report, summarize_bundle_with_resources,
+};

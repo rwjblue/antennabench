@@ -98,10 +98,12 @@ available when an optional adapter stops. Storage-safe export remains separate
 from analysis/report eligibility, and a live acquisition overflow becomes an
 auditable completeness gap.
 
-Storage and adapter enforcement are implemented for local bundles, offline and
-live WSJT-X acquisition, and NOAA SWPC HTTP acquisition. Analysis,
-report-rendering, and desktop-delivery enforcement remains tracked by
-[#57](https://github.com/rwjblue/antennabench/issues/57).
+The fixed profile is implemented across local bundle storage, offline and live
+WSJT-X acquisition, NOAA SWPC HTTP acquisition, analysis, report projection,
+standalone HTML, and desktop IPC/orchestration. Oversized report detail becomes
+an unmistakable aggregate overview with complete omission counts and no sampled
+rows; if even that cannot fit, report generation fails while storage-safe
+lossless export remains available.
 
 ## Planned Local Conductor Delivery
 
