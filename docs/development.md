@@ -163,10 +163,12 @@ Project-local Mise tasks remain the command source of truth on every platform.
 The portability jobs explicitly select `shell: bash`; on Windows, GitHub Actions
 therefore uses the Bash supplied by Git for Windows instead of the PowerShell
 default. Simple task wrappers intentionally remain Bash. The desktop build and
-development tasks resolve Mise's `cargo-tauri` executable before restoring the
-native Windows path list required by Tauri's Cargo child processes. The desktop
-E2E task uses Node's clock rather than a platform-specific `time` executable
-and records
+development tasks resolve Mise's Cargo and `cargo-tauri` executables in Bash;
+under Git Bash they cross into native PowerShell with one canonical Windows
+`Path` before Tauri starts its Cargo child processes. Developers and CI still
+use the same `mise run desktop:build` and `mise run desktop:dev` entry points on
+every platform. The desktop E2E task uses Node's clock rather than a
+platform-specific `time` executable and records
 the runner OS, elapsed seconds, exit status, and bounded phase diagnostics in
 `target/desktop-e2e/last-run.log`. A failed portability job uploads that log for
 seven days when it exists.

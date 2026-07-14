@@ -8,9 +8,23 @@ cd apps/desktop
 tauri_cli="$(command -v cargo-tauri)"
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
-    # Native Tauri child processes need Windows paths after Git Bash starts the task.
-    export PATH="$(cygpath -wp "$PATH")"
-    export MSYS2_ENV_CONV_EXCL="${MSYS2_ENV_CONV_EXCL:+${MSYS2_ENV_CONV_EXCL};}PATH"
+    export ANTENNABENCH_CARGO_CLI="$(cygpath -w "$(command -v cargo)")"
+    export ANTENNABENCH_TAURI_CLI="$(cygpath -w "$tauri_cli")"
+    export ANTENNABENCH_TAURI_DIR="$(cygpath -w "$PWD")"
+    export ANTENNABENCH_WINDOWS_PATH="$(cygpath -wp "$PATH")"
+    MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*' powershell.exe \
+      -NoLogo -NoProfile -NonInteractive -Command '
+        $ErrorActionPreference = "Stop"
+        $cargoDirectory = Split-Path -Parent $env:ANTENNABENCH_CARGO_CLI
+        $env:Path = "$cargoDirectory;$env:ANTENNABENCH_WINDOWS_PATH"
+        Set-Location -LiteralPath $env:ANTENNABENCH_TAURI_DIR
+        $cargo = Get-Command cargo -CommandType Application -ErrorAction Stop
+        Write-Host "Using cargo: $($cargo.Source)"
+        & $env:ANTENNABENCH_TAURI_CLI build --debug --no-bundle
+        exit $LASTEXITCODE
+      '
+    ;;
+  *)
+    "$tauri_cli" build --debug --no-bundle
     ;;
 esac
-"$tauri_cli" build --debug --no-bundle
