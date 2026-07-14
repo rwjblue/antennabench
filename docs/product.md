@@ -98,10 +98,9 @@ available when an optional adapter stops. Storage-safe export remains separate
 from analysis/report eligibility, and a live acquisition overflow becomes an
 auditable completeness gap.
 
-The policy is approved but not yet implemented. Storage, adapter, and
-report/desktop enforcement are tracked by
-[#55](https://github.com/rwjblue/antennabench/issues/55),
-[#56](https://github.com/rwjblue/antennabench/issues/56), and
+Storage and adapter enforcement are implemented for local bundles, offline and
+live WSJT-X acquisition, and NOAA SWPC HTTP acquisition. Analysis,
+report-rendering, and desktop-delivery enforcement remains tracked by
 [#57](https://github.com/rwjblue/antennabench/issues/57).
 
 ## Planned Local Conductor Delivery

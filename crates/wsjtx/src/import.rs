@@ -6,7 +6,11 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use thiserror::Error;
 
-use crate::{parse_all_wspr_text, AllWsprDecode, AllWsprLineIssue, ParsedAllWsprText};
+use crate::{
+    parse_all_wspr_reader, parse_all_wspr_text, AdapterCancellationToken, AllWsprDecode,
+    AllWsprLineIssue, AllWsprStreamError, AllWsprStreamOutcome, IncompleteAllWsprText,
+    ParsedAllWsprText,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WsjtxImportConfig {
@@ -43,6 +47,20 @@ pub enum WsjtxImportError {
     EmptyStationGrid,
 }
 
+#[derive(Debug, Error)]
+pub enum StreamedWsjtxImportError {
+    #[error(transparent)]
+    Source(AllWsprStreamError),
+    #[error(transparent)]
+    Config(WsjtxImportError),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamedWsjtxImport {
+    Complete(WsjtxImport),
+    Quarantined(IncompleteAllWsprText),
+}
+
 pub fn import_all_wspr_text(
     input: &str,
     config: WsjtxImportConfig,
@@ -50,6 +68,24 @@ pub fn import_all_wspr_text(
     let parsed = parse_all_wspr_text(input);
 
     import_parsed_all_wspr_text(parsed, input, config)
+}
+
+pub fn import_all_wspr_reader(
+    reader: impl BufRead,
+    source: impl Into<String>,
+    config: WsjtxImportConfig,
+    cancellation: &AdapterCancellationToken,
+) -> Result<StreamedWsjtxImport, StreamedWsjtxImportError> {
+    match parse_all_wspr_reader(reader, source, cancellation)
+        .map_err(StreamedWsjtxImportError::Source)?
+    {
+        AllWsprStreamOutcome::Complete(parsed) => import_parsed_all_wspr_text(parsed, "", config)
+            .map(StreamedWsjtxImport::Complete)
+            .map_err(StreamedWsjtxImportError::Config),
+        AllWsprStreamOutcome::Quarantined(incomplete) => {
+            Ok(StreamedWsjtxImport::Quarantined(incomplete))
+        }
+    }
 }
 
 pub fn import_parsed_all_wspr_text(
@@ -218,3 +254,4 @@ fn observation_id(import_id: &str, line_number: usize) -> String {
 fn fields(line: &str) -> Vec<&str> {
     line.split_whitespace().collect()
 }
+use std::io::BufRead;

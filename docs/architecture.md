@@ -182,8 +182,14 @@ sampled.
 The storage boundary is enforced for both durable schema versions with bounded
 metadata preflight plus streaming growth checks, strict-write preflight,
 cooperative cancellation, and rollback of incomplete destinations. Adapter and
-analysis/report/desktop enforcement remains split across
-[#56](https://github.com/rwjblue/antennabench/issues/56) and
+network boundaries apply the same profile: offline WSJT-X input is streamed by
+byte, physical-line, and nonblank-record budgets; live UDP uses a bounded queue,
+deterministic token bucket, idle-only client eviction, and fixed-size timed
+fingerprints; and NOAA responses use HTTPS/same-host redirect rules, bounded
+headers, streamed decoded-body accounting, expected JSON media, cancellation,
+and incomplete quarantine metadata. A queue, rate, client, or duplicate-state
+breach produces one explicit acquisition gap and stops only that receiver.
+Analysis/report/desktop enforcement remains tracked by
 [#57](https://github.com/rwjblue/antennabench/issues/57). Hosted upload and archive
 limits remain a separate decision in
 [#11](https://github.com/rwjblue/antennabench/issues/11).

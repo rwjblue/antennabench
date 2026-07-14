@@ -5,15 +5,179 @@ use std::time::Duration as StdDuration;
 use antennabench_core::{normalize_bundle, validate_bundle, ObservationKind, RecordSource};
 use antennabench_storage::BundleStore;
 use antennabench_wsjtx::{
-    append_live_wsjtx_message, parse_wsjtx_datagram, DatagramParseError, LiveIngestConfig,
-    LiveIngestOutcome, LiveMessageDisposition, LiveRecordedMessage, LiveWsjtxIngest,
-    UdpReceiverError, WsjtxMessage, WsjtxUdpReceiver, WsprDecodeDisposition, MAX_SUPPORTED_SCHEMA,
-    MIN_SUPPORTED_SCHEMA, WSJTX_MAGIC,
+    append_live_wsjtx_message, parse_wsjtx_datagram, BoundedUdpQueue, DatagramParseError,
+    LiveIngestConfig, LiveIngestError, LiveIngestOutcome, LiveMessageDisposition,
+    LiveRecordedMessage, LiveWsjtxIngest, ReceivedUdpDatagram, UdpReceiverError,
+    WsjtxAdapterLimits, WsjtxMessage, WsjtxUdpReceiver, WsprDecodeDisposition,
+    MAX_SUPPORTED_SCHEMA, MIN_SUPPORTED_SCHEMA, WSJTX_ADAPTER_LIMITS, WSJTX_MAGIC,
 };
 use chrono::{DateTime, TimeZone, Utc};
 
 const CLIENT_ID: &str = "WSJT-X";
 const SESSION_ID: &str = "session-live-wsjtx-test";
+
+#[test]
+fn live_admission_rate_breach_records_one_gap_and_stops_only_the_receiver() {
+    let mut limits = WSJTX_ADAPTER_LIMITS;
+    limits.udp_rate_per_second = 1;
+    limits.udp_rate_burst = 2;
+    let mut ingest = live_ingest_with_limits(limits);
+    let at = utc(2026, 7, 9, 20, 1, 0);
+    ingest
+        .ingest_datagram(&heartbeat_datagram(3, "a", "a"), at)
+        .unwrap();
+    ingest
+        .ingest_datagram(&heartbeat_datagram(3, "b", "b"), at)
+        .unwrap();
+    let error = ingest
+        .ingest_datagram(&heartbeat_datagram(3, "c", "c"), at)
+        .unwrap_err();
+    assert!(matches!(error, LiveIngestError::Resource(_)));
+    assert_eq!(
+        ingest.acquisition_gap().unwrap().diagnostic.code,
+        "resource.adapter.udp.rate"
+    );
+    assert!(ingest.is_stopped());
+    let repeated = ingest
+        .ingest_datagram(&heartbeat_datagram(3, "d", "d"), at)
+        .unwrap_err();
+    assert_eq!(error.to_string(), repeated.to_string());
+}
+
+#[test]
+fn live_client_and_dedup_state_are_bounded_without_storing_datagram_copies() {
+    let mut limits = WSJTX_ADAPTER_LIMITS;
+    limits.udp_clients = 1;
+    let mut clients = live_ingest_with_limits(limits);
+    let at = utc(2026, 7, 9, 20, 1, 0);
+    clients.ingest_datagram(&heartbeat_for("one"), at).unwrap();
+    let error = clients
+        .ingest_datagram(&heartbeat_for("two"), at)
+        .unwrap_err();
+    assert!(error.to_string().contains("resource.adapter.udp.clients"));
+
+    let mut limits = WSJTX_ADAPTER_LIMITS;
+    limits.udp_dedup_entries_per_client = 2;
+    let mut dedup = live_ingest_with_limits(limits);
+    dedup
+        .ingest_datagram(&status_datagram("WSPR", "N1RWJ", "FN42"), at)
+        .unwrap();
+    dedup
+        .ingest_datagram(&wspr_decode_datagram(true, 72_110_000, false), at)
+        .unwrap();
+    dedup
+        .ingest_datagram(&wspr_decode_datagram(true, 72_111_000, false), at)
+        .unwrap();
+    let error = dedup
+        .ingest_datagram(&wspr_decode_datagram(true, 72_112_000, false), at)
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("resource.adapter.udp.dedup_entries"));
+}
+
+#[test]
+fn bounded_udp_queue_stops_at_item_or_byte_limit_without_silent_drop() {
+    let mut limits = WSJTX_ADAPTER_LIMITS;
+    limits.udp_queue_datagrams = 2;
+    limits.udp_queue_bytes = 4;
+    let mut queue = BoundedUdpQueue::with_limits("queue-test", limits);
+    let at = utc(2026, 7, 9, 20, 1, 0);
+    let source = "127.0.0.1:1234".parse().unwrap();
+    for bytes in [vec![1, 2], vec![3, 4]] {
+        queue
+            .push(ReceivedUdpDatagram {
+                bytes,
+                source,
+                received_at: at,
+            })
+            .unwrap();
+    }
+    let failure = queue
+        .push(ReceivedUdpDatagram {
+            bytes: vec![5],
+            source,
+            received_at: at,
+        })
+        .unwrap_err();
+    assert_eq!(
+        failure.diagnostic.code,
+        "resource.adapter.udp.queue_datagrams"
+    );
+    assert_eq!(queue.len(), 2);
+    assert!(queue.acquisition_gap().is_some());
+
+    let mut byte_limits = WSJTX_ADAPTER_LIMITS;
+    byte_limits.udp_queue_datagrams = 10;
+    byte_limits.udp_queue_bytes = 3;
+    let mut queue = BoundedUdpQueue::with_limits("byte-queue", byte_limits);
+    queue
+        .push(ReceivedUdpDatagram {
+            bytes: vec![1, 2],
+            source,
+            received_at: at,
+        })
+        .unwrap();
+    let failure = queue
+        .push(ReceivedUdpDatagram {
+            bytes: vec![3, 4],
+            source,
+            received_at: at,
+        })
+        .unwrap_err();
+    assert_eq!(failure.diagnostic.code, "resource.adapter.udp.queue_bytes");
+}
+
+#[test]
+fn datagram_client_id_idle_eviction_and_dedup_window_use_fixed_boundaries() {
+    let at = utc(2026, 7, 9, 20, 1, 0);
+    let mut exact = heartbeat_datagram(3, "2.6.1", "test");
+    exact.resize(65_535, 0);
+    live_ingest().ingest_datagram(&exact, at).unwrap();
+    let mut over = exact;
+    over.push(0);
+    let mut ingest = live_ingest();
+    let error = ingest.ingest_datagram(&over, at).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("resource.adapter.udp.datagram_bytes"));
+
+    let mut ingest = live_ingest();
+    let error = ingest
+        .ingest_datagram(&heartbeat_for(&"x".repeat(129)), at)
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("resource.adapter.udp.client_id_bytes"));
+
+    let mut limits = WSJTX_ADAPTER_LIMITS;
+    limits.udp_clients = 1;
+    limits.udp_idle_eviction_seconds = 5;
+    let mut ingest = live_ingest_with_limits(limits);
+    ingest.ingest_datagram(&heartbeat_for("one"), at).unwrap();
+    ingest
+        .ingest_datagram(&heartbeat_for("two"), at + chrono::Duration::seconds(5))
+        .unwrap();
+    assert!(ingest.client_state("one").is_none());
+    assert!(ingest.client_state("two").is_some());
+
+    let mut limits = WSJTX_ADAPTER_LIMITS;
+    limits.udp_dedup_entries_per_client = 1;
+    limits.udp_dedup_window_seconds = 10;
+    let mut ingest = live_ingest_with_limits(limits);
+    ingest
+        .ingest_datagram(&status_datagram("WSPR", "N1RWJ", "FN42"), at)
+        .unwrap();
+    ingest
+        .ingest_datagram(&wspr_decode_datagram(true, 72_110_000, false), at)
+        .unwrap();
+    ingest
+        .ingest_datagram(
+            &wspr_decode_datagram(true, 72_121_000, false),
+            at + chrono::Duration::seconds(11),
+        )
+        .unwrap();
+}
 
 #[test]
 fn parses_synthetic_schema_three_fixture_and_ignores_trailing_fields() {
@@ -376,13 +540,20 @@ fn udp_receiver_has_a_minimal_receive_and_shutdown_boundary() {
 }
 
 fn live_ingest() -> LiveWsjtxIngest {
-    LiveWsjtxIngest::new(LiveIngestConfig {
-        session_id: SESSION_ID.to_string(),
-        receiver_id: "live-test".to_string(),
-        station_callsign: "n1rwj".to_string(),
-        station_grid: "fn42".to_string(),
-        session_started_at: utc(2026, 7, 9, 19, 58, 0),
-    })
+    live_ingest_with_limits(WSJTX_ADAPTER_LIMITS)
+}
+
+fn live_ingest_with_limits(limits: WsjtxAdapterLimits) -> LiveWsjtxIngest {
+    LiveWsjtxIngest::new_with_limits(
+        LiveIngestConfig {
+            session_id: SESSION_ID.to_string(),
+            receiver_id: "live-test".to_string(),
+            station_callsign: "n1rwj".to_string(),
+            station_grid: "fn42".to_string(),
+            session_started_at: utc(2026, 7, 9, 19, 58, 0),
+        },
+        limits,
+    )
     .unwrap()
 }
 
@@ -450,6 +621,14 @@ fn heartbeat_datagram(schema: u32, version: &str, revision: &str) -> Vec<u8> {
     bytes
 }
 
+fn heartbeat_for(client_id: &str) -> Vec<u8> {
+    let mut bytes = header_for(3, 0, client_id);
+    put_u32(&mut bytes, 3);
+    put_utf8(&mut bytes, "2.6.1");
+    put_utf8(&mut bytes, "test");
+    bytes
+}
+
 fn status_datagram(mode: &str, de_call: &str, de_grid: &str) -> Vec<u8> {
     let mut bytes = header(3, 1);
     put_u64(&mut bytes, 14_095_600);
@@ -493,11 +672,15 @@ fn unsupported_datagram(schema: u32, message_type: u32) -> Vec<u8> {
 }
 
 fn header(schema: u32, message_type: u32) -> Vec<u8> {
+    header_for(schema, message_type, CLIENT_ID)
+}
+
+fn header_for(schema: u32, message_type: u32, client_id: &str) -> Vec<u8> {
     let mut bytes = Vec::new();
     put_u32(&mut bytes, WSJTX_MAGIC);
     put_u32(&mut bytes, schema);
     put_u32(&mut bytes, message_type);
-    put_utf8(&mut bytes, CLIENT_ID);
+    put_utf8(&mut bytes, client_id);
     bytes
 }
 

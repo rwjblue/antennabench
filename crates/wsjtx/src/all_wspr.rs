@@ -1,6 +1,13 @@
+use std::io::{self, BufRead};
+
 use antennabench_core::Band;
 use chrono::{DateTime, NaiveDate, Utc};
 use thiserror::Error;
+
+use crate::{
+    diagnostic, AdapterCancellationToken, AdapterResourceError, AdapterResourceStage,
+    AdapterResourceUnit, WsjtxAdapterLimits, WSJTX_ADAPTER_LIMITS,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AllWsprDecode {
@@ -24,6 +31,25 @@ pub struct AllWsprDecode {
 pub struct ParsedAllWsprText {
     pub decodes: Vec<AllWsprDecode>,
     pub issues: Vec<AllWsprLineIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IncompleteAllWsprText {
+    pub retained_prefix: Vec<u8>,
+    pub retained_bytes: u64,
+    pub failure: AdapterResourceError,
+}
+
+#[derive(Debug, Error)]
+pub enum AllWsprStreamError {
+    #[error("failed to read offline WSJT-X source")]
+    Io(#[source] io::Error),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AllWsprStreamOutcome {
+    Complete(ParsedAllWsprText),
+    Quarantined(IncompleteAllWsprText),
 }
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -76,6 +102,165 @@ pub fn parse_all_wspr_text(input: &str) -> ParsedAllWsprText {
     }
 
     ParsedAllWsprText { decodes, issues }
+}
+
+pub fn parse_all_wspr_reader(
+    reader: impl BufRead,
+    source: impl Into<String>,
+    cancellation: &AdapterCancellationToken,
+) -> Result<AllWsprStreamOutcome, AllWsprStreamError> {
+    parse_all_wspr_reader_with_limits(reader, source.into(), cancellation, WSJTX_ADAPTER_LIMITS)
+}
+
+#[doc(hidden)]
+pub fn parse_all_wspr_reader_with_limits(
+    mut reader: impl BufRead,
+    source: String,
+    cancellation: &AdapterCancellationToken,
+    limits: WsjtxAdapterLimits,
+) -> Result<AllWsprStreamOutcome, AllWsprStreamError> {
+    let mut retained_prefix = Vec::new();
+    let mut current_line = Vec::new();
+    let mut total_bytes = 0_u64;
+    let mut physical_lines = 0_u64;
+    let mut nonblank_lines = 0_u64;
+    let mut parsed = ParsedAllWsprText {
+        decodes: Vec::new(),
+        issues: Vec::new(),
+    };
+
+    loop {
+        if cancellation.is_cancelled() {
+            return Ok(quarantined(
+                retained_prefix,
+                diagnostic(
+                    "resource.operation.cancelled",
+                    "wsjtx.offline",
+                    &source,
+                    AdapterResourceStage::Stream,
+                    0,
+                    Some(total_bytes),
+                    AdapterResourceUnit::Checkpoints,
+                    false,
+                ),
+            ));
+        }
+
+        let available = reader.fill_buf().map_err(AllWsprStreamError::Io)?;
+        if available.is_empty() {
+            if !current_line.is_empty() {
+                physical_lines += 1;
+                if let Err(failure) = process_streamed_line(
+                    &mut parsed,
+                    &current_line,
+                    physical_lines as usize,
+                    &mut nonblank_lines,
+                    &source,
+                    limits,
+                ) {
+                    return Ok(quarantined(retained_prefix, failure));
+                }
+            }
+            return Ok(AllWsprStreamOutcome::Complete(parsed));
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let consumed = newline.map_or(available.len(), |index| index + 1);
+        let chunk = &available[..consumed];
+        let observed_total = total_bytes.saturating_add(chunk.len() as u64);
+        if observed_total > limits.offline_source_bytes {
+            return Ok(quarantined(
+                retained_prefix,
+                diagnostic(
+                    "resource.adapter.offline_source_bytes",
+                    "wsjtx.offline",
+                    &source,
+                    AdapterResourceStage::Stream,
+                    limits.offline_source_bytes,
+                    Some(observed_total),
+                    AdapterResourceUnit::Bytes,
+                    false,
+                ),
+            ));
+        }
+        let observed_line = current_line.len() as u64 + chunk.len() as u64;
+        if observed_line > limits.offline_line_bytes {
+            return Ok(quarantined(
+                retained_prefix,
+                diagnostic(
+                    "resource.adapter.offline_line_bytes",
+                    "wsjtx.offline",
+                    &source,
+                    AdapterResourceStage::Stream,
+                    limits.offline_line_bytes,
+                    Some(observed_line),
+                    AdapterResourceUnit::Bytes,
+                    false,
+                ),
+            ));
+        }
+
+        retained_prefix.extend_from_slice(chunk);
+        current_line.extend_from_slice(chunk);
+        total_bytes = observed_total;
+        reader.consume(consumed);
+        if newline.is_some() {
+            physical_lines += 1;
+            if let Err(failure) = process_streamed_line(
+                &mut parsed,
+                &current_line,
+                physical_lines as usize,
+                &mut nonblank_lines,
+                &source,
+                limits,
+            ) {
+                return Ok(quarantined(retained_prefix, failure));
+            }
+            current_line.clear();
+        }
+    }
+}
+
+fn process_streamed_line(
+    parsed: &mut ParsedAllWsprText,
+    bytes: &[u8],
+    line_number: usize,
+    nonblank_lines: &mut u64,
+    source: &str,
+    limits: WsjtxAdapterLimits,
+) -> Result<(), AdapterResourceError> {
+    let line = String::from_utf8_lossy(bytes)
+        .trim_end_matches(['\r', '\n'])
+        .to_string();
+    if line.trim().is_empty() {
+        return Ok(());
+    }
+    *nonblank_lines += 1;
+    if *nonblank_lines > limits.offline_nonblank_lines {
+        return Err(diagnostic(
+            "resource.adapter.offline_source_lines",
+            "wsjtx.offline",
+            source,
+            AdapterResourceStage::Stream,
+            limits.offline_nonblank_lines,
+            Some(*nonblank_lines),
+            AdapterResourceUnit::Lines,
+            false,
+        ));
+    }
+    match parse_all_wspr_line(line_number, &line) {
+        Ok(decode) => parsed.decodes.push(decode),
+        Err(issue) => parsed.issues.push(issue),
+    }
+    Ok(())
+}
+
+fn quarantined(prefix: Vec<u8>, failure: AdapterResourceError) -> AllWsprStreamOutcome {
+    AllWsprStreamOutcome::Quarantined(IncompleteAllWsprText {
+        retained_bytes: prefix.len() as u64,
+        retained_prefix: prefix,
+        failure,
+    })
 }
 
 pub fn parse_all_wspr_line(

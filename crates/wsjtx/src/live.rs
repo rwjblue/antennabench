@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::time::Duration as StdDuration;
@@ -9,6 +9,7 @@ use antennabench_core::{
 };
 use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
@@ -16,9 +17,13 @@ use crate::{
     parse_wsjtx_datagram, DatagramParseError, HeartbeatMessage, ParsedDatagram, StatusMessage,
     UnsupportedMessage, WsjtxMessage, WsprDecodeMessage, MAX_SUPPORTED_SCHEMA,
 };
+use crate::{
+    diagnostic, AdapterResourceDiagnostic, AdapterResourceError, AdapterResourceStage,
+    AdapterResourceUnit, WsjtxAdapterLimits, WSJTX_ADAPTER_LIMITS,
+};
 
 const CLIENT_RESTART_TIMEOUT_SECONDS: i64 = 45;
-const MAX_UDP_DATAGRAM_BYTES: usize = 65_535;
+pub const MAX_UDP_DATAGRAM_BYTES: usize = 65_535;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveIngestConfig {
@@ -45,6 +50,14 @@ pub enum LiveIngestConfigError {
 pub enum LiveIngestError {
     #[error(transparent)]
     Parse(#[from] DatagramParseError),
+    #[error(transparent)]
+    Resource(#[from] AdapterResourceError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveAcquisitionGap {
+    pub stopped_at: DateTime<Utc>,
+    pub diagnostic: AdapterResourceDiagnostic,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -124,16 +137,33 @@ pub struct LiveWsjtxIngest {
     station_grid: String,
     next_sequence: u64,
     clients: HashMap<String, ClientRuntime>,
+    limits: WsjtxAdapterLimits,
+    admission: TokenBucket,
+    gap: Option<LiveAcquisitionGap>,
 }
 
 #[derive(Debug)]
 struct ClientRuntime {
     state: LiveClientState,
-    seen_wspr_datagrams: HashSet<Vec<u8>>,
+    seen_wspr_datagrams: VecDeque<([u8; 32], DateTime<Utc>)>,
+}
+
+#[derive(Debug)]
+struct TokenBucket {
+    tokens: f64,
+    last_refill: DateTime<Utc>,
 }
 
 impl LiveWsjtxIngest {
     pub fn new(config: LiveIngestConfig) -> Result<Self, LiveIngestConfigError> {
+        Self::new_with_limits(config, WSJTX_ADAPTER_LIMITS)
+    }
+
+    #[doc(hidden)]
+    pub fn new_with_limits(
+        config: LiveIngestConfig,
+        limits: WsjtxAdapterLimits,
+    ) -> Result<Self, LiveIngestConfigError> {
         if config.session_id.trim().is_empty() {
             return Err(LiveIngestConfigError::EmptySessionId);
         }
@@ -152,12 +182,19 @@ impl LiveWsjtxIngest {
             }
         })?;
 
+        let session_started_at = config.session_started_at;
         Ok(Self {
             config,
             station_callsign,
             station_grid,
             next_sequence: 1,
             clients: HashMap::new(),
+            limits,
+            admission: TokenBucket {
+                tokens: limits.udp_rate_burst as f64,
+                last_refill: session_started_at,
+            },
+            gap: None,
         })
     }
 
@@ -165,22 +202,55 @@ impl LiveWsjtxIngest {
         self.clients.get(client_id).map(|client| &client.state)
     }
 
+    pub fn acquisition_gap(&self) -> Option<&LiveAcquisitionGap> {
+        self.gap.as_ref()
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self.gap.is_some()
+    }
+
     pub fn ingest_datagram(
         &mut self,
         datagram: &[u8],
         received_at: DateTime<Utc>,
     ) -> Result<LiveIngestOutcome, LiveIngestError> {
+        if let Some(gap) = &self.gap {
+            return Err(AdapterResourceError {
+                diagnostic: gap.diagnostic.clone(),
+            }
+            .into());
+        }
+        if datagram.len() as u64 > self.limits.udp_datagram_bytes {
+            return Err(self.stop(
+                "resource.adapter.udp.datagram_bytes",
+                AdapterResourceStage::Admission,
+                self.limits.udp_datagram_bytes,
+                Some(datagram.len() as u64),
+                AdapterResourceUnit::Bytes,
+                received_at,
+            ));
+        }
+        self.admit_rate(received_at)?;
         let parsed = parse_wsjtx_datagram(datagram)?;
-
+        let client_id = parsed.message.client_id().to_string();
+        if client_id.len() as u64 > self.limits.udp_client_id_bytes {
+            return Err(self.stop(
+                "resource.adapter.udp.client_id_bytes",
+                AdapterResourceStage::Admission,
+                self.limits.udp_client_id_bytes,
+                Some(client_id.len() as u64),
+                AdapterResourceUnit::Bytes,
+                received_at,
+            ));
+        }
         if let WsjtxMessage::Unsupported(message) = parsed.message {
             return Ok(LiveIngestOutcome::IgnoredUnsupported {
                 schema: parsed.schema,
                 message,
             });
         }
-
-        let client_id = parsed.message.client_id().to_string();
-        self.touch_client(&client_id, parsed.schema, received_at);
+        self.touch_client(&client_id, parsed.schema, received_at)?;
         let sequence = self.next_sequence;
         self.next_sequence += 1;
 
@@ -223,7 +293,7 @@ impl LiveWsjtxIngest {
                     source_timestamp,
                     received_at,
                     sequence,
-                );
+                )?;
                 self.recorded_message(
                     sequence,
                     source_timestamp,
@@ -255,7 +325,94 @@ impl LiveWsjtxIngest {
         Ok(LiveIngestOutcome::Recorded(Box::new(result)))
     }
 
-    fn touch_client(&mut self, client_id: &str, schema: u32, received_at: DateTime<Utc>) {
+    fn admit_rate(&mut self, received_at: DateTime<Utc>) -> Result<(), LiveIngestError> {
+        let elapsed = received_at
+            .signed_duration_since(self.admission.last_refill)
+            .num_microseconds()
+            .unwrap_or_default()
+            .max(0) as f64
+            / 1_000_000.0;
+        self.admission.tokens = (self.admission.tokens
+            + elapsed * self.limits.udp_rate_per_second as f64)
+            .min(self.limits.udp_rate_burst as f64);
+        if received_at > self.admission.last_refill {
+            self.admission.last_refill = received_at;
+        }
+        if self.admission.tokens < 1.0 {
+            return Err(self.stop(
+                "resource.adapter.udp.rate",
+                AdapterResourceStage::Admission,
+                self.limits.udp_rate_burst,
+                Some(self.limits.udp_rate_burst + 1),
+                AdapterResourceUnit::Datagrams,
+                received_at,
+            ));
+        }
+        self.admission.tokens -= 1.0;
+        Ok(())
+    }
+
+    fn stop(
+        &mut self,
+        code: &'static str,
+        stage: AdapterResourceStage,
+        limit: u64,
+        observed: Option<u64>,
+        unit: AdapterResourceUnit,
+        stopped_at: DateTime<Utc>,
+    ) -> LiveIngestError {
+        let error = diagnostic(
+            code,
+            "wsjtx.live_udp",
+            &self.config.receiver_id,
+            stage,
+            limit,
+            observed,
+            unit,
+            true,
+        );
+        self.gap.get_or_insert_with(|| LiveAcquisitionGap {
+            stopped_at,
+            diagnostic: error.diagnostic.clone(),
+        });
+        LiveIngestError::Resource(error)
+    }
+
+    fn touch_client(
+        &mut self,
+        client_id: &str,
+        schema: u32,
+        received_at: DateTime<Utc>,
+    ) -> Result<(), LiveIngestError> {
+        if !self.clients.contains_key(client_id)
+            && self.clients.len() as u64 >= self.limits.udp_clients
+        {
+            let eviction_cutoff =
+                received_at - Duration::seconds(self.limits.udp_idle_eviction_seconds);
+            let evict = self
+                .clients
+                .iter()
+                .filter(|(_, client)| client.state.last_seen_at <= eviction_cutoff)
+                .min_by(|(left_id, left), (right_id, right)| {
+                    left.state
+                        .last_seen_at
+                        .cmp(&right.state.last_seen_at)
+                        .then_with(|| left_id.cmp(right_id))
+                })
+                .map(|(id, _)| id.clone());
+            if let Some(evict) = evict {
+                self.clients.remove(&evict);
+            } else {
+                return Err(self.stop(
+                    "resource.adapter.udp.clients",
+                    AdapterResourceStage::Admission,
+                    self.limits.udp_clients,
+                    Some(self.clients.len() as u64 + 1),
+                    AdapterResourceUnit::Clients,
+                    received_at,
+                ));
+            }
+        }
         match self.clients.get_mut(client_id) {
             Some(client) => {
                 let elapsed = received_at.signed_duration_since(client.state.last_seen_at);
@@ -286,11 +443,12 @@ impl LiveWsjtxIngest {
                             status: None,
                             last_seen_at: received_at,
                         },
-                        seen_wspr_datagrams: HashSet::new(),
+                        seen_wspr_datagrams: VecDeque::new(),
                     },
                 );
             }
         }
+        Ok(())
     }
 
     fn apply_heartbeat(
@@ -328,46 +486,84 @@ impl LiveWsjtxIngest {
         source_timestamp: DateTime<Utc>,
         received_at: DateTime<Utc>,
         sequence: u64,
-    ) -> (Option<ObservationRecord>, WsprDecodeDisposition) {
-        let client = self
-            .clients
-            .get_mut(&message.client_id)
-            .expect("client touched before decode");
-        let duplicate = !client.seen_wspr_datagrams.insert(datagram.to_vec());
+    ) -> Result<(Option<ObservationRecord>, WsprDecodeDisposition), LiveIngestError> {
+        let fingerprint: [u8; 32] = Sha256::digest(datagram).into();
+        let dedup_cutoff = received_at - Duration::seconds(self.limits.udp_dedup_window_seconds);
+        let (duplicate, dedup_overflow) = {
+            let client = self
+                .clients
+                .get_mut(&message.client_id)
+                .expect("client touched before decode");
+            while client
+                .seen_wspr_datagrams
+                .front()
+                .is_some_and(|(_, seen_at)| *seen_at < dedup_cutoff)
+            {
+                client.seen_wspr_datagrams.pop_front();
+            }
+            let duplicate = client
+                .seen_wspr_datagrams
+                .iter()
+                .any(|(seen, _)| *seen == fingerprint);
+            let overflow = (!duplicate
+                && client.seen_wspr_datagrams.len() as u64
+                    >= self.limits.udp_dedup_entries_per_client)
+                .then_some(client.seen_wspr_datagrams.len() as u64 + 1);
+            if !duplicate && overflow.is_none() {
+                client
+                    .seen_wspr_datagrams
+                    .push_back((fingerprint, received_at));
+            }
+            (duplicate, overflow)
+        };
+        if let Some(observed) = dedup_overflow {
+            return Err(self.stop(
+                "resource.adapter.udp.dedup_entries",
+                AdapterResourceStage::Admission,
+                self.limits.udp_dedup_entries_per_client,
+                Some(observed),
+                AdapterResourceUnit::Entries,
+                received_at,
+            ));
+        }
 
         if !message.is_new {
-            return (None, WsprDecodeDisposition::Replay);
+            return Ok((None, WsprDecodeDisposition::Replay));
         }
         if message.off_air {
-            return (None, WsprDecodeDisposition::OffAir);
+            return Ok((None, WsprDecodeDisposition::OffAir));
         }
         if duplicate {
-            return (None, WsprDecodeDisposition::Duplicate);
+            return Ok((None, WsprDecodeDisposition::Duplicate));
         }
 
+        let client = self
+            .clients
+            .get(&message.client_id)
+            .expect("client touched before decode");
         let Some(status) = &client.state.status else {
-            return (None, WsprDecodeDisposition::MissingStatus);
+            return Ok((None, WsprDecodeDisposition::MissingStatus));
         };
         if !status.mode.eq_ignore_ascii_case("WSPR") {
-            return (None, WsprDecodeDisposition::NonWsprMode);
+            return Ok((None, WsprDecodeDisposition::NonWsprMode));
         }
         if !status.de_call.eq_ignore_ascii_case(&self.station_callsign)
             || !status.de_grid.eq_ignore_ascii_case(&self.station_grid)
         {
-            return (None, WsprDecodeDisposition::StationIdentityMismatch);
+            return Ok((None, WsprDecodeDisposition::StationIdentityMismatch));
         }
 
         let Some(band) = band_from_frequency_hz(message.frequency_hz) else {
-            return (None, WsprDecodeDisposition::UnsupportedBand);
+            return Ok((None, WsprDecodeDisposition::UnsupportedBand));
         };
         let Some(callsign) = normalize_wspr_callsign(&message.callsign) else {
-            return (None, WsprDecodeDisposition::InvalidCallsign);
+            return Ok((None, WsprDecodeDisposition::InvalidCallsign));
         };
         let Some(grid) = normalize_maidenhead_grid(&message.grid) else {
-            return (None, WsprDecodeDisposition::InvalidGrid);
+            return Ok((None, WsprDecodeDisposition::InvalidGrid));
         };
         let Ok(power_dbm) = i16::try_from(message.power_dbm) else {
-            return (None, WsprDecodeDisposition::InvalidPower);
+            return Ok((None, WsprDecodeDisposition::InvalidPower));
         };
 
         let hex = encode_hex(datagram);
@@ -407,10 +603,10 @@ impl LiveWsjtxIngest {
             }),
         };
 
-        (
+        Ok((
             Some(observation),
             WsprDecodeDisposition::ObservationProduced,
-        )
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -559,6 +755,98 @@ pub struct ReceivedUdpDatagram {
     pub bytes: Vec<u8>,
     pub source: SocketAddr,
     pub received_at: DateTime<Utc>,
+}
+
+#[derive(Debug)]
+pub struct BoundedUdpQueue {
+    receiver_id: String,
+    limits: WsjtxAdapterLimits,
+    queued_bytes: u64,
+    datagrams: VecDeque<ReceivedUdpDatagram>,
+    gap: Option<LiveAcquisitionGap>,
+}
+
+impl BoundedUdpQueue {
+    pub fn new(receiver_id: impl Into<String>) -> Self {
+        Self::with_limits(receiver_id, WSJTX_ADAPTER_LIMITS)
+    }
+
+    #[doc(hidden)]
+    pub fn with_limits(receiver_id: impl Into<String>, limits: WsjtxAdapterLimits) -> Self {
+        Self {
+            receiver_id: receiver_id.into(),
+            limits,
+            queued_bytes: 0,
+            datagrams: VecDeque::new(),
+            gap: None,
+        }
+    }
+
+    pub fn push(&mut self, datagram: ReceivedUdpDatagram) -> Result<(), AdapterResourceError> {
+        if let Some(gap) = &self.gap {
+            return Err(AdapterResourceError {
+                diagnostic: gap.diagnostic.clone(),
+            });
+        }
+        let observed_items = self.datagrams.len() as u64 + 1;
+        let observed_bytes = self.queued_bytes + datagram.bytes.len() as u64;
+        let (code, limit, observed, unit) = if observed_items > self.limits.udp_queue_datagrams {
+            (
+                "resource.adapter.udp.queue_datagrams",
+                self.limits.udp_queue_datagrams,
+                observed_items,
+                AdapterResourceUnit::Datagrams,
+            )
+        } else if observed_bytes > self.limits.udp_queue_bytes {
+            (
+                "resource.adapter.udp.queue_bytes",
+                self.limits.udp_queue_bytes,
+                observed_bytes,
+                AdapterResourceUnit::Bytes,
+            )
+        } else {
+            self.queued_bytes = observed_bytes;
+            self.datagrams.push_back(datagram);
+            return Ok(());
+        };
+        let failure = diagnostic(
+            code,
+            "wsjtx.live_udp",
+            &self.receiver_id,
+            AdapterResourceStage::Queue,
+            limit,
+            Some(observed),
+            unit,
+            true,
+        );
+        self.gap = Some(LiveAcquisitionGap {
+            stopped_at: datagram.received_at,
+            diagnostic: failure.diagnostic.clone(),
+        });
+        Err(failure)
+    }
+
+    pub fn pop(&mut self) -> Option<ReceivedUdpDatagram> {
+        self.datagrams.pop_front().inspect(|datagram| {
+            self.queued_bytes -= datagram.bytes.len() as u64;
+        })
+    }
+
+    pub fn len(&self) -> usize {
+        self.datagrams.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.datagrams.is_empty()
+    }
+
+    pub fn queued_bytes(&self) -> u64 {
+        self.queued_bytes
+    }
+
+    pub fn acquisition_gap(&self) -> Option<&LiveAcquisitionGap> {
+        self.gap.as_ref()
+    }
 }
 
 #[derive(Debug, Error)]

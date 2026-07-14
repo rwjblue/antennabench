@@ -6,12 +6,103 @@ use antennabench_core::{
 };
 use antennabench_wsjtx::{
     append_wsjtx_import, import_all_wspr_text, import_parsed_all_wspr_text, parse_all_wspr_line,
-    parse_all_wspr_text, AllWsprLineIssueKind, WsjtxImport, WsjtxImportConfig,
+    parse_all_wspr_reader_with_limits, parse_all_wspr_text, AdapterCancellationToken,
+    AllWsprLineIssueKind, AllWsprStreamOutcome, WsjtxAdapterLimits, WsjtxImport, WsjtxImportConfig,
+    WSJTX_ADAPTER_LIMITS,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 
 const SESSION_ID: &str = "session-wsjtx-import-test";
+
+#[test]
+fn streamed_offline_import_enforces_exact_byte_line_and_record_boundaries() {
+    let valid = b"260709 2002 -18 0.07 14.095600 K1ABC EM12 37 0\n";
+    let mut exact = WSJTX_ADAPTER_LIMITS;
+    exact.offline_source_bytes = valid.len() as u64;
+    exact.offline_line_bytes = valid.len() as u64;
+    exact.offline_nonblank_lines = 1;
+
+    let outcome = parse_all_wspr_reader_with_limits(
+        BufReader::new(Cursor::new(valid)),
+        "exact.log".to_string(),
+        &AdapterCancellationToken::default(),
+        exact,
+    )
+    .unwrap();
+    let AllWsprStreamOutcome::Complete(parsed) = outcome else {
+        panic!("exact limits must be accepted");
+    };
+    assert_eq!(parsed.decodes.len(), 1);
+
+    let mut line_limited = exact;
+    line_limited.offline_source_bytes = exact.offline_source_bytes * 4;
+    let record_limited = line_limited;
+    for (input, limits, code) in [
+        (
+            [valid.as_slice(), b"x"].concat(),
+            exact,
+            "resource.adapter.offline_source_bytes",
+        ),
+        (
+            vec![b'x'; valid.len() + 1],
+            line_limited,
+            "resource.adapter.offline_line_bytes",
+        ),
+        (
+            [valid.as_slice(), valid.as_slice()].concat(),
+            record_limited,
+            "resource.adapter.offline_source_lines",
+        ),
+    ] {
+        let outcome = parse_all_wspr_reader_with_limits(
+            BufReader::new(Cursor::new(input)),
+            "over.log".to_string(),
+            &AdapterCancellationToken::default(),
+            limits,
+        )
+        .unwrap();
+        let AllWsprStreamOutcome::Quarantined(incomplete) = outcome else {
+            panic!("first over-limit input must be quarantined");
+        };
+        assert_eq!(incomplete.failure.diagnostic.code, code);
+        assert!(!incomplete.failure.diagnostic.complete_result);
+    }
+}
+
+#[test]
+fn streamed_offline_import_preserves_in_budget_malformed_rows_and_cancels_incomplete() {
+    let malformed = b"not a wspr row\n";
+    let outcome = parse_all_wspr_reader_with_limits(
+        BufReader::new(Cursor::new(malformed)),
+        "malformed.log".to_string(),
+        &AdapterCancellationToken::default(),
+        WSJTX_ADAPTER_LIMITS,
+    )
+    .unwrap();
+    let AllWsprStreamOutcome::Complete(parsed) = outcome else {
+        panic!("malformed content within the budget remains a complete import");
+    };
+    assert_eq!(parsed.issues.len(), 1);
+    assert_eq!(parsed.issues[0].raw_line, "not a wspr row");
+
+    let cancellation = AdapterCancellationToken::default();
+    cancellation.cancel();
+    let cancelled = parse_all_wspr_reader_with_limits(
+        BufReader::new(Cursor::new(malformed)),
+        "cancelled.log".to_string(),
+        &cancellation,
+        WsjtxAdapterLimits::testing(64),
+    )
+    .unwrap();
+    let AllWsprStreamOutcome::Quarantined(incomplete) = cancelled else {
+        panic!("cancelled input is never complete");
+    };
+    assert_eq!(
+        incomplete.failure.diagnostic.code,
+        "resource.operation.cancelled"
+    );
+}
 
 fn import_config(import_id: &str) -> WsjtxImportConfig {
     WsjtxImportConfig {
@@ -1129,3 +1220,4 @@ fn operator_event(
 fn snapshot_confidence(confidence: f32) -> f64 {
     (f64::from(confidence) * 100.0).round() / 100.0
 }
+use std::io::{BufReader, Cursor};

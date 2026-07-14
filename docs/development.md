@@ -161,6 +161,15 @@ cooperative cancellation. Storage integration tests keep lossless copy separate
 from typed projection and verify rollback, unsafe-entry rejection, v1/v2 reopen,
 and byte identity.
 
+`crates/wsjtx/tests/all_wspr_import.rs`, `crates/wsjtx/tests/live_udp.rs`, and
+`crates/propagation/tests/acquisition.rs` pin the adapter portion of that same
+profile. They exercise exact and first-over offline source, line, and record
+limits; cancellation and malformed-row preservation; UDP datagram, queue, rate,
+client, idle-eviction, and timed fixed-size dedup boundaries; and HTTP redirect,
+timeout, header, content-length, streamed body, media, encoding, quarantine, and
+cancellation outcomes. All network tests use injected transports or loopback;
+the verification suite never depends on a live NOAA or WSJT-X service.
+
 Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, accessible chart tables, and all
 report sections. Separate hostile-string and empty-data cases pin escaping and
