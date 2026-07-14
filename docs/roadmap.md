@@ -1,6 +1,6 @@
 # Roadmap
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-14
 
 ## Current
 
@@ -34,6 +34,35 @@ The current implementation focus is the bundle-first Rust foundation:
 - optional NOAA SWPC F10.7 and provisional estimated-Kp acquisition with pure
   captured-fixture parsing, source envelopes, freshness and polling policy,
   typed best-effort failures, and duplicate suppression
+
+## Next Local Product Track
+
+The next product milestone is the validated local setup and live-run conductor
+tracked by [#45](https://github.com/rwjblue/antennabench/issues/45). The
+validation, mutation/recovery, and bounded-resource policies are settled by
+[Decision 0009](decisions/0009-use-layered-bundle-validation-profiles.md),
+[Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md),
+and
+[Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md),
+but the conductor remains planned rather than shipped.
+
+The dependency-ordered implementation path is:
+
+1. Establish schema-v2, layered validation, strict write preflight, and bounded
+   storage (#46, #50, #51, and #55).
+2. Implement checkpointed persistence/recovery and the lifecycle/correction
+   reducers (#53 and #54).
+3. Deliver validated setup/bundle creation and the complete manual/no-rig
+   conductor (#61 and #62).
+4. Bound adapter ingress and orchestrate live WSJT-X evidence (#56 and #63).
+5. Add granular evidence eligibility, bounded report/IPC behavior, and coherent
+   live/final report refresh and export (#52, #57, and #64). The same-session
+   presentation fix is tracked by #41.
+6. Prove the workflow with deterministic unattended end-to-end coverage (#65).
+
+Optional rig control, public spots, hosted sharing, and stronger comparative
+conclusions remain outside this milestone. Manual/no-rig operation must be
+complete before optional integrations expand the workflow.
 
 ## Later
 

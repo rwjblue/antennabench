@@ -166,6 +166,50 @@ This is an approved design, not implemented behavior: current schema-v1 bundles
 remain static read/report/export inputs and must be upgraded non-destructively
 before a future conductor mutates them.
 
+## Planned Conductor Delivery
+
+The conductor tracker
+([#45](https://github.com/rwjblue/antennabench/issues/45)) turns the approved
+validation, persistence, and resource decisions into a dependency-ordered local
+product path:
+
+```text
+schema v2 + validation + bounded storage
+                  |
+                  v
+       checkpoint persistence + event reducers
+                  |
+                  v
+        setup/create -> manual conductor
+                              |
+                              v
+               bounded WSJT-X orchestration
+                              |
+                              v
+        coherent report/export -> end-to-end proof
+```
+
+Schema and safety prerequisites are #46 and #50 through #57. Focused product
+slices are #61 for validated setup and bundle creation, #62 for the
+manual/no-rig conductor, #63 for live WSJT-X orchestration, #64 for coherent
+live/final report and export, and #65 for deterministic end-to-end coverage.
+The slices consume the checkpoint and event contracts; they do not define
+competing persistence, lifecycle, correction, or resource semantics.
+
+The trusted boundary remains Rust-owned throughout. Setup and conductor
+commands accept typed intent plus an expected checkpoint revision, create
+trusted mutation IDs and timestamps, validate before durable promotion, and
+return typed outcomes. The frontend owns presentation and disposable input
+state only. It receives no general path, filesystem, socket, clock, identity,
+or network authority.
+
+Manual/no-rig operation is the first complete vertical path. Live WSJT-X is an
+optional bounded producer: admitted raw evidence and normalized observations
+commit together, and a resource or acquisition gap is explicit before affected
+intake stops. Reports, report export, and lossless bundle export select one
+verified checkpoint revision so derived views cannot mix live generations.
+None of this is implemented conductor behavior until the focused issues land.
+
 ## Desktop Shell Boundary
 
 The desktop application is a thin Tauri host around static, framework-free web

@@ -104,6 +104,33 @@ report/desktop enforcement are tracked by
 [#56](https://github.com/rwjblue/antennabench/issues/56), and
 [#57](https://github.com/rwjblue/antennabench/issues/57).
 
+## Planned Local Conductor Delivery
+
+The local conductor is tracked by
+[#45](https://github.com/rwjblue/antennabench/issues/45) and remains planned
+work. Its implementation is intentionally split so the UI cannot outrun the
+durable, validation, and resource boundaries:
+
+1. Schema-v2, layered validation, strict write preflight, and bounded storage
+   establish what can be created and mutated (#46, #50, #51, and #55).
+2. Checkpointed persistence/recovery and pure lifecycle/correction semantics
+   establish the auditable session state (#53 and #54).
+3. Validated setup creates a new bundle, then the manual/no-rig conductor runs
+   it without depending on any optional adapter (#61 and #62).
+4. Bounded WSJT-X ingress and desktop orchestration add live evidence without
+   making adapter health a lifecycle prerequisite (#56 and #63).
+5. Granular evidence eligibility and bounded report/IPC behavior feed coherent
+   live and final reports and exports (#52, #57, and #64).
+6. A deterministic unattended scenario proves creation through interruption,
+   recovery, completion, reporting, export, and reopen (#65).
+
+All setup, mutation, adapter, clock/identity, filesystem, and network authority
+stays behind focused Rust-owned commands. JavaScript presents typed drafts,
+actions, diagnostics, and derived report documents; it does not become a
+second experiment model or receive general host authority. Reports and exports
+consume one committed checkpoint revision, and rendered output never becomes
+source evidence.
+
 ## Hosted Sharing
 
 Hosted sharing is an optional extension of the local workflow, not a dependency
