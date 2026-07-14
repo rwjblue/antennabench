@@ -5,4 +5,9 @@
 set -euo pipefail
 
 cd apps/desktop
-cargo-tauri build --debug --no-bundle
+tauri_cli="$(command -v cargo-tauri)"
+if [[ "${OS:-}" == "Windows_NT" ]]; then
+  # Native Tauri child processes need Windows paths after Git Bash starts the task.
+  export PATH="$(cygpath -wp "$PATH")"
+fi
+"$tauri_cli" build --debug --no-bundle
