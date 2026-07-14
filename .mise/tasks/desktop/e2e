@@ -8,7 +8,20 @@ log_dir="target/desktop-e2e"
 log_file="$log_dir/last-run.log"
 mkdir -p "$log_dir"
 
+platform="${RUNNER_OS:-$(uname -s)}"
+started_ms="$(node -p 'Date.now()')"
+
+set +e
 {
+  echo "desktop-e2e platform=$platform"
   echo "desktop-e2e: deterministic Rust desktop boundary; no window or native picker is launched"
-  /usr/bin/time -p cargo test -p antennabench-desktop --lib desktop_e2e -- --nocapture
+  cargo test -p antennabench-desktop --lib desktop_e2e -- --nocapture
 } 2>&1 | tee "$log_file"
+status="${PIPESTATUS[0]}"
+set -e
+
+finished_ms="$(node -p 'Date.now()')"
+elapsed_seconds="$(node -e 'const [start, end] = process.argv.slice(1).map(Number); process.stdout.write(((end - start) / 1000).toFixed(2))' "$started_ms" "$finished_ms")"
+echo "desktop-e2e elapsed_seconds=$elapsed_seconds status=$status" | tee -a "$log_file"
+
+exit "$status"

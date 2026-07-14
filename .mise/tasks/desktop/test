@@ -4,5 +4,5 @@
 
 set -euo pipefail
 
-node --test apps/desktop/tests/*.test.mjs
+mise run desktop:frontend-test
 cargo test -p antennabench-desktop --lib

@@ -95,6 +95,33 @@ cargo run -p antennabench-report --example render_canonical_sample -- /tmp/anten
 For documentation-only changes, inspect the rendered intent and verify the diff
 is limited to the requested files.
 
+## Continuous Integration
+
+Pull requests and pushes to `main` run three standard GitHub-hosted jobs. Linux
+is the canonical full-quality job: it installs the Linux Tauri prerequisites
+and runs `mise run ci`, including formatting, Clippy, all workspace targets,
+frontend state tests, and the unattended desktop workflow. The macOS and
+Windows jobs each run the portable workspace tests, frontend state tests,
+unattended desktop workflow, and `mise run desktop:build` for a native debug
+`--no-bundle` compilation.
+
+Project-local Mise tasks remain the command source of truth on every platform.
+The portability jobs explicitly select `shell: bash`; on Windows, GitHub Actions
+therefore uses the Bash supplied by Git for Windows instead of the PowerShell
+default. Simple task wrappers intentionally remain Bash. The desktop E2E task
+uses Node's clock rather than a platform-specific `time` executable and records
+the runner OS, elapsed seconds, exit status, and bounded phase diagnostics in
+`target/desktop-e2e/last-run.log`. A failed portability job uploads that log for
+seven days when it exists.
+
+The workflow uses the moving `ubuntu-latest`, `macos-latest`, and
+`windows-latest` labels. As of 2026-07-13, GitHub documents the standard public
+`macos-latest` runner as arm64 and `windows-latest` as x64, but those labels and
+images evolve. Green CI proves that the portable contract compiled and passed
+on the exact runner recorded in that workflow log; it does not declare a
+supported release platform or architecture. Release support, artifacts,
+signing, and publication remain separate decisions.
+
 ## Desktop Development
 
 The currently supported desktop development platform is macOS. Install Xcode
@@ -126,9 +153,11 @@ removed. The task does not launch Tauri, create a window, take focus, or send
 keyboard or pointer input.
 
 The task streams phase diagnostics to the terminal and overwrites the bounded
-`target/desktop-e2e/last-run.log` artifact on every run. CI runs the same task,
-so failures retain the selected phase, fixture path, typed error kind, technical
-detail, and Rust assertion context in both the artifact and job log.
+`target/desktop-e2e/last-run.log` artifact on every run. It records the platform,
+elapsed seconds, and final status without depending on a Unix-only timing tool.
+CI runs the same task, so failures retain the selected phase, fixture path,
+typed error kind, technical detail, and Rust assertion context in both the
+artifact and job log.
 
 On the 2026-07-13 macOS development machine, the warm task completed in 0.42 s.
 The prior issue #18 foreground smoke took 3 min 49 s from application relaunch

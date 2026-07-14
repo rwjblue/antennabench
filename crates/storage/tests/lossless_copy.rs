@@ -94,10 +94,7 @@ fn copies_root_bytes_nested_attachments_and_reopens_without_mutating_source() {
 
 #[test]
 fn rejects_existing_destination_without_merging_or_overwriting() {
-    let temp = tempfile::Builder::new()
-        .prefix("ab")
-        .tempdir_in("/tmp")
-        .unwrap();
+    let temp = TempDir::new().unwrap();
     let source = copy_fixture(&temp);
     let destination = temp.path().join("existing.session.wsprabundle");
     fs::create_dir(&destination).unwrap();

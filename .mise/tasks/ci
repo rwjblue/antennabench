@@ -5,7 +5,7 @@
 set -euo pipefail
 
 mise run desktop:e2e
-mise run desktop:test
+mise run desktop:frontend-test
 mise run fmt
 mise run lint
 mise run test
