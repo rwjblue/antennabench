@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
-use antennabench_analysis::{EvidenceQuality, ObservationCounts};
+use antennabench_analysis::{ComparisonAvailability, EvidenceQuality, ObservationCounts};
+use antennabench_core::normalize_bundle;
 use antennabench_report::{build_report, render_standalone_html, ReportNotice, SessionReport};
 use antennabench_storage::BundleStore;
+use chrono::Duration;
 
 #[test]
 fn renders_the_canonical_report_as_deterministic_offline_html() {
@@ -26,6 +28,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
         "Session context",
         "Schedule overview",
         "Evidence overview",
+        "Paired comparison diagnostics",
         "Antenna evidence",
         "Band evidence",
         "Slot evidence",
@@ -34,6 +37,8 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     }
     for caption in [
         "Planned slots",
+        "Path overlap and missingness data",
+        "Data-quality timeline details",
         "Antenna SNR chart data",
         "Evidence by antenna",
         "Band evidence chart data",
@@ -43,7 +48,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     ] {
         assert!(first.contains(&format!("<caption>{caption}</caption>")));
     }
-    assert_eq!(first.matches("aria-hidden=\"true\"").count(), 3);
+    assert_eq!(first.matches("aria-hidden=\"true\"").count(), 5);
     assert!(first.contains("<dt>Usable</dt><dd>19</dd>"));
     assert!(first.contains("<dt>Excluded</dt><dd>7</dd>"));
     assert!(first.contains("<dt>Scheduled bands</dt><dd>40 m, 20 m</dd>"));
@@ -53,7 +58,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
 
 #[test]
 fn escapes_every_untrusted_report_string() {
-    let mut report = canonical_report();
+    let mut report = paired_report(true);
     let hostile = "\"><script>alert('x') & imported</script>".to_string();
 
     report.context.session_id = hostile.clone();
@@ -85,6 +90,35 @@ fn escapes_every_untrusted_report_string() {
         row.slot_id = hostile.clone();
         row.planned_label = hostile.clone();
         row.actual_label = Some(hostile.clone());
+    }
+    report.comparison.left_label = Some(hostile.clone());
+    report.comparison.right_label = Some(hostile.clone());
+    if let Some(orientation) = &mut report.comparison.delta_orientation {
+        orientation.minuend_label = hostile.clone();
+        orientation.subtrahend_label = hostile.clone();
+    }
+    for block in &mut report.comparison.blocks {
+        block.first_slot_id = hostile.clone();
+        block.first_label = Some(hostile.clone());
+        block.second_slot_id = Some(hostile.clone());
+        block.second_label = Some(hostile.clone());
+    }
+    for row in &mut report.comparison.overlap_rows {
+        row.remote_path = hostile.clone();
+    }
+    for row in &mut report.comparison.timeline_rows {
+        row.slot_id = hostile.clone();
+        row.actual_label = Some(hostile.clone());
+    }
+    for row in &mut report.comparison.paired_rows {
+        row.remote_path = hostile.clone();
+        row.left_observation_id = hostile.clone();
+        row.right_observation_id = hostile.clone();
+        row.left_slot_id = hostile.clone();
+        row.right_slot_id = hostile.clone();
+    }
+    for row in &mut report.comparison.path_summaries {
+        row.remote_path = hostile.clone();
     }
 
     let html = render_standalone_html(&report);
@@ -171,6 +205,109 @@ fn renders_every_evidence_coverage_value_with_non_comparative_explanation() {
     }
 }
 
+#[test]
+fn renders_every_comparison_availability_before_difference_output() {
+    for (availability, label, explanation) in [
+        (
+            ComparisonAvailability::NotApplicable,
+            "Not applicable",
+            "Single-antenna profiling does not create an A/B comparison.",
+        ),
+        (
+            ComparisonAvailability::UnsupportedComparisonShape,
+            "Unsupported comparison shape",
+            "A paired comparison requires exactly two scheduled antenna labels.",
+        ),
+        (
+            ComparisonAvailability::NoEligibleBlocks,
+            "No eligible blocks",
+            "No adjacent same-band block contained one usable actual slot for each label.",
+        ),
+        (
+            ComparisonAvailability::NoMatchedPaths,
+            "No matched paths",
+            "Eligible blocks exist, but no same-stratum remote path had finite SNR under both labels.",
+        ),
+        (
+            ComparisonAvailability::DescriptivePairsAvailable,
+            "Descriptive pairs available",
+            "Finite same-path paired rows are available for descriptive display only.",
+        ),
+    ] {
+        let mut report = paired_report(false);
+        report.comparison.availability = availability;
+
+        let html = render_standalone_html(&report);
+        let availability_position = html
+            .find("Comparison availability")
+            .expect("availability should render");
+        let difference_position = html
+            .find("Paired difference distribution")
+            .expect("difference section should render");
+
+        assert!(availability_position < difference_position);
+        assert!(html.contains(&format!("<span class=\"badge\">{label}</span>")));
+        assert!(html.contains(explanation));
+    }
+}
+
+#[test]
+fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
+    let mut report = paired_report(true);
+    report.comparison.diagnostics.unmatched_left_count = 3;
+    report.comparison.diagnostics.unmatched_right_count = 1;
+    report.comparison.diagnostics.missing_snr_left_count = 2;
+    report.comparison.diagnostics.exact_duplicate_count = 4;
+    report
+        .comparison
+        .diagnostics
+        .conflicting_duplicate_group_count = 2;
+
+    let html = render_standalone_html(&report);
+
+    for section in [
+        "Coverage and data-quality counts",
+        "Path overlap and missingness",
+        "Data-quality timeline",
+        "Paired difference distribution",
+        "Paired SNR over time",
+        "Stratum descriptive summaries",
+    ] {
+        assert!(html.contains(section), "missing section: {section}");
+    }
+    for caption in [
+        "Path overlap and missingness data",
+        "Data-quality timeline details",
+        "Paired difference data",
+        "Paired SNR over time data",
+        "Stratum summary data",
+    ] {
+        assert!(html.contains(&format!("<caption>{caption}</caption>")));
+    }
+    for fact in [
+        "Delta orientation:",
+        "B minus A (right minus left)",
+        "TX path · 20 m · Local decode · WSJT-X log",
+        "Left then right",
+        "Right then left",
+        "Unmatched left",
+        "Missing SNR left",
+        "Exact duplicates collapsed",
+        "Conflicting duplicate groups",
+        "Adjacent switched slots reduce elapsed time but do not remove propagation or time confounding.",
+    ] {
+        assert!(html.contains(fact), "missing fact: {fact}");
+    }
+    for prohibited in [
+        "statistically significant",
+        "confidence interval",
+        "equivalent antennas",
+        "better antenna",
+    ] {
+        assert!(!html.contains(prohibited));
+    }
+}
+
 fn canonical_report() -> SessionReport {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/session-bundles/canonical-sample-report.session.wsprabundle");
@@ -178,4 +315,44 @@ fn canonical_report() -> SessionReport {
         .read_normalized_validated()
         .expect("canonical sample should be valid");
     build_report(&bundle).expect("canonical sample should build report data")
+}
+
+fn paired_report(balanced_order: bool) -> SessionReport {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
+    let mut bundle = BundleStore::new(fixture)
+        .read_normalized_validated()
+        .expect("minimal sample should be valid");
+    bundle.events.clear();
+    if balanced_order {
+        bundle.schedule.slots[2].antenna_label = "B".to_string();
+        bundle.schedule.slots[3].antenna_label = "A".to_string();
+    }
+    let template = bundle.observations[0].clone();
+    bundle.observations = [
+        ("pair-1-left", 0, "K1PAIR", -22.0),
+        ("pair-1-right", 1, "K1PAIR", -19.0),
+        ("pair-2-right", 2, "K1PAIR", -18.0),
+        ("pair-2-left", 3, "K1PAIR", -21.0),
+        ("sparse-left", 0, "K2SPARSE", -20.0),
+        ("sparse-right", 1, "K2SPARSE", -20.0),
+    ]
+    .into_iter()
+    .map(|(id, slot_index, remote, snr)| {
+        let slot = &bundle.schedule.slots[slot_index];
+        let mut observation = template.clone();
+        observation.observation_id = id.to_string();
+        observation.meta.timestamp = slot.starts_at + Duration::seconds(30);
+        observation.band = slot.band;
+        observation.reporter_call = Some(remote.to_string());
+        observation.heard_call = Some(bundle.station.callsign.clone());
+        observation.snr_db = Some(snr);
+        observation.slot_id = None;
+        observation.slot_label = None;
+        observation.slot_confidence = None;
+        observation
+    })
+    .collect();
+    let bundle = normalize_bundle(bundle);
+    build_report(&bundle).expect("paired sample should build a report")
 }

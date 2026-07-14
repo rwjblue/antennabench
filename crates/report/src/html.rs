@@ -1,9 +1,12 @@
 use std::fmt::Write;
 
 use antennabench_analysis::{
-    EvidenceQuality, ObservationCounts, ObservationExclusionReason, SnrStatistics,
+    ComparisonAvailability, ComparisonOrder, ComparisonSide, ComparisonTimelineRow,
+    EvidenceQuality, ObservationCounts, ObservationExclusionReason, PathDirection, SnrStatistics,
 };
-use antennabench_core::{AlignedSlotStatus, Band, ExperimentMode, SessionGoal};
+use antennabench_core::{
+    AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
+};
 use chrono::{SecondsFormat, Utc};
 
 use crate::{
@@ -18,7 +21,8 @@ macro_rules! write_html {
 }
 
 const STYLES: &str = r#"
-:root{color-scheme:light;--ink:#172033;--muted:#5c667a;--line:#d8deea;--paper:#fff;--soft:#f5f7fb;--usable:#237a57;--excluded:#b84b4b;--accent:#315da8}*{box-sizing:border-box}body{margin:0;background:var(--soft);color:var(--ink);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(1120px,calc(100% - 2rem));margin:2rem auto 4rem}.hero,.panel{background:var(--paper);border:1px solid var(--line);border-radius:.75rem;box-shadow:0 1px 2px #17203312}.hero{padding:1.5rem 1.75rem}.hero h1{margin:0 0 .25rem;font-size:clamp(1.7rem,4vw,2.6rem)}.eyebrow{margin:0;color:var(--accent);font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}.muted{color:var(--muted)}.panel{margin-top:1rem;padding:1.25rem;overflow:hidden}.panel h2{margin:.1rem 0 1rem}.panel h3{margin:1.4rem 0 .6rem}.facts,.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}.fact,.stat{padding:.75rem;background:var(--soft);border-radius:.5rem}.fact dt,.stat dt{color:var(--muted);font-size:.78rem;font-weight:700;text-transform:uppercase}.fact dd,.stat dd{margin:.2rem 0 0;font-weight:650}.notice{padding:.75rem 1rem;border-left:.3rem solid #b36b00;background:#fff8e8}.badge{display:inline-block;padding:.16rem .55rem;border-radius:999px;background:#e5ebf7;font-size:.82rem;font-weight:700}.empty{padding:.85rem;border:1px dashed var(--line);border-radius:.5rem;color:var(--muted)}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.9rem}caption{text-align:left;font-weight:700;padding:.25rem 0 .55rem}th,td{padding:.55rem .65rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}thead th{background:var(--soft);white-space:nowrap}.chart{display:grid;gap:.5rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.chart-row{display:grid;grid-template-columns:minmax(7rem,14rem) 1fr 4.5rem;gap:.6rem;align-items:center}.chart-label{overflow-wrap:anywhere}.bar-track,.snr-track{position:relative;height:1rem;background:#e1e6ef;border-radius:999px;overflow:hidden}.bar{height:100%;float:left}.bar.usable{background:var(--usable)}.bar.excluded{background:var(--excluded)}.snr-range{position:absolute;top:.3rem;height:.4rem;border-radius:999px;background:var(--accent)}.snr-point{position:absolute;top:.1rem;width:.18rem;height:.8rem;background:var(--ink)}.legend{display:flex;gap:1rem;color:var(--muted);font-size:.82rem}.swatch{display:inline-block;width:.7rem;height:.7rem;margin-right:.25rem;border-radius:.15rem}.swatch.usable{background:var(--usable)}.swatch.excluded{background:var(--excluded)}.antenna-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.75rem}.antenna-card{padding:1rem;border:1px solid var(--line);border-radius:.5rem}.antenna-card h3{margin:0 0 .6rem}.antenna-card dl{margin:0}.antenna-card dt{color:var(--muted);font-size:.8rem;font-weight:700}.antenna-card dd{margin:0 0 .45rem}.footnote{font-size:.84rem;color:var(--muted)}@media print{body{background:#fff}main{width:100%;margin:0}.hero,.panel{box-shadow:none;break-inside:avoid}}@media(max-width:620px){.chart-row{grid-template-columns:1fr}.chart-value{color:var(--muted)}}
+:root{color-scheme:light;--ink:#172033;--muted:#5c667a;--line:#d8deea;--paper:#fff;--soft:#f5f7fb;--usable:#237a57;--excluded:#b84b4b;--accent:#315da8}*{box-sizing:border-box}body{margin:0;background:var(--soft);color:var(--ink);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(1120px,calc(100% - 2rem));margin:2rem auto 4rem}.hero,.panel{background:var(--paper);border:1px solid var(--line);border-radius:.75rem;box-shadow:0 1px 2px #17203312}.hero{padding:1.5rem 1.75rem}.hero h1{margin:0 0 .25rem;font-size:clamp(1.7rem,4vw,2.6rem)}.eyebrow{margin:0;color:var(--accent);font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}.muted{color:var(--muted)}.panel{margin-top:1rem;padding:1.25rem;overflow:hidden}.panel h2{margin:.1rem 0 1rem}.panel h3{margin:1.4rem 0 .6rem}.facts,.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}.fact,.stat{padding:.75rem;background:var(--soft);border-radius:.5rem}.fact dt,.stat dt{color:var(--muted);font-size:.78rem;font-weight:700;text-transform:uppercase}.fact dd,.stat dd{margin:.2rem 0 0;font-weight:650}.notice{padding:.75rem 1rem;border-left:.3rem solid #b36b00;background:#fff8e8}.badge{display:inline-block;padding:.16rem .55rem;border-radius:999px;background:#e5ebf7;font-size:.82rem;font-weight:700}.empty{padding:.85rem;border:1px dashed var(--line);border-radius:.5rem;color:var(--muted)}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.9rem}caption{text-align:left;font-weight:700;padding:.25rem 0 .55rem}th,td{padding:.55rem .65rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}thead th{background:var(--soft);white-space:nowrap}.chart,.comparison-chart{display:grid;gap:.5rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.chart-row{display:grid;grid-template-columns:minmax(7rem,14rem) 1fr 4.5rem;gap:.6rem;align-items:center}.comparison-row{display:grid;grid-template-columns:minmax(8rem,16rem) 1fr minmax(5rem,auto);gap:.6rem;align-items:center}.chart-label{overflow-wrap:anywhere}.bar-track,.snr-track,.comparison-track,.snr-pair{position:relative;height:1rem;background:#e1e6ef;border-radius:999px;overflow:hidden}.bar{height:100%;float:left}.bar.usable{background:var(--usable)}.bar.excluded{background:var(--excluded)}.snr-range{position:absolute;top:.3rem;height:.4rem;border-radius:999px;background:var(--accent)}.snr-point{position:absolute;top:.1rem;width:.18rem;height:.8rem;background:var(--ink)}.comparison-zero{position:absolute;left:50%;top:0;width:1px;height:100%;background:var(--muted)}.comparison-delta{position:absolute;top:.2rem;height:.6rem;border-radius:999px;background:var(--accent)}.snr-pair{height:1.2rem}.snr-left,.snr-right{position:absolute;top:.15rem;width:.55rem;height:.9rem;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}.snr-left{background:#315da8}.snr-right{background:#b35c00}.timeline{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.timeline-slot{min-width:2.6rem;padding:.45rem;border:1px solid var(--line);border-radius:.35rem;text-align:center}.timeline-slot.invalid{border-style:dashed;color:var(--muted)}.timeline-slot.issue{background:#fff8e8}.legend{display:flex;gap:1rem;color:var(--muted);font-size:.82rem}.swatch{display:inline-block;width:.7rem;height:.7rem;margin-right:.25rem;border-radius:.15rem}.swatch.usable{background:var(--usable)}.swatch.excluded{background:var(--excluded)}.antenna-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.75rem}.antenna-card{padding:1rem;border:1px solid var(--line);border-radius:.5rem}.antenna-card h3{margin:0 0 .6rem}.antenna-card dl{margin:0}.antenna-card dt{color:var(--muted);font-size:.8rem;font-weight:700}.antenna-card dd{margin:0 0 .45rem}.footnote{font-size:.84rem;color:var(--muted)}@media print{body{background:#fff}main{width:100%;margin:0}.hero,.panel{box-shadow:none;break-inside:avoid}}@media(max-width:620px){.chart-row,.comparison-row{grid-template-columns:1fr}.chart-value{color:var(--muted)}}
+.swatch.left,.bar.left{background:#315da8}.swatch.right,.bar.right{background:#b35c00}
 "#;
 
 /// Renders a deterministic, standalone HTML document from renderer-neutral
@@ -45,6 +49,7 @@ pub fn render_standalone_html(report: &SessionReport) -> String {
     render_notices(&mut out, &report.notices);
     render_context(&mut out, report);
     render_overall(&mut out, report);
+    render_comparison(&mut out, report);
     render_antenna_section(&mut out, report);
     render_band_section(&mut out, report);
     render_slot_section(&mut out, report);
@@ -195,6 +200,231 @@ fn render_overall(out: &mut String, report: &SessionReport) {
     );
     evidence_summary(out, &report.evidence.overall);
     out.push_str("</section>");
+}
+
+fn render_comparison(out: &mut String, report: &SessionReport) {
+    let comparison = &report.comparison;
+    out.push_str("<section class=\"panel\" aria-labelledby=\"comparison-title\"><h2 id=\"comparison-title\">Paired comparison diagnostics</h2>");
+    write_html!(
+        out,
+        "<p>Comparison availability: <span class=\"badge\">{}</span></p><p class=\"muted\">{}</p>",
+        comparison_availability_label(comparison.availability),
+        comparison_availability_text(comparison.availability)
+    );
+    if let Some(orientation) = &comparison.delta_orientation {
+        write_html!(
+            out,
+            "<p><strong>Delta orientation:</strong> {} minus {} (right minus left).</p>",
+            escape_html(&orientation.minuend_label),
+            escape_html(&orientation.subtrahend_label)
+        );
+    }
+    out.push_str("<p class=\"notice\">Adjacent switched slots reduce elapsed time but do not remove propagation or time confounding. Paired values are descriptive and do not establish antenna superiority.</p>");
+    render_comparison_diagnostics(out, report);
+    render_overlap(out, report);
+    render_comparison_timeline(out, report);
+    render_paired_differences(out, report);
+    render_paired_snr_time(out, report);
+    render_stratum_summaries(out, report);
+    out.push_str("</section>");
+}
+
+fn render_comparison_diagnostics(out: &mut String, report: &SessionReport) {
+    let diagnostics = report.comparison.diagnostics;
+    out.push_str("<h3>Coverage and data-quality counts</h3><dl class=\"stat-grid\">");
+    comparison_stat(out, "Blocks", diagnostics.block_count);
+    comparison_stat(out, "Eligible blocks", diagnostics.eligible_block_count);
+    comparison_stat(out, "Invalid blocks", diagnostics.invalid_block_count);
+    comparison_stat(
+        out,
+        "Left then right",
+        diagnostics.left_then_right_block_count,
+    );
+    comparison_stat(
+        out,
+        "Right then left",
+        diagnostics.right_then_left_block_count,
+    );
+    comparison_stat(out, "Paired rows", diagnostics.paired_row_count);
+    comparison_stat(out, "Unique paths", diagnostics.unique_path_count);
+    comparison_stat(out, "Unmatched left", diagnostics.unmatched_left_count);
+    comparison_stat(out, "Unmatched right", diagnostics.unmatched_right_count);
+    comparison_stat(out, "Missing SNR left", diagnostics.missing_snr_left_count);
+    comparison_stat(
+        out,
+        "Missing SNR right",
+        diagnostics.missing_snr_right_count,
+    );
+    comparison_stat(out, "Ambiguous paths", diagnostics.ambiguous_path_count);
+    comparison_stat(
+        out,
+        "Exact duplicates collapsed",
+        diagnostics.exact_duplicate_count,
+    );
+    comparison_stat(
+        out,
+        "Conflicting duplicate groups",
+        diagnostics.conflicting_duplicate_group_count,
+    );
+    comparison_stat(
+        out,
+        "Alignment exclusions",
+        diagnostics.excluded_observation_count,
+    );
+    out.push_str("</dl>");
+}
+
+fn comparison_stat(out: &mut String, label: &str, value: usize) {
+    write_html!(
+        out,
+        "<div class=\"stat\"><dt>{}</dt><dd>{}</dd></div>",
+        label,
+        value
+    );
+}
+
+fn render_overlap(out: &mut String, report: &SessionReport) {
+    out.push_str("<h3>Path overlap and missingness</h3>");
+    if report.comparison.overlap_rows.is_empty() {
+        out.push_str("<p class=\"empty\">No path-level overlap rows are available.</p>");
+        return;
+    }
+    out.push_str("<div class=\"legend\"><span><i class=\"swatch left\"></i>Left finite</span><span><i class=\"swatch right\"></i>Right finite</span></div><div class=\"comparison-chart\" aria-hidden=\"true\">");
+    for row in &report.comparison.overlap_rows {
+        let total = (row.left_finite_count + row.right_finite_count).max(1) as f64;
+        let left_width = row.left_finite_count as f64 / total * 100.0;
+        let right_width = row.right_finite_count as f64 / total * 100.0;
+        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"bar-track\"><span class=\"bar left\" style=\"width:{left_width:.3}%\"></span><span class=\"bar right\" style=\"width:{right_width:.3}%\"></span></span><span>{} / {}</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), row.left_finite_count, row.right_finite_count);
+    }
+    out.push_str("</div><div class=\"table-wrap\"><table><caption>Path overlap and missingness data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Left finite</th><th scope=\"col\">Right finite</th><th scope=\"col\">Paired</th><th scope=\"col\">Unmatched left</th><th scope=\"col\">Unmatched right</th><th scope=\"col\">Missing SNR left</th><th scope=\"col\">Missing SNR right</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
+    for row in &report.comparison.overlap_rows {
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.left_finite_count, row.right_finite_count, row.paired_count, row.unmatched_left_count, row.unmatched_right_count, row.missing_snr_left_count, row.missing_snr_right_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_comparison_timeline(out: &mut String, report: &SessionReport) {
+    out.push_str("<h3>Data-quality timeline</h3>");
+    if report.comparison.timeline_rows.is_empty() {
+        out.push_str("<p class=\"empty\">No comparison timeline rows are available.</p>");
+        return;
+    }
+    out.push_str("<div class=\"timeline\" aria-hidden=\"true\">");
+    for row in &report.comparison.timeline_rows {
+        let invalid = if row.block_eligible { "" } else { " invalid" };
+        let issue = if row.excluded_observation_count > 0
+            || row.missing_snr_count > 0
+            || row.ambiguous_path_count > 0
+            || row.conflicting_duplicate_group_count > 0
+        {
+            " issue"
+        } else {
+            ""
+        };
+        write_html!(
+            out,
+            "<span class=\"timeline-slot{invalid}{issue}\"><strong>{}</strong><br>{}<br>{}</span>",
+            row.sequence_number,
+            escape_html(row.actual_label.as_deref().unwrap_or("—")),
+            slot_status(row.status)
+        );
+    }
+    out.push_str("</div><div class=\"table-wrap\"><table><caption>Data-quality timeline details</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Eligible</th><th scope=\"col\">Sequence</th><th scope=\"col\">Slot</th><th scope=\"col\">Starts</th><th scope=\"col\">Band</th><th scope=\"col\">Actual label</th><th scope=\"col\">Side</th><th scope=\"col\">Status</th><th scope=\"col\">Total</th><th scope=\"col\">Usable</th><th scope=\"col\">Excluded</th><th scope=\"col\">Missing SNR</th><th scope=\"col\">Ambiguous</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
+    for row in &report.comparison.timeline_rows {
+        timeline_table_row(out, row);
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn timeline_table_row(out: &mut String, row: &ComparisonTimelineRow) {
+    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.block_index + 1, yes_no(row.block_eligible), row.sequence_number, escape_html(&row.slot_id), timestamp(row.starts_at), band(row.band), escape_html(row.actual_label.as_deref().unwrap_or("Not recorded")), row.side.map(comparison_side).unwrap_or("Unavailable"), slot_status(row.status), row.total_observation_count, row.usable_observation_count, row.excluded_observation_count, row.missing_snr_count, row.ambiguous_path_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+}
+
+fn render_paired_differences(out: &mut String, report: &SessionReport) {
+    out.push_str("<h3>Paired difference distribution</h3>");
+    let rows = &report.comparison.paired_rows;
+    if rows.is_empty() {
+        out.push_str(
+            "<p class=\"empty\">No finite same-path paired differences are available.</p>",
+        );
+        return;
+    }
+    let max_abs = rows
+        .iter()
+        .map(|row| row.delta_right_minus_left_db.abs())
+        .fold(1.0_f64, f64::max);
+    out.push_str("<div class=\"comparison-chart\" aria-hidden=\"true\">");
+    for row in rows {
+        let width = row.delta_right_minus_left_db.abs() / max_abs * 50.0;
+        let left = if row.delta_right_minus_left_db < 0.0 {
+            50.0 - width
+        } else {
+            50.0
+        };
+        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"comparison-track\"><span class=\"comparison-zero\"></span><span class=\"comparison-delta\" style=\"left:{left:.3}%;width:{width:.3}%\"></span></span><span>{} dB</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), format_signed(row.delta_right_minus_left_db));
+    }
+    out.push_str("</div><div class=\"table-wrap\"><table><caption>Paired difference data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left observation</th><th scope=\"col\">Right observation</th><th scope=\"col\">Left slot</th><th scope=\"col\">Right slot</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th><th scope=\"col\">Right − left</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>");
+    for row in rows {
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{} s</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), escape_html(&row.left_observation_id), escape_html(&row.right_observation_id), escape_html(&row.left_slot_id), escape_html(&row.right_slot_id), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), row.elapsed_seconds);
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_paired_snr_time(out: &mut String, report: &SessionReport) {
+    out.push_str("<h3>Paired SNR over time</h3>");
+    let rows = &report.comparison.paired_rows;
+    if rows.is_empty() {
+        out.push_str("<p class=\"empty\">No paired SNR-over-time rows are available.</p>");
+        return;
+    }
+    let minimum = rows
+        .iter()
+        .flat_map(|row| [row.left_snr_db, row.right_snr_db])
+        .fold(f64::INFINITY, f64::min);
+    let maximum = rows
+        .iter()
+        .flat_map(|row| [row.left_snr_db, row.right_snr_db])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let span = (maximum - minimum).max(1.0);
+    out.push_str("<div class=\"legend\"><span><i class=\"swatch left\"></i>Left</span><span><i class=\"swatch right\"></i>Right</span></div><div class=\"comparison-chart\" aria-hidden=\"true\">");
+    for row in rows {
+        let left = (row.left_snr_db - minimum) / span * 100.0;
+        let right = (row.right_snr_db - minimum) / span * 100.0;
+        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"snr-pair\"><span class=\"snr-left\" style=\"left:{left:.3}%\"></span><span class=\"snr-right\" style=\"left:{right:.3}%\"></span></span><span>{} / {} dB</span></div>", timestamp(row.left_timestamp), escape_html(&row.remote_path), format_number(row.left_snr_db), format_number(row.right_snr_db));
+    }
+    out.push_str("</div><div class=\"table-wrap\"><table><caption>Paired SNR over time data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left time</th><th scope=\"col\">Right time</th><th scope=\"col\">Elapsed</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th></tr></thead><tbody>");
+    for row in rows {
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} s</td><td>{} dB</td><td>{} dB</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), timestamp(row.left_timestamp), timestamp(row.right_timestamp), row.elapsed_seconds, format_number(row.left_snr_db), format_number(row.right_snr_db));
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_stratum_summaries(out: &mut String, report: &SessionReport) {
+    out.push_str("<h3>Stratum descriptive summaries</h3>");
+    if report.comparison.strata.is_empty() {
+        out.push_str("<p class=\"empty\">No comparison strata are available.</p>");
+        return;
+    }
+    out.push_str("<div class=\"table-wrap\"><table><caption>Stratum summary data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Rows</th><th scope=\"col\">Paths</th><th scope=\"col\">Blocks</th><th scope=\"col\">Left → right</th><th scope=\"col\">Right → left</th><th scope=\"col\">Unmatched L/R</th><th scope=\"col\">Missing SNR L/R</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th><th scope=\"col\">Observed range</th><th scope=\"col\">Median across paths</th></tr></thead><tbody>");
+    for row in &report.comparison.strata {
+        let range = row
+            .minimum_delta_right_minus_left_db
+            .zip(row.maximum_delta_right_minus_left_db)
+            .map(|(minimum, maximum)| {
+                format!(
+                    "{} to {} dB",
+                    format_signed(minimum),
+                    format_signed(maximum)
+                )
+            })
+            .unwrap_or_else(not_available);
+        let median = row
+            .median_path_delta_right_minus_left_db
+            .map(|value| format!("{} dB", format_signed(value)))
+            .unwrap_or_else(not_available);
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} / {}</td><td>{} / {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), row.paired_row_count, row.unique_path_count, row.contributing_block_count, row.left_then_right_block_count, row.right_then_left_block_count, row.unmatched_left_count, row.unmatched_right_count, row.missing_snr_left_count, row.missing_snr_right_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count, range, median);
+    }
+    out.push_str("</tbody></table></div>");
 }
 
 fn render_antenna_section(out: &mut String, report: &SessionReport) {
@@ -469,6 +699,9 @@ fn optional_measure(value: Option<f32>, unit: &str) -> String {
 fn not_recorded() -> String {
     "Not recorded".to_string()
 }
+fn not_available() -> String {
+    "Not available".to_string()
+}
 
 fn timestamp(value: chrono::DateTime<Utc>) -> String {
     value.to_rfc3339_opts(SecondsFormat::Secs, true)
@@ -536,6 +769,95 @@ fn evidence_coverage(value: EvidenceQuality) -> &'static str {
         EvidenceQuality::Insufficient => "Insufficient",
         EvidenceQuality::Weak => "Weak",
         EvidenceQuality::Moderate => "Moderate",
+    }
+}
+fn comparison_availability_label(value: ComparisonAvailability) -> &'static str {
+    match value {
+        ComparisonAvailability::NotApplicable => "Not applicable",
+        ComparisonAvailability::UnsupportedComparisonShape => "Unsupported comparison shape",
+        ComparisonAvailability::NoEligibleBlocks => "No eligible blocks",
+        ComparisonAvailability::NoMatchedPaths => "No matched paths",
+        ComparisonAvailability::DescriptivePairsAvailable => "Descriptive pairs available",
+    }
+}
+fn comparison_availability_text(value: ComparisonAvailability) -> &'static str {
+    match value {
+        ComparisonAvailability::NotApplicable => {
+            "Single-antenna profiling does not create an A/B comparison."
+        }
+        ComparisonAvailability::UnsupportedComparisonShape => {
+            "A paired comparison requires exactly two scheduled antenna labels."
+        }
+        ComparisonAvailability::NoEligibleBlocks => {
+            "No adjacent same-band block contained one usable actual slot for each label."
+        }
+        ComparisonAvailability::NoMatchedPaths => {
+            "Eligible blocks exist, but no same-stratum remote path had finite SNR under both labels."
+        }
+        ComparisonAvailability::DescriptivePairsAvailable => {
+            "Finite same-path paired rows are available for descriptive display only."
+        }
+    }
+}
+fn comparison_side(value: ComparisonSide) -> &'static str {
+    match value {
+        ComparisonSide::Left => "Left",
+        ComparisonSide::Right => "Right",
+    }
+}
+fn comparison_order(value: ComparisonOrder) -> &'static str {
+    match value {
+        ComparisonOrder::LeftThenRight => "Left then right",
+        ComparisonOrder::RightThenLeft => "Right then left",
+    }
+}
+fn comparison_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
+    format!(
+        "{} · {} · {} · {}",
+        path_direction(value.direction),
+        band(value.band),
+        observation_kind(value.observation_kind),
+        record_source(value.source)
+    )
+}
+fn path_direction(value: PathDirection) -> &'static str {
+    match value {
+        PathDirection::Transmit => "TX path",
+        PathDirection::Receive => "RX path",
+    }
+}
+fn observation_kind(value: ObservationKind) -> &'static str {
+    match value {
+        ObservationKind::LocalDecode => "Local decode",
+        ObservationKind::PublicReport => "Public report",
+        ObservationKind::ImportedSpot => "Imported spot",
+    }
+}
+fn record_source(value: RecordSource) -> &'static str {
+    match value {
+        RecordSource::Operator => "Operator",
+        RecordSource::WsjtxUdp => "WSJT-X UDP",
+        RecordSource::WsjtxLog => "WSJT-X log",
+        RecordSource::Wsprnet => "WSPRnet",
+        RecordSource::WsprLive => "WSPR.live",
+        RecordSource::ImportedFile => "Imported file",
+        RecordSource::RigAdapter => "Rig adapter",
+        RecordSource::NoaaSwpc => "NOAA SWPC",
+        RecordSource::Derived => "Derived",
+    }
+}
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "Yes"
+    } else {
+        "No"
+    }
+}
+fn format_signed(value: f64) -> String {
+    if value > 0.0 {
+        format!("+{}", format_number(value))
+    } else {
+        format_number(value)
     }
 }
 fn slot_status(value: AlignedSlotStatus) -> &'static str {

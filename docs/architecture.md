@@ -87,8 +87,12 @@ or evidence-coverage labels.
 reanalyze a bundle and does not persist output into one. The renderer produces a
 complete deterministic HTML document with embedded CSS, a restrictive content
 security policy, no scripts or external resources, and accessible tables beside
-its CSS visualizations. Every report-provided string is HTML-escaped; bundle
-text is never accepted as markup, script, a template, or a style value.
+its CSS visualizations. Comparison availability precedes overlap and missingness,
+slot data-quality, paired-difference, SNR-over-time, and stratum-summary views.
+The report states the fixed right-minus-left orientation and warns that adjacent
+slots do not remove propagation or time confounding. Every report-provided
+string is HTML-escaped; bundle text is never accepted as markup, script, a
+template, or a style value.
 
 ## Alignment
 
