@@ -643,9 +643,13 @@ pub(super) fn ensure_v2_suffix(path: &Path) -> Result<(), BundleStoreError> {
 }
 
 pub(super) fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut output = String::with_capacity(64);
-    for byte in digest {
+    encode_lower_hex(Sha256::digest(bytes))
+}
+
+pub(super) fn encode_lower_hex(bytes: impl IntoIterator<Item = u8>) -> String {
+    let bytes = bytes.into_iter();
+    let mut output = String::with_capacity(bytes.size_hint().0 * 2);
+    for byte in bytes {
         use std::fmt::Write as _;
         write!(&mut output, "{byte:02x}").expect("write to String");
     }
