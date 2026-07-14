@@ -134,16 +134,29 @@ source evidence.
 ## Hosted Sharing
 
 Hosted sharing is an optional extension of the local workflow, not a dependency
-of it. A publishing surface should accept bounded session-bundle data, apply
-strict structural, semantic, and size validation, and render reports entirely
-with trusted application code. It must not accept or execute bundle-provided
-HTML, JavaScript, or templates; operator-authored and imported text remains
-untrusted content.
+of it. Capture, inspection, analysis, report rendering, standalone HTML export,
+and lossless bundle export remain complete without an account, network
+connection, or hosted service. Publishing is an explicit copy operation for
+convenient sharing; it is not synchronization and hosted state never becomes
+session evidence.
+
+The selected hosted shape is a static viewer and explanatory site plus a
+minimal publishing API. A bounded ZIP transport is quarantined privately, the
+canonical Rust pipeline validates and renders it in a scale-to-zero isolated
+processor, and trusted immutable report HTML can be served through a cached
+public object boundary. Previously published public reports do not require a
+running application or database lookup for ordinary views.
+
+Hosted ingress applies its own lower, versioned resource and abuse profile. It
+performs strict structural, semantic, archive/path, and size validation and
+renders entirely with trusted application code. It does not accept or execute
+bundle-provided HTML, JavaScript, CSS, templates, or other executable content;
+operator-authored and imported text remains untrusted data.
 
 The uploaded bundle remains the evidence input. Normalized copies, metadata,
 report pages, charts, and discovery indexes are derived artifacts. Architecture,
-storage, validation, and abuse-control choices are tracked by
-[#11](https://github.com/rwjblue/antennabench/issues/11). Authentication,
-callsign claims, ownership, visibility defaults, raw-download exposure, and
-moderation are deliberately unsettled and tracked by
+storage, validation, lifecycle, cost, and abuse-control choices follow
+[ADR 0013](decisions/0013-use-an-optional-static-hosted-sharing-adapter.md).
+Authentication, callsign claims, ownership, visibility defaults, raw-download
+exposure, and moderation remain deliberately unsettled and tracked by
 [#12](https://github.com/rwjblue/antennabench/issues/12).

@@ -285,19 +285,40 @@ rig-control milestone by
 
 ## Hosted Trust Boundary
 
-A hosted viewer may accept only a bounded session-bundle representation. The
-ingress boundary must enforce structural, semantic, path/archive, and size
-limits before analysis or rendering. Original uploaded evidence remains
-auditable; normalized data, metadata, report pages, charts, and indexes remain
-derived and replaceable.
+AntennaBench's hosted surface is an optional sharing adapter. Local session
+capture, inspection, analysis, rendering, and export have no hosted dependency.
+An explicit publish operation may send one bounded ZIP transport to a minimal
+Worker API; the service is not a synchronization peer and hosted state never
+replaces the local bundle as evidence.
+
+The selected service uses static application assets, private R2 quarantine and
+original storage, D1 control metadata, an at-least-once Queue, and the canonical
+Rust pipeline in an egress-disabled scale-to-zero Container. A separate public
+R2 boundary holds only trusted immutable standalone HTML that the visibility
+policy permits to be public. Public views use a custom domain and cache without
+ordinary Worker, D1, Queue, or processor execution.
+
+Hosted ingress applies the fixed `hosted-standard-v1` profile before analysis or
+rendering. It limits the HTTP body, archive entries and paths, compressed and
+expanded bytes, compression ratio, bundle files and records, attachments,
+analysis/report projections, output bytes, and processor time. The hosted
+profile is deliberately lower than local-standard-v1 and may reject a locally
+valid bundle without changing local behavior.
 
 Hosted output is rendered by trusted application code. Bundle-provided HTML,
 JavaScript, templates, and other executable content are never rendering inputs,
 and all operator-authored or imported text is treated as untrusted. Fixed-bundle
 rendering tests and malformed, hostile, oversized, and archive-abuse cases belong
-at this boundary. Platform services and the exact upload/storage lifecycle are
-deferred to [#11](https://github.com/rwjblue/antennabench/issues/11); identity,
-authorization, visibility, and moderation are deferred to
+at this boundary. Exact accepted archive bytes and their entry digests remain
+private and auditable; metadata, diagnostics, report models, and HTML remain
+derived. Write-once objects, idempotency keys, explicit states, reconciliation,
+and cache purge define retry and deletion across services that do not share a
+transaction.
+
+[ADR 0013](decisions/0013-use-an-optional-static-hosted-sharing-adapter.md)
+defines the platform, profile, lifecycle, cost, and verification boundary.
+Identity, authorization, visibility, raw download, and moderation remain
+deferred to
 [#12](https://github.com/rwjblue/antennabench/issues/12).
 
 ## Live WSJT-X Boundary
