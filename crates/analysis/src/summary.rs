@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 
 use antennabench_core::{
-    align_schedule_slots, validate_bundle, AlignedSlot, Band, BundleContents, ObservationKind,
-    ObservationRecord, ObservationSlotAssignment, SlotAlignmentPolicy, SlotAssignmentReason,
+    align_schedule_slots, codes, validate_bundle_report, AlignedSlot, Band, BundleContents,
+    BundleValidationError, BundleValidationProfile, ObservationKind, ObservationRecord,
+    ObservationSlotAssignment, SlotAlignmentPolicy, SlotAssignmentReason,
 };
 
 use crate::{
@@ -47,7 +48,15 @@ const OBSERVATION_KINDS: [ObservationKind; OBSERVATION_KIND_COUNT] = [
 ];
 
 pub fn summarize_bundle(bundle: &BundleContents) -> Result<AnalysisSummary, AnalysisError> {
-    validate_bundle(bundle)?;
+    let validation = validate_bundle_report(bundle);
+    if !validation.allows(BundleValidationProfile::Analysis)
+        || validation
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == codes::ALIGNMENT_ANNOTATION_MISMATCH)
+    {
+        return Err(BundleValidationError::from_report(validation).into());
+    }
     reject_non_finite_snr(bundle)?;
 
     let alignment = align_schedule_slots(

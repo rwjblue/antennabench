@@ -56,7 +56,11 @@ fn read_validated_returns_validation_error_for_parseable_invalid_bundle() {
 
     match error {
         BundleStoreError::Validation { source } => {
-            assert_eq!(source.diagnostic_count(), 1);
+            assert!(source
+                .report()
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == codes::UNKNOWN_EVENT_SLOT));
         }
         other => panic!("expected validation error, got {other:?}"),
     }
@@ -78,8 +82,12 @@ fn unknown_modeled_fields_are_visible_but_compatible_with_read_and_analysis() {
     let store = BundleStore::new(&bundle_path);
     let inspection = store.inspect().unwrap();
     assert!(inspection.bundle().is_some());
-    assert_eq!(inspection.report().diagnostics().len(), 1);
-    let diagnostic = &inspection.report().diagnostics()[0];
+    let diagnostic = inspection
+        .report()
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == codes::UNKNOWN_FIELD)
+        .expect("unknown-field diagnostic");
     assert_eq!(diagnostic.code, codes::UNKNOWN_FIELD);
     assert_eq!(diagnostic.location.file, BundleFileRole::Station);
     assert_eq!(
@@ -170,7 +178,16 @@ fn read_normalized_validated_repairs_stale_alignment_annotations_before_validati
 
     let tempdir = tempfile::tempdir().unwrap();
     let bundle_path = tempdir.path().join("stale.session.wsprabundle");
-    BundleStore::new(&bundle_path).write(&stale).unwrap();
+    BundleStore::new(&bundle_path).write(&expected).unwrap();
+    let mut observations = stale
+        .observations
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .join("\n");
+    observations.push('\n');
+    std::fs::write(bundle_path.join("observations.jsonl"), observations).unwrap();
 
     let error = BundleStore::new(&bundle_path).read_validated().unwrap_err();
     match error {

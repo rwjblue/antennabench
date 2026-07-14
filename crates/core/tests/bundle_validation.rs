@@ -1,9 +1,10 @@
 use antennabench_core::{
     codes, validate_bundle, validate_bundle_report, AnalysisFile, AnalysisStatus, Antenna,
     AntennasFile, Band, BundleContents, BundleFiles, BundleManifest, BundleValidationIssue,
-    BundleValidationProfile, ExperimentMode, ObservationKind, ObservationRecord, OperatorEvent,
-    OperatorEventType, PlannedSlot, PropagationRecord, RecordMeta, RecordSource, RigRecord,
-    Schedule, SessionGoal, Station, WsjtXRecord,
+    BundleValidationProfile, ExperimentMode, MachineIdentityError, ObservationKind,
+    ObservationRecord, OperatorEvent, OperatorEventType, PlannedSlot, PropagationRecord,
+    RecordMeta, RecordSource, RigRecord, Schedule, SessionGoal, Station, WsjtXRecord,
+    MACHINE_ID_MAX_BYTES,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -384,6 +385,196 @@ fn diagnostic_records_have_stable_codes_locations_and_ordering() {
         ),
     ]
     "###);
+}
+
+#[test]
+fn machine_identity_boundaries_are_warnings_for_legacy_and_block_writes() {
+    assert_eq!(
+        antennabench_core::validate_machine_identity(""),
+        Err(MachineIdentityError::Empty)
+    );
+    assert!(
+        antennabench_core::validate_machine_identity(&"a".repeat(MACHINE_ID_MAX_BYTES)).is_ok()
+    );
+    assert_eq!(
+        antennabench_core::validate_machine_identity(&"a".repeat(MACHINE_ID_MAX_BYTES + 1)),
+        Err(MachineIdentityError::TooLong)
+    );
+    assert_eq!(
+        antennabench_core::validate_machine_identity("identity-é"),
+        Err(MachineIdentityError::NonAscii)
+    );
+
+    let mut bundle = valid_bundle();
+    bundle.schedule.slots[0].slot_id.clear();
+    bundle.events[0].slot_id = Some(String::new());
+    bundle.observations[0].slot_id = Some(String::new());
+    let report = validate_bundle_report(&bundle);
+    let diagnostic = report
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == codes::EMPTY_IDENTITY)
+        .expect("empty identity diagnostic");
+    assert_eq!(
+        diagnostic.location.field_path.as_deref(),
+        Some("/slots/0/slot_id")
+    );
+    assert!(report.allows(BundleValidationProfile::CompatibilityRead));
+    assert!(report.allows(BundleValidationProfile::Analysis));
+    assert!(!report.allows(BundleValidationProfile::StrictCreation));
+    assert!(!report.allows(BundleValidationProfile::Upgrade));
+}
+
+#[test]
+fn antenna_schedule_and_experiment_shape_rules_are_deterministic() {
+    let mut bundle = valid_bundle();
+    bundle.antennas.antennas[1].label = " A ".into();
+    for slot in &mut bundle.schedule.slots {
+        if slot.antenna_label == "B" {
+            slot.antenna_label = " A ".into();
+        }
+    }
+    bundle.schedule.slots[1].sequence_number = 1;
+    bundle.schedule.slots[1].duration_seconds = 0;
+    bundle.schedule.slots[1].guard_seconds = 0;
+    let mut out_of_order = bundle.schedule.slots[1].clone();
+    out_of_order.slot_id = "slot-003".into();
+    out_of_order.sequence_number = 0;
+    out_of_order.starts_at += chrono::Duration::seconds(120);
+    bundle.schedule.slots.push(out_of_order);
+    bundle.schedule.mode = ExperimentMode::SingleAntennaProfiling;
+
+    let report = validate_bundle_report(&bundle);
+    let codes = report
+        .diagnostics()
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    for expected in [
+        codes::INVALID_ANTENNA_LABEL,
+        codes::DUPLICATE_ANTENNA_LABEL,
+        codes::DUPLICATE_SEQUENCE_NUMBER,
+        codes::SLOT_SEQUENCE_OUT_OF_ORDER,
+        codes::INVALID_SLOT_DURATION,
+        codes::INVALID_SLOT_GUARD,
+        codes::EXPERIMENT_SHAPE_MISMATCH,
+    ] {
+        assert!(codes.contains(&expected), "missing {expected}: {codes:?}");
+    }
+    assert!(!report.allows(BundleValidationProfile::Analysis));
+    assert!(report.allows(BundleValidationProfile::CompatibilityRead));
+}
+
+#[test]
+fn sequence_gaps_and_supported_single_antenna_shapes_remain_valid() {
+    let mut gaps = valid_bundle();
+    gaps.schedule.slots[1].sequence_number = 10;
+    let gap_report = validate_bundle_report(&gaps);
+    assert!(!gap_report.diagnostics().iter().any(|diagnostic| matches!(
+        diagnostic.code.as_str(),
+        codes::DUPLICATE_SEQUENCE_NUMBER | codes::SLOT_SEQUENCE_OUT_OF_ORDER
+    )));
+
+    let mut profiling = valid_bundle();
+    profiling.schedule.mode = ExperimentMode::SingleAntennaProfiling;
+    profiling.schedule.goal = SessionGoal::SingleAntennaProfiling;
+    profiling
+        .schedule
+        .slots
+        .retain(|slot| slot.antenna_label == "A");
+    assert!(!validate_bundle_report(&profiling)
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.code == codes::EXPERIMENT_SHAPE_MISMATCH));
+}
+
+#[test]
+fn every_modeled_float_is_finite_and_universal_ranges_are_enforced() {
+    let mut bundle = valid_bundle();
+    bundle.station.power_watts = Some(f32::NAN);
+    bundle.antennas.antennas[0].height_m = Some(f32::INFINITY);
+    bundle.antennas.antennas[0].radial_length_m = Some(-0.1);
+    bundle.antennas.antennas[0].orientation_degrees = Some(360.0);
+    bundle.observations[0].frequency_hz = Some(0);
+    bundle.observations[0].distance_km = Some(f64::NEG_INFINITY);
+    bundle.observations[0].azimuth_degrees = Some(360.0);
+    bundle.observations[0].snr_db = Some(f32::NAN);
+    bundle.observations[0].drift_hz_per_minute = Some(f32::INFINITY);
+    bundle.observations[0].power_watts = Some(0.0);
+    bundle.observations[0].slot_confidence = Some(f32::NAN);
+    bundle.rig[0].frequency_hz = Some(0);
+    bundle.propagation[0].solar_flux_f107 = Some(f32::NAN);
+    bundle.propagation[0].kp_index = Some(9.1);
+    bundle.propagation[0].solar_wind_speed_kms = Some(-1.0);
+    bundle.propagation[0].bz_nt = Some(f32::INFINITY);
+
+    let report = validate_bundle_report(&bundle);
+    let finite_paths = report
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.code == codes::NON_FINITE_NUMBER)
+        .filter_map(|diagnostic| diagnostic.location.field_path.as_deref())
+        .collect::<Vec<_>>();
+    for expected in [
+        "/power_watts",
+        "/antennas/0/height_m",
+        "/distance_km",
+        "/snr_db",
+        "/drift_hz_per_minute",
+        "/slot_confidence",
+        "/solar_flux_f107",
+        "/bz_nt",
+    ] {
+        assert!(
+            finite_paths.contains(&expected),
+            "missing {expected}: {finite_paths:?}"
+        );
+    }
+    assert!(report
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.code == codes::INVALID_RANGE));
+    assert!(report.allows(BundleValidationProfile::CompatibilityRead));
+    assert!(!report.allows(BundleValidationProfile::Analysis));
+    assert!(!report.allows(BundleValidationProfile::StrictCreation));
+}
+
+#[test]
+fn protocol_literals_stay_consumer_owned_and_analysis_metadata_is_coherent() {
+    let mut bundle = valid_bundle();
+    bundle.station.callsign = "not-a-protocol-callsign".into();
+    bundle.station.grid = "not-a-maidenhead-grid".into();
+    bundle.analysis.status = AnalysisStatus::Generated;
+    bundle.analysis.generated_at = None;
+
+    let report = validate_bundle_report(&bundle);
+    assert!(!report
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.code == codes::INVALID_REQUIRED_TEXT));
+    let analysis = report
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == codes::ANALYSIS_METADATA_MISMATCH)
+        .expect("analysis metadata diagnostic");
+    assert_eq!(
+        analysis.location.field_path.as_deref(),
+        Some("/generated_at")
+    );
+    assert!(report.allows(BundleValidationProfile::CompatibilityRead));
+    assert!(report.allows(BundleValidationProfile::Analysis));
+    assert!(!report.allows(BundleValidationProfile::StrictCreation));
+
+    bundle.station.callsign = " N1RWJ ".into();
+    bundle.station.grid.clear();
+    assert_eq!(
+        validate_bundle_report(&bundle)
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code == codes::INVALID_REQUIRED_TEXT)
+            .count(),
+        2
+    );
 }
 
 fn valid_bundle() -> BundleContents {

@@ -144,6 +144,15 @@ lines, reopens the current projection, and makes/reopens a byte-identical v2
 lossless copy. `crates/core/tests/v2_types.rs` pins every legacy provenance
 mapping and the lowercase-ASCII identity boundaries.
 
+`crates/core/tests/bundle_validation.rs` is the semantic rule/code matrix for
+machine-ID and antenna-label boundaries, schedule sequence/window/shape rules,
+universal numeric units and ranges, analysis metadata, and the explicit
+adapter-owned protocol boundary. `crates/storage/tests/semantic_preflight.rs`
+mutates every checked-in v1 fixture with a non-finite modeled value and proves
+strict v1/v2 writes create no destination. It also proves a warning-bearing v1
+source stays byte-identical, compatibility-readable, losslessly copyable, and
+upgradeable when its warning is representable.
+
 Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, accessible chart tables, and all
 report sections. Separate hostile-string and empty-data cases pin escaping and

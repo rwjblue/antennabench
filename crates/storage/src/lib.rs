@@ -43,6 +43,10 @@ impl BundleStore {
     /// New authored sessions should use [`Self::write_v2`] so provenance and
     /// lifecycle state are retained in the provider-neutral schema.
     pub fn write(&self, bundle: &BundleContents) -> Result<(), BundleStoreError> {
+        let report = validate_bundle_report(bundle);
+        if !report.allows(BundleValidationProfile::StrictCreation) {
+            return Err(BundleValidationError::from_report(report).into());
+        }
         ensure_writable_root(&self.root)?;
         let paths = self.bundle_paths(&bundle.manifest.files)?;
         paths.ensure_writable_targets()?;

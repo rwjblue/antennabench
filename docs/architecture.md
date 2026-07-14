@@ -64,7 +64,9 @@ new neutral-suffix destination, preserves the v1 source bytes, maps all legacy
 source and WSJT-X evidence, and verifies semantic equivalence and the v2
 checkpoint. New v2 writes use `write_v2()` or
 `write_v2_with_attachments()`; `write()` remains the explicit v1 compatibility
-writer for legacy fixtures and integrations.
+wire writer for legacy fixtures and integrations. All authored writers run the
+strict-creation diagnostic profile before creating files; the upgrade path
+uses its separate non-destructive upgrade profile.
 
 The diagnostic contract separates wire, structural, and semantic failures and
 states which of compatibility read, analysis, strict creation, or upgrade each

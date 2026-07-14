@@ -5,8 +5,8 @@ use std::{
 };
 
 use antennabench_core::{
-    AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, BundleContents,
-    BundleFilesV2, BundleManifestV2, BundleV2Contents, BundleValidationError,
+    validate_machine_identity, AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2,
+    BundleContents, BundleFilesV2, BundleManifestV2, BundleV2Contents, BundleValidationError,
     BundleValidationProfile, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
     ObservationRecordV2, OperatorEventType, OperatorEventV2, PlanGenerationV2, PropagationRecordV2,
     Provenance, RecordMeta, RecordMetaV2, RigRecordV2, SessionLifecycleV2, SessionStateV2,
@@ -58,7 +58,7 @@ impl BundleStore {
         verify_semantic_projection(&bundle, v2.clone().into_current().bundle)?;
 
         let destination_store = BundleStore::new(destination);
-        destination_store.write_v2(&v2)?;
+        destination_store.write_v2_for_upgrade(&v2)?;
         let result = (|| {
             copy_legacy_attachments(
                 &self.root().join(&bundle.manifest.files.attachments_dir),
@@ -120,7 +120,7 @@ fn migrate_bundle(
     let mut wsjtx_observation_links = HashMap::<String, (String, String, u32, u32)>::new();
     for (index, (record, line)) in v1.wsjtx.iter().zip(wsjtx_lines).enumerate() {
         let malformed = record.message_type.contains("malformed");
-        let evidence_id = format!("legacy-wsjtx-{}", record.record_id);
+        let evidence_id = bounded_migration_id("legacy-wsjtx", &record.record_id);
         let mutation_id = migration_mutation_id("wsjtx", &record.record_id);
         let matching_observations = v1
             .observations
@@ -186,7 +186,8 @@ fn migrate_bundle(
                 .get(&record.observation_id)
                 .cloned()
                 .unwrap_or_else(|| {
-                    let evidence_id = format!("legacy-observation-{}", record.observation_id);
+                    let evidence_id =
+                        bounded_migration_id("legacy-observation", &record.observation_id);
                     let mutation_id = migration_mutation_id("observations", &record.observation_id);
                     adapter_records.push(AdapterRecordV2 {
                         meta: migrate_meta_with_mutation(
@@ -513,7 +514,16 @@ fn legacy_evidence_id(record_kind: NormalizedRecordKind, normalized_id: &str) ->
         NormalizedRecordKind::Rig => "rig",
         NormalizedRecordKind::Propagation => "propagation",
     };
-    format!("legacy-{kind}-{normalized_id}")
+    bounded_migration_id(&format!("legacy-{kind}"), normalized_id)
+}
+
+fn bounded_migration_id(prefix: &str, legacy_id: &str) -> String {
+    let candidate = format!("{prefix}-{legacy_id}");
+    if validate_machine_identity(&candidate).is_ok() {
+        candidate
+    } else {
+        format!("{prefix}-{}", sha256_hex(legacy_id.as_bytes()))
+    }
 }
 
 fn migrate_meta(
@@ -755,4 +765,21 @@ pub enum BundleUpgradeError {
         #[source]
         source: io::Error,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use antennabench_core::{validate_machine_identity, MACHINE_ID_MAX_BYTES};
+
+    use super::bounded_migration_id;
+
+    #[test]
+    fn derived_evidence_ids_stay_bounded_for_maximum_legacy_ids() {
+        let legacy = "a".repeat(MACHINE_ID_MAX_BYTES);
+        let first = bounded_migration_id("legacy-observation", &legacy);
+        let second = bounded_migration_id("legacy-observation", &legacy);
+        assert_eq!(first, second);
+        assert!(validate_machine_identity(&first).is_ok());
+        assert_ne!(first, format!("legacy-observation-{legacy}"));
+    }
 }

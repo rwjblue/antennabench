@@ -528,7 +528,7 @@ fn sample_bundle() -> BundleContents {
             power_watts: Some(5.0),
             slot_id: Some("slot-001".to_string()),
             slot_label: Some("A".to_string()),
-            slot_confidence: Some(0.95),
+            slot_confidence: Some(0.25),
             raw: json!({ "line": "example wsjtx decode" }),
         }],
         wsjtx: Vec::new(),

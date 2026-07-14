@@ -6,11 +6,11 @@ use std::{
 };
 
 use antennabench_core::{
-    codes, validate_bundle_report, AdapterInput, AttachmentReference, BundleDiagnostic,
-    BundleDiagnosticCategory, BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleFileRole,
-    BundleFilesV2, BundleManifestV2, BundleRecordKind, BundleV2Contents, BundleValidationProfile,
-    BundleValidationReport, StreamCheckpointV2, ALL_TYPED_OPERATIONS, SCHEMA_VERSION_V2,
-    V2_BUNDLE_SUFFIX,
+    codes, validate_bundle_report, validate_machine_identity, AdapterInput, AttachmentReference,
+    BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation, BundleDiagnosticSeverity,
+    BundleFileRole, BundleFilesV2, BundleManifestV2, BundleRecordKind, BundleV2Contents,
+    BundleValidationProfile, BundleValidationReport, StreamCheckpointV2, ALL_TYPED_OPERATIONS,
+    SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
@@ -318,7 +318,7 @@ impl BundleStore {
                         .into(),
             });
         }
-        self.write_v2_files(bundle)
+        self.write_v2_files(bundle, BundleValidationProfile::StrictCreation)
     }
 
     pub fn write_v2_with_attachments(
@@ -326,7 +326,7 @@ impl BundleStore {
         bundle: &BundleV2Contents,
         attachments: &[BundleAttachment],
     ) -> Result<(), BundleStoreError> {
-        self.write_v2_files(bundle)?;
+        self.write_v2_files(bundle, BundleValidationProfile::StrictCreation)?;
         let result = (|| {
             for attachment in attachments {
                 let written = self.write_attachment(
@@ -356,7 +356,41 @@ impl BundleStore {
         result
     }
 
-    fn write_v2_files(&self, bundle: &BundleV2Contents) -> Result<(), BundleStoreError> {
+    pub(super) fn write_v2_for_upgrade(
+        &self,
+        bundle: &BundleV2Contents,
+    ) -> Result<(), BundleStoreError> {
+        self.write_v2_files(bundle, BundleValidationProfile::Upgrade)
+    }
+
+    fn write_v2_files(
+        &self,
+        bundle: &BundleV2Contents,
+        profile: BundleValidationProfile,
+    ) -> Result<(), BundleStoreError> {
+        let report = validate_bundle_report(&bundle.clone().into_current().bundle);
+        if !report.allows(profile) {
+            return Err(antennabench_core::BundleValidationError::from_report(report).into());
+        }
+        let mut adapter_ids = HashSet::new();
+        for record in &bundle.adapter_records {
+            if validate_machine_identity(&record.record_id).is_err() {
+                return Err(BundleStoreError::InvalidV2Bundle {
+                    message: format!(
+                        "adapter record identity {:?} must be nonempty ASCII and at most 128 bytes",
+                        record.record_id
+                    ),
+                });
+            }
+            if !adapter_ids.insert(record.record_id.as_str()) {
+                return Err(BundleStoreError::InvalidV2Bundle {
+                    message: format!(
+                        "adapter record identity {:?} is duplicated",
+                        record.record_id
+                    ),
+                });
+            }
+        }
         ensure_v2_suffix(self.root())?;
         if bundle.manifest.schema_version != SCHEMA_VERSION_V2 {
             return Err(BundleStoreError::InvalidV2Bundle {
@@ -636,6 +670,32 @@ fn validate_v2_bundle(
 
     let mut adapter_ids = HashSet::new();
     for record in &bundle.adapter_records {
+        if let Err(error) = validate_machine_identity(&record.record_id) {
+            diagnostics.push(BundleDiagnostic {
+                code: if record.record_id.is_empty() {
+                    codes::EMPTY_IDENTITY
+                } else {
+                    codes::INVALID_IDENTITY
+                }
+                .into(),
+                category: BundleDiagnosticCategory::Semantic,
+                severity: BundleDiagnosticSeverity::Warning,
+                blocked_operations: vec![
+                    BundleValidationProfile::StrictCreation,
+                    BundleValidationProfile::Upgrade,
+                ],
+                location: BundleDiagnosticLocation {
+                    file: BundleFileRole::AdapterRecords,
+                    record_kind: Some(BundleRecordKind::AdapterRecord),
+                    record_id: Some(record.record_id.clone()),
+                    record_index: None,
+                    physical_line: None,
+                    field_path: Some("/record_id".into()),
+                },
+                message: format!("adapter record identity is invalid: {error}"),
+                related_locations: Vec::new(),
+            });
+        }
         if !adapter_ids.insert(record.record_id.as_str()) {
             diagnostics.push(v2_diagnostic(
                 codes::V2_ADAPTER_LINK,

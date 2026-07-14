@@ -217,11 +217,27 @@ Structural and semantic validation checks:
 
 - root files and records use the expected schema version
 - root files and records use the manifest session id
-- planned slot, event, observation, WSJT-X, rig, and propagation IDs are unique
-- planned slot antenna labels exist in `antennas.json`
-- planned slot windows are sorted and non-overlapping
+- session, slot, event, observation, adapter, rig, and propagation machine IDs
+  are nonempty ASCII of at most 128 bytes for new writes and unique in their
+  identity domain
+- station callsign/grid text is trimmed and nonempty; antenna labels are
+  trimmed, nonempty, unique, control-free, and at most 128 UTF-8 bytes
+- planned slot antenna labels resolve exactly once in `antennas.json`
+- schedule sequence numbers are unique and strictly increasing in persisted
+  order (gaps are valid); start times strictly increase and windows do not
+  overlap
+- schedules contain a slot, durations are positive, guards consume less than
+  the duration, and experiment mode/goal/distinct-antenna shape is coherent
 - event and observation slot references point to known planned slots
-- observation slot confidence values are in `0.0..=1.0`
+- present station/observation power is finite and positive; antenna dimensions
+  are finite and nonnegative; antenna/observation headings are finite in
+  `[0, 360)`
+- present observation distance is finite and nonnegative; SNR and drift are
+  finite; observation/rig frequencies are positive; slot confidence is finite
+  in `[0, 1]`
+- normalized propagation floats are finite, nonnegative where the modeled
+  quantity cannot be negative, and planetary Kp is in `[0, 9]`
+- generated analysis metadata includes its generation timestamp
 - persisted slot annotations match regenerated alignment output
 - v2 mutation membership and record schema/session identities agree
 - normalized v2 records link to existing generic adapter evidence
@@ -235,6 +251,20 @@ current projection. `read_current()` retains provider-neutral sidecars and
 `read_normalized_validated()` applies the analysis profile after regenerating
 observation alignment annotations. The complete policy is recorded in
 [Decision 0009](decisions/0009-use-layered-bundle-validation-profiles.md).
+
+Core deliberately does not impose WSPR callsign/grid grammar, exact band-plan
+edges, jurisdiction rules, provider quality flags, rig status values, or
+provider-specific propagation acceptance ranges. WSJT-X offline and live
+adapters validate callsign, locator, power, frequency/band, and supported
+message semantics before emitting normalized observations; other adapters and
+workflows own equivalent source-specific diagnostics.
+
+`BundleStore::write()` and the v2 authored writers apply the strict-creation
+profile before creating any destination file. This catches warning-level
+authored values and every modeled non-finite float before `serde_json` could
+turn it into `null`. The v1 upgrader instead applies the upgrade profile, so a
+representable warning can retain both normalized meaning and source evidence;
+it never clamps, trims, renumbers, or otherwise repairs the source.
 
 ## Lossless Copies
 

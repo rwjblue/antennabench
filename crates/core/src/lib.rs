@@ -2,6 +2,7 @@ pub mod alignment;
 mod diagnostics;
 mod model;
 pub mod normalization;
+mod semantics;
 mod v2;
 mod validation;
 
@@ -9,6 +10,7 @@ pub use alignment::*;
 pub use diagnostics::*;
 pub use model::*;
 pub use normalization::*;
+pub use semantics::*;
 pub use v2::*;
 pub use validation::*;
 

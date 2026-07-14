@@ -5,10 +5,11 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::{
-    align_schedule_slots, codes, BundleContents, BundleDiagnostic, BundleDiagnosticCategory,
-    BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleRecordKind, BundleValidationProfile,
-    BundleValidationReport, PlannedSlot, SlotAlignmentPolicy, ALL_TYPED_OPERATIONS,
-    ANALYSIS_AND_WRITE_OPERATIONS, LATEST_SCHEMA_VERSION, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2,
+    align_schedule_slots, codes, semantic_diagnostics, BundleContents, BundleDiagnostic,
+    BundleDiagnosticCategory, BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleRecordKind,
+    BundleValidationProfile, BundleValidationReport, PlannedSlot, SlotAlignmentPolicy,
+    ALL_TYPED_OPERATIONS, ANALYSIS_AND_WRITE_OPERATIONS, LATEST_SCHEMA_VERSION, SCHEMA_VERSION_V1,
+    SCHEMA_VERSION_V2,
 };
 
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -157,11 +158,11 @@ pub enum AlignmentAnnotationField {
 
 pub fn validate_bundle(bundle: &BundleContents) -> Result<(), BundleValidationError> {
     let issues = validate_bundle_issues(bundle);
+    let report = report_from_issues(bundle, &issues);
 
-    if issues.is_empty() {
+    if report.is_empty() {
         Ok(())
     } else {
-        let report = report_from_issues(bundle, &issues);
         Err(BundleValidationError::from_issues_and_report(
             issues, report,
         ))
@@ -439,7 +440,7 @@ fn validate_schedule_references_and_windows(
         }
 
         if let Some(previous) = previous_slot {
-            if slot.starts_at < previous.starts_at {
+            if slot.starts_at <= previous.starts_at {
                 issues.push(BundleValidationIssue::SlotWindowOutOfOrder {
                     previous_slot_id: previous.slot_id.clone(),
                     slot_id: slot.slot_id.clone(),
@@ -590,12 +591,14 @@ fn report_from_issues(
     bundle: &BundleContents,
     issues: &[BundleValidationIssue],
 ) -> BundleValidationReport {
-    BundleValidationReport::new(
+    let mut report = BundleValidationReport::new(
         issues
             .iter()
             .map(|issue| diagnostic_from_issue(issue, Some(bundle)))
             .collect(),
-    )
+    );
+    report.extend(semantic_diagnostics(bundle));
+    report
 }
 
 fn diagnostic_from_issue(
@@ -686,7 +689,7 @@ fn diagnostic_from_issue(
             blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
             location: slot_location(bundle, slot_id, "/starts_at"),
             message: format!(
-                "slot {slot_id:?} starts before preceding slot {previous_slot_id:?}"
+                "slot {slot_id:?} does not start strictly after preceding slot {previous_slot_id:?}"
             ),
             related_locations: vec![slot_location(bundle, previous_slot_id, "/starts_at")],
         },
