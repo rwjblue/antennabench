@@ -1,0 +1,14 @@
+[
+  {
+    "time_tag": "2026-07-13T21:18:00",
+    "kp_index": 0,
+    "estimated_kp": 0.33,
+    "kp": "0P"
+  },
+  {
+    "time_tag": "2026-07-13T21:20:00",
+    "kp_index": 1,
+    "estimated_kp": 0.67,
+    "kp": "1M"
+  }
+]

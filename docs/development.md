@@ -75,6 +75,15 @@ under `fixtures/wsjtx/udp/`; no operator capture or third-party spot data is
 committed. Loopback UDP coverage verifies only the receiver boundary. It does
 not require WSJT-X or network access during the test suite.
 
+The optional NOAA SWPC adapter tests use reduced captured response shapes under
+`fixtures/noaa-swpc/`. They cover pure F10.7 and provisional estimated-Kp
+parsing, source envelopes, malformed/partial/stale input, deterministic record
+selection, duplicate suppression, polling/backoff policy, conditional requests,
+and best-effort failures through an injected transport. `cargo test -p
+antennabench-propagation` never contacts NOAA. The live blocking transport is a
+one-shot boundary for future desktop orchestration; network or source failure
+must remain a typed optional outcome rather than a session failure.
+
 The canonical sample-report bundle is purpose-built synthetic data documented
 under `fixtures/session-bundles/`. Its focused integration test reads,
 normalizes, validates, exports, reopens, analyzes, and builds report data from

@@ -178,11 +178,16 @@ The durable boundaries are:
   and no rig adapter.
 - Public-spot and propagation sources preserve provenance and raw or near-raw
   inputs before normalizing supported values into bundle records.
+- `crates/propagation` implements the first optional NOAA/NWS SWPC boundary. It
+  selects observed F10.7 and provisional `estimated_kp` from two fixed endpoints,
+  emits separate sparse schema-version-1 records, preserves the selected source
+  object and HTTP metadata, and exposes freshness, polling, retry, conditional
+  request, duplicate-suppression, and best-effort two-product outcomes. Captured
+  fixtures and transport substitution keep tests independent of live networks.
 - Local stores, disposable indexes, and publishers consume the session bundle;
   they do not replace it as the evidence source of truth.
 
-These seams describe responsibilities, not approved provider or library
-choices. Public-spot source and polling policy is tracked by
+These seams describe responsibilities. Public-spot source and polling policy is tracked by
 [#13](https://github.com/rwjblue/antennabench/issues/13), and the first optional
 rig-control milestone by
 [#14](https://github.com/rwjblue/antennabench/issues/14).

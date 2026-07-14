@@ -42,7 +42,13 @@ The implemented schema version is `1`.
   preserved lines that could not become observations. Live companion records
   use `udp_heartbeat`, `udp_status`, `udp_wspr_decode`, and `udp_close`.
 - `rig.jsonl`: rig adapter state.
-- `propagation.jsonl`: time-scoped propagation context.
+- `propagation.jsonl`: time-scoped propagation context. The implemented NOAA
+  SWPC adapter writes observed F10.7 and provisional estimated planetary Kp as
+  separate sparse records because the products have different source times.
+  `meta.timestamp` is response receipt time, `observed_at` is the upstream UTC
+  `time_tag`, and `raw` retains the exact endpoint, selected near-raw object,
+  retrieval time, provider/semantics attribution, and available HTTP metadata.
+  Repeated unchanged source observations are not appended.
 
 Every JSONL record includes `meta` with schema version, session id, timestamp,
 and source.

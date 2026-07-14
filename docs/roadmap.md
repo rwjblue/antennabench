@@ -31,13 +31,14 @@ The current implementation focus is the bundle-first Rust foundation:
   missingness, order, duplicate/conflict, repeated-path, and stratum facts
 - standalone paired diagnostics for data quality, differences, SNR over time,
   and distance/azimuth path context with accessible table equivalents
+- optional NOAA SWPC F10.7 and provisional estimated-Kp acquisition with pure
+  captured-fixture parsing, source envelopes, freshness and polling policy,
+  typed best-effort failures, and duplicate suppression
 
 ## Later
 
 Later tracks:
 
-- Propagation snapshot acquisition and normalization
-  ([#6](https://github.com/rwjblue/antennabench/issues/6)).
 - A rebuildable local SQLite/index boundary
   ([#7](https://github.com/rwjblue/antennabench/issues/7)).
 - Calibrated uncertainty and comparative conclusion semantics, after paired
