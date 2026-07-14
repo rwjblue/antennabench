@@ -1,8 +1,9 @@
-use std::fmt::Write;
+use std::{collections::BTreeSet, fmt::Write};
 
 use antennabench_analysis::{
-    ComparisonAvailability, ComparisonOrder, ComparisonSide, ComparisonTimelineRow,
-    EvidenceQuality, ObservationCounts, ObservationExclusionReason, PathDirection, SnrStatistics,
+    ComparisonAvailability, ComparisonOrder, ComparisonSide, ComparisonStratum,
+    ComparisonTimelineRow, EvidenceQuality, ObservationCounts, ObservationExclusionReason,
+    PairedObservationRow, PathDirection, SnrStatistics,
 };
 use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
@@ -23,6 +24,7 @@ macro_rules! write_html {
 const STYLES: &str = r#"
 :root{color-scheme:light;--ink:#172033;--muted:#5c667a;--line:#d8deea;--paper:#fff;--soft:#f5f7fb;--usable:#237a57;--excluded:#b84b4b;--accent:#315da8}*{box-sizing:border-box}body{margin:0;background:var(--soft);color:var(--ink);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(1120px,calc(100% - 2rem));margin:2rem auto 4rem}.hero,.panel{background:var(--paper);border:1px solid var(--line);border-radius:.75rem;box-shadow:0 1px 2px #17203312}.hero{padding:1.5rem 1.75rem}.hero h1{margin:0 0 .25rem;font-size:clamp(1.7rem,4vw,2.6rem)}.eyebrow{margin:0;color:var(--accent);font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}.muted{color:var(--muted)}.panel{margin-top:1rem;padding:1.25rem;overflow:hidden}.panel h2{margin:.1rem 0 1rem}.panel h3{margin:1.4rem 0 .6rem}.facts,.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}.fact,.stat{padding:.75rem;background:var(--soft);border-radius:.5rem}.fact dt,.stat dt{color:var(--muted);font-size:.78rem;font-weight:700;text-transform:uppercase}.fact dd,.stat dd{margin:.2rem 0 0;font-weight:650}.notice{padding:.75rem 1rem;border-left:.3rem solid #b36b00;background:#fff8e8}.badge{display:inline-block;padding:.16rem .55rem;border-radius:999px;background:#e5ebf7;font-size:.82rem;font-weight:700}.empty{padding:.85rem;border:1px dashed var(--line);border-radius:.5rem;color:var(--muted)}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.9rem}caption{text-align:left;font-weight:700;padding:.25rem 0 .55rem}th,td{padding:.55rem .65rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}thead th{background:var(--soft);white-space:nowrap}.chart,.comparison-chart{display:grid;gap:.5rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.chart-row{display:grid;grid-template-columns:minmax(7rem,14rem) 1fr 4.5rem;gap:.6rem;align-items:center}.comparison-row{display:grid;grid-template-columns:minmax(8rem,16rem) 1fr minmax(5rem,auto);gap:.6rem;align-items:center}.chart-label{overflow-wrap:anywhere}.bar-track,.snr-track,.comparison-track,.snr-pair{position:relative;height:1rem;background:#e1e6ef;border-radius:999px;overflow:hidden}.bar{height:100%;float:left}.bar.usable{background:var(--usable)}.bar.excluded{background:var(--excluded)}.snr-range{position:absolute;top:.3rem;height:.4rem;border-radius:999px;background:var(--accent)}.snr-point{position:absolute;top:.1rem;width:.18rem;height:.8rem;background:var(--ink)}.comparison-zero{position:absolute;left:50%;top:0;width:1px;height:100%;background:var(--muted)}.comparison-delta{position:absolute;top:.2rem;height:.6rem;border-radius:999px;background:var(--accent)}.snr-pair{height:1.2rem}.snr-left,.snr-right{position:absolute;top:.15rem;width:.55rem;height:.9rem;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}.snr-left{background:#315da8}.snr-right{background:#b35c00}.timeline{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.timeline-slot{min-width:2.6rem;padding:.45rem;border:1px solid var(--line);border-radius:.35rem;text-align:center}.timeline-slot.invalid{border-style:dashed;color:var(--muted)}.timeline-slot.issue{background:#fff8e8}.legend{display:flex;gap:1rem;color:var(--muted);font-size:.82rem}.swatch{display:inline-block;width:.7rem;height:.7rem;margin-right:.25rem;border-radius:.15rem}.swatch.usable{background:var(--usable)}.swatch.excluded{background:var(--excluded)}.antenna-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.75rem}.antenna-card{padding:1rem;border:1px solid var(--line);border-radius:.5rem}.antenna-card h3{margin:0 0 .6rem}.antenna-card dl{margin:0}.antenna-card dt{color:var(--muted);font-size:.8rem;font-weight:700}.antenna-card dd{margin:0 0 .45rem}.footnote{font-size:.84rem;color:var(--muted)}@media print{body{background:#fff}main{width:100%;margin:0}.hero,.panel{box-shadow:none;break-inside:avoid}}@media(max-width:620px){.chart-row,.comparison-row{grid-template-columns:1fr}.chart-value{color:var(--muted)}}
 .swatch.left,.bar.left{background:#315da8}.swatch.right,.bar.right{background:#b35c00}
+.location-fill{height:100%;background:#315da8;border-radius:999px}.azimuth-track{position:relative;height:1rem;background:linear-gradient(90deg,#e1e6ef 0 24.8%,#cbd5e7 25% 25.2%,#e1e6ef 25.4% 49.8%,#cbd5e7 50% 50.2%,#e1e6ef 50.4% 74.8%,#cbd5e7 75% 75.2%,#e1e6ef 75.4% 100%);border-radius:999px}.azimuth-marker{position:absolute;top:.1rem;width:.45rem;height:.8rem;background:#b35c00;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}
 "#;
 
 /// Renders a deterministic, standalone HTML document from renderer-neutral
@@ -225,6 +227,7 @@ fn render_comparison(out: &mut String, report: &SessionReport) {
     render_comparison_timeline(out, report);
     render_paired_differences(out, report);
     render_paired_snr_time(out, report);
+    render_location_views(out, report);
     render_stratum_summaries(out, report);
     out.push_str("</section>");
 }
@@ -397,6 +400,184 @@ fn render_paired_snr_time(out: &mut String, report: &SessionReport) {
         write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} s</td><td>{} dB</td><td>{} dB</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), timestamp(row.left_timestamp), timestamp(row.right_timestamp), row.elapsed_seconds, format_number(row.left_snr_db), format_number(row.right_snr_db));
     }
     out.push_str("</tbody></table></div>");
+}
+
+fn render_location_views(out: &mut String, report: &SessionReport) {
+    out.push_str("<h3>Distance and azimuth path context</h3><p class=\"notice\">Distance and azimuth describe only the remote paths observed in these paired rows. Missing location stays visible, and geographic concentration limits how broadly these paths represent other distances or directions.</p>");
+    if report.comparison.paired_rows.is_empty() {
+        out.push_str("<p class=\"empty\">No paired rows are available for location views.</p>");
+        return;
+    }
+
+    let mut strata = Vec::<ComparisonStratum>::new();
+    for row in &report.comparison.paired_rows {
+        if !strata.contains(&row.stratum) {
+            strata.push(row.stratum.clone());
+        }
+    }
+    for (index, stratum) in strata.iter().enumerate() {
+        let rows = report
+            .comparison
+            .paired_rows
+            .iter()
+            .filter(|row| row.stratum == *stratum)
+            .collect::<Vec<_>>();
+        write_html!(
+            out,
+            "<section aria-labelledby=\"location-stratum-{index}\"><h4 id=\"location-stratum-{index}\">{}</h4>",
+            comparison_stratum(stratum)
+        );
+        render_geographic_coverage(out, &rows);
+        render_distance_view(out, &rows);
+        render_azimuth_view(out, &rows);
+        out.push_str("</section>");
+    }
+}
+
+fn render_geographic_coverage(out: &mut String, rows: &[&PairedObservationRow]) {
+    let unique_paths = rows
+        .iter()
+        .map(|row| row.remote_path.as_str())
+        .collect::<BTreeSet<_>>();
+    let located_paths = rows
+        .iter()
+        .filter(|row| location_available(row))
+        .map(|row| row.remote_path.as_str())
+        .collect::<BTreeSet<_>>();
+    let unavailable_rows = rows.iter().filter(|row| !location_available(row)).count();
+    let mut sectors: [BTreeSet<&str>; 8] = std::array::from_fn(|_| BTreeSet::new());
+    for row in rows {
+        if location_available(row) {
+            if let Some(azimuth) = row_azimuth(row) {
+                sectors[azimuth_sector_index(azimuth)].insert(row.remote_path.as_str());
+            }
+        }
+    }
+    let (sector_index, sector_count) = sectors
+        .iter()
+        .enumerate()
+        .max_by_key(|(index, paths)| (paths.len(), std::cmp::Reverse(*index)))
+        .map(|(index, paths)| (index, paths.len()))
+        .unwrap_or((0, 0));
+    out.push_str("<dl class=\"stat-grid\">");
+    comparison_stat(out, "Paired rows in stratum", rows.len());
+    comparison_stat(out, "Unique paths in stratum", unique_paths.len());
+    comparison_stat(out, "Unique paths with location", located_paths.len());
+    comparison_stat(out, "Location-unavailable rows", unavailable_rows);
+    write_html!(out, "<div class=\"stat\"><dt>Most populated 45° display sector</dt><dd>{}: {} of {} located paths</dd></div>", azimuth_sector_label(sector_index), sector_count, located_paths.len());
+    out.push_str("</dl>");
+}
+
+fn render_distance_view(out: &mut String, rows: &[&PairedObservationRow]) {
+    out.push_str("<h4>Observed distance</h4>");
+    let maximum = rows
+        .iter()
+        .filter_map(|row| row_distance(row))
+        .fold(1.0_f64, f64::max);
+    out.push_str("<div class=\"comparison-chart\" aria-hidden=\"true\">");
+    for row in rows {
+        match row_distance(row).filter(|_| location_available(row)) {
+            Some(distance) => {
+                let width = distance / maximum * 100.0;
+                write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"bar-track\"><span class=\"location-fill\" style=\"width:{width:.3}%\"></span></span><span>{} km</span></div>", escape_html(&row.remote_path), format_number(distance));
+            }
+            None => write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"empty\">Location unavailable</span><span>—</span></div>", escape_html(&row.remote_path)),
+        }
+    }
+    out.push_str("</div><div class=\"table-wrap\"><table><caption>Observed distance path-context data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th><th scope=\"col\">Right − left</th><th scope=\"col\">Left grid</th><th scope=\"col\">Right grid</th><th scope=\"col\">Left distance</th><th scope=\"col\">Right distance</th><th scope=\"col\">Availability</th><th scope=\"col\">Left time</th><th scope=\"col\">Right time</th></tr></thead><tbody>");
+    for row in rows {
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), optional_text(row.left_remote_grid.as_deref()), optional_text(row.right_remote_grid.as_deref()), optional_measure_f64(row.left_distance_km, "km"), optional_measure_f64(row.right_distance_km, "km"), location_availability(row), timestamp(row.left_timestamp), timestamp(row.right_timestamp));
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_azimuth_view(out: &mut String, rows: &[&PairedObservationRow]) {
+    out.push_str("<h4>Observed azimuth</h4><div class=\"comparison-chart\" aria-hidden=\"true\">");
+    for row in rows {
+        match row_azimuth(row).filter(|_| location_available(row)) {
+            Some(azimuth) => {
+                let left = azimuth / 360.0 * 100.0;
+                write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"azimuth-track\"><span class=\"azimuth-marker\" style=\"left:{left:.3}%\"></span></span><span>{}°</span></div>", escape_html(&row.remote_path), format_number(azimuth));
+            }
+            None => write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"empty\">Location unavailable</span><span>—</span></div>", escape_html(&row.remote_path)),
+        }
+    }
+    out.push_str("</div><div class=\"table-wrap\"><table><caption>Observed azimuth path-context data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th><th scope=\"col\">Right − left</th><th scope=\"col\">Left grid</th><th scope=\"col\">Right grid</th><th scope=\"col\">Left azimuth</th><th scope=\"col\">Right azimuth</th><th scope=\"col\">Display sector</th><th scope=\"col\">Availability</th><th scope=\"col\">Left time</th><th scope=\"col\">Right time</th></tr></thead><tbody>");
+    for row in rows {
+        let sector = row_azimuth(row)
+            .filter(|_| location_available(row))
+            .map(|azimuth| azimuth_sector_label(azimuth_sector_index(azimuth)))
+            .unwrap_or("Location unavailable");
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), optional_text(row.left_remote_grid.as_deref()), optional_text(row.right_remote_grid.as_deref()), optional_measure_f64(row.left_azimuth_degrees, "°"), optional_measure_f64(row.right_azimuth_degrees, "°"), sector, location_availability(row), timestamp(row.left_timestamp), timestamp(row.right_timestamp));
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn location_available(row: &PairedObservationRow) -> bool {
+    row_grid(row).is_some() && row_distance(row).is_some() && row_azimuth(row).is_some()
+}
+
+fn location_availability(row: &PairedObservationRow) -> &'static str {
+    if location_available(row) {
+        "Available"
+    } else {
+        "Location unavailable"
+    }
+}
+
+fn row_grid(row: &PairedObservationRow) -> Option<&str> {
+    row.left_remote_grid
+        .as_deref()
+        .filter(|grid| !grid.is_empty())
+        .or_else(|| {
+            row.right_remote_grid
+                .as_deref()
+                .filter(|grid| !grid.is_empty())
+        })
+}
+
+fn row_distance(row: &PairedObservationRow) -> Option<f64> {
+    row.left_distance_km
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .or_else(|| {
+            row.right_distance_km
+                .filter(|value| value.is_finite() && *value >= 0.0)
+        })
+}
+
+fn row_azimuth(row: &PairedObservationRow) -> Option<f64> {
+    row.left_azimuth_degrees
+        .filter(|value| value.is_finite())
+        .or_else(|| row.right_azimuth_degrees.filter(|value| value.is_finite()))
+        .map(|value| value.rem_euclid(360.0))
+}
+
+fn azimuth_sector_index(azimuth: f64) -> usize {
+    ((azimuth / 45.0).floor() as usize).min(7)
+}
+
+fn azimuth_sector_label(index: usize) -> &'static str {
+    match index {
+        0 => "0°–<45°",
+        1 => "45°–<90°",
+        2 => "90°–<135°",
+        3 => "135°–<180°",
+        4 => "180°–<225°",
+        5 => "225°–<270°",
+        6 => "270°–<315°",
+        _ => "315°–<360°",
+    }
+}
+
+fn optional_text(value: Option<&str>) -> String {
+    value.map(escape_html).unwrap_or_else(not_available)
+}
+
+fn optional_measure_f64(value: Option<f64>, unit: &str) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{} {unit}", format_number(value)))
+        .unwrap_or_else(not_available)
 }
 
 fn render_stratum_summaries(out: &mut String, report: &SessionReport) {

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use antennabench_analysis::{ComparisonAvailability, EvidenceQuality, ObservationCounts};
-use antennabench_core::normalize_bundle;
+use antennabench_core::{normalize_bundle, Band, ObservationKind, RecordSource};
 use antennabench_report::{build_report, render_standalone_html, ReportNotice, SessionReport};
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -116,6 +116,8 @@ fn escapes_every_untrusted_report_string() {
         row.right_observation_id = hostile.clone();
         row.left_slot_id = hostile.clone();
         row.right_slot_id = hostile.clone();
+        row.left_remote_grid = Some(hostile.clone());
+        row.right_remote_grid = Some(hostile.clone());
     }
     for row in &mut report.comparison.path_summaries {
         row.remote_path = hostile.clone();
@@ -271,6 +273,7 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
         "Data-quality timeline",
         "Paired difference distribution",
         "Paired SNR over time",
+        "Distance and azimuth path context",
         "Stratum descriptive summaries",
     ] {
         assert!(html.contains(section), "missing section: {section}");
@@ -280,6 +283,8 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
         "Data-quality timeline details",
         "Paired difference data",
         "Paired SNR over time data",
+        "Observed distance path-context data",
+        "Observed azimuth path-context data",
         "Stratum summary data",
     ] {
         assert!(html.contains(&format!("<caption>{caption}</caption>")));
@@ -306,6 +311,46 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
     ] {
         assert!(!html.contains(prohibited));
     }
+}
+
+#[test]
+fn renders_stratified_location_context_missingness_and_concentration() {
+    let mut report = paired_report(true);
+    report.comparison.paired_rows[0].left_remote_grid = None;
+    report.comparison.paired_rows[0].right_remote_grid = None;
+    report.comparison.paired_rows[0].left_distance_km = None;
+    report.comparison.paired_rows[0].right_distance_km = None;
+    report.comparison.paired_rows[0].left_azimuth_degrees = None;
+    report.comparison.paired_rows[0].right_azimuth_degrees = None;
+    let mut second_stratum = report.comparison.paired_rows[1].clone();
+    second_stratum.stratum.direction = antennabench_analysis::PathDirection::Receive;
+    second_stratum.stratum.band = Band::M40;
+    second_stratum.stratum.observation_kind = ObservationKind::PublicReport;
+    second_stratum.stratum.source = RecordSource::Wsprnet;
+    second_stratum.remote_path = "K9SECOND".to_string();
+    second_stratum.left_distance_km = Some(900.0);
+    second_stratum.right_distance_km = Some(905.0);
+    second_stratum.left_azimuth_degrees = Some(10.0);
+    second_stratum.right_azimuth_degrees = Some(12.0);
+    report.comparison.paired_rows.push(second_stratum);
+
+    let html = render_standalone_html(&report);
+
+    assert!(html.contains("Location unavailable"));
+    assert!(html.contains("Unique paths in stratum"));
+    assert!(html.contains("Unique paths with location"));
+    assert!(html.contains("Most populated 45° display sector"));
+    assert!(html.contains("TX path · 20 m · Local decode · WSJT-X log"));
+    assert!(html.contains("RX path · 40 m · Public report · WSPRnet"));
+    assert!(html.contains("<caption>Observed distance path-context data</caption>"));
+    assert!(html.contains("<caption>Observed azimuth path-context data</caption>"));
+    assert!(html.contains("Distance and azimuth describe only the remote paths observed"));
+    assert!(!html.contains("<script"));
+    assert!(!html.contains("http://"));
+    assert!(!html.contains("https://"));
+
+    let empty = render_standalone_html(&canonical_report());
+    assert!(empty.contains("No paired rows are available for location views."));
 }
 
 fn canonical_report() -> SessionReport {

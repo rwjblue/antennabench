@@ -37,15 +37,13 @@ imbalanced, or low-quality evidence must stay visible. `Insufficient data` and
 `too close to call` are valid outcomes; the product must not manufacture a
 winner when a method does not justify one.
 
-The implemented analysis and report layers are currently descriptive and do
-not select a winner. [Decision 0004](decisions/0004-paired-descriptive-analysis-precedes-conclusions.md)
-keeps automated conclusions deferred while allowing a next slice of honest
-paired descriptive data: same-path SNR differences, overlap and unmatched
-counts, time/order diagnostics, and stratified charts, tracked by
-[#23](https://github.com/rwjblue/antennabench/issues/23) and
-[#25](https://github.com/rwjblue/antennabench/issues/25). Existing
-insufficient/weak/moderate labels describe evidence coverage only; they do not
-say that one antenna is better.
+The implemented analysis and report layers are descriptive and do not select a
+winner. [Decision 0004](decisions/0004-paired-descriptive-analysis-precedes-conclusions.md)
+keeps automated conclusions deferred while allowing same-path SNR differences,
+overlap and unmatched counts, time/order diagnostics, stratified charts, and
+distance/azimuth context for observed paths. Existing insufficient/weak/moderate
+labels describe evidence coverage only; they do not say that one antenna is
+better.
 
 Transmit-path reports and receive-path local decodes answer different questions
 and must not be pooled. Missing decodes are not zero-SNR observations. Goal

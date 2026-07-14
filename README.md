@@ -35,7 +35,9 @@ Implemented:
   renderer-neutral rows for antenna SNR, band evidence, and slot evidence.
 - Standalone offline HTML report rendering with embedded styling, accessible
   chart tables, paired availability/overlap/timeline/difference/SNR diagnostics,
-  restrictive content security policy, and hostile-text escaping.
+  stratified distance/azimuth path context with explicit missing location and
+  concentration counts, restrictive content security policy, and hostile-text
+  escaping.
 - A Tauri desktop shell that opens existing directory bundles, validates and
   analyzes them without mutation, shows the local report in an isolated frame,
   and exports verified lossless copies through narrow Rust commands.

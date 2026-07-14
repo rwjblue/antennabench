@@ -27,6 +27,10 @@ The current implementation focus is the bundle-first Rust foundation:
 - golden fixture coverage
 - a durable paired-analysis contract that permits stratified descriptive
   comparisons while deferring uncertainty and automated conclusions
+- paired descriptive comparison data with explicit availability, overlap,
+  missingness, order, duplicate/conflict, repeated-path, and stratum facts
+- standalone paired diagnostics for data quality, differences, SNR over time,
+  and distance/azimuth path context with accessible table equivalents
 
 ## Later
 
@@ -36,13 +40,6 @@ Later tracks:
   ([#6](https://github.com/rwjblue/antennabench/issues/6)).
 - A rebuildable local SQLite/index boundary
   ([#7](https://github.com/rwjblue/antennabench/issues/7)).
-- Paired descriptive comparison data, evidence-coverage terminology, and
-  comparison diagnostics following
-  [decision 0004](decisions/0004-paired-descriptive-analysis-precedes-conclusions.md)
-  ([#22](https://github.com/rwjblue/antennabench/issues/22),
-  [#23](https://github.com/rwjblue/antennabench/issues/23),
-  [#25](https://github.com/rwjblue/antennabench/issues/25), and
-  [#24](https://github.com/rwjblue/antennabench/issues/24)).
 - Calibrated uncertainty and comparative conclusion semantics, after paired
   data and suitable design evidence exist
   ([#26](https://github.com/rwjblue/antennabench/issues/26)).

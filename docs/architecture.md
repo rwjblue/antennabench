@@ -88,11 +88,16 @@ reanalyze a bundle and does not persist output into one. The renderer produces a
 complete deterministic HTML document with embedded CSS, a restrictive content
 security policy, no scripts or external resources, and accessible tables beside
 its CSS visualizations. Comparison availability precedes overlap and missingness,
-slot data-quality, paired-difference, SNR-over-time, and stratum-summary views.
-The report states the fixed right-minus-left orientation and warns that adjacent
-slots do not remove propagation or time confounding. Every report-provided
-string is HTML-escaped; bundle text is never accepted as markup, script, a
-template, or a style value.
+slot data-quality, paired-difference, SNR-over-time, stratum-summary, and
+distance/azimuth path-context views. Geographic views consume the already
+paired rows, preserve every comparison stratum, retain incomplete grid,
+distance, or azimuth facts as `location unavailable`, and show unique-path and
+45-degree display-sector concentration counts. The sectors are presentation
+bins, not goal thresholds or estimates of unobserved directions. The report
+states the fixed right-minus-left orientation and warns that adjacent slots do
+not remove propagation or time confounding. Every report-provided string is
+HTML-escaped; bundle text is never accepted as markup, script, a template, or a
+style value.
 
 ## Alignment
 
