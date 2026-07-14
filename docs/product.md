@@ -24,6 +24,18 @@ The intended workflow is:
 7. Export a portable session bundle.
 8. Generate reports from the bundle.
 
+The planned conductor keeps planned and actual state distinct. A slot points to
+the schedule's intended antenna, while each switch confirmation records the
+actual antenna independently. Missed/bad marks and later corrections append to
+the evidence history instead of rewriting it. Draft, ready, running,
+interrupted/resumed, ended, and abandoned lifecycle states remain durable and
+auditable under
+[Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md).
+
+Manual/no-rig operation is a first-class path. Optional adapters can add
+observed state, but their absence never causes the application to invent an
+actual switch or prevent an operator from conducting a local session.
+
 ## Evidence And Report Honesty
 
 The session bundle preserves the experiment record so later analysis can be

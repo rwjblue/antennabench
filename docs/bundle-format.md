@@ -22,6 +22,20 @@ example.session.wsprabundle/
 
 The implemented schema version is `1`.
 
+Schema version 2 is approved but not yet implemented. In addition to the
+provider-neutral adapter evidence in
+[Decision 0008](decisions/0008-use-provider-neutral-adapter-evidence-in-bundle-v2.md),
+new mutable sessions will use versioned plan generations and a
+`session-state.json` checkpoint that commits one lifecycle state and coherent
+prefix of every append-only stream. Mutation IDs, committed byte lengths,
+record heads, and digests make retry, recovery, active report refresh, and
+export deterministic. The complete persistence and operator-event contract is
+[Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md).
+
+Version 1 is never silently rewritten to gain these semantics. It remains
+readable and losslessly copyable; live mutation requires an explicit v2 upgrade
+to a new `.session.antennabundle` destination.
+
 ## Root Files
 
 - `manifest.json`: schema version, session id, creation time, app version, and

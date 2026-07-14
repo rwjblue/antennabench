@@ -124,6 +124,23 @@ persisted in the bundle. `analysis.json` remains bundle metadata rather than a
 serialized analysis summary or report. Report construction and rendering do
 not change the bundle format or schema version.
 
+## Planned Live-Session Persistence
+
+[Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md)
+defines the future schema-v2 mutation boundary. Complete draft plan generations
+will be staged and validated before one checkpoint selects them. During a run,
+operator, adapter, observation, rig, and propagation evidence will append; a
+small atomically replaced `session-state.json` will identify the one committed
+plan generation and coherent prefix of every stream.
+
+One Rust-owned writer lock, checkpoint/digest comparison, durable mutation IDs,
+and explicit tail recovery prevent cooperative concurrent writes, retry
+duplication, and silent overwrite of external changes. Reports and active
+exports will consume one checkpoint revision rather than racing live files.
+This is an approved design, not implemented behavior: current schema-v1 bundles
+remain static read/report/export inputs and must be upgraded non-destructively
+before a future conductor mutates them.
+
 ## Desktop Shell Boundary
 
 The desktop application is a thin Tauri host around static, framework-free web
