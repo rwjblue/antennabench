@@ -11,12 +11,18 @@ use antennabench_core::{
 use thiserror::Error;
 
 mod inspection;
+mod live;
 mod lossless_copy;
 mod resource;
 mod upgrade;
 mod v2;
 
 pub use inspection::BundleInspection;
+pub use live::{
+    CommitReceiptV2, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
+    LivePersistenceHooks, LivePersistencePoint, LivePlanFile, LiveSessionV2, LiveStreamV2,
+    PlanCommitV2, SystemLivePersistenceHooks,
+};
 pub use lossless_copy::BundleCopyError;
 pub use resource::{
     BundleResourceProfile, CancellationToken, ResourceDiagnostic, ResourceError, ResourceOperation,

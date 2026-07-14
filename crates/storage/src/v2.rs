@@ -250,6 +250,36 @@ impl BundleStore {
         Ok(paths)
     }
 
+    pub(super) fn v2_paths_for_state(
+        &self,
+        files: &BundleFilesV2,
+        state: &antennabench_core::SessionStateV2,
+    ) -> Result<ResolvedBundlePathsV2, BundleStoreError> {
+        let mut paths = self.v2_paths(files)?;
+        if state.active_plan.generation_id.is_empty()
+            || !state
+                .active_plan
+                .generation_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return Err(BundleStoreError::InvalidV2Bundle {
+                message: "active plan generation identity is not a safe path component".into(),
+            });
+        }
+        let generation = self
+            .root()
+            .join("plan-generations")
+            .join(&state.active_plan.generation_id);
+        if generation.is_dir() {
+            paths.station = generation.join("station.json");
+            paths.antennas = generation.join("antennas.json");
+            paths.schedule = generation.join("schedule.json");
+            paths.ensure_unique()?;
+        }
+        Ok(paths)
+    }
+
     pub(super) fn inspect_v2(
         &self,
         mut report: BundleValidationReport,
@@ -288,14 +318,16 @@ impl BundleStore {
                 actual: manifest.schema_version,
             });
         }
-        let paths = self.v2_paths(&manifest.files)?;
+        let bootstrap_paths = self.v2_paths(&manifest.files)?;
+        let session_state = self.read_json_bounded(&bootstrap_paths.session_state, &mut budget)?;
+        let paths = self.v2_paths_for_state(&manifest.files, &session_state)?;
         paths.ensure_readable()?;
         self.inventory_root(ResourceOperation::Read)?;
         inventory_attachment_tree(self, &paths.attachments_dir, ResourceOperation::Read)?;
 
         let bundle = BundleV2Contents {
             manifest,
-            session_state: self.read_json_bounded(&paths.session_state, &mut budget)?,
+            session_state,
             station: self.read_json_bounded(&paths.station, &mut budget)?,
             antennas: self.read_json_bounded(&paths.antennas, &mut budget)?,
             schedule: self.read_json_bounded(&paths.schedule, &mut budget)?,
