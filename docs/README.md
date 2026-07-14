@@ -10,6 +10,8 @@ plans.
 - [Bundle Format](bundle-format.md): session bundle files, records, and
   validation rules.
 - [Development](development.md): local workflow, tests, and repo conventions.
+- [Supply-Chain Updates](supply-chain.md): dependency, Action, tool, and runner
+  review procedure.
 - [Work Tracking](work-tracking.md): how milestones, tracking issues, labels,
   dependencies, human handoffs, and completion evidence fit together.
 - [Roadmap](roadmap.md): current, next, and later work.

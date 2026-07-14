@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "ecosystems": [
+    {
+      "name": "cargo",
+      "manifest_globs": [
+        "Cargo.toml",
+        "apps/*/Cargo.toml",
+        "crates/*/Cargo.toml"
+      ],
+      "lockfile": "Cargo.lock",
+      "update": "dependabot:cargo:/",
+      "policy": "ADR 0012 and deny.toml"
+    }
+  ]
+}

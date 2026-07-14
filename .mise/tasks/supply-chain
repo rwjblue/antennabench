@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Validate immutable CI inputs and dependency maintenance coverage"
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$repo_root"
+
+node --test scripts/validate-supply-chain.test.mjs
+node scripts/validate-supply-chain.mjs

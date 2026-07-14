@@ -3,9 +3,10 @@
 This repo uses Rust, Cargo, and Jujutsu (`jj`).
 
 The desktop shell also uses Tauri 2 and plain JavaScript. Node is used only for
-the frontend's dependency-free state tests and desktop test timing. No Node
-package manifest or lockfile exists. Rust and cargo-tauri are pinned today;
-pinning the Node test runtime is approved by Decision 0012 and tracked by #58.
+the frontend's dependency-free state tests, supply-chain policy validation, and
+desktop test timing. No Node package manifest or lockfile exists. Rust, Node,
+and cargo-tauri are exact Mise pins; Cargo-backed tools are installed with their
+published lockfiles.
 
 ## Version Control
 
@@ -99,24 +100,30 @@ before publication rather than inheriting an accidental application MSRV.
 [Decision 0014](decisions/0014-use-one-pinned-rust-toolchain.md) records the
 rationale for replacing the former dual-toolchain policy.
 
-## Planned Supply-Chain Maintenance
+## Supply-Chain Maintenance
 
 [Decision 0012](decisions/0012-use-combined-supply-chain-maintenance-gates.md)
-selects a combined GitHub and cargo-deny baseline. External Actions will use
-full commit SHAs, Dependabot will propose weekly Cargo and Actions updates,
-pull requests will receive dependency review, and Rust advisory, license,
-source, wildcard, and exception policy will be repository-owned.
+selects a combined GitHub and cargo-deny baseline. External Actions use full
+commit SHAs with release-tag comments. Dependabot proposes weekly Cargo and
+Actions updates, and pull requests receive a read-only dependency review that
+blocks newly introduced moderate-or-higher vulnerabilities.
 
-The decision also selects GitHub-managed Rust/workflow CodeQL, exact Node and
-repository-tool pins, dated GA runner labels, read-only ordinary workflow
-permissions, time-bounded exceptions, and a fresh non-secret supply-chain gate
-before release credentials become reachable.
+The workflow validator rejects mutable Action or container references, moving
+runner aliases, missing read-only permissions, and unowned dependency
+manifests. The exact Node, Rust, cargo-tauri, and Mise workflow pins, dated GA
+runner labels, Dependabot limits, and manifest maintenance policy are checked
+by:
 
-This is approved policy, not current enforcement. Code implementation is
-tracked by [#58](https://github.com/rwjblue/antennabench/issues/58) and
-[#59](https://github.com/rwjblue/antennabench/issues/59). Dependabot alerts,
-CodeQL, Action restrictions, and the main ruleset require the explicit owner
-action in [#60](https://github.com/rwjblue/antennabench/issues/60).
+```bash
+mise run supply-chain
+```
+
+The repository-owned Rust advisory, license, source, wildcard, and exception
+gate is tracked by [#59](https://github.com/rwjblue/antennabench/issues/59).
+Dependabot alerts, CodeQL, Action restrictions, and the main ruleset require
+the explicit owner action in
+[#60](https://github.com/rwjblue/antennabench/issues/60). See
+[Supply-Chain Updates](supply-chain.md) for the review and update procedure.
 
 ## Verification
 
@@ -236,24 +243,18 @@ the runner OS, elapsed seconds, exit status, and bounded phase diagnostics in
 `target/desktop-e2e/last-run.log`. A failed portability job uploads that log for
 seven days when it exists.
 
-The workflow uses the moving `ubuntu-latest`, `macos-latest`, and
-`windows-latest` labels. As of 2026-07-13, GitHub documents the standard public
-`macos-latest` runner as arm64 and `windows-latest` as x64, but those labels and
-images evolve. Green CI proves that the portable contract compiled and passed
-on the exact runner recorded in that workflow log; it does not declare a
-supported release platform or architecture. Release support, artifacts,
-signing, and publication remain separate decisions.
-
-Decision 0012 replaces these moving aliases with dated GA runner labels under
-#58. Until that issue lands, the paragraph above remains the implemented
-behavior.
+The workflow uses dated GA labels: `ubuntu-24.04`, `macos-15`, and
+`windows-2025`. GitHub still updates those managed images in place. Green CI
+proves that the portable contract compiled and passed on the exact image
+recorded in the workflow log; it does not claim bit-for-bit reproducibility or
+declare a supported release platform or architecture. Release support,
+artifacts, signing, and publication remain separate decisions.
 
 ## Desktop Development
 
 The currently supported desktop development platform is macOS. Install Xcode
 Command Line Tools (or Xcode) before building Tauri, then let Mise install the
-pinned Rust and Tauri CLI versions. Node must also be available until #58 adds
-its approved exact Mise pin:
+pinned Rust, Node, and Tauri CLI versions:
 
 ```bash
 xcode-select --install
