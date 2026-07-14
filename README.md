@@ -72,10 +72,8 @@ as project documentation.
 
 ## License
 
-AntennaBench is licensed under either of the following, at your option:
-
-- [Apache License, Version 2.0](LICENSE-APACHE)
-- [MIT License](LICENSE-MIT)
+AntennaBench is licensed under the [Apache License, Version 2.0](LICENSE).
+Copyright 2026 Robert Jackson.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in AntennaBench is licensed under the same terms, without
