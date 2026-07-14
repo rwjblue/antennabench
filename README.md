@@ -27,6 +27,9 @@ Implemented:
 - Conservative in-memory A/B evidence summaries with observation eligibility,
   exclusion reasons, per-antenna/band/slot counts, SNR descriptive statistics,
   and insufficient/weak/moderate evidence-coverage labels.
+- Deterministic paired descriptive data for adjacent A/B slots, with explicit
+  availability, strata, overlap, missingness, order, duplicate/conflict, raw
+  pair, per-path, and equal-path-weight summary facts.
 - Deterministic, in-memory report data derived from one bundle, with session
   context, conservative evidence sections, typed notices, and concrete
   renderer-neutral rows for antenna SNR, band evidence, and slot evidence.

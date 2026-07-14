@@ -263,7 +263,145 @@ fn summarizes_the_minimal_whole_station_fixture() {
             }
           }
         }
-      ]
+      ],
+      "comparison": {
+        "availability": "no_eligible_blocks",
+        "left_label": "A",
+        "right_label": "B",
+        "delta_orientation": {
+          "minuend_label": "B",
+          "subtrahend_label": "A"
+        },
+        "diagnostics": {
+          "block_count": 2,
+          "eligible_block_count": 0,
+          "invalid_block_count": 2,
+          "left_then_right_block_count": 0,
+          "right_then_left_block_count": 0,
+          "paired_row_count": 0,
+          "unique_path_count": 0,
+          "unmatched_left_count": 0,
+          "unmatched_right_count": 0,
+          "missing_snr_left_count": 0,
+          "missing_snr_right_count": 0,
+          "ambiguous_path_count": 0,
+          "exact_duplicate_count": 0,
+          "conflicting_duplicate_group_count": 0,
+          "excluded_observation_count": 3
+        },
+        "blocks": [
+          {
+            "block_index": 0,
+            "band": "20m",
+            "first_slot_id": "slot-001",
+            "first_sequence_number": 1,
+            "first_starts_at": "2026-07-09T20:00:00Z",
+            "first_label": "A",
+            "first_status": "switched",
+            "second_slot_id": "slot-002",
+            "second_sequence_number": 2,
+            "second_starts_at": "2026-07-09T20:02:00Z",
+            "second_label": null,
+            "second_status": "bad",
+            "order": null,
+            "eligibility": "missing_actual_label"
+          },
+          {
+            "block_index": 1,
+            "band": "20m",
+            "first_slot_id": "slot-003",
+            "first_sequence_number": 3,
+            "first_starts_at": "2026-07-09T20:04:00Z",
+            "first_label": null,
+            "first_status": "missed",
+            "second_slot_id": "slot-004",
+            "second_sequence_number": 4,
+            "second_starts_at": "2026-07-09T20:06:00Z",
+            "second_label": "B",
+            "second_status": "late_switch",
+            "order": null,
+            "eligibility": "missing_actual_label"
+          }
+        ],
+        "overlap_rows": [],
+        "timeline_rows": [
+          {
+            "block_index": 0,
+            "block_eligible": false,
+            "sequence_number": 1,
+            "slot_id": "slot-001",
+            "starts_at": "2026-07-09T20:00:00Z",
+            "band": "20m",
+            "actual_label": "A",
+            "side": "left",
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 0,
+            "missing_snr_count": 0,
+            "ambiguous_path_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0
+          },
+          {
+            "block_index": 0,
+            "block_eligible": false,
+            "sequence_number": 2,
+            "slot_id": "slot-002",
+            "starts_at": "2026-07-09T20:02:00Z",
+            "band": "20m",
+            "actual_label": null,
+            "side": null,
+            "status": "bad",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "missing_snr_count": 0,
+            "ambiguous_path_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0
+          },
+          {
+            "block_index": 1,
+            "block_eligible": false,
+            "sequence_number": 3,
+            "slot_id": "slot-003",
+            "starts_at": "2026-07-09T20:04:00Z",
+            "band": "20m",
+            "actual_label": null,
+            "side": null,
+            "status": "missed",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "missing_snr_count": 0,
+            "ambiguous_path_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0
+          },
+          {
+            "block_index": 1,
+            "block_eligible": false,
+            "sequence_number": 4,
+            "slot_id": "slot-004",
+            "starts_at": "2026-07-09T20:06:00Z",
+            "band": "20m",
+            "actual_label": "B",
+            "side": "right",
+            "status": "late_switch",
+            "total_observation_count": 2,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 1,
+            "missing_snr_count": 0,
+            "ambiguous_path_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0
+          }
+        ],
+        "paired_rows": [],
+        "path_summaries": [],
+        "strata": []
+      }
     }
     "#);
 }
@@ -459,7 +597,127 @@ fn summarizes_only_observations_from_the_wsjtx_hardening_fixture() {
             "snr": null
           }
         }
-      ]
+      ],
+      "comparison": {
+        "availability": "no_matched_paths",
+        "left_label": "A",
+        "right_label": "B",
+        "delta_orientation": {
+          "minuend_label": "B",
+          "subtrahend_label": "A"
+        },
+        "diagnostics": {
+          "block_count": 2,
+          "eligible_block_count": 1,
+          "invalid_block_count": 1,
+          "left_then_right_block_count": 1,
+          "right_then_left_block_count": 0,
+          "paired_row_count": 0,
+          "unique_path_count": 0,
+          "unmatched_left_count": 0,
+          "unmatched_right_count": 0,
+          "missing_snr_left_count": 0,
+          "missing_snr_right_count": 0,
+          "ambiguous_path_count": 0,
+          "exact_duplicate_count": 0,
+          "conflicting_duplicate_group_count": 0,
+          "excluded_observation_count": 3
+        },
+        "blocks": [
+          {
+            "block_index": 0,
+            "band": "20m",
+            "first_slot_id": "slot-001",
+            "first_sequence_number": 1,
+            "first_starts_at": "2026-07-09T19:00:00Z",
+            "first_label": "A",
+            "first_status": "switched",
+            "second_slot_id": "slot-002",
+            "second_sequence_number": 2,
+            "second_starts_at": "2026-07-09T19:02:00Z",
+            "second_label": "B",
+            "second_status": "switched",
+            "order": "left_then_right",
+            "eligibility": "eligible"
+          },
+          {
+            "block_index": 1,
+            "band": "20m",
+            "first_slot_id": "slot-003",
+            "first_sequence_number": 3,
+            "first_starts_at": "2026-07-09T19:26:00Z",
+            "first_label": "A",
+            "first_status": "switched",
+            "second_slot_id": null,
+            "second_sequence_number": null,
+            "second_starts_at": null,
+            "second_label": null,
+            "second_status": null,
+            "order": null,
+            "eligibility": "incomplete_same_band_run"
+          }
+        ],
+        "overlap_rows": [],
+        "timeline_rows": [
+          {
+            "block_index": 0,
+            "block_eligible": true,
+            "sequence_number": 1,
+            "slot_id": "slot-001",
+            "starts_at": "2026-07-09T19:00:00Z",
+            "band": "20m",
+            "actual_label": "A",
+            "side": "left",
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "missing_snr_count": 0,
+            "ambiguous_path_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0
+          },
+          {
+            "block_index": 0,
+            "block_eligible": true,
+            "sequence_number": 2,
+            "slot_id": "slot-002",
+            "starts_at": "2026-07-09T19:02:00Z",
+            "band": "20m",
+            "actual_label": "B",
+            "side": "right",
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "missing_snr_count": 0,
+            "ambiguous_path_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0
+          },
+          {
+            "block_index": 1,
+            "block_eligible": false,
+            "sequence_number": 3,
+            "slot_id": "slot-003",
+            "starts_at": "2026-07-09T19:26:00Z",
+            "band": "20m",
+            "actual_label": "A",
+            "side": "left",
+            "status": "switched",
+            "total_observation_count": 0,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 0,
+            "missing_snr_count": 0,
+            "ambiguous_path_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0
+          }
+        ],
+        "paired_rows": [],
+        "path_summaries": [],
+        "strata": []
+      }
     }
     "#);
 }

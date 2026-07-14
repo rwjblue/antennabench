@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use antennabench_analysis::{
-    summarize_bundle, EvidenceQuality, ObservationExclusionReason, ObservationKindCount,
+    summarize_bundle, ComparisonAvailability, EvidenceQuality, ObservationExclusionReason,
+    ObservationKindCount,
 };
 use antennabench_core::{
     normalize_bundle, validate_bundle, AnalysisStatus, Band, ObservationKind, OperatorEventType,
@@ -100,6 +101,11 @@ fn canonical_sample_exercises_the_complete_report_input_pipeline() {
         .iter()
         .all(|antenna| antenna.evidence_quality == EvidenceQuality::Moderate));
     assert_eq!(
+        summary.comparison.availability,
+        ComparisonAvailability::NoMatchedPaths
+    );
+    assert!(summary.comparison.paired_rows.is_empty());
+    assert_eq!(
         summary
             .bands
             .iter()
@@ -157,6 +163,23 @@ fn canonical_sample_exercises_the_complete_report_input_pipeline() {
     assert_eq!(report.chart_data.antenna_snr.len(), 2);
     assert_eq!(report.chart_data.band_evidence_counts.len(), 2);
     assert_eq!(report.chart_data.slot_evidence_counts.len(), 12);
+    assert_eq!(
+        report.comparison.availability,
+        summary.comparison.availability
+    );
+    assert_eq!(
+        report.comparison.diagnostics,
+        summary.comparison.diagnostics
+    );
+    assert_eq!(report.comparison.blocks, summary.comparison.blocks);
+    assert_eq!(
+        report.comparison.timeline_rows,
+        summary.comparison.timeline_rows
+    );
+    assert_eq!(
+        report.comparison.paired_rows,
+        summary.comparison.paired_rows
+    );
     assert!(report.notices.is_empty());
 }
 

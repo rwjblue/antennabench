@@ -1,3 +1,4 @@
+mod comparison;
 mod model;
 mod summary;
 

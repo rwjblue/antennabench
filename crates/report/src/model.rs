@@ -1,5 +1,7 @@
 use antennabench_analysis::{
-    AnalysisError, EvidenceQuality, ExclusionCount, ObservationCounts, SnrStatistics,
+    AnalysisError, ComparisonAvailability, ComparisonBlock, ComparisonDiagnostics,
+    ComparisonTimelineRow, DeltaOrientation, EvidenceQuality, ExclusionCount, ObservationCounts,
+    PairedObservationRow, PairedPathSummary, PairedStratumSummary, PathOverlapRow, SnrStatistics,
 };
 use antennabench_core::{AlignedSlotStatus, Antenna, Band, ExperimentMode, SessionGoal};
 use chrono::{DateTime, Utc};
@@ -10,8 +12,24 @@ use thiserror::Error;
 pub struct SessionReport {
     pub context: SessionContext,
     pub evidence: EvidenceSections,
+    pub comparison: ReportComparisonData,
     pub chart_data: ReportChartData,
     pub notices: Vec<ReportNotice>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportComparisonData {
+    pub availability: ComparisonAvailability,
+    pub left_label: Option<String>,
+    pub right_label: Option<String>,
+    pub delta_orientation: Option<DeltaOrientation>,
+    pub diagnostics: ComparisonDiagnostics,
+    pub blocks: Vec<ComparisonBlock>,
+    pub overlap_rows: Vec<PathOverlapRow>,
+    pub timeline_rows: Vec<ComparisonTimelineRow>,
+    pub paired_rows: Vec<PairedObservationRow>,
+    pub path_summaries: Vec<PairedPathSummary>,
+    pub strata: Vec<PairedStratumSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

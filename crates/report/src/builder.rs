@@ -1,15 +1,16 @@
 use antennabench_analysis::{
     summarize_bundle, AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary,
-    EvidenceSummary, ObservationKindCount, SlotEvidenceSummary,
+    EvidenceSummary, ObservationKindCount, PairedComparisonAnalysis, SlotEvidenceSummary,
 };
 use antennabench_core::{BundleContents, ObservationKind, PlannedSlot};
 use chrono::Duration;
 
 use crate::{
     AntennaEvidenceSection, AntennaSnrRow, BandEvidenceCountRow, BandEvidenceSection,
-    EvidenceSections, ReportChartData, ReportError, ReportEvidenceSummary, ReportNotice,
-    ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange, SessionContext, SessionReport,
-    SlotEvidenceCountRow, SlotEvidenceSection, StationContext, UsableObservationKindCounts,
+    EvidenceSections, ReportChartData, ReportComparisonData, ReportError, ReportEvidenceSummary,
+    ReportNotice, ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange, SessionContext,
+    SessionReport, SlotEvidenceCountRow, SlotEvidenceSection, StationContext,
+    UsableObservationKindCounts,
 };
 
 pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportError> {
@@ -20,6 +21,7 @@ pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportErro
         antennas,
         bands,
         slots,
+        comparison,
     } = summarize_bundle(bundle)?;
 
     let context = build_context(bundle, &bands);
@@ -36,9 +38,26 @@ pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportErro
     Ok(SessionReport {
         context,
         evidence,
+        comparison: project_comparison(comparison),
         chart_data,
         notices,
     })
+}
+
+fn project_comparison(comparison: PairedComparisonAnalysis) -> ReportComparisonData {
+    ReportComparisonData {
+        availability: comparison.availability,
+        left_label: comparison.left_label,
+        right_label: comparison.right_label,
+        delta_orientation: comparison.delta_orientation,
+        diagnostics: comparison.diagnostics,
+        blocks: comparison.blocks,
+        overlap_rows: comparison.overlap_rows,
+        timeline_rows: comparison.timeline_rows,
+        paired_rows: comparison.paired_rows,
+        path_summaries: comparison.path_summaries,
+        strata: comparison.strata,
+    }
 }
 
 fn build_context(

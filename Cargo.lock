@@ -47,8 +47,10 @@ version = "0.1.0"
 dependencies = [
  "antennabench-core",
  "antennabench-storage",
+ "chrono",
  "insta",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

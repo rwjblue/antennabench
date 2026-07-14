@@ -61,27 +61,27 @@ Those labels measure descriptive evidence coverage from usable-observation and
 contributing-slot counts; they are not comparative evidence.
 
 [Decision 0004](decisions/0004-paired-descriptive-analysis-precedes-conclusions.md)
-defines the next analysis boundary. Paired comparison facts must distinguish
-transmit and receive paths; remain stratified by band, observation kind, and
-source; preserve unmatched and missing evidence; and expose time/order and
-repeated-path diagnostics. Analysis may derive deterministic paired differences
-and per-path descriptive summaries, but uncertainty intervals and automated
-conclusions remain deferred. The model work is tracked by
-[#23](https://github.com/rwjblue/antennabench/issues/23), with initial rendering
-tracked separately by [#25](https://github.com/rwjblue/antennabench/issues/25).
+defines the paired descriptive boundary. Analysis partitions uninterrupted
+same-band runs into non-overlapping adjacent two-slot blocks, fixes delta
+orientation from the first two scheduled labels, and distinguishes transmit and
+receive paths. Paired rows remain stratified by band, observation kind, and
+record source; unmatched sides, missing SNR, ambiguous paths, exact duplicates,
+conflicts, invalid blocks, time, and order stay explicit. Repeated rows are
+reduced to a per-path median before the stratum median so prolific paths do not
+receive extra headline weight. Uncertainty intervals and automated conclusions
+remain deferred.
 
 Report construction accepts one `BundleContents` value and invokes analysis
 internally, preventing callers from pairing bundle context with a summary from
 another bundle. It deterministically projects session context, conservative
-evidence sections, typed notices, and concrete chart-ready rows for antenna SNR,
-band evidence counts, and slot usable/excluded counts. The model is serializable
-but renderer-neutral: it contains no generated prose, winner logic, generic
-chart configuration, or rendering output.
-
-Future paired rows, comparison availability, overlap counts, and quality
-diagnostics also belong at this renderer-neutral boundary. The renderer may
-explain and visualize those typed facts, but it must not infer a conclusion from
-chart shape, raw antenna summaries, or evidence-coverage labels.
+evidence sections, typed notices, paired comparison availability and
+diagnostics, and concrete chart-ready rows for antenna SNR, band evidence, slot
+evidence, overlap, data-quality timelines, paired differences, and SNR over
+time. The model is serializable but renderer-neutral: it contains no generated
+prose, winner logic, generic chart configuration, or rendering output. The
+renderer may explain and visualize those typed facts, but it must not infer a
+conclusion from chart shape, raw antenna summaries, paired descriptive centers,
+or evidence-coverage labels.
 
 `render_standalone_html()` accepts only a `SessionReport`. It does not read or
 reanalyze a bundle and does not persist output into one. The renderer produces a

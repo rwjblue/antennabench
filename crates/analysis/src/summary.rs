@@ -6,9 +6,9 @@ use antennabench_core::{
 };
 
 use crate::{
-    AnalysisError, AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary, EvidenceQuality,
-    EvidenceSummary, ExclusionCount, ObservationCounts, ObservationExclusionReason,
-    ObservationKindCount, SlotEvidenceSummary, SnrStatistics,
+    comparison::analyze_paired_comparison, AnalysisError, AnalysisSummary, AntennaEvidenceSummary,
+    BandEvidenceSummary, EvidenceQuality, EvidenceSummary, ExclusionCount, ObservationCounts,
+    ObservationExclusionReason, ObservationKindCount, SlotEvidenceSummary, SnrStatistics,
 };
 
 const MINIMUM_USABLE_CONFIDENCE: f32 = 0.70;
@@ -115,6 +115,7 @@ pub fn summarize_bundle(bundle: &BundleContents) -> Result<AnalysisSummary, Anal
         .map(|slot| summarize_slot(slot, &observations))
         .collect();
     let evidence_quality = session_evidence_quality(bundle, &antennas);
+    let comparison = analyze_paired_comparison(bundle, &alignment.slots, &observations);
 
     Ok(AnalysisSummary {
         session_id: bundle.manifest.session_id.clone(),
@@ -123,6 +124,7 @@ pub fn summarize_bundle(bundle: &BundleContents) -> Result<AnalysisSummary, Anal
         antennas,
         bands,
         slots,
+        comparison,
     })
 }
 
@@ -194,14 +196,14 @@ fn evidence_quality(usable: usize, contributing_slots: usize) -> EvidenceQuality
 }
 
 #[derive(Clone, Copy)]
-struct ClassifiedObservation<'a> {
-    observation: &'a ObservationRecord,
-    assignment: &'a ObservationSlotAssignment,
-    disposition: ObservationDisposition,
+pub(crate) struct ClassifiedObservation<'a> {
+    pub(crate) observation: &'a ObservationRecord,
+    pub(crate) assignment: &'a ObservationSlotAssignment,
+    pub(crate) disposition: ObservationDisposition,
 }
 
 #[derive(Clone, Copy)]
-enum ObservationDisposition {
+pub(crate) enum ObservationDisposition {
     Usable,
     Excluded(ObservationExclusionReason),
 }
