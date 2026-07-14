@@ -188,6 +188,16 @@ cooperative cancellation. Storage integration tests keep lossless copy separate
 from typed projection and verify rollback, unsafe-entry rejection, v1/v2 reopen,
 and byte identity.
 
+`crates/storage/tests/live_persistence.rs` is the schema-v2 durability matrix.
+It uses real OS file locks and replacement on the host platform plus injected
+clock, ID, and failure hooks. The test visits every event-stream and checkpoint
+write/sync/replace/verify boundary and every plan-generation file boundary,
+then reopens the previous or complete next revision. Focused cases cover
+cooperative and ignored locks, external-change freeze, raw-plus-normalized
+batches, lost responses and idempotent retry, complete/torn/incomplete and
+duplicate tails, current/previous checkpoint selection, committed corruption,
+recovery attachments, interruption detection, and checkpointed export.
+
 `crates/wsjtx/tests/all_wspr_import.rs`, `crates/wsjtx/tests/live_udp.rs`, and
 `crates/propagation/tests/acquisition.rs` pin the adapter portion of that same
 profile. They exercise exact and first-over offline source, line, and record

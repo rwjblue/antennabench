@@ -21,7 +21,8 @@ pub use inspection::BundleInspection;
 pub use live::{
     CommitReceiptV2, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
     LivePersistenceHooks, LivePersistencePoint, LivePlanFile, LiveSessionV2, LiveStreamV2,
-    PlanCommitV2, SystemLivePersistenceHooks,
+    PlanCommitV2, RecoveryArtifactV2, RecoveryDispositionV2, RecoveryReportV2,
+    SystemLivePersistenceHooks,
 };
 pub use lossless_copy::BundleCopyError;
 pub use resource::{

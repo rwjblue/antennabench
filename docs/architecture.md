@@ -200,28 +200,30 @@ lossless export independent from report eligibility. Hosted upload and archive
 limits remain a separate decision in
 [#11](https://github.com/rwjblue/antennabench/issues/11).
 
-## Schema-V2 Foundation And Planned Live Persistence
+## Schema-V2 Live Persistence
 
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md)
 defines the schema-v2 mutation boundary. The implemented v2 wire foundation
 includes provider-neutral evidence, mutation member envelopes, and the complete
-`session-state.json` checkpoint shape. Complete draft plan generations
-will be staged and validated before one checkpoint selects them. During a run,
-operator, adapter, observation, rig, and propagation evidence will append; a
-small atomically replaced `session-state.json` will identify the one committed
+`session-state.json` checkpoint shape. Complete draft plan generations are
+staged, validated, and synchronized before one checkpoint selects them. During
+a run, operator, adapter, observation, rig, and propagation evidence append; a
+small atomically replaced `session-state.json` identifies the one committed
 plan generation and coherent prefix of every stream.
 
 One Rust-owned writer lock, checkpoint/digest comparison, durable mutation IDs,
 and explicit tail recovery prevent cooperative concurrent writes, retry
-duplication, and silent overwrite of external changes. Reports and active
-exports will consume one checkpoint revision rather than racing live files.
+duplication, and silent overwrite of external changes. Checkpointed reads and
+exports consume one revision rather than racing live files.
 Static v2 creation, read, attachment verification, lossless copy, and explicit
 v1 upgrade are implemented. Pure schema-v2 lifecycle validation, append-ordered
 correction reduction, explicit actual-antenna projection, and conservative
 conflict alignment are implemented by #54. Atomic append/promotion, locking,
-recovery, and checkpoint-aware active export remain in #53. Schema-v1 bundles
-remain static read/report/export inputs and must be upgraded non-destructively
-before a future conductor mutates them.
+current/previous checkpoint recovery, recovery attachments, and
+checkpoint-aware export are implemented by #53. Schema-v1 bundles remain static
+read/report/export inputs and must be upgraded non-destructively before a
+conductor mutates them. The exact boundary and filesystem limitations are in
+[Schema-V2 Live Persistence And Recovery](live-persistence.md).
 
 ## Planned Conductor Delivery
 

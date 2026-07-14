@@ -1,22 +1,27 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use antennabench_core::{
     validate_bundle_report, validate_lifecycle_transition_v2, validate_operator_event_append_v2,
-    AdapterRecordV2, AntennasFile, BundleV2Contents, BundleValidationProfile, ObservationRecordV2,
-    OperatorEventPayloadV2, OperatorEventV2, PlanGenerationV2, PropagationRecordV2, RecordMetaV2,
-    RigRecordV2, Schedule, SessionLifecycleV2, SessionStateV2, Station, SCHEMA_VERSION_V2,
+    AdapterRecordV2, AnalysisFile, AntennasFile, AttachmentReference, BundleManifestV2,
+    BundleV2Contents, BundleValidationProfile, EventTimeBasisV2, MutationMember,
+    ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2, PlanGenerationV2,
+    PropagationRecordV2, Provenance, RecordMetaV2, RecordSource, RigRecordV2, Schedule,
+    SessionLifecycleV2, SessionStateV2, Station, StreamCheckpointV2, SCHEMA_VERSION_V2,
 };
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
+    resource::{read_bounded, ResourceOperation},
     v2::{checkpoint_for_bytes, serialize_json, sha256_hex, ResolvedBundlePathsV2},
     BundleStore, BundleStoreError,
 };
@@ -24,6 +29,7 @@ use crate::{
 const LOCK_FILE: &str = ".antennabench.lock";
 const CHECKPOINT_TEMP: &str = ".session-state.next.json";
 const CHECKPOINT_PREVIOUS: &str = "session-state.previous.json";
+const CHECKPOINT_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LiveStreamV2 {
@@ -51,6 +57,7 @@ pub enum LivePlanFile {
     Station,
     Antennas,
     Schedule,
+    GenerationMetadata,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -194,6 +201,52 @@ pub struct CommitReceiptV2 {
     pub idempotent: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryArtifactV2 {
+    pub source: String,
+    pub committed_offset: u64,
+    pub diagnosis: String,
+    pub raw_attachment: AttachmentReference,
+    pub metadata_attachment: AttachmentReference,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryDispositionV2 {
+    Clean,
+    RolledForward,
+    RolledBack,
+    IdempotentTailRemoved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryReportV2 {
+    pub starting_revision: u64,
+    pub recovered_revision: u64,
+    pub final_revision: u64,
+    pub disposition: RecoveryDispositionV2,
+    pub artifacts: Vec<RecoveryArtifactV2>,
+    pub interruption: Option<CommitReceiptV2>,
+}
+
+#[derive(Debug, Serialize)]
+struct RecoveryArtifactMetadataV2<'a> {
+    schema_version: u16,
+    session_id: &'a str,
+    source: &'a str,
+    committed_offset: u64,
+    detected_at: DateTime<Utc>,
+    diagnosis: &'a str,
+    raw_attachment: &'a AttachmentReference,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PlanGenerationMetadataV2 {
+    schema_version: u16,
+    session_id: String,
+    base_revision: u64,
+    generation: PlanGenerationV2,
+}
+
 #[derive(Debug, Error)]
 pub enum LivePersistenceError {
     #[error(transparent)]
@@ -247,6 +300,93 @@ impl std::fmt::Debug for LiveSessionV2 {
 }
 
 impl BundleStore {
+    pub fn read_v2_checkpointed(&self) -> Result<BundleV2Contents, LivePersistenceError> {
+        let lock_path = self.root().join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|source| live_io("open snapshot lock", &lock_path, source))?;
+        match lock.try_lock_shared() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
+            Err(fs::TryLockError::Error(source)) => {
+                return Err(LivePersistenceError::Capability {
+                    message: format!("shared OS file locking failed: {source}"),
+                })
+            }
+        }
+        load_checkpointed_bundle(self)
+    }
+
+    pub fn export_v2_checkpointed_to(
+        &self,
+        destination: impl AsRef<Path>,
+    ) -> Result<BundleStore, LivePersistenceError> {
+        let lock_path = self.root().join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|source| live_io("open checkpointed export lock", &lock_path, source))?;
+        match lock.try_lock_shared() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
+            Err(fs::TryLockError::Error(source)) => {
+                return Err(LivePersistenceError::Capability {
+                    message: format!("shared export locking failed: {source}"),
+                })
+            }
+        }
+
+        let bundle = load_checkpointed_bundle(self)?;
+        let source_paths =
+            self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+        let destination_store = BundleStore::new(destination);
+        let referenced = bundle
+            .adapter_records
+            .iter()
+            .filter_map(|record| match &record.input {
+                antennabench_core::AdapterInput::Attachment { attachment } => {
+                    Some((attachment.sha256.clone(), attachment.clone()))
+                }
+                antennabench_core::AdapterInput::Inline { .. } => None,
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut referenced_attachments = Vec::new();
+        for reference in referenced.into_values() {
+            referenced_attachments.push(crate::v2::BundleAttachment {
+                bytes: self.read_attachment(&reference)?,
+                reference,
+            });
+        }
+        let result = (|| {
+            if referenced_attachments.is_empty() {
+                destination_store.write_v2(&bundle)?;
+            } else {
+                destination_store.write_v2_with_attachments(&bundle, &referenced_attachments)?;
+            }
+            copy_checkpointed_attachments(
+                self,
+                &source_paths.attachments_dir,
+                &destination_store
+                    .v2_paths(&bundle.manifest.files)?
+                    .attachments_dir,
+            )?;
+            destination_store.read_v2()?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(error);
+        }
+        Ok(destination_store)
+    }
+
     pub fn open_v2_writer(&self) -> Result<LiveSessionV2, LivePersistenceError> {
         self.open_v2_writer_with_hooks(Arc::new(SystemLivePersistenceHooks))
     }
@@ -283,7 +423,7 @@ impl BundleStore {
         })?;
         let bundle = self.read_v2()?;
         let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
-        verify_exact_checkpoint(&bundle.session_state, &paths)?;
+        verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
         Ok(LiveSessionV2 {
             store: self.clone(),
             _lock: lock,
@@ -291,6 +431,183 @@ impl BundleStore {
             bundle,
             paths,
             frozen: false,
+        })
+    }
+
+    pub fn recover_v2(&self) -> Result<RecoveryReportV2, LivePersistenceError> {
+        self.recover_v2_with_hooks(Arc::new(SystemLivePersistenceHooks))
+    }
+
+    pub fn recover_v2_with_hooks(
+        &self,
+        hooks: Arc<dyn LivePersistenceHooks>,
+    ) -> Result<RecoveryReportV2, LivePersistenceError> {
+        if !self.root().is_dir() {
+            return Err(LivePersistenceError::Capability {
+                message: "bundle root is not a regular local directory".into(),
+            });
+        }
+        let lock_path = self.root().join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|source| live_io("open recovery lock", &lock_path, source))?;
+        match lock.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
+            Err(fs::TryLockError::Error(source)) => {
+                return Err(LivePersistenceError::Capability {
+                    message: format!("OS file locking failed during recovery: {source}"),
+                })
+            }
+        }
+
+        let (mut bundle, restore_selected_checkpoint) = load_recovery_bundle(self)?;
+        let starting_revision = bundle.session_state.revision;
+        let mut paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+        if restore_selected_checkpoint {
+            commit_checkpoint(
+                self.root(),
+                &paths.session_state,
+                &bundle.session_state,
+                hooks.as_ref(),
+            )?;
+        }
+        let mut artifacts = Vec::new();
+        let plan_disposition = recover_pending_plan_generation(
+            self,
+            &mut bundle,
+            &mut paths,
+            &mut artifacts,
+            hooks.as_ref(),
+        )?;
+        let tails = read_stream_tails(self, &bundle.session_state, &paths)?;
+        let disposition;
+
+        if tails.iter().all(|tail| tail.bytes.is_empty()) {
+            disposition = plan_disposition.unwrap_or(RecoveryDispositionV2::Clean);
+        } else {
+            match parse_tail_mutation(&bundle, &tails) {
+                Ok(mutation) => {
+                    if let Some(existing) = committed_mutation(&bundle, &mutation.mutation_id) {
+                        if !same_business_members(&existing, &mutation.members) {
+                            let diagnosis = format!(
+                                "tail reuses committed mutation ID {} with conflicting content",
+                                mutation.mutation_id
+                            );
+                            artifacts.extend(preserve_tails(
+                                self,
+                                &bundle,
+                                &paths,
+                                &tails,
+                                &diagnosis,
+                                hooks.now(),
+                            )?);
+                            truncate_tails(&bundle.session_state, &paths)?;
+                            disposition = RecoveryDispositionV2::RolledBack;
+                        } else {
+                            truncate_tails(&bundle.session_state, &paths)?;
+                            disposition = RecoveryDispositionV2::IdempotentTailRemoved;
+                        }
+                    } else {
+                        let next_lifecycle = validate_mutation(&bundle, &mutation)?;
+                        for member in mutation.members.clone() {
+                            member.append_to(&mut bundle);
+                        }
+                        let mut next = checkpoint_from_paths(self, &bundle, &paths)?;
+                        next.revision = next.revision.checked_add(1).ok_or_else(|| {
+                            LivePersistenceError::CheckpointVerification {
+                                message: "checkpoint revision overflowed during recovery".into(),
+                            }
+                        })?;
+                        next.lifecycle = next_lifecycle;
+                        next.last_committed_mutation_id = Some(mutation.mutation_id);
+                        commit_checkpoint(
+                            self.root(),
+                            &paths.session_state,
+                            &next,
+                            hooks.as_ref(),
+                        )?;
+                        bundle.session_state = next;
+                        disposition = RecoveryDispositionV2::RolledForward;
+                    }
+                }
+                Err(diagnosis) => {
+                    artifacts.extend(preserve_tails(
+                        self,
+                        &bundle,
+                        &paths,
+                        &tails,
+                        &diagnosis,
+                        hooks.now(),
+                    )?);
+                    truncate_tails(&bundle.session_state, &paths)?;
+                    disposition = RecoveryDispositionV2::RolledBack;
+                }
+            }
+        }
+
+        recover_checkpoint_temp(self, &bundle, &paths, &mut artifacts, hooks.now())?;
+        let recovered_revision = bundle.session_state.revision;
+        paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+        verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
+
+        let mut session = LiveSessionV2 {
+            store: self.clone(),
+            _lock: lock,
+            hooks,
+            bundle,
+            paths,
+            frozen: false,
+        };
+        let interruption = if session.bundle.session_state.lifecycle == SessionLifecycleV2::Running
+        {
+            let revision = session.bundle.session_state.revision;
+            let event_id = session.allocate_id("event");
+            let mutation_id = session.allocate_id("mutation");
+            let occurred_at = session.hooks.now();
+            Some(session.append(LiveMutationV2 {
+                expected_revision: revision,
+                mutation_id: mutation_id.clone(),
+                members: vec![LiveMutationMemberV2::Event(OperatorEventV2 {
+                    meta: RecordMetaV2 {
+                        schema_version: SCHEMA_VERSION_V2,
+                        session_id: session.bundle.manifest.session_id.clone(),
+                        recorded_at: occurred_at,
+                        provenance: Provenance::from_legacy(
+                            RecordSource::Derived,
+                            env!("CARGO_PKG_VERSION"),
+                        ),
+                        mutation: MutationMember {
+                            mutation_id,
+                            member_index: 0,
+                            member_count: 1,
+                        },
+                    },
+                    event_id,
+                    occurred_at,
+                    time_basis: EventTimeBasisV2::RecoverySystem,
+                    uncertainty_seconds: None,
+                    slot_id: None,
+                    payload: OperatorEventPayloadV2::InterruptionDetected {
+                        reason: Some("recovery opened a session left running".into()),
+                    },
+                })],
+            })?)
+        } else {
+            None
+        };
+        let final_revision = session.bundle.session_state.revision;
+        Ok(RecoveryReportV2 {
+            starting_revision,
+            recovered_revision,
+            final_revision,
+            disposition,
+            artifacts,
+            interruption,
         })
     }
 }
@@ -348,6 +665,7 @@ impl LiveSessionV2 {
                 message: format!("record serialization failed: {source}"),
             })?;
         serialized.sort_by_key(|(stream, _)| *stream);
+        preflight_live_budget(&self.store, &self.bundle.session_state, &serialized)?;
 
         let baseline = self.bundle.session_state.clone();
         let operation = (|| {
@@ -364,7 +682,7 @@ impl LiveSessionV2 {
             for member in mutation.members.clone() {
                 member.append_to(&mut next_bundle);
             }
-            let mut next = checkpoint_from_paths(&next_bundle, &self.paths)?;
+            let mut next = checkpoint_from_paths(&self.store, &next_bundle, &self.paths)?;
             next.revision = baseline.revision.checked_add(1).ok_or_else(|| {
                 LivePersistenceError::InvalidMutation {
                     message: "checkpoint revision overflowed".into(),
@@ -406,6 +724,21 @@ impl LiveSessionV2 {
     ) -> Result<CommitReceiptV2, LivePersistenceError> {
         self.ensure_mutable()?;
         self.refresh_if_advanced()?;
+        if self.bundle.session_state.active_plan.generation_id == plan.generation_id {
+            if self.bundle.station == plan.station
+                && self.bundle.antennas == plan.antennas
+                && self.bundle.schedule == plan.schedule
+            {
+                return Ok(CommitReceiptV2 {
+                    revision: self.bundle.session_state.revision,
+                    mutation_id: format!("plan:{}", plan.generation_id),
+                    idempotent: true,
+                });
+            }
+            return Err(LivePersistenceError::MutationConflict {
+                mutation_id: format!("plan:{}", plan.generation_id),
+            });
+        }
         if plan.expected_revision != self.bundle.session_state.revision {
             return Err(LivePersistenceError::StaleRevision {
                 expected: plan.expected_revision,
@@ -484,6 +817,19 @@ impl LiveSessionV2 {
         ] {
             write_plan_file(&path, kind, &bytes, self.hooks.as_ref())?;
         }
+        let generation_metadata = serialize_json(&PlanGenerationMetadataV2 {
+            schema_version: SCHEMA_VERSION_V2,
+            session_id: self.bundle.manifest.session_id.clone(),
+            base_revision: self.bundle.session_state.revision,
+            generation: generation.clone(),
+        })
+        .map_err(invalid_serialization)?;
+        write_plan_file(
+            &generation_dir.join("generation.json"),
+            LivePlanFile::GenerationMetadata,
+            &generation_metadata,
+            self.hooks.as_ref(),
+        )?;
         sync_directory(&generation_dir)
             .map_err(|source| live_io("synchronize plan generation", &generation_dir, source))?;
 
@@ -497,12 +843,23 @@ impl LiveSessionV2 {
         next.lifecycle = SessionLifecycleV2::Ready;
         next.active_plan = generation;
         next.last_committed_mutation_id = Some(format!("plan:{}", plan.generation_id));
-        commit_checkpoint(
+        let baseline_revision = self.bundle.session_state.revision;
+        if let Err(error) = commit_checkpoint(
             self.store.root(),
             &self.paths.session_state,
             &next,
             self.hooks.as_ref(),
-        )?;
+        ) {
+            if read_state(&self.paths.session_state)
+                .is_ok_and(|state| state.revision > baseline_revision)
+            {
+                self.bundle = self.store.read_v2()?;
+                self.paths = self
+                    .store
+                    .v2_paths_for_state(&self.bundle.manifest.files, &self.bundle.session_state)?;
+            }
+            return Err(error);
+        }
         candidate.session_state = next;
         self.bundle = candidate;
         self.paths = self
@@ -554,7 +911,7 @@ impl LiveSessionV2 {
                 message: "session-state.json changed since the writer snapshot".into(),
             });
         }
-        if let Err(error) = verify_exact_checkpoint(&actual, &self.paths) {
+        if let Err(error) = verify_exact_checkpoint(&self.store, &actual, &self.paths) {
             self.frozen = true;
             return Err(error);
         }
@@ -601,6 +958,1000 @@ impl LiveSessionV2 {
     }
 }
 
+#[derive(Debug)]
+struct StreamTail {
+    stream: LiveStreamV2,
+    committed_offset: u64,
+    bytes: Vec<u8>,
+}
+
+struct RecoveryBytes<'a> {
+    source: &'a str,
+    committed_offset: u64,
+    bytes: &'a [u8],
+}
+
+fn recover_pending_plan_generation(
+    store: &BundleStore,
+    bundle: &mut BundleV2Contents,
+    paths: &mut ResolvedBundlePathsV2,
+    artifacts: &mut Vec<RecoveryArtifactV2>,
+    hooks: &dyn LivePersistenceHooks,
+) -> Result<Option<RecoveryDispositionV2>, LivePersistenceError> {
+    let generations_dir = store.root().join("plan-generations");
+    if !generations_dir.exists() {
+        return Ok(None);
+    }
+    let mut pending = Vec::<(PathBuf, PlanGenerationMetadataV2)>::new();
+    let mut unresolved = Vec::<PathBuf>::new();
+    let entries = fs::read_dir(&generations_dir)
+        .map_err(|source| live_io("inspect plan generations", &generations_dir, source))?;
+    for entry in entries {
+        let entry = entry
+            .map_err(|source| live_io("inspect plan generation entry", &generations_dir, source))?;
+        let path = entry.path();
+        let metadata = entry
+            .file_type()
+            .map_err(|source| live_io("inspect plan generation type", &path, source))?;
+        if !metadata.is_dir() || metadata.is_symlink() {
+            unresolved.push(path);
+            continue;
+        }
+        if entry.file_name().to_string_lossy() == bundle.session_state.active_plan.generation_id {
+            continue;
+        }
+        let marker = path.join("generation.json");
+        match read_json_file::<PlanGenerationMetadataV2>(store, &marker, "plan generation metadata")
+        {
+            Ok(metadata)
+                if metadata.schema_version == SCHEMA_VERSION_V2
+                    && metadata.session_id == bundle.manifest.session_id
+                    && metadata.base_revision == bundle.session_state.revision =>
+            {
+                pending.push((path, metadata));
+            }
+            Ok(metadata) if metadata.base_revision < bundle.session_state.revision => {
+                // A formerly active generation remains immutable history.
+            }
+            _ => unresolved.push(path),
+        }
+    }
+
+    if pending.len() == 1 && unresolved.is_empty() {
+        let (generation_dir, metadata) = pending.pop().expect("one pending generation");
+        match load_pending_plan(store, &generation_dir, &metadata) {
+            Ok((station, antennas, schedule))
+                if matches!(
+                    bundle.session_state.lifecycle,
+                    SessionLifecycleV2::Draft | SessionLifecycleV2::Ready
+                ) =>
+            {
+                let mut candidate = bundle.clone();
+                candidate.station = station;
+                candidate.antennas = antennas;
+                candidate.schedule = schedule;
+                candidate.session_state.active_plan = metadata.generation.clone();
+                candidate.session_state.lifecycle = SessionLifecycleV2::Ready;
+                let report = validate_bundle_report(&candidate.clone().into_current().bundle);
+                if report.allows(BundleValidationProfile::StrictCreation) {
+                    let mut next = candidate.session_state.clone();
+                    next.revision = next.revision.checked_add(1).ok_or_else(|| {
+                        LivePersistenceError::CheckpointVerification {
+                            message: "checkpoint revision overflowed during plan recovery".into(),
+                        }
+                    })?;
+                    next.last_committed_mutation_id =
+                        Some(format!("plan:{}", metadata.generation.generation_id));
+                    commit_checkpoint(store.root(), &paths.session_state, &next, hooks)?;
+                    candidate.session_state = next;
+                    *bundle = candidate;
+                    *paths =
+                        store.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+                    return Ok(Some(RecoveryDispositionV2::RolledForward));
+                }
+            }
+            _ => {}
+        }
+        unresolved.push(generation_dir);
+    } else {
+        unresolved.extend(pending.into_iter().map(|(path, _)| path));
+    }
+
+    if unresolved.is_empty() {
+        return Ok(None);
+    }
+    unresolved.sort();
+    let diagnosis = if unresolved.len() == 1 {
+        "plan generation is incomplete, malformed, or invalid"
+    } else {
+        "multiple pending plan generations conflict"
+    };
+    for generation in unresolved {
+        preserve_plan_generation(
+            store,
+            bundle,
+            paths,
+            &generation,
+            diagnosis,
+            hooks.now(),
+            artifacts,
+        )?;
+        if generation.is_dir() {
+            fs::remove_dir_all(&generation).map_err(|source| {
+                live_io("remove recovered plan generation", &generation, source)
+            })?;
+        } else {
+            fs::remove_file(&generation)
+                .map_err(|source| live_io("remove recovered plan artifact", &generation, source))?;
+        }
+    }
+    sync_directory(&generations_dir).map_err(|source| {
+        live_io(
+            "synchronize recovered plan generation cleanup",
+            &generations_dir,
+            source,
+        )
+    })?;
+    Ok(Some(RecoveryDispositionV2::RolledBack))
+}
+
+fn load_pending_plan(
+    store: &BundleStore,
+    generation_dir: &Path,
+    metadata: &PlanGenerationMetadataV2,
+) -> Result<(Station, AntennasFile, Schedule), LivePersistenceError> {
+    let station_path = generation_dir.join("station.json");
+    let antennas_path = generation_dir.join("antennas.json");
+    let schedule_path = generation_dir.join("schedule.json");
+    let station_bytes = read_bounded(
+        store,
+        &station_path,
+        store.profile().root_json_bytes,
+        "resource.bundle.root_json_bytes",
+        ResourceOperation::Write,
+    )?;
+    let antennas_bytes = read_bounded(
+        store,
+        &antennas_path,
+        store.profile().root_json_bytes,
+        "resource.bundle.root_json_bytes",
+        ResourceOperation::Write,
+    )?;
+    let schedule_bytes = read_bounded(
+        store,
+        &schedule_path,
+        store.profile().root_json_bytes,
+        "resource.bundle.root_json_bytes",
+        ResourceOperation::Write,
+    )?;
+    let digests = [
+        sha256_hex(&station_bytes),
+        sha256_hex(&antennas_bytes),
+        sha256_hex(&schedule_bytes),
+    ];
+    if digests[0] != metadata.generation.station_sha256
+        || digests[1] != metadata.generation.antennas_sha256
+        || digests[2] != metadata.generation.schedule_sha256
+        || sha256_hex(digests.join("\n").as_bytes()) != metadata.generation.root_sha256
+    {
+        return Err(LivePersistenceError::CheckpointVerification {
+            message: "pending plan generation digest does not match its durable metadata".into(),
+        });
+    }
+    let station = serde_json::from_slice(&station_bytes).map_err(|source| {
+        LivePersistenceError::CheckpointVerification {
+            message: format!("pending station plan is invalid: {source}"),
+        }
+    })?;
+    let antennas = serde_json::from_slice(&antennas_bytes).map_err(|source| {
+        LivePersistenceError::CheckpointVerification {
+            message: format!("pending antenna plan is invalid: {source}"),
+        }
+    })?;
+    let schedule = serde_json::from_slice(&schedule_bytes).map_err(|source| {
+        LivePersistenceError::CheckpointVerification {
+            message: format!("pending schedule plan is invalid: {source}"),
+        }
+    })?;
+    Ok((station, antennas, schedule))
+}
+
+fn preserve_plan_generation(
+    store: &BundleStore,
+    bundle: &BundleV2Contents,
+    paths: &ResolvedBundlePathsV2,
+    generation: &Path,
+    diagnosis: &str,
+    detected_at: DateTime<Utc>,
+    artifacts: &mut Vec<RecoveryArtifactV2>,
+) -> Result<(), LivePersistenceError> {
+    if generation.is_file() {
+        let bytes = read_bounded(
+            store,
+            generation,
+            store.profile().root_json_bytes,
+            "resource.bundle.root_json_bytes",
+            ResourceOperation::Write,
+        )?;
+        let source = format!(
+            "plan-generation/{}",
+            generation.file_name().unwrap_or_default().to_string_lossy()
+        );
+        artifacts.push(preserve_recovery_bytes(
+            store,
+            bundle,
+            paths,
+            RecoveryBytes {
+                source: &source,
+                committed_offset: 0,
+                bytes: &bytes,
+            },
+            diagnosis,
+            detected_at,
+        )?);
+        return Ok(());
+    }
+    let mut entries = fs::read_dir(generation)
+        .map_err(|source| live_io("inspect unresolved plan generation", generation, source))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| live_io("inspect unresolved plan generation", generation, source))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        if !entry
+            .file_type()
+            .map_err(|source| live_io("inspect unresolved plan file", &path, source))?
+            .is_file()
+        {
+            return Err(LivePersistenceError::RecoveryRequired {
+                message: format!("unsupported entry remains in {}", generation.display()),
+            });
+        }
+        let bytes = read_bounded(
+            store,
+            &path,
+            store.profile().root_json_bytes,
+            "resource.bundle.root_json_bytes",
+            ResourceOperation::Write,
+        )?;
+        let source = format!(
+            "plan-generation/{}/{}",
+            generation.file_name().unwrap_or_default().to_string_lossy(),
+            path.file_name().unwrap_or_default().to_string_lossy()
+        );
+        artifacts.push(preserve_recovery_bytes(
+            store,
+            bundle,
+            paths,
+            RecoveryBytes {
+                source: &source,
+                committed_offset: 0,
+                bytes: &bytes,
+            },
+            diagnosis,
+            detected_at,
+        )?);
+    }
+    Ok(())
+}
+
+fn load_checkpointed_bundle(store: &BundleStore) -> Result<BundleV2Contents, LivePersistenceError> {
+    let manifest_path = store.root().join("manifest.json");
+    let manifest: BundleManifestV2 = read_json_file(store, &manifest_path, "manifest")?;
+    if manifest.schema_version != SCHEMA_VERSION_V2 {
+        return Err(LivePersistenceError::Store(
+            BundleStoreError::UnsupportedSchemaVersion {
+                actual: manifest.schema_version,
+            },
+        ));
+    }
+    let bootstrap = store.v2_paths(&manifest.files)?;
+    let session_state: SessionStateV2 =
+        read_json_file(store, &bootstrap.session_state, "checkpoint")?;
+    load_checkpointed_bundle_from_state(store, manifest, session_state)
+}
+
+fn load_recovery_bundle(
+    store: &BundleStore,
+) -> Result<(BundleV2Contents, bool), LivePersistenceError> {
+    let manifest_path = store.root().join("manifest.json");
+    let manifest: BundleManifestV2 = read_json_file(store, &manifest_path, "manifest")?;
+    if manifest.schema_version != SCHEMA_VERSION_V2 {
+        return Err(LivePersistenceError::Store(
+            BundleStoreError::UnsupportedSchemaVersion {
+                actual: manifest.schema_version,
+            },
+        ));
+    }
+    let bootstrap = store.v2_paths(&manifest.files)?;
+    let candidates = [
+        (bootstrap.session_state.clone(), false),
+        (store.root().join(CHECKPOINT_PREVIOUS), true),
+    ];
+    let mut valid = Vec::new();
+    let mut last_error = None;
+    for (path, previous) in candidates {
+        if !path.exists() {
+            continue;
+        }
+        let state = match read_json_file(store, &path, "recovery checkpoint") {
+            Ok(state) => state,
+            Err(error) => {
+                last_error = Some(error);
+                continue;
+            }
+        };
+        match load_checkpointed_bundle_from_state(store, manifest.clone(), state) {
+            Ok(bundle) => valid.push((bundle, previous)),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    valid.sort_by_key(|(bundle, _)| bundle.session_state.revision);
+    valid.pop().ok_or_else(|| {
+        last_error.unwrap_or_else(|| LivePersistenceError::CheckpointVerification {
+            message: "neither current nor previous checkpoint is valid".into(),
+        })
+    })
+}
+
+fn load_checkpointed_bundle_from_state(
+    store: &BundleStore,
+    manifest: BundleManifestV2,
+    session_state: SessionStateV2,
+) -> Result<BundleV2Contents, LivePersistenceError> {
+    let paths = store.v2_paths_for_state(&manifest.files, &session_state)?;
+    verify_committed_prefixes(store, &session_state, &paths)?;
+    let bundle = BundleV2Contents {
+        manifest,
+        session_state: session_state.clone(),
+        station: read_json_file(store, &paths.station, "active station plan")?,
+        antennas: read_json_file(store, &paths.antennas, "active antenna plan")?,
+        schedule: read_json_file(store, &paths.schedule, "active schedule plan")?,
+        events: read_jsonl_prefix(
+            store,
+            &paths.events,
+            stream_checkpoint(&session_state, LiveStreamV2::Events)?.committed_bytes,
+        )?,
+        observations: read_jsonl_prefix(
+            store,
+            &paths.observations,
+            stream_checkpoint(&session_state, LiveStreamV2::Observations)?.committed_bytes,
+        )?,
+        adapter_records: read_jsonl_prefix(
+            store,
+            &paths.adapter_records,
+            stream_checkpoint(&session_state, LiveStreamV2::AdapterRecords)?.committed_bytes,
+        )?,
+        rig: read_jsonl_prefix(
+            store,
+            &paths.rig,
+            stream_checkpoint(&session_state, LiveStreamV2::Rig)?.committed_bytes,
+        )?,
+        propagation: read_jsonl_prefix(
+            store,
+            &paths.propagation,
+            stream_checkpoint(&session_state, LiveStreamV2::Propagation)?.committed_bytes,
+        )?,
+        analysis: read_json_file::<AnalysisFile>(store, &paths.analysis, "analysis metadata")?,
+    };
+    verify_loaded_counts(&bundle)?;
+    Ok(bundle)
+}
+
+fn verify_loaded_counts(bundle: &BundleV2Contents) -> Result<(), LivePersistenceError> {
+    for (stream, count, last_id) in [
+        (
+            LiveStreamV2::Events,
+            bundle.events.len(),
+            bundle.events.last().map(|record| record.event_id.as_str()),
+        ),
+        (
+            LiveStreamV2::AdapterRecords,
+            bundle.adapter_records.len(),
+            bundle
+                .adapter_records
+                .last()
+                .map(|record| record.record_id.as_str()),
+        ),
+        (
+            LiveStreamV2::Observations,
+            bundle.observations.len(),
+            bundle
+                .observations
+                .last()
+                .map(|record| record.observation_id.as_str()),
+        ),
+        (
+            LiveStreamV2::Rig,
+            bundle.rig.len(),
+            bundle.rig.last().map(|record| record.record_id.as_str()),
+        ),
+        (
+            LiveStreamV2::Propagation,
+            bundle.propagation.len(),
+            bundle
+                .propagation
+                .last()
+                .map(|record| record.record_id.as_str()),
+        ),
+    ] {
+        let checkpoint = stream_checkpoint(&bundle.session_state, stream)?;
+        if checkpoint.record_count != u64::try_from(count).expect("usize fits u64")
+            || checkpoint.last_record_id.as_deref() != last_id
+        {
+            return Err(LivePersistenceError::CheckpointVerification {
+                message: format!(
+                    "{} committed record count or last identity is inconsistent",
+                    stream.checkpoint_name()
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn verify_committed_prefixes(
+    store: &BundleStore,
+    checkpoint: &SessionStateV2,
+    paths: &ResolvedBundlePathsV2,
+) -> Result<(), LivePersistenceError> {
+    for stream in all_streams() {
+        let expected = stream_checkpoint(checkpoint, stream)?;
+        let path = stream_path(paths, stream);
+        let bytes = read_bounded(
+            store,
+            path,
+            store.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Write,
+        )?;
+        let committed = usize::try_from(expected.committed_bytes).map_err(|_| {
+            LivePersistenceError::CheckpointVerification {
+                message: format!(
+                    "{} committed offset does not fit this platform",
+                    stream.checkpoint_name()
+                ),
+            }
+        })?;
+        if bytes.len() < committed {
+            return Err(LivePersistenceError::CheckpointVerification {
+                message: format!(
+                    "{} is shorter than its committed prefix",
+                    stream.checkpoint_name()
+                ),
+            });
+        }
+        if sha256_hex(&bytes[..committed]) != expected.committed_sha256 {
+            return Err(LivePersistenceError::ExternalModification {
+                message: format!(
+                    "{} has corruption inside its committed prefix",
+                    stream.checkpoint_name()
+                ),
+            });
+        }
+    }
+    for (name, path, expected) in [
+        (
+            "station",
+            &paths.station,
+            &checkpoint.active_plan.station_sha256,
+        ),
+        (
+            "antennas",
+            &paths.antennas,
+            &checkpoint.active_plan.antennas_sha256,
+        ),
+        (
+            "schedule",
+            &paths.schedule,
+            &checkpoint.active_plan.schedule_sha256,
+        ),
+    ] {
+        let bytes = read_bounded(
+            store,
+            path,
+            store.profile().root_json_bytes,
+            "resource.bundle.root_json_bytes",
+            ResourceOperation::Write,
+        )?;
+        if sha256_hex(&bytes) != *expected {
+            return Err(LivePersistenceError::ExternalModification {
+                message: format!("active plan {name} has committed corruption"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn read_stream_tails(
+    store: &BundleStore,
+    checkpoint: &SessionStateV2,
+    paths: &ResolvedBundlePathsV2,
+) -> Result<Vec<StreamTail>, LivePersistenceError> {
+    all_streams()
+        .into_iter()
+        .map(|stream| {
+            let committed_offset = stream_checkpoint(checkpoint, stream)?.committed_bytes;
+            let path = stream_path(paths, stream);
+            let bytes = read_bounded(
+                store,
+                path,
+                store.profile().jsonl_stream_bytes,
+                "resource.jsonl.stream_bytes",
+                ResourceOperation::Write,
+            )?;
+            let offset = usize::try_from(committed_offset).map_err(|_| {
+                LivePersistenceError::CheckpointVerification {
+                    message: "committed offset does not fit this platform".into(),
+                }
+            })?;
+            Ok(StreamTail {
+                stream,
+                committed_offset,
+                bytes: bytes[offset..].to_vec(),
+            })
+        })
+        .collect()
+}
+
+fn parse_tail_mutation(
+    bundle: &BundleV2Contents,
+    tails: &[StreamTail],
+) -> Result<LiveMutationV2, String> {
+    let mut members = Vec::new();
+    for tail in tails.iter().filter(|tail| !tail.bytes.is_empty()) {
+        if !tail.bytes.ends_with(b"\n") {
+            return Err(format!(
+                "{} tail is torn and not newline terminated",
+                tail.stream.checkpoint_name()
+            ));
+        }
+        for line in tail.bytes.split_inclusive(|byte| *byte == b'\n') {
+            let line = &line[..line.len() - 1];
+            if line.is_empty() {
+                return Err(format!(
+                    "{} tail contains an empty member",
+                    tail.stream.checkpoint_name()
+                ));
+            }
+            members.push(parse_tail_member(tail.stream, line).map_err(|error| {
+                format!(
+                    "{} tail contains malformed JSON: {error}",
+                    tail.stream.checkpoint_name()
+                )
+            })?);
+        }
+    }
+    if members.is_empty() {
+        return Err("no complete tail mutation members were found".into());
+    }
+    members.sort_by_key(|member| member.meta().mutation.member_index);
+    let mutation_id = members[0].meta().mutation.mutation_id.clone();
+    let member_count = members[0].meta().mutation.member_count;
+    if mutation_id.is_empty()
+        || member_count != u32::try_from(members.len()).unwrap_or(u32::MAX)
+        || members.iter().enumerate().any(|(index, member)| {
+            member.meta().mutation.mutation_id != mutation_id
+                || member.meta().mutation.member_count != member_count
+                || member.meta().mutation.member_index
+                    != u32::try_from(index).expect("tail member count fits u32")
+        })
+    {
+        return Err("tail does not contain one complete declared mutation".into());
+    }
+    Ok(LiveMutationV2 {
+        expected_revision: bundle.session_state.revision,
+        mutation_id,
+        members,
+    })
+}
+
+fn parse_tail_member(
+    stream: LiveStreamV2,
+    line: &[u8],
+) -> Result<LiveMutationMemberV2, serde_json::Error> {
+    match stream {
+        LiveStreamV2::Events => serde_json::from_slice(line).map(LiveMutationMemberV2::Event),
+        LiveStreamV2::AdapterRecords => {
+            serde_json::from_slice(line).map(LiveMutationMemberV2::AdapterRecord)
+        }
+        LiveStreamV2::Observations => {
+            serde_json::from_slice(line).map(LiveMutationMemberV2::Observation)
+        }
+        LiveStreamV2::Rig => serde_json::from_slice(line).map(LiveMutationMemberV2::Rig),
+        LiveStreamV2::Propagation => {
+            serde_json::from_slice(line).map(LiveMutationMemberV2::Propagation)
+        }
+    }
+}
+
+fn preserve_tails(
+    store: &BundleStore,
+    bundle: &BundleV2Contents,
+    paths: &ResolvedBundlePathsV2,
+    tails: &[StreamTail],
+    diagnosis: &str,
+    detected_at: DateTime<Utc>,
+) -> Result<Vec<RecoveryArtifactV2>, LivePersistenceError> {
+    let mut artifacts = Vec::new();
+    for tail in tails.iter().filter(|tail| !tail.bytes.is_empty()) {
+        let source = tail.stream.checkpoint_name().to_string();
+        artifacts.push(preserve_recovery_bytes(
+            store,
+            bundle,
+            paths,
+            RecoveryBytes {
+                source: &source,
+                committed_offset: tail.committed_offset,
+                bytes: &tail.bytes,
+            },
+            diagnosis,
+            detected_at,
+        )?);
+    }
+    Ok(artifacts)
+}
+
+fn preserve_recovery_bytes(
+    store: &BundleStore,
+    bundle: &BundleV2Contents,
+    paths: &ResolvedBundlePathsV2,
+    evidence: RecoveryBytes<'_>,
+    diagnosis: &str,
+    detected_at: DateTime<Utc>,
+) -> Result<RecoveryArtifactV2, LivePersistenceError> {
+    let RecoveryBytes {
+        source,
+        committed_offset,
+        bytes,
+    } = evidence;
+    let raw_attachment = durable_attachment(
+        store,
+        paths,
+        bytes,
+        "application/octet-stream",
+        Some(format!("recovery:{source}:{committed_offset}")),
+    )?;
+    let metadata = RecoveryArtifactMetadataV2 {
+        schema_version: SCHEMA_VERSION_V2,
+        session_id: &bundle.manifest.session_id,
+        source,
+        committed_offset,
+        detected_at,
+        diagnosis,
+        raw_attachment: &raw_attachment,
+    };
+    let metadata_bytes = serialize_json(&metadata).map_err(invalid_serialization)?;
+    let metadata_attachment = durable_attachment(
+        store,
+        paths,
+        &metadata_bytes,
+        "application/json",
+        Some(format!("recovery-metadata:{source}:{committed_offset}")),
+    )?;
+    Ok(RecoveryArtifactV2 {
+        source: source.into(),
+        committed_offset,
+        diagnosis: diagnosis.into(),
+        raw_attachment,
+        metadata_attachment,
+    })
+}
+
+fn durable_attachment(
+    store: &BundleStore,
+    paths: &ResolvedBundlePathsV2,
+    bytes: &[u8],
+    media_type: &str,
+    source_locator: Option<String>,
+) -> Result<AttachmentReference, LivePersistenceError> {
+    let reference = store.write_attachment(bytes, media_type, None, None, source_locator)?;
+    let relative =
+        reference
+            .relative_path()
+            .ok_or_else(|| LivePersistenceError::CheckpointVerification {
+                message: "recovery attachment digest is invalid".into(),
+            })?;
+    let path = paths.attachments_dir.join(relative);
+    File::open(&path)
+        .and_then(|file| file.sync_all())
+        .map_err(|source| live_io("synchronize recovery attachment", &path, source))?;
+    if let Some(parent) = path.parent() {
+        sync_directory(parent)
+            .map_err(|source| live_io("synchronize recovery digest directory", parent, source))?;
+    }
+    sync_directory(&paths.attachments_dir).map_err(|source| {
+        live_io(
+            "synchronize recovery attachments directory",
+            &paths.attachments_dir,
+            source,
+        )
+    })?;
+    Ok(reference)
+}
+
+fn copy_checkpointed_attachments(
+    store: &BundleStore,
+    source_attachments: &Path,
+    destination_attachments: &Path,
+) -> Result<(), LivePersistenceError> {
+    let source_digest_dir = source_attachments.join("sha256");
+    if !source_digest_dir.exists() {
+        return Ok(());
+    }
+    let destination_digest_dir = destination_attachments.join("sha256");
+    fs::create_dir_all(&destination_digest_dir).map_err(|source| {
+        live_io(
+            "create export attachment directory",
+            &destination_digest_dir,
+            source,
+        )
+    })?;
+    let mut entries = fs::read_dir(&source_digest_dir)
+        .map_err(|source| {
+            live_io(
+                "inspect checkpointed attachments",
+                &source_digest_dir,
+                source,
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| {
+            live_io(
+                "inspect checkpointed attachments",
+                &source_digest_dir,
+                source,
+            )
+        })?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let source_path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|source| live_io("inspect checkpointed attachment", &source_path, source))?;
+        if !file_type.is_file() || file_type.is_symlink() {
+            return Err(LivePersistenceError::CheckpointVerification {
+                message: format!(
+                    "checkpointed attachment is not a regular file: {}",
+                    source_path.display()
+                ),
+            });
+        }
+        let name = entry.file_name();
+        let expected = name.to_string_lossy();
+        if digest_file(&source_path, store.profile().attachment_file_bytes)? != expected {
+            return Err(LivePersistenceError::CheckpointVerification {
+                message: format!(
+                    "attachment digest name does not match {}",
+                    source_path.display()
+                ),
+            });
+        }
+        let destination_path = destination_digest_dir.join(&name);
+        if !destination_path.exists() {
+            fs::copy(&source_path, &destination_path).map_err(|source| {
+                live_io("copy checkpointed attachment", &destination_path, source)
+            })?;
+        }
+        if digest_file(&destination_path, store.profile().attachment_file_bytes)? != expected {
+            return Err(LivePersistenceError::CheckpointVerification {
+                message: format!(
+                    "exported attachment digest does not match {}",
+                    destination_path.display()
+                ),
+            });
+        }
+        File::open(&destination_path)
+            .and_then(|file| file.sync_all())
+            .map_err(|source| {
+                live_io("synchronize exported attachment", &destination_path, source)
+            })?;
+    }
+    sync_directory(&destination_digest_dir).map_err(|source| {
+        live_io(
+            "synchronize exported digest directory",
+            &destination_digest_dir,
+            source,
+        )
+    })?;
+    sync_directory(destination_attachments).map_err(|source| {
+        live_io(
+            "synchronize exported attachments directory",
+            destination_attachments,
+            source,
+        )
+    })
+}
+
+fn digest_file(path: &Path, limit: u64) -> Result<String, LivePersistenceError> {
+    let size = fs::metadata(path)
+        .map_err(|source| live_io("inspect attachment digest input", path, source))?
+        .len();
+    if size > limit {
+        return Err(LivePersistenceError::CheckpointVerification {
+            message: format!(
+                "attachment {} exceeds the {} byte live-copy limit",
+                path.display(),
+                limit
+            ),
+        });
+    }
+    let mut file =
+        File::open(path).map_err(|source| live_io("open attachment digest input", path, source))?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|source| live_io("read attachment digest input", path, source))?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(crate::v2::encode_lower_hex(digest.finalize()))
+}
+
+fn truncate_tails(
+    checkpoint: &SessionStateV2,
+    paths: &ResolvedBundlePathsV2,
+) -> Result<(), LivePersistenceError> {
+    for stream in all_streams() {
+        let committed = stream_checkpoint(checkpoint, stream)?.committed_bytes;
+        let path = stream_path(paths, stream);
+        let file = OpenOptions::new()
+            .write(true)
+            .open(path)
+            .map_err(|source| live_io("open recovery truncation", path, source))?;
+        file.set_len(committed)
+            .map_err(|source| live_io("truncate recovered stream", path, source))?;
+        file.sync_all()
+            .map_err(|source| live_io("synchronize recovered stream", path, source))?;
+    }
+    sync_directory(paths.session_state.parent().expect("checkpoint has parent")).map_err(|source| {
+        live_io(
+            "synchronize recovered bundle directory",
+            paths.session_state.parent().expect("checkpoint has parent"),
+            source,
+        )
+    })
+}
+
+fn recover_checkpoint_temp(
+    store: &BundleStore,
+    bundle: &BundleV2Contents,
+    paths: &ResolvedBundlePathsV2,
+    artifacts: &mut Vec<RecoveryArtifactV2>,
+    detected_at: DateTime<Utc>,
+) -> Result<(), LivePersistenceError> {
+    let temp = store.root().join(CHECKPOINT_TEMP);
+    if !temp.exists() {
+        return Ok(());
+    }
+    let bytes = read_bounded(
+        store,
+        &temp,
+        store.profile().root_json_bytes,
+        "resource.bundle.root_json_bytes",
+        ResourceOperation::Write,
+    )?;
+    if !bytes.is_empty() && serde_json::from_slice::<SessionStateV2>(&bytes).is_err() {
+        let diagnosis = "checkpoint temporary file is malformed";
+        let raw_attachment = durable_attachment(
+            store,
+            paths,
+            &bytes,
+            "application/json",
+            Some("recovery:checkpoint-temp".into()),
+        )?;
+        let metadata = RecoveryArtifactMetadataV2 {
+            schema_version: SCHEMA_VERSION_V2,
+            session_id: &bundle.manifest.session_id,
+            source: "checkpoint_temp",
+            committed_offset: 0,
+            detected_at,
+            diagnosis,
+            raw_attachment: &raw_attachment,
+        };
+        let metadata_bytes = serialize_json(&metadata).map_err(invalid_serialization)?;
+        let metadata_attachment = durable_attachment(
+            store,
+            paths,
+            &metadata_bytes,
+            "application/json",
+            Some("recovery-metadata:checkpoint-temp".into()),
+        )?;
+        artifacts.push(RecoveryArtifactV2 {
+            source: "checkpoint_temp".into(),
+            committed_offset: 0,
+            diagnosis: diagnosis.into(),
+            raw_attachment,
+            metadata_attachment,
+        });
+    }
+    fs::remove_file(&temp)
+        .map_err(|source| live_io("remove recovered checkpoint temp", &temp, source))?;
+    sync_directory(store.root())
+        .map_err(|source| live_io("synchronize checkpoint temp cleanup", store.root(), source))
+}
+
+fn stream_checkpoint(
+    state: &SessionStateV2,
+    stream: LiveStreamV2,
+) -> Result<&StreamCheckpointV2, LivePersistenceError> {
+    state.streams.get(stream.checkpoint_name()).ok_or_else(|| {
+        LivePersistenceError::CheckpointVerification {
+            message: format!("checkpoint is missing {}", stream.checkpoint_name()),
+        }
+    })
+}
+
+fn read_json_file<T: serde::de::DeserializeOwned>(
+    store: &BundleStore,
+    path: &Path,
+    description: &str,
+) -> Result<T, LivePersistenceError> {
+    let bytes = read_bounded(
+        store,
+        path,
+        store.profile().root_json_bytes,
+        "resource.bundle.root_json_bytes",
+        ResourceOperation::Read,
+    )?;
+    serde_json::from_slice(&bytes).map_err(|source| LivePersistenceError::CheckpointVerification {
+        message: format!("{description} at {} is invalid: {source}", path.display()),
+    })
+}
+
+fn read_jsonl_prefix<T: serde::de::DeserializeOwned>(
+    store: &BundleStore,
+    path: &Path,
+    committed_bytes: u64,
+) -> Result<Vec<T>, LivePersistenceError> {
+    let bytes = read_bounded(
+        store,
+        path,
+        store.profile().jsonl_stream_bytes,
+        "resource.jsonl.stream_bytes",
+        ResourceOperation::Read,
+    )?;
+    let end = usize::try_from(committed_bytes).map_err(|_| {
+        LivePersistenceError::CheckpointVerification {
+            message: format!(
+                "committed prefix for {} does not fit this platform",
+                path.display()
+            ),
+        }
+    })?;
+    let prefix = bytes
+        .get(..end)
+        .ok_or_else(|| LivePersistenceError::CheckpointVerification {
+            message: format!("{} is shorter than its committed prefix", path.display()),
+        })?;
+    if !prefix.is_empty() && !prefix.ends_with(b"\n") {
+        return Err(LivePersistenceError::CheckpointVerification {
+            message: format!(
+                "{} committed prefix is not newline terminated",
+                path.display()
+            ),
+        });
+    }
+    prefix
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            serde_json::from_slice(line).map_err(|source| {
+                LivePersistenceError::CheckpointVerification {
+                    message: format!(
+                        "{} contains malformed committed JSONL: {source}",
+                        path.display()
+                    ),
+                }
+            })
+        })
+        .collect()
+}
+
 fn prepare_mutation(
     mutation: &mut LiveMutationV2,
     session_id: &str,
@@ -645,6 +1996,25 @@ fn validate_mutation(
     bundle: &BundleV2Contents,
     mutation: &LiveMutationV2,
 ) -> Result<SessionLifecycleV2, LivePersistenceError> {
+    let declared_count = u32::try_from(mutation.members.len()).map_err(|_| {
+        LivePersistenceError::InvalidMutation {
+            message: "mutation has too many members".into(),
+        }
+    })?;
+    for (index, member) in mutation.members.iter().enumerate() {
+        let meta = member.meta();
+        if meta.schema_version != SCHEMA_VERSION_V2
+            || meta.session_id != bundle.manifest.session_id
+            || meta.mutation.mutation_id != mutation.mutation_id
+            || meta.mutation.member_count != declared_count
+            || meta.mutation.member_index != u32::try_from(index).expect("member count fits u32")
+        {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: "mutation member envelope does not match the bundle and declared batch"
+                    .into(),
+            });
+        }
+    }
     let mut ids = bundle
         .events
         .iter()
@@ -955,6 +2325,71 @@ fn append_line(
     Ok(())
 }
 
+fn preflight_live_budget(
+    store: &BundleStore,
+    checkpoint: &SessionStateV2,
+    serialized: &[(LiveStreamV2, Vec<u8>)],
+) -> Result<(), LivePersistenceError> {
+    let profile = store.profile();
+    let mut added_bytes = BTreeMap::<LiveStreamV2, u64>::new();
+    let mut added_records = BTreeMap::<LiveStreamV2, u64>::new();
+    for (stream, bytes) in serialized {
+        let line_bytes = u64::try_from(bytes.len()).expect("usize fits u64");
+        if line_bytes > profile.jsonl_line_bytes {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: format!(
+                    "{} member exceeds the {} byte JSONL line limit",
+                    stream.checkpoint_name(),
+                    profile.jsonl_line_bytes
+                ),
+            });
+        }
+        *added_bytes.entry(*stream).or_default() += line_bytes;
+        *added_records.entry(*stream).or_default() += 1;
+    }
+    let mut total_bytes = 0_u64;
+    let mut total_records = 0_u64;
+    for stream in all_streams() {
+        let current = stream_checkpoint(checkpoint, stream)?;
+        let next_bytes = current
+            .committed_bytes
+            .checked_add(added_bytes.get(&stream).copied().unwrap_or_default())
+            .ok_or_else(|| LivePersistenceError::InvalidMutation {
+                message: "stream byte accounting overflowed".into(),
+            })?;
+        let next_records = current
+            .record_count
+            .checked_add(added_records.get(&stream).copied().unwrap_or_default())
+            .ok_or_else(|| LivePersistenceError::InvalidMutation {
+                message: "stream record accounting overflowed".into(),
+            })?;
+        if next_bytes > profile.jsonl_stream_bytes || next_records > profile.jsonl_stream_records {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: format!(
+                    "{} mutation would exceed the live stream resource profile",
+                    stream.checkpoint_name()
+                ),
+            });
+        }
+        total_bytes = total_bytes.checked_add(next_bytes).ok_or_else(|| {
+            LivePersistenceError::InvalidMutation {
+                message: "modeled byte accounting overflowed".into(),
+            }
+        })?;
+        total_records = total_records.checked_add(next_records).ok_or_else(|| {
+            LivePersistenceError::InvalidMutation {
+                message: "modeled record accounting overflowed".into(),
+            }
+        })?;
+    }
+    if total_bytes > profile.modeled_total_bytes || total_records > profile.modeled_total_records {
+        return Err(LivePersistenceError::InvalidMutation {
+            message: "mutation would exceed the aggregate live resource profile".into(),
+        });
+    }
+    Ok(())
+}
+
 fn write_plan_file(
     path: &Path,
     kind: LivePlanFile,
@@ -1051,6 +2486,7 @@ fn commit_checkpoint(
 }
 
 fn checkpoint_from_paths(
+    store: &BundleStore,
     bundle: &BundleV2Contents,
     paths: &ResolvedBundlePathsV2,
 ) -> Result<SessionStateV2, LivePersistenceError> {
@@ -1092,9 +2528,13 @@ fn checkpoint_from_paths(
                 .map(|record| record.record_id.clone()),
         ),
     ] {
-        let bytes = fs::read(stream_path(paths, stream)).map_err(|source| {
-            live_io("read appended stream", stream_path(paths, stream), source)
-        })?;
+        let bytes = read_bounded(
+            store,
+            stream_path(paths, stream),
+            store.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Write,
+        )?;
         state.streams.insert(
             stream.checkpoint_name().into(),
             checkpoint_for_bytes(&bytes, count, last_id),
@@ -1104,6 +2544,7 @@ fn checkpoint_from_paths(
 }
 
 fn verify_exact_checkpoint(
+    store: &BundleStore,
     checkpoint: &SessionStateV2,
     paths: &ResolvedBundlePathsV2,
 ) -> Result<(), LivePersistenceError> {
@@ -1115,8 +2556,13 @@ fn verify_exact_checkpoint(
                 message: format!("checkpoint is missing {}", stream.checkpoint_name()),
             })?;
         let path = stream_path(paths, stream);
-        let bytes =
-            fs::read(path).map_err(|source| live_io("read checkpointed stream", path, source))?;
+        let bytes = read_bounded(
+            store,
+            path,
+            store.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Write,
+        )?;
         if u64::try_from(bytes.len()).ok() != Some(expected.committed_bytes) {
             return Err(LivePersistenceError::RecoveryRequired {
                 message: format!(
@@ -1151,7 +2597,13 @@ fn verify_exact_checkpoint(
             &checkpoint.active_plan.schedule_sha256,
         ),
     ] {
-        let bytes = fs::read(path).map_err(|source| live_io("read active plan", path, source))?;
+        let bytes = read_bounded(
+            store,
+            path,
+            store.profile().root_json_bytes,
+            "resource.bundle.root_json_bytes",
+            ResourceOperation::Write,
+        )?;
         if sha256_hex(&bytes) != *expected {
             return Err(LivePersistenceError::ExternalModification {
                 message: format!("active plan {name} digest changed"),
@@ -1162,6 +2614,18 @@ fn verify_exact_checkpoint(
 }
 
 fn read_state(path: &Path) -> Result<SessionStateV2, LivePersistenceError> {
+    let size = fs::metadata(path)
+        .map_err(|source| live_io("inspect checkpoint", path, source))?
+        .len();
+    if size > CHECKPOINT_MAX_BYTES {
+        return Err(LivePersistenceError::CheckpointVerification {
+            message: format!(
+                "checkpoint {} exceeds the {} byte limit",
+                path.display(),
+                CHECKPOINT_MAX_BYTES
+            ),
+        });
+    }
     let bytes = fs::read(path).map_err(|source| live_io("read checkpoint", path, source))?;
     serde_json::from_slice(&bytes).map_err(|source| LivePersistenceError::CheckpointVerification {
         message: format!("{} is not a valid checkpoint: {source}", path.display()),

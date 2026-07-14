@@ -11,6 +11,8 @@ plans.
   validation rules.
 - [Operator Event Semantics](event-semantics.md): schema-v2 lifecycle,
   correction, actual-state, and conservative alignment rules.
+- [Schema-V2 Live Persistence And Recovery](live-persistence.md): durable
+  append, locking, checkpoint promotion, snapshots, export, and recovery.
 - [Development](development.md): local workflow, tests, and repo conventions.
 - [Supply-Chain Updates](supply-chain.md): dependency, Action, tool, and runner
   review procedure.

@@ -50,8 +50,8 @@ The dependency-ordered implementation path is:
 
 1. Establish schema-v2, layered validation, strict write preflight, and bounded
    storage (#46, #50, #51, and #55).
-2. Implement checkpointed persistence/recovery and the lifecycle/correction
-   reducers (#53 and #54).
+2. Checkpointed persistence/recovery and the lifecycle/correction reducers are
+   implemented (#53 and #54).
 3. Deliver validated setup/bundle creation and the complete manual/no-rig
    conductor (#61 and #62).
 4. Bound adapter ingress and orchestrate live WSJT-X evidence (#56 and #63).

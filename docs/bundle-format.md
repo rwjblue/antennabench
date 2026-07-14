@@ -27,6 +27,7 @@ Version 2 layout:
 example.session.antennabundle/
   manifest.json
   session-state.json
+  session-state.previous.json
   station.json
   antennas.json
   schedule.json
@@ -38,6 +39,12 @@ example.session.antennabundle/
   analysis.json
   attachments/
     sha256/
+  plan-generations/
+    <generation-id>/
+      station.json
+      antennas.json
+      schedule.json
+      generation.json
 ```
 
 Storage reads `manifest.schema_version` first and dispatches into distinct v1
@@ -52,10 +59,11 @@ Its `session-state.json` reserves the checkpoint selected by
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md):
 revision, lifecycle, active-plan/root digests, committed byte
 length/count/last-ID/digest for every stream, and the last mutation ID. Every
-v2 stream record carries mutation ID and member index/count. Live append,
-atomic promotion, locking, and recovery remain tracked by #53. Typed
-lifecycle/correction reduction is implemented by #54 and is shared by v2
-inspection, analysis, reports, and the future mutation writer.
+v2 stream record carries mutation ID and member index/count. The live writer,
+atomic promotion, locking, checkpoint snapshots/export, and recovery contract
+are implemented by #53. Typed lifecycle/correction reduction is implemented by
+#54 and is shared by v2 inspection, mutation, analysis, and reports. See
+[Schema-V2 Live Persistence And Recovery](live-persistence.md).
 
 Version 1 is never silently rewritten to gain these semantics. It remains
 readable and losslessly copyable; live mutation requires an explicit v2 upgrade
