@@ -226,6 +226,26 @@ of truth; workflow YAML orchestrates them rather than duplicating release
 logic. External actions used in the credentialed path are pinned to reviewed
 immutable commit SHAs where practical.
 
+## Dependency And Workflow Preflight
+
+[Decision 0012](0012-use-combined-supply-chain-maintenance-gates.md) adds the
+maintenance boundary used by this release contract. Every external Action in
+the release workflow is pinned to a reviewed full commit SHA. The tagged
+revision uses exact Rust, Node, Tauri CLI, and supply-chain tool pins plus its
+committed Cargo lockfile.
+
+Before the protected desktop-release environment or Apple credentials become
+reachable, a read-only job refreshes the RustSec advisory database and verifies
+the action pins, dependency sources and licenses, exception expiry, CodeQL/main
+status, and exact tool inputs. A failure cannot be downgraded by a credentialed
+job. Dependabot and pull-request workflows never receive release secrets or
+release mutation permission.
+
+Implementation is split across #58 and #59; repository settings and required
+checks require the owner action in #60. This preflight strengthens the selected
+artifact and credential boundary without changing its platform, version, asset,
+signing, notarization, attestation, or promotion contract.
+
 ## Integrity And Provenance
 
 The workflow generates GitHub build-provenance attestations for the two final
@@ -352,6 +372,8 @@ an existing reviewed tag, draft-first validation, and immutable publication.
 - [Release tracking issue #33](https://github.com/rwjblue/antennabench/issues/33)
 - [Artifact construction issue #35](https://github.com/rwjblue/antennabench/issues/35)
 - [Credentialed publication issue #36](https://github.com/rwjblue/antennabench/issues/36)
+- [Supply-chain decision #44](https://github.com/rwjblue/antennabench/issues/44)
+- [Decision 0012](0012-use-combined-supply-chain-maintenance-gates.md)
 - [Tauri distribution and versioning](https://v2.tauri.app/distribute/)
 - [Tauri macOS signing and notarization](https://v2.tauri.app/distribute/sign/macos/)
 - [Apple notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)

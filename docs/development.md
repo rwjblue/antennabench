@@ -3,7 +3,9 @@
 This repo uses Rust, Cargo, and Jujutsu (`jj`).
 
 The desktop shell also uses Tauri 2 and plain JavaScript. Node is used only for
-the frontend's dependency-free state tests.
+the frontend's dependency-free state tests and desktop test timing. No Node
+package manifest or lockfile exists. Rust and cargo-tauri are pinned today;
+pinning the Node test runtime is approved by Decision 0012 and tracked by #58.
 
 ## Version Control
 
@@ -83,6 +85,25 @@ floor, and pass both the minimum-version job and the pinned current-toolchain
 quality suite. Updating the routine compiler pin is a separate deliberate
 maintenance change and does not by itself raise the compatibility floor.
 
+## Planned Supply-Chain Maintenance
+
+[Decision 0012](decisions/0012-use-combined-supply-chain-maintenance-gates.md)
+selects a combined GitHub and cargo-deny baseline. External Actions will use
+full commit SHAs, Dependabot will propose weekly Cargo and Actions updates,
+pull requests will receive dependency review, and Rust advisory, license,
+source, wildcard, and exception policy will be repository-owned.
+
+The decision also selects GitHub-managed Rust/workflow CodeQL, exact Node and
+repository-tool pins, dated GA runner labels, read-only ordinary workflow
+permissions, time-bounded exceptions, and a fresh non-secret supply-chain gate
+before release credentials become reachable.
+
+This is approved policy, not current enforcement. Code implementation is
+tracked by [#58](https://github.com/rwjblue/antennabench/issues/58) and
+[#59](https://github.com/rwjblue/antennabench/issues/59). Dependabot alerts,
+CodeQL, Action restrictions, and the main ruleset require the explicit owner
+action in [#60](https://github.com/rwjblue/antennabench/issues/60).
+
 ## Verification
 
 Before declaring Rust behavior complete, run:
@@ -158,11 +179,16 @@ on the exact runner recorded in that workflow log; it does not declare a
 supported release platform or architecture. Release support, artifacts,
 signing, and publication remain separate decisions.
 
+Decision 0012 replaces these moving aliases with dated GA runner labels under
+#58. Until that issue lands, the paragraph above remains the implemented
+behavior.
+
 ## Desktop Development
 
 The currently supported desktop development platform is macOS. Install Xcode
 Command Line Tools (or Xcode) before building Tauri, then let Mise install the
-pinned Rust, Node, and Tauri CLI versions:
+pinned Rust and Tauri CLI versions. Node must also be available until #58 adds
+its approved exact Mise pin:
 
 ```bash
 xcode-select --install
