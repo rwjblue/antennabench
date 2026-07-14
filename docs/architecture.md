@@ -57,6 +57,18 @@ and reuses core alignment to derive slot status and evidence eligibility. It
 returns observation counts, exclusions, per-antenna/band/slot evidence, SNR
 descriptive statistics, and conservative evidence-quality labels. It does not
 select a winner or perform effect-size, confidence, or significance analysis.
+Those labels measure descriptive evidence coverage from usable-observation and
+contributing-slot counts; they are not comparative evidence.
+
+[Decision 0004](decisions/0004-paired-descriptive-analysis-precedes-conclusions.md)
+defines the next analysis boundary. Paired comparison facts must distinguish
+transmit and receive paths; remain stratified by band, observation kind, and
+source; preserve unmatched and missing evidence; and expose time/order and
+repeated-path diagnostics. Analysis may derive deterministic paired differences
+and per-path descriptive summaries, but uncertainty intervals and automated
+conclusions remain deferred. The model work is tracked by
+[#23](https://github.com/rwjblue/antennabench/issues/23), with initial rendering
+tracked separately by [#25](https://github.com/rwjblue/antennabench/issues/25).
 
 Report construction accepts one `BundleContents` value and invokes analysis
 internally, preventing callers from pairing bundle context with a summary from
@@ -65,6 +77,11 @@ evidence sections, typed notices, and concrete chart-ready rows for antenna SNR,
 band evidence counts, and slot usable/excluded counts. The model is serializable
 but renderer-neutral: it contains no generated prose, winner logic, generic
 chart configuration, or rendering output.
+
+Future paired rows, comparison availability, overlap counts, and quality
+diagnostics also belong at this renderer-neutral boundary. The renderer may
+explain and visualize those typed facts, but it must not infer a conclusion from
+chart shape, raw antenna summaries, or evidence-coverage labels.
 
 `render_standalone_html()` accepts only a `SessionReport`. It does not read or
 reanalyze a bundle and does not persist output into one. The renderer produces a

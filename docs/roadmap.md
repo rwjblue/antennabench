@@ -25,6 +25,8 @@ The current implementation focus is the bundle-first Rust foundation:
 - a realistic, purpose-built synthetic canonical sample-report session spanning
   two antennas, two bands, usable and excluded evidence, and missing data
 - golden fixture coverage
+- a durable paired-analysis contract that permits stratified descriptive
+  comparisons while deferring uncertainty and automated conclusions
 
 ## Later
 
@@ -34,8 +36,16 @@ Later tracks:
   ([#6](https://github.com/rwjblue/antennabench/issues/6)).
 - A rebuildable local SQLite/index boundary
   ([#7](https://github.com/rwjblue/antennabench/issues/7)).
-- Advanced analysis, conclusion language, and future chart-ready report data
-  ([#15](https://github.com/rwjblue/antennabench/issues/15)).
+- Paired descriptive comparison data, evidence-coverage terminology, and
+  comparison diagnostics following
+  [decision 0004](decisions/0004-paired-descriptive-analysis-precedes-conclusions.md)
+  ([#22](https://github.com/rwjblue/antennabench/issues/22),
+  [#23](https://github.com/rwjblue/antennabench/issues/23),
+  [#25](https://github.com/rwjblue/antennabench/issues/25), and
+  [#24](https://github.com/rwjblue/antennabench/issues/24)).
+- Calibrated uncertainty and comparative conclusion semantics, after paired
+  data and suitable design evidence exist
+  ([#26](https://github.com/rwjblue/antennabench/issues/26)).
 - Optional rig observation or control
   ([#14](https://github.com/rwjblue/antennabench/issues/14)).
 - Public spot source and polling integration

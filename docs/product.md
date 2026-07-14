@@ -38,9 +38,26 @@ imbalanced, or low-quality evidence must stay visible. `Insufficient data` and
 winner when a method does not justify one.
 
 The implemented analysis and report layers are currently descriptive and do
-not select a winner. Future effect-size, uncertainty, conclusion-language, and
-advanced-chart behavior requires the methodological decision tracked in
-[#15](https://github.com/rwjblue/antennabench/issues/15).
+not select a winner. [Decision 0004](decisions/0004-paired-descriptive-analysis-precedes-conclusions.md)
+keeps automated conclusions deferred while allowing a next slice of honest
+paired descriptive data: same-path SNR differences, overlap and unmatched
+counts, time/order diagnostics, and stratified charts, tracked by
+[#23](https://github.com/rwjblue/antennabench/issues/23) and
+[#25](https://github.com/rwjblue/antennabench/issues/25). Existing
+insufficient/weak/moderate labels describe evidence coverage only; they do not
+say that one antenna is better.
+
+Transmit-path reports and receive-path local decodes answer different questions
+and must not be pooled. Missing decodes are not zero-SNR observations. Goal
+lenses may choose documented views or filters, but they do not change effect or
+conclusion rules. Single-antenna profiling never invents an A/B comparison.
+
+Directional evidence, practical equivalence, uncertainty intervals, and "too
+close to call" require a later validated inference contract with recorded
+experimental-design gates, a prespecified practical-effect bound, dependence
+and missingness handling, and deterministic simulation coverage. "Winner" and
+unqualified "better antenna" remain prohibited product claims. That deferred
+decision is tracked by [#26](https://github.com/rwjblue/antennabench/issues/26).
 
 ## V1 Bias
 
