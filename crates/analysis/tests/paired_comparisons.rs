@@ -237,6 +237,8 @@ fn counts_missing_and_invalid_modes_without_pairing_them() {
         ComparisonAvailability::NoMatchedPaths
     );
     assert_eq!(comparison.diagnostics.missing_or_invalid_mode_count, 3);
+    assert_eq!(comparison.diagnostics.missing_mode_count, 2);
+    assert_eq!(comparison.diagnostics.malformed_mode_count, 1);
     assert_eq!(comparison.timeline_rows[0].missing_or_invalid_mode_count, 1);
     assert_eq!(comparison.timeline_rows[1].missing_or_invalid_mode_count, 2);
     assert!(comparison.paired_rows.is_empty());

@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use antennabench_analysis::{summarize_bundle, AnalysisError, EvidenceQuality};
+use antennabench_analysis::{
+    summarize_bundle, AnalysisError, EligibilityExclusionCategory, EvidenceQuality,
+    ObservationExclusionReason,
+};
 use antennabench_core::{normalize_bundle, Band, BundleContents, ObservationKind};
 use antennabench_storage::BundleStore;
 
@@ -216,27 +219,135 @@ fn usable_observation_kinds_have_fixed_order() {
 }
 
 #[test]
-fn rejects_stale_annotations_instead_of_normalizing_them() {
+fn stale_annotation_excludes_only_the_affected_observation() {
     let mut bundle = fixture_bundle();
     bundle.observations[0].slot_label = Some("B".to_string());
 
-    let error = summarize_bundle(&bundle).expect_err("stale annotation must fail validation");
+    let summary = summarize_bundle(&bundle).expect("stale evidence is scoped to one observation");
+
+    assert_eq!(
+        summary.overall.observation_counts.total,
+        bundle.observations.len()
+    );
+    assert!(summary.overall.exclusions.iter().any(|exclusion| {
+        exclusion.reason == ObservationExclusionReason::ContradictoryEvidence
+            && exclusion.count == 1
+    }));
+    assert!(summary.eligibility.exclusions.iter().any(|exclusion| {
+        exclusion.code == "bundle.semantic.alignment_annotation_mismatch"
+            && exclusion.category == EligibilityExclusionCategory::Contradictory
+            && exclusion.count == 1
+    }));
+}
+
+#[test]
+fn non_finite_snr_excludes_only_the_affected_observation() {
+    let mut bundle = fixture_bundle();
+    bundle.observations[0].snr_db = Some(f32::NAN);
+
+    let summary = summarize_bundle(&bundle).expect("non-finite SNR is scoped to one observation");
+
+    assert!(summary.overall.exclusions.iter().any(|exclusion| {
+        exclusion.reason == ObservationExclusionReason::MalformedEvidence && exclusion.count == 1
+    }));
+    assert!(summary
+        .overall
+        .snr
+        .is_none_or(|statistics| statistics.min_db.is_finite()));
+}
+
+#[test]
+fn structural_antenna_ambiguity_still_blocks_analysis() {
+    let mut bundle = fixture_bundle();
+    bundle.antennas.antennas[1].label = bundle.antennas.antennas[0].label.clone();
+
+    let error = summarize_bundle(&bundle).expect_err("ambiguous antenna identity must block");
 
     assert!(matches!(error, AnalysisError::InvalidBundle(_)));
 }
 
 #[test]
-fn rejects_non_finite_snr_with_the_observation_id() {
+fn mixed_quality_observations_preserve_valid_slots_and_stable_reasons() {
+    let mut bundle = bundle_with_samples(&[
+        ("malformed", "2026-07-09T20:00:30Z", Some(-20.0)),
+        ("contradictory", "2026-07-09T20:02:30Z", Some(-18.0)),
+        ("valid-a", "2026-07-09T20:04:30Z", Some(-16.0)),
+        ("valid-b", "2026-07-09T20:06:30Z", Some(-14.0)),
+    ]);
+    bundle.observations[0].distance_km = Some(-1.0);
+    bundle.observations[1].slot_label = Some("A".to_string());
+
+    let summary = summarize_bundle(&bundle).expect("valid observations remain analyzable");
+
+    assert_eq!(summary.overall.observation_counts.total, 4);
+    assert_eq!(summary.overall.observation_counts.usable, 3);
+    assert_eq!(summary.overall.observation_counts.excluded, 1);
+    assert_eq!(
+        summary
+            .slots
+            .iter()
+            .map(|slot| slot.evidence.observation_counts.usable)
+            .sum::<usize>(),
+        3
+    );
+    insta::assert_json_snapshot!(summary.eligibility, @r#"
+    {
+      "exclusions": [
+        {
+          "code": "bundle.semantic.alignment_annotation_mismatch",
+          "category": "contradictory",
+          "scope": "observation",
+          "count": 1
+        },
+        {
+          "code": "bundle.semantic.invalid_range",
+          "category": "malformed",
+          "scope": "observation",
+          "count": 1
+        }
+      ]
+    }
+    "#);
+}
+
+#[test]
+fn invalid_slot_excludes_only_its_scope() {
     let mut bundle = fixture_bundle();
-    bundle.observations[0].snr_db = Some(f32::NAN);
+    let original_slot_count = bundle.schedule.slots.len();
+    bundle.schedule.slots[0].guard_seconds = bundle.schedule.slots[0].duration_seconds;
 
-    let error = summarize_bundle(&bundle).expect_err("non-finite SNR must be rejected");
+    let summary = summarize_bundle(&bundle).expect("other slots remain deterministic");
 
-    assert!(matches!(
-        error,
-        AnalysisError::NonFiniteSnr { observation_id }
-            if observation_id == "obs-001"
-    ));
+    assert_eq!(summary.slots.len(), original_slot_count - 1);
+    assert!(summary.eligibility.exclusions.iter().any(|exclusion| {
+        exclusion.code == "bundle.semantic.invalid_slot_guard"
+            && exclusion.scope == antennabench_analysis::EligibilityScope::Slot
+    }));
+    assert!(summary
+        .slots
+        .iter()
+        .any(|slot| slot.evidence.observation_counts.total > 0));
+}
+
+#[test]
+fn duplicate_observation_identity_is_distinct_from_malformed_evidence() {
+    let mut bundle = bundle_with_samples(&[
+        ("duplicate-a", "2026-07-09T20:00:30Z", Some(-20.0)),
+        ("duplicate-b", "2026-07-09T20:02:30Z", Some(-18.0)),
+        ("valid", "2026-07-09T20:04:30Z", Some(-16.0)),
+    ]);
+    bundle.observations[1].observation_id = bundle.observations[0].observation_id.clone();
+
+    let summary = summarize_bundle(&bundle).expect("duplicate observations are excluded by ID");
+
+    assert!(summary.overall.exclusions.iter().any(|exclusion| {
+        exclusion.reason == ObservationExclusionReason::DuplicateEvidence && exclusion.count == 2
+    }));
+    assert_eq!(summary.overall.observation_counts.usable, 1);
+    assert!(summary.eligibility.exclusions.iter().any(|exclusion| {
+        exclusion.code == "bundle.structure.duplicate_id"
+            && exclusion.category == EligibilityExclusionCategory::Duplicate
+    }));
 }
 
 #[test]

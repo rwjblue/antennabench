@@ -206,6 +206,18 @@ impl BundleStore {
         Ok(bundle)
     }
 
+    /// Reads a compatibility-safe typed bundle for granular analysis and keeps
+    /// its layered diagnostics beside the normalized projection.
+    pub fn read_for_analysis(
+        &self,
+    ) -> Result<(BundleContents, antennabench_core::BundleValidationReport), BundleStoreError> {
+        let (bundle, report) = self.inspect()?.into_parts();
+        let Some(bundle) = bundle else {
+            return Err(BundleValidationError::from_report(report).into());
+        };
+        Ok((normalize_bundle(bundle), report))
+    }
+
     fn bundle_paths(&self, files: &BundleFiles) -> Result<ResolvedBundlePaths, BundleStoreError> {
         let bootstrap_files = BundleFiles::default();
         let manifest = self.bundle_path(bootstrap_files.manifest.as_str())?;

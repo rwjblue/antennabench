@@ -22,6 +22,48 @@ pub struct AnalysisSummary {
     pub bands: Vec<BandEvidenceSummary>,
     pub slots: Vec<SlotEvidenceSummary>,
     pub comparison: PairedComparisonAnalysis,
+    #[serde(default, skip_serializing_if = "EvidenceEligibility::is_empty")]
+    pub eligibility: EvidenceEligibility,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvidenceEligibility {
+    pub exclusions: Vec<EligibilityExclusionCount>,
+}
+
+impl EvidenceEligibility {
+    pub fn is_empty(&self) -> bool {
+        self.exclusions.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EligibilityExclusionCount {
+    pub code: String,
+    pub category: EligibilityExclusionCategory,
+    pub scope: EligibilityScope,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EligibilityExclusionCategory {
+    Missing,
+    Malformed,
+    Contradictory,
+    Unsupported,
+    Duplicate,
+    DeliberatelyExcluded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EligibilityScope {
+    Field,
+    Observation,
+    Slot,
+    ComparisonStratum,
+    ComparisonBlock,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -103,6 +145,11 @@ pub enum ObservationExclusionReason {
     BadSlot,
     BandMismatch,
     OutsideSchedule,
+    MissingEvidence,
+    MalformedEvidence,
+    ContradictoryEvidence,
+    UnsupportedEvidence,
+    DuplicateEvidence,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -150,10 +197,18 @@ pub struct ComparisonDiagnostics {
     pub missing_snr_left_count: usize,
     pub missing_snr_right_count: usize,
     pub missing_or_invalid_mode_count: usize,
+    #[serde(default, skip_serializing_if = "usize_is_zero")]
+    pub missing_mode_count: usize,
+    #[serde(default, skip_serializing_if = "usize_is_zero")]
+    pub malformed_mode_count: usize,
     pub ambiguous_path_count: usize,
     pub exact_duplicate_count: usize,
     pub conflicting_duplicate_group_count: usize,
     pub excluded_observation_count: usize,
+}
+
+fn usize_is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -105,6 +105,7 @@ dependencies = [
  "chrono",
  "insta",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 1.0.69",
 ]

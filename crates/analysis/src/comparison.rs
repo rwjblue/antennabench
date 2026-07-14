@@ -111,13 +111,15 @@ pub(crate) fn analyze_paired_comparison(
                 timeline_rows[index].ambiguous_path_count += 1;
             }
         }
-        let mode = classified
-            .observation
-            .mode
-            .as_deref()
-            .and_then(SignalMode::normalize);
+        let mode_value = classified.observation.mode.as_deref();
+        let mode = mode_value.and_then(SignalMode::normalize);
         if mode.is_none() {
             diagnostics.missing_or_invalid_mode_count += 1;
+            if mode_value.is_none_or(|value| value.trim().is_empty()) {
+                diagnostics.missing_mode_count += 1;
+            } else {
+                diagnostics.malformed_mode_count += 1;
+            }
             if let Some(index) = slot_locations.get(slot_id).copied() {
                 timeline_rows[index].missing_or_invalid_mode_count += 1;
             }

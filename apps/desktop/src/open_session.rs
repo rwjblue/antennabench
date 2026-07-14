@@ -5,8 +5,10 @@ use std::{
 };
 
 use antennabench_analysis::AnalysisError;
-use antennabench_core::{BundleContents, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX};
-use antennabench_report::{build_report, render_standalone_html, ReportError};
+use antennabench_core::{
+    BundleContents, BundleValidationReport, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+};
+use antennabench_report::{build_report_with_validation, render_standalone_html, ReportError};
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError};
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -275,8 +277,8 @@ fn open_bundle(path: &Path) -> Result<ActiveSession, OpenSessionError> {
         })?
         .to_string();
 
-    let bundle = BundleStore::new(path).read_normalized_validated()?;
-    build_active_session(path.to_path_buf(), bundle_name, &bundle)
+    let (bundle, validation) = BundleStore::new(path).read_for_analysis()?;
+    build_active_session(path.to_path_buf(), bundle_name, &bundle, &validation)
 }
 
 fn suggested_export_name(source: &Path) -> String {
@@ -326,8 +328,9 @@ fn build_active_session(
     source: PathBuf,
     bundle_name: String,
     bundle: &BundleContents,
+    validation: &BundleValidationReport,
 ) -> Result<ActiveSession, OpenSessionError> {
-    let report = build_report(bundle)?;
+    let report = build_report_with_validation(bundle, validation)?;
     let report_html = render_standalone_html(&report);
 
     Ok(ActiveSession {

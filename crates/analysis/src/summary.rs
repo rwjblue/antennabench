@@ -1,19 +1,21 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use antennabench_core::{
     align_schedule_slots, codes, validate_bundle_report, AlignedSlot, Band, BundleContents,
-    BundleValidationError, BundleValidationProfile, ObservationKind, ObservationRecord,
-    ObservationSlotAssignment, SlotAlignmentPolicy, SlotAssignmentReason,
+    BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation, BundleRecordKind,
+    BundleValidationError, BundleValidationProfile, BundleValidationReport, ObservationKind,
+    ObservationRecord, ObservationSlotAssignment, SlotAlignmentPolicy, SlotAssignmentReason,
 };
 
 use crate::{
     comparison::analyze_paired_comparison, AnalysisError, AnalysisSummary, AntennaEvidenceSummary,
-    BandEvidenceSummary, EvidenceQuality, EvidenceSummary, ExclusionCount, ObservationCounts,
+    BandEvidenceSummary, EligibilityExclusionCategory, EligibilityExclusionCount, EligibilityScope,
+    EvidenceEligibility, EvidenceQuality, EvidenceSummary, ExclusionCount, ObservationCounts,
     ObservationExclusionReason, ObservationKindCount, SlotEvidenceSummary, SnrStatistics,
 };
 
 const MINIMUM_USABLE_CONFIDENCE: f32 = 0.70;
-const EXCLUSION_REASON_COUNT: usize = 7;
+const EXCLUSION_REASON_COUNT: usize = 12;
 const OBSERVATION_KIND_COUNT: usize = 3;
 
 const BANDS: [Band; 12] = [
@@ -39,6 +41,11 @@ const EXCLUSION_REASONS: [ObservationExclusionReason; EXCLUSION_REASON_COUNT] = 
     ObservationExclusionReason::BadSlot,
     ObservationExclusionReason::BandMismatch,
     ObservationExclusionReason::OutsideSchedule,
+    ObservationExclusionReason::MissingEvidence,
+    ObservationExclusionReason::MalformedEvidence,
+    ObservationExclusionReason::ContradictoryEvidence,
+    ObservationExclusionReason::UnsupportedEvidence,
+    ObservationExclusionReason::DuplicateEvidence,
 ];
 
 const OBSERVATION_KINDS: [ObservationKind; OBSERVATION_KIND_COUNT] = [
@@ -49,32 +56,69 @@ const OBSERVATION_KINDS: [ObservationKind; OBSERVATION_KIND_COUNT] = [
 
 pub fn summarize_bundle(bundle: &BundleContents) -> Result<AnalysisSummary, AnalysisError> {
     let validation = validate_bundle_report(bundle);
-    if !validation.allows(BundleValidationProfile::Analysis)
-        || validation
-            .diagnostics()
-            .iter()
-            .any(|diagnostic| diagnostic.code == codes::ALIGNMENT_ANNOTATION_MISMATCH)
-    {
-        return Err(BundleValidationError::from_report(validation).into());
+    summarize_bundle_with_report(bundle, &validation)
+}
+
+pub fn summarize_bundle_with_report(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+) -> Result<AnalysisSummary, AnalysisError> {
+    if validation.diagnostics().iter().any(is_fatal_for_analysis) {
+        return Err(BundleValidationError::from_report(validation.clone()).into());
     }
-    reject_non_finite_snr(bundle)?;
+    let plan = EligibilityPlan::from_report(validation);
+    let mut analysis_bundle = bundle.clone();
+    sanitize_analysis_fields(&mut analysis_bundle, validation);
+    analysis_bundle.schedule.slots = bundle
+        .schedule
+        .slots
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !plan.excluded_slots.contains(index))
+        .map(|(_, slot)| slot.clone())
+        .collect();
+    let retained_slot_ids = analysis_bundle
+        .schedule
+        .slots
+        .iter()
+        .map(|slot| slot.slot_id.as_str())
+        .collect::<HashSet<_>>();
+    analysis_bundle.events = bundle
+        .events
+        .iter()
+        .enumerate()
+        .filter(|(index, event)| {
+            !plan.excluded_events.contains(index)
+                && event
+                    .slot_id
+                    .as_deref()
+                    .is_none_or(|slot_id| retained_slot_ids.contains(slot_id))
+        })
+        .map(|(_, event)| event.clone())
+        .collect();
 
     let alignment = align_schedule_slots(
-        &bundle.schedule,
-        &bundle.events,
-        &bundle.observations,
+        &analysis_bundle.schedule,
+        &analysis_bundle.events,
+        &analysis_bundle.observations,
         SlotAlignmentPolicy::default(),
     );
-    let observations = bundle
+    let observations = analysis_bundle
         .observations
         .iter()
         .zip(&alignment.observation_assignments)
-        .map(|(observation, assignment)| {
+        .enumerate()
+        .map(|(index, (observation, assignment))| {
             debug_assert_eq!(observation.observation_id, assignment.observation_id);
             ClassifiedObservation {
                 observation,
                 assignment,
-                disposition: classify_assignment(assignment),
+                disposition: plan
+                    .excluded_observations
+                    .get(&index)
+                    .copied()
+                    .map(ObservationDisposition::Excluded)
+                    .unwrap_or_else(|| classify_assignment(assignment)),
             }
         })
         .collect::<Vec<_>>();
@@ -101,8 +145,12 @@ pub fn summarize_bundle(bundle: &BundleContents) -> Result<AnalysisSummary, Anal
         .iter()
         .copied()
         .filter(|band| {
-            bundle.schedule.slots.iter().any(|slot| slot.band == *band)
-                || bundle
+            analysis_bundle
+                .schedule
+                .slots
+                .iter()
+                .any(|slot| slot.band == *band)
+                || analysis_bundle
                     .observations
                     .iter()
                     .any(|observation| observation.band == *band)
@@ -123,8 +171,8 @@ pub fn summarize_bundle(bundle: &BundleContents) -> Result<AnalysisSummary, Anal
         .iter()
         .map(|slot| summarize_slot(slot, &observations))
         .collect();
-    let evidence_quality = session_evidence_quality(bundle, &antennas);
-    let comparison = analyze_paired_comparison(bundle, &alignment.slots, &observations);
+    let evidence_quality = session_evidence_quality(&analysis_bundle, &antennas);
+    let comparison = analyze_paired_comparison(&analysis_bundle, &alignment.slots, &observations);
 
     Ok(AnalysisSummary {
         session_id: bundle.manifest.session_id.clone(),
@@ -134,19 +182,229 @@ pub fn summarize_bundle(bundle: &BundleContents) -> Result<AnalysisSummary, Anal
         bands,
         slots,
         comparison,
+        eligibility: plan.eligibility,
     })
 }
 
-fn reject_non_finite_snr(bundle: &BundleContents) -> Result<(), AnalysisError> {
-    for observation in &bundle.observations {
-        if observation.snr_db.is_some_and(|snr| !snr.is_finite()) {
-            return Err(AnalysisError::NonFiniteSnr {
-                observation_id: observation.observation_id.clone(),
-            });
+struct EligibilityPlan {
+    excluded_observations: HashMap<usize, ObservationExclusionReason>,
+    excluded_slots: HashSet<usize>,
+    excluded_events: HashSet<usize>,
+    eligibility: EvidenceEligibility,
+}
+
+impl EligibilityPlan {
+    fn from_report(report: &BundleValidationReport) -> Self {
+        let mut excluded_observations = HashMap::new();
+        let mut excluded_slots = HashSet::new();
+        let mut excluded_events = HashSet::new();
+        let mut counts =
+            BTreeMap::<(String, EligibilityExclusionCategory, EligibilityScope), usize>::new();
+
+        for diagnostic in report.diagnostics().iter().filter(|diagnostic| {
+            diagnostic.blocks(BundleValidationProfile::Analysis)
+                || diagnostic.code == codes::ALIGNMENT_ANNOTATION_MISMATCH
+                || is_non_finite_snr(diagnostic)
+        }) {
+            let category = eligibility_category(diagnostic);
+            let scope = eligibility_scope(&diagnostic.location);
+            *counts
+                .entry((diagnostic.code.clone(), category, scope))
+                .or_default() += 1;
+            for location in
+                std::iter::once(&diagnostic.location).chain(diagnostic.related_locations.iter())
+            {
+                match (location.record_kind, location.record_index) {
+                    (Some(BundleRecordKind::Observation), Some(index))
+                        if observation_diagnostic_excludes(diagnostic) =>
+                    {
+                        let reason = observation_reason(category);
+                        excluded_observations
+                            .entry(index)
+                            .and_modify(|existing| {
+                                if observation_reason_rank(reason)
+                                    > observation_reason_rank(*existing)
+                                {
+                                    *existing = reason;
+                                }
+                            })
+                            .or_insert(reason);
+                    }
+                    (Some(BundleRecordKind::Slot), Some(index)) => {
+                        excluded_slots.insert(index);
+                    }
+                    (Some(BundleRecordKind::OperatorEvent), Some(index)) => {
+                        excluded_events.insert(index);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Self {
+            excluded_observations,
+            excluded_slots,
+            excluded_events,
+            eligibility: EvidenceEligibility {
+                exclusions: counts
+                    .into_iter()
+                    .map(
+                        |((code, category, scope), count)| EligibilityExclusionCount {
+                            code,
+                            category,
+                            scope,
+                            count,
+                        },
+                    )
+                    .collect(),
+            },
         }
     }
+}
 
-    Ok(())
+fn observation_diagnostic_excludes(diagnostic: &BundleDiagnostic) -> bool {
+    matches!(
+        diagnostic.code.as_str(),
+        codes::DUPLICATE_ID
+            | codes::UNKNOWN_OBSERVATION_SLOT
+            | codes::INVALID_SLOT_CONFIDENCE
+            | codes::ALIGNMENT_ANNOTATION_MISMATCH
+            | codes::SESSION_ID_MISMATCH
+            | codes::UNSUPPORTED_SCHEMA_VERSION
+    ) || is_non_finite_snr(diagnostic)
+}
+
+fn sanitize_analysis_fields(bundle: &mut BundleContents, report: &BundleValidationReport) {
+    for diagnostic in report.diagnostics() {
+        let Some(index) = diagnostic.location.record_index else {
+            continue;
+        };
+        if diagnostic.location.record_kind != Some(BundleRecordKind::Observation) {
+            continue;
+        }
+        let Some(observation) = bundle.observations.get_mut(index) else {
+            continue;
+        };
+        match diagnostic.location.field_path.as_deref() {
+            Some("/distance_km") => observation.distance_km = None,
+            Some("/azimuth_degrees") => observation.azimuth_degrees = None,
+            Some("/power_watts") => observation.power_watts = None,
+            Some("/frequency_hz") => observation.frequency_hz = None,
+            Some("/drift_hz_per_minute") => observation.drift_hz_per_minute = None,
+            _ => {}
+        }
+    }
+}
+
+fn is_fatal_for_analysis(diagnostic: &BundleDiagnostic) -> bool {
+    if !diagnostic.blocks(BundleValidationProfile::Analysis) {
+        return false;
+    }
+    if diagnostic.code == codes::DUPLICATE_ANTENNA_LABEL
+        || matches!(
+            diagnostic.code.as_str(),
+            codes::V2_CHECKPOINT_MISMATCH
+                | codes::V2_ADAPTER_LINK
+                | codes::V2_ATTACHMENT
+                | codes::V2_MUTATION
+        )
+    {
+        return true;
+    }
+    if diagnostic.category == BundleDiagnosticCategory::Wire {
+        return diagnostic.location.record_kind.is_none();
+    }
+    if diagnostic.category == BundleDiagnosticCategory::Structural {
+        return !matches!(
+            diagnostic.location.record_kind,
+            Some(BundleRecordKind::Observation)
+                | Some(BundleRecordKind::Slot)
+                | Some(BundleRecordKind::OperatorEvent)
+                | Some(BundleRecordKind::WsjtXRecord)
+                | Some(BundleRecordKind::RigRecord)
+                | Some(BundleRecordKind::PropagationRecord)
+        );
+    }
+    false
+}
+
+fn is_non_finite_snr(diagnostic: &BundleDiagnostic) -> bool {
+    diagnostic.code == codes::NON_FINITE_NUMBER
+        && diagnostic.location.record_kind == Some(BundleRecordKind::Observation)
+        && diagnostic.location.field_path.as_deref() == Some("/snr_db")
+}
+
+fn eligibility_scope(location: &BundleDiagnosticLocation) -> EligibilityScope {
+    match location.record_kind {
+        Some(BundleRecordKind::Observation) => EligibilityScope::Observation,
+        Some(BundleRecordKind::Slot) => EligibilityScope::Slot,
+        _ => EligibilityScope::Field,
+    }
+}
+
+fn eligibility_category(diagnostic: &BundleDiagnostic) -> EligibilityExclusionCategory {
+    match diagnostic.code.as_str() {
+        codes::DUPLICATE_MEMBER
+        | codes::DUPLICATE_RAW_MEMBER
+        | codes::DUPLICATE_ID
+        | codes::DUPLICATE_ANTENNA_LABEL
+        | codes::DUPLICATE_SEQUENCE_NUMBER => EligibilityExclusionCategory::Duplicate,
+        codes::UNKNOWN_ANTENNA_LABEL
+        | codes::UNKNOWN_EVENT_SLOT
+        | codes::UNKNOWN_OBSERVATION_SLOT
+        | codes::EMPTY_IDENTITY
+        | codes::EMPTY_SCHEDULE => EligibilityExclusionCategory::Missing,
+        codes::UNSUPPORTED_SCHEMA_VERSION | codes::EXPERIMENT_SHAPE_MISMATCH => {
+            EligibilityExclusionCategory::Unsupported
+        }
+        codes::SESSION_ID_MISMATCH
+        | codes::SLOT_WINDOW_OUT_OF_ORDER
+        | codes::SLOT_WINDOW_OVERLAP
+        | codes::SLOT_SEQUENCE_OUT_OF_ORDER
+        | codes::ALIGNMENT_ANNOTATION_MISMATCH
+        | codes::V2_CHECKPOINT_MISMATCH
+        | codes::V2_ADAPTER_LINK
+        | codes::V2_ATTACHMENT
+        | codes::V2_MUTATION => EligibilityExclusionCategory::Contradictory,
+        codes::INVALID_JSON
+        | codes::INVALID_SLOT_CONFIDENCE
+        | codes::INVALID_IDENTITY
+        | codes::INVALID_REQUIRED_TEXT
+        | codes::INVALID_ANTENNA_LABEL
+        | codes::INVALID_SLOT_DURATION
+        | codes::INVALID_SLOT_GUARD
+        | codes::NON_FINITE_NUMBER
+        | codes::INVALID_RANGE => EligibilityExclusionCategory::Malformed,
+        _ => EligibilityExclusionCategory::Unsupported,
+    }
+}
+
+fn observation_reason(category: EligibilityExclusionCategory) -> ObservationExclusionReason {
+    match category {
+        EligibilityExclusionCategory::Missing => ObservationExclusionReason::MissingEvidence,
+        EligibilityExclusionCategory::Malformed => ObservationExclusionReason::MalformedEvidence,
+        EligibilityExclusionCategory::Contradictory => {
+            ObservationExclusionReason::ContradictoryEvidence
+        }
+        EligibilityExclusionCategory::Unsupported => {
+            ObservationExclusionReason::UnsupportedEvidence
+        }
+        EligibilityExclusionCategory::Duplicate => ObservationExclusionReason::DuplicateEvidence,
+        EligibilityExclusionCategory::DeliberatelyExcluded => {
+            ObservationExclusionReason::ContradictoryEvidence
+        }
+    }
+}
+
+fn observation_reason_rank(reason: ObservationExclusionReason) -> u8 {
+    match reason {
+        ObservationExclusionReason::DuplicateEvidence => 5,
+        ObservationExclusionReason::UnsupportedEvidence => 4,
+        ObservationExclusionReason::ContradictoryEvidence => 3,
+        ObservationExclusionReason::MalformedEvidence => 2,
+        ObservationExclusionReason::MissingEvidence => 1,
+        _ => 0,
+    }
 }
 
 fn summarize_slot(
@@ -357,6 +615,11 @@ fn exclusion_reason_index(reason: ObservationExclusionReason) -> usize {
         ObservationExclusionReason::BadSlot => 4,
         ObservationExclusionReason::BandMismatch => 5,
         ObservationExclusionReason::OutsideSchedule => 6,
+        ObservationExclusionReason::MissingEvidence => 7,
+        ObservationExclusionReason::MalformedEvidence => 8,
+        ObservationExclusionReason::ContradictoryEvidence => 9,
+        ObservationExclusionReason::UnsupportedEvidence => 10,
+        ObservationExclusionReason::DuplicateEvidence => 11,
     }
 }
 

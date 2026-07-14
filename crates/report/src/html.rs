@@ -2,8 +2,9 @@ use std::{collections::BTreeSet, fmt::Write};
 
 use antennabench_analysis::{
     ComparisonAvailability, ComparisonOrder, ComparisonSide, ComparisonStratum,
-    ComparisonTimelineRow, EvidenceQuality, ObservationCounts, ObservationExclusionReason,
-    PairedObservationRow, PathDirection, SnrStatistics,
+    ComparisonTimelineRow, EligibilityExclusionCategory, EligibilityScope, EvidenceQuality,
+    ObservationCounts, ObservationExclusionReason, PairedObservationRow, PathDirection,
+    SnrStatistics,
 };
 use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
@@ -49,6 +50,7 @@ pub fn render_standalone_html(report: &SessionReport) -> String {
         escape_html(&report.context.session_id)
     );
     render_notices(&mut out, &report.notices);
+    render_eligibility(&mut out, report);
     render_context(&mut out, report);
     render_overall(&mut out, report);
     render_comparison(&mut out, report);
@@ -58,6 +60,45 @@ pub fn render_standalone_html(report: &SessionReport) -> String {
 
     out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
     out
+}
+
+fn render_eligibility(out: &mut String, report: &SessionReport) {
+    if report.eligibility_exclusions.is_empty() {
+        return;
+    }
+    out.push_str("<section class=\"panel\" aria-labelledby=\"eligibility-title\"><h2 id=\"eligibility-title\">Evidence eligibility disclosures</h2><p class=\"notice\">Affected evidence is excluded only from calculations that require it. Unrelated valid evidence remains included.</p><div class=\"table-wrap\"><table><caption>Validation-driven exclusions</caption><thead><tr><th scope=\"col\">Reason code</th><th scope=\"col\">Kind</th><th scope=\"col\">Scope</th><th scope=\"col\">Count</th></tr></thead><tbody>");
+    for exclusion in &report.eligibility_exclusions {
+        write_html!(
+            out,
+            "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            escape_html(&exclusion.code),
+            eligibility_category(exclusion.category),
+            eligibility_scope(exclusion.scope),
+            exclusion.count
+        );
+    }
+    out.push_str("</tbody></table></div></section>");
+}
+
+fn eligibility_category(value: EligibilityExclusionCategory) -> &'static str {
+    match value {
+        EligibilityExclusionCategory::Missing => "Missing",
+        EligibilityExclusionCategory::Malformed => "Malformed",
+        EligibilityExclusionCategory::Contradictory => "Contradictory",
+        EligibilityExclusionCategory::Unsupported => "Unsupported",
+        EligibilityExclusionCategory::Duplicate => "Duplicate",
+        EligibilityExclusionCategory::DeliberatelyExcluded => "Deliberately excluded",
+    }
+}
+
+fn eligibility_scope(value: EligibilityScope) -> &'static str {
+    match value {
+        EligibilityScope::Field => "Field",
+        EligibilityScope::Observation => "Observation",
+        EligibilityScope::Slot => "Slot",
+        EligibilityScope::ComparisonStratum => "Comparison stratum",
+        EligibilityScope::ComparisonBlock => "Comparison block",
+    }
 }
 
 fn render_notices(out: &mut String, notices: &[ReportNotice]) {
@@ -263,6 +304,8 @@ fn render_comparison_diagnostics(out: &mut String, report: &SessionReport) {
         "Missing or invalid mode",
         diagnostics.missing_or_invalid_mode_count,
     );
+    comparison_stat(out, "Missing mode", diagnostics.missing_mode_count);
+    comparison_stat(out, "Malformed mode", diagnostics.malformed_mode_count);
     comparison_stat(out, "Ambiguous paths", diagnostics.ambiguous_path_count);
     comparison_stat(
         out,
@@ -1066,6 +1109,11 @@ fn exclusion_reason(value: ObservationExclusionReason) -> &'static str {
         ObservationExclusionReason::BadSlot => "Bad slot",
         ObservationExclusionReason::BandMismatch => "Band mismatch",
         ObservationExclusionReason::OutsideSchedule => "Outside schedule",
+        ObservationExclusionReason::MissingEvidence => "Missing evidence",
+        ObservationExclusionReason::MalformedEvidence => "Malformed evidence",
+        ObservationExclusionReason::ContradictoryEvidence => "Contradictory evidence",
+        ObservationExclusionReason::UnsupportedEvidence => "Unsupported evidence",
+        ObservationExclusionReason::DuplicateEvidence => "Duplicate evidence",
     }
 }
 fn notice_text(value: ReportNotice) -> &'static str {

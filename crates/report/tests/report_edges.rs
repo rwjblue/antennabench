@@ -1,35 +1,48 @@
 use std::path::PathBuf;
 
-use antennabench_analysis::AnalysisError;
 use antennabench_core::normalize_bundle;
-use antennabench_report::{build_report, ReportError, ReportNotice};
+use antennabench_report::{build_report, render_standalone_html, ReportNotice};
 use antennabench_storage::BundleStore;
 
 #[test]
-fn propagates_stale_annotation_errors_from_analysis() {
+fn discloses_stale_annotation_without_hiding_unrelated_evidence() {
     let mut bundle = minimal_fixture_bundle();
     bundle.observations[0].slot_label = Some("B".to_string());
 
-    let error = build_report(&bundle).expect_err("stale annotation must fail validation");
+    let report = build_report(&bundle).expect("stale annotation should be narrowly excluded");
+    let html = render_standalone_html(&report);
 
-    assert!(matches!(
-        error,
-        ReportError::Analysis(AnalysisError::InvalidBundle(_))
-    ));
+    assert_eq!(report.eligibility_exclusions.len(), 1);
+    assert!(html.contains("Evidence eligibility disclosures"));
+    assert!(html.contains("bundle.semantic.alignment_annotation_mismatch"));
+    assert!(html.contains("Contradictory"));
 }
 
 #[test]
-fn propagates_non_finite_snr_errors_with_the_observation_id() {
+fn discloses_non_finite_snr_as_an_observation_exclusion() {
     let mut bundle = minimal_fixture_bundle();
+    let baseline = build_report(&bundle).expect("baseline report");
     bundle.observations[0].snr_db = Some(f32::NAN);
 
-    let error = build_report(&bundle).expect_err("non-finite SNR must be rejected");
+    let report = build_report(&bundle).expect("non-finite SNR should be narrowly excluded");
+    let serialized = serde_json::to_value(&report).expect("report serializes");
 
-    assert!(matches!(
-        error,
-        ReportError::Analysis(AnalysisError::NonFiniteSnr { observation_id })
-            if observation_id == "obs-001"
-    ));
+    assert_eq!(
+        report.evidence.overall.observation_counts.total,
+        bundle.observations.len()
+    );
+    assert_eq!(
+        report.evidence.overall.observation_counts.excluded,
+        baseline.evidence.overall.observation_counts.excluded + 1
+    );
+    assert_eq!(
+        serialized["eligibility_exclusions"][0]["code"],
+        "bundle.semantic.non_finite_number"
+    );
+    assert_eq!(
+        serialized["eligibility_exclusions"][0]["category"],
+        "malformed"
+    );
 }
 
 #[test]

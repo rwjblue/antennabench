@@ -1,7 +1,8 @@
 use antennabench_analysis::{
     AnalysisError, ComparisonAvailability, ComparisonBlock, ComparisonDiagnostics,
-    ComparisonTimelineRow, DeltaOrientation, EvidenceQuality, ExclusionCount, ObservationCounts,
-    PairedObservationRow, PairedPathSummary, PairedStratumSummary, PathOverlapRow, SnrStatistics,
+    ComparisonTimelineRow, DeltaOrientation, EligibilityExclusionCount, EvidenceQuality,
+    ExclusionCount, ObservationCounts, PairedObservationRow, PairedPathSummary,
+    PairedStratumSummary, PathOverlapRow, SnrStatistics,
 };
 use antennabench_core::{AlignedSlotStatus, Antenna, Band, ExperimentMode, SessionGoal};
 use chrono::{DateTime, Utc};
@@ -15,6 +16,8 @@ pub struct SessionReport {
     pub comparison: ReportComparisonData,
     pub chart_data: ReportChartData,
     pub notices: Vec<ReportNotice>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub eligibility_exclusions: Vec<EligibilityExclusionCount>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

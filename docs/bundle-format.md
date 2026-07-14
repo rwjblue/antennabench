@@ -205,8 +205,10 @@ The operation profiles are deliberately different:
 
 - compatibility read rejects ambiguous modeled JSON, unsupported schemas, and
   structural identity/reference failures, but retains semantic warnings
-- analysis additionally rejects semantic facts that would make evidence
-  interpretation unsafe; persisted alignment annotations may be regenerated
+- analysis maps field-, observation-, event-, and slot-scoped semantic problems
+  to granular evidence exclusions; only ambiguity that prevents deterministic
+  typed interpretation rejects the whole analysis, and persisted alignment
+  annotations may be regenerated while their diagnostics remain disclosed
 - strict creation rejects warning-bearing authored values; upgrade may accept a
   regenerable derived annotation only when the old source evidence remains
   retained, while warnings that cannot be represented losslessly still block it
@@ -250,7 +252,9 @@ Structural and semantic validation checks:
   match `session-state.json`
 
 Use `BundleStore::inspect()` to retain the report beside an optional all-or-none
-current projection. `read_current()` retains provider-neutral sidecars and
+current projection. `read_for_analysis()` returns a normalized compatibility-safe
+projection together with that report so analysis and reporting can preserve
+stable reason codes while excluding only affected evidence. `read_current()` retains provider-neutral sidecars and
 `read_v2()` exposes the v2 wire model. `read()` applies the compatibility profile,
 `read_validated()` requires a completely clean report, and
 `read_normalized_validated()` applies the analysis profile after regenerating

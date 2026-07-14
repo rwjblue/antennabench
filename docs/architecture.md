@@ -76,11 +76,20 @@ legacy `raw` evidence stay reportable without granting typed code permission to
 rewrite the source. [Decision 0009](decisions/0009-use-layered-bundle-validation-profiles.md)
 defines this boundary.
 
-Analysis accepts normalized bundle contents, validates them without mutation,
-and reuses core alignment to derive slot status and evidence eligibility. It
-returns observation counts, exclusions, per-antenna/band/slot evidence, SNR
-descriptive statistics, and conservative evidence-coverage labels. It does not
-select a winner or perform effect-size, confidence, or significance analysis.
+Analysis accepts normalized bundle contents together with the layered validation
+report and reuses core alignment to derive slot status and evidence eligibility.
+Wire or structural ambiguity that prevents deterministic typed interpretation
+still blocks the whole analysis. Record- and field-scoped semantic problems are
+instead mapped to the smallest honest exclusion: a malformed location field is
+omitted from location context, a contradictory or malformed observation needed
+for eligibility is excluded from that observation, and an invalid slot or event
+is removed without hiding unrelated slots. Stable validation codes are retained
+with missing, malformed, contradictory, unsupported, duplicate, or deliberately
+excluded categories and field, observation, or slot scope.
+
+Analysis returns observation counts, exclusions, per-antenna/band/slot evidence,
+SNR descriptive statistics, and conservative evidence-coverage labels. It does
+not select a winner or perform effect-size, confidence, or significance analysis.
 Those labels measure descriptive evidence coverage from usable-observation and
 contributing-slot counts; they are not comparative evidence.
 
@@ -89,7 +98,7 @@ defines the paired descriptive boundary. Analysis partitions uninterrupted
 same-band runs into non-overlapping adjacent two-slot blocks, fixes delta
 orientation from the first two scheduled labels, and distinguishes transmit and
 receive paths. Paired rows remain stratified by band, normalized signal mode,
-observation kind, and record source; unmatched sides, missing or invalid mode,
+observation kind, and record source; unmatched sides, separately counted missing and malformed mode,
 missing SNR, ambiguous paths, exact duplicates, conflicts, invalid blocks, time,
 and order stay explicit. Duplicate schedule sequence numbers make the ordering
 ambiguous, so no block in that schedule is eligible for paired evidence. Signal
@@ -100,13 +109,16 @@ reduced to a per-path median before the stratum median so prolific paths do not
 receive extra headline weight. Uncertainty intervals and automated conclusions
 remain deferred.
 
-Report construction accepts one `BundleContents` value and invokes analysis
-internally, preventing callers from pairing bundle context with a summary from
-another bundle. It deterministically projects session context, conservative
+Report construction accepts one `BundleContents` value and its matching layered
+report, then invokes analysis internally, preventing callers from pairing bundle
+context with a summary from another bundle. Its compatibility helper computes
+that report directly for already-typed inputs. It deterministically projects session context, conservative
 evidence sections, typed notices, paired comparison availability and
 diagnostics, and concrete chart-ready rows for antenna SNR, band evidence, slot
 evidence, overlap, data-quality timelines, paired differences, and SNR over
-time. The model is serializable but renderer-neutral: it contains no generated
+time. Validation-driven exclusions remain serializable structured data and render
+in an operator-facing eligibility disclosure table. The model is otherwise
+renderer-neutral: it contains no generated
 prose, winner logic, generic chart configuration, or rendering output. The
 renderer may explain and visualize those typed facts, but it must not infer a
 conclusion from chart shape, raw antenna summaries, paired descriptive centers,

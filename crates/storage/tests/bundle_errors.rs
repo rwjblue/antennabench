@@ -67,6 +67,28 @@ fn read_validated_returns_validation_error_for_parseable_invalid_bundle() {
 }
 
 #[test]
+fn read_for_analysis_retains_scopable_semantic_diagnostics() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let bundle_path = tempdir.path().join("scopable.session.wsprabundle");
+    std::fs::create_dir_all(bundle_path.join("attachments")).unwrap();
+    write_minimal_bundle_files(&bundle_path);
+    let station_path = bundle_path.join("station.json");
+    let station = std::fs::read_to_string(&station_path)
+        .unwrap()
+        .replace("\"power_watts\": 5.0", "\"power_watts\": -1.0");
+    std::fs::write(&station_path, station).unwrap();
+
+    let (bundle, report) = BundleStore::new(&bundle_path).read_for_analysis().unwrap();
+
+    assert_eq!(bundle.station.power_watts, Some(-1.0));
+    assert!(report
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.code == codes::INVALID_RANGE));
+    assert!(!report.allows(BundleValidationProfile::Analysis));
+}
+
+#[test]
 fn unknown_modeled_fields_are_visible_but_compatible_with_read_and_analysis() {
     let tempdir = tempfile::tempdir().unwrap();
     let bundle_path = tempdir.path().join("unknown-field.session.wsprabundle");

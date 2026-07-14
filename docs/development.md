@@ -165,6 +165,11 @@ Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, accessible chart tables, and all
 report sections. Separate hostile-string and empty-data cases pin escaping and
 honest unavailable states without loading a browser or making network requests.
+Mixed-quality analysis/report tests pair malformed and contradictory observations
+with valid evidence, assert stable eligibility code/category/scope counts, and
+prove unrelated slots and summaries remain usable. Structural antenna ambiguity
+continues to fail deterministically, while non-finite SNR becomes an affected-
+observation exclusion in serialized and rendered reports.
 
 To generate the canonical sample as an untracked verification artifact:
 

@@ -1,8 +1,11 @@
 use antennabench_analysis::{
-    summarize_bundle, AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary,
+    summarize_bundle_with_report, AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary,
     EvidenceSummary, ObservationKindCount, PairedComparisonAnalysis, SlotEvidenceSummary,
 };
-use antennabench_core::{BundleContents, ObservationKind, PlannedSlot};
+use antennabench_core::{
+    codes, validate_bundle_report, BundleContents, BundleFileRole, BundleRecordKind,
+    BundleValidationReport, ObservationKind, PlannedSlot,
+};
 use chrono::Duration;
 
 use crate::{
@@ -14,6 +17,14 @@ use crate::{
 };
 
 pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportError> {
+    let validation = validate_bundle_report(bundle);
+    build_report_with_validation(bundle, &validation)
+}
+
+pub fn build_report_with_validation(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+) -> Result<SessionReport, ReportError> {
     let AnalysisSummary {
         session_id: _,
         evidence_quality,
@@ -22,9 +33,10 @@ pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportErro
         bands,
         slots,
         comparison,
-    } = summarize_bundle(bundle)?;
+        eligibility,
+    } = summarize_bundle_with_report(bundle, validation)?;
 
-    let context = build_context(bundle, &bands);
+    let context = build_context(bundle, &bands, validation);
     let evidence = EvidenceSections {
         evidence_quality,
         overall: project_evidence(overall),
@@ -41,6 +53,7 @@ pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportErro
         comparison: project_comparison(comparison),
         chart_data,
         notices,
+        eligibility_exclusions: eligibility.exclusions,
     })
 }
 
@@ -63,6 +76,7 @@ fn project_comparison(comparison: PairedComparisonAnalysis) -> ReportComparisonD
 fn build_context(
     bundle: &BundleContents,
     analyzed_bands: &[BandEvidenceSummary],
+    validation: &BundleValidationReport,
 ) -> SessionContext {
     let slots = bundle
         .schedule
@@ -90,17 +104,54 @@ fn build_context(
         .map(|summary| summary.band)
         .collect();
 
+    let mut antennas = bundle.antennas.antennas.clone();
+    for diagnostic in validation.diagnostics() {
+        if diagnostic.location.record_kind != Some(BundleRecordKind::Antenna)
+            || !matches!(
+                diagnostic.code.as_str(),
+                codes::NON_FINITE_NUMBER | codes::INVALID_RANGE
+            )
+        {
+            continue;
+        }
+        let Some(antenna) = diagnostic
+            .location
+            .record_index
+            .and_then(|index| antennas.get_mut(index))
+        else {
+            continue;
+        };
+        match diagnostic.location.field_path.as_deref() {
+            Some(path) if path.ends_with("/height_m") => antenna.height_m = None,
+            Some(path) if path.ends_with("/radial_length_m") => antenna.radial_length_m = None,
+            Some(path) if path.ends_with("/orientation_degrees") => {
+                antenna.orientation_degrees = None;
+            }
+            _ => {}
+        }
+    }
+    let station_power_excluded = validation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.location.file == BundleFileRole::Station
+            && diagnostic.location.field_path.as_deref() == Some("/power_watts")
+            && matches!(
+                diagnostic.code.as_str(),
+                codes::NON_FINITE_NUMBER | codes::INVALID_RANGE
+            )
+    });
+
     SessionContext {
         session_id: bundle.manifest.session_id.clone(),
         station: StationContext {
             callsign: bundle.station.callsign.clone(),
             grid: bundle.station.grid.clone(),
-            power_watts: bundle.station.power_watts,
+            power_watts: (!station_power_excluded)
+                .then_some(bundle.station.power_watts)
+                .flatten(),
         },
         experiment_mode: bundle.schedule.mode,
         goal: bundle.schedule.goal,
         scheduled_time_range,
-        antennas: bundle.antennas.antennas.clone(),
+        antennas,
         bands,
         schedule: ScheduleOverview {
             slot_count: slots.len(),
