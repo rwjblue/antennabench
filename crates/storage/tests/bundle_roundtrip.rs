@@ -522,6 +522,7 @@ fn sample_bundle() -> BundleContents {
             slot_id: Some("slot-001".to_string()),
             event_type: OperatorEventType::Switched,
             note: None,
+            actual_antenna_label: None,
         }],
         observations: vec![ObservationRecord {
             meta: RecordMeta {

@@ -184,6 +184,13 @@ pub struct OperatorEvent {
     pub slot_id: Option<String>,
     pub event_type: OperatorEventType,
     pub note: Option<String>,
+    /// Schema-v2 projection of explicitly confirmed actual antenna state.
+    ///
+    /// This is deliberately absent from the schema-v1 wire format. V1 keeps
+    /// its historical planned-label inference, while v2 readers populate this
+    /// field only from typed operator evidence.
+    #[serde(skip)]
+    pub actual_antenna_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

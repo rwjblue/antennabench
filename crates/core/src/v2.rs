@@ -6,8 +6,8 @@ use thiserror::Error;
 
 use crate::{
     AnalysisFile, AntennasFile, Band, BundleContents, BundleFiles, BundleManifest, ObservationKind,
-    ObservationRecord, OperatorEvent, OperatorEventType, PropagationRecord, RecordMeta,
-    RecordSource, RigRecord, Schedule, Station, WsjtXRecord, SCHEMA_VERSION_V2,
+    ObservationRecord, PropagationRecord, RecordMeta, RecordSource, RigRecord, Schedule, Station,
+    WsjtXRecord, SCHEMA_VERSION_V2,
 };
 
 pub const V1_BUNDLE_SUFFIX: &str = ".session.wsprabundle";
@@ -312,9 +312,100 @@ pub struct AdapterRecordV2 {
 pub struct OperatorEventV2 {
     pub meta: RecordMetaV2,
     pub event_id: String,
+    pub occurred_at: DateTime<Utc>,
+    pub time_basis: EventTimeBasisV2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uncertainty_seconds: Option<u32>,
     pub slot_id: Option<String>,
-    pub event_type: OperatorEventType,
-    pub note: Option<String>,
+    pub payload: OperatorEventPayloadV2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EventTimeBasisV2 {
+    ObservedNow,
+    OperatorReported,
+    RecoverySystem,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CorrectableOperatorEventPayloadV2 {
+    AntennaStateConfirmed {
+        antenna_label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    SlotMissed {
+        reason: Option<String>,
+    },
+    SlotBad {
+        reason: String,
+    },
+    NoteAdded {
+        note: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReplacementOperatorEventV2 {
+    pub occurred_at: DateTime<Utc>,
+    pub time_basis: EventTimeBasisV2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uncertainty_seconds: Option<u32>,
+    pub slot_id: Option<String>,
+    pub payload: CorrectableOperatorEventPayloadV2,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum EventCorrectionActionV2 {
+    Retract,
+    Replace {
+        replacement: ReplacementOperatorEventV2,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OperatorEventPayloadV2 {
+    SessionStarted {
+        note: Option<String>,
+    },
+    SessionInterrupted {
+        reason: Option<String>,
+    },
+    InterruptionDetected {
+        reason: Option<String>,
+    },
+    SessionResumed {
+        note: Option<String>,
+    },
+    SessionEnded {
+        reason: Option<String>,
+    },
+    SessionAbandoned {
+        reason: Option<String>,
+    },
+    AntennaStateConfirmed {
+        antenna_label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    SlotMissed {
+        reason: Option<String>,
+    },
+    SlotBad {
+        reason: String,
+    },
+    NoteAdded {
+        note: String,
+    },
+    EventCorrected {
+        target_event_id: String,
+        correction: EventCorrectionActionV2,
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -533,22 +624,27 @@ impl CurrentBundleContents {
 impl BundleV2Contents {
     pub fn into_current(self) -> CurrentBundleContents {
         let mut record_provenance = Vec::new();
+        for event in &self.events {
+            record_provenance.push(CurrentRecordProvenance {
+                record_kind: CurrentRecordKind::Event,
+                record_id: event.event_id.clone(),
+                provenance: event.meta.provenance.clone(),
+            });
+        }
+        let reduction = crate::reduce_operator_events_v2(SessionLifecycleV2::Ready, &self.events);
+        let mut effective = reduction
+            .effective_events
+            .into_iter()
+            .filter_map(|event| event.project_legacy())
+            .map(|event| (event.event_id.clone(), event))
+            .collect::<BTreeMap<_, _>>();
         let events = self
             .events
             .iter()
-            .map(|event| {
-                record_provenance.push(CurrentRecordProvenance {
-                    record_kind: CurrentRecordKind::Event,
-                    record_id: event.event_id.clone(),
-                    provenance: event.meta.provenance.clone(),
-                });
-                OperatorEvent {
-                    meta: event.meta.project(),
-                    event_id: event.event_id.clone(),
-                    slot_id: event.slot_id.clone(),
-                    event_type: event.event_type,
-                    note: event.note.clone(),
-                }
+            .filter_map(|event| {
+                event
+                    .project_legacy_lifecycle()
+                    .or_else(|| effective.remove(&event.event_id))
             })
             .collect();
         let observations = self

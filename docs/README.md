@@ -9,6 +9,8 @@ plans.
   boundaries.
 - [Bundle Format](bundle-format.md): session bundle files, records, and
   validation rules.
+- [Operator Event Semantics](event-semantics.md): schema-v2 lifecycle,
+  correction, actual-state, and conservative alignment rules.
 - [Development](development.md): local workflow, tests, and repo conventions.
 - [Supply-Chain Updates](supply-chain.md): dependency, Action, tool, and runner
   review procedure.

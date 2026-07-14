@@ -8,10 +8,11 @@ use std::{
 use antennabench_core::{
     validate_machine_identity, AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2,
     BundleContents, BundleFilesV2, BundleManifestV2, BundleV2Contents, BundleValidationError,
-    BundleValidationProfile, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
-    ObservationRecordV2, OperatorEventType, OperatorEventV2, PlanGenerationV2, PropagationRecordV2,
-    Provenance, RecordMeta, RecordMetaV2, RigRecordV2, SessionLifecycleV2, SessionStateV2,
-    StreamCheckpointV2, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2,
+    BundleValidationProfile, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
+    NormalizedRecordLink, ObservationRecordV2, OperatorEventPayloadV2, OperatorEventType,
+    OperatorEventV2, PlanGenerationV2, PropagationRecordV2, Provenance, RecordMeta, RecordMetaV2,
+    RigRecordV2, SessionLifecycleV2, SessionStateV2, StreamCheckpointV2, SCHEMA_VERSION_V1,
+    SCHEMA_VERSION_V2,
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -120,17 +121,88 @@ fn migrate_bundle(
     let mut analysis = v1.analysis.clone();
     analysis.schema_version = SCHEMA_VERSION_V2;
 
-    let events = v1
+    let mut events = v1
         .events
         .iter()
-        .map(|event| OperatorEventV2 {
-            meta: migrate_meta(&event.meta, "events", &event.event_id, 0, 1, &app_version),
-            event_id: event.event_id.clone(),
-            slot_id: event.slot_id.clone(),
-            event_type: event.event_type,
-            note: event.note.clone(),
+        .map(|event| {
+            let payload = match event.event_type {
+                OperatorEventType::SessionStarted => OperatorEventPayloadV2::SessionStarted {
+                    note: event.note.clone(),
+                },
+                OperatorEventType::Switched => {
+                    let antenna_label = event
+                        .slot_id
+                        .as_deref()
+                        .and_then(|slot_id| {
+                            v1.schedule
+                                .slots
+                                .iter()
+                                .find(|slot| slot.slot_id == slot_id)
+                        })
+                        .map(|slot| slot.antenna_label.clone())
+                        .unwrap_or_else(|| "legacy-unknown".into());
+                    OperatorEventPayloadV2::AntennaStateConfirmed {
+                        antenna_label,
+                        note: event.note.clone(),
+                    }
+                }
+                OperatorEventType::MissedSlot => OperatorEventPayloadV2::SlotMissed {
+                    reason: event.note.clone(),
+                },
+                OperatorEventType::BadSlot => OperatorEventPayloadV2::SlotBad {
+                    reason: event.note.clone().unwrap_or_default(),
+                },
+                OperatorEventType::NoteAdded => OperatorEventPayloadV2::NoteAdded {
+                    note: event.note.clone().unwrap_or_default(),
+                },
+                OperatorEventType::SessionEnded => OperatorEventPayloadV2::SessionEnded {
+                    reason: event.note.clone(),
+                },
+            };
+            OperatorEventV2 {
+                meta: migrate_meta(&event.meta, "events", &event.event_id, 0, 1, &app_version),
+                event_id: event.event_id.clone(),
+                occurred_at: event.meta.timestamp,
+                time_basis: EventTimeBasisV2::OperatorReported,
+                uncertainty_seconds: None,
+                slot_id: event.slot_id.clone(),
+                payload,
+            }
         })
         .collect::<Vec<_>>();
+    let started_without_end = v1
+        .events
+        .iter()
+        .any(|event| event.event_type == OperatorEventType::SessionStarted)
+        && !v1
+            .events
+            .iter()
+            .any(|event| event.event_type == OperatorEventType::SessionEnded);
+    if started_without_end {
+        let event_id = bounded_migration_id("legacy-upgrade-interruption", &v1.manifest.session_id);
+        let timestamp = v1
+            .events
+            .last()
+            .map(|event| event.meta.timestamp)
+            .unwrap_or(v1.manifest.created_at);
+        let meta = RecordMeta {
+            schema_version: SCHEMA_VERSION_V1,
+            session_id: v1.manifest.session_id.clone(),
+            timestamp,
+            source: antennabench_core::RecordSource::Derived,
+        };
+        events.push(OperatorEventV2 {
+            meta: migrate_meta(&meta, "events", &event_id, 0, 1, &app_version),
+            event_id,
+            occurred_at: timestamp,
+            time_basis: EventTimeBasisV2::RecoverySystem,
+            uncertainty_seconds: None,
+            slot_id: None,
+            payload: OperatorEventPayloadV2::InterruptionDetected {
+                reason: Some("schema-v1 upgrade recovered a previously started session".into()),
+            },
+        });
+    }
 
     let mut adapter_records = Vec::new();
     let mut wsjtx_observation_links = HashMap::<String, (String, String, u32, u32)>::new();
@@ -616,6 +688,18 @@ fn verify_semantic_projection(
         )
     {
         meta.schema_version = SCHEMA_VERSION_V2;
+    }
+    for event in &mut expected.events {
+        if event.event_type == OperatorEventType::Switched {
+            event.actual_antenna_label = event.slot_id.as_deref().and_then(|slot_id| {
+                expected
+                    .schedule
+                    .slots
+                    .iter()
+                    .find(|slot| slot.slot_id == slot_id)
+                    .map(|slot| slot.antenna_label.clone())
+            });
+        }
     }
     expected.wsjtx.clear();
     projected.manifest.files = antennabench_core::BundleFiles::default();

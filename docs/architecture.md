@@ -216,10 +216,12 @@ and explicit tail recovery prevent cooperative concurrent writes, retry
 duplication, and silent overwrite of external changes. Reports and active
 exports will consume one checkpoint revision rather than racing live files.
 Static v2 creation, read, attachment verification, lossless copy, and explicit
-v1 upgrade are implemented. Atomic append/promotion, locking, recovery,
-checkpoint-aware active export, and lifecycle/correction reduction remain in
-#53 and #54. Schema-v1 bundles remain static read/report/export inputs and must
-be upgraded non-destructively before a future conductor mutates them.
+v1 upgrade are implemented. Pure schema-v2 lifecycle validation, append-ordered
+correction reduction, explicit actual-antenna projection, and conservative
+conflict alignment are implemented by #54. Atomic append/promotion, locking,
+recovery, and checkpoint-aware active export remain in #53. Schema-v1 bundles
+remain static read/report/export inputs and must be upgraded non-destructively
+before a future conductor mutates them.
 
 ## Planned Conductor Delivery
 

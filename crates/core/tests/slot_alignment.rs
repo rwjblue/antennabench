@@ -1,7 +1,8 @@
 use antennabench_core::{
-    align_schedule_slots, apply_slot_assignments, Band, ExperimentMode, ObservationKind,
-    ObservationRecord, OperatorEvent, OperatorEventType, PlannedSlot, RecordMeta, RecordSource,
-    Schedule, SessionGoal, SlotAlignmentPolicy,
+    align_schedule_slots, apply_slot_assignments, AlignedSlotStatus, Band, ExperimentMode,
+    ObservationKind, ObservationRecord, OperatorEvent, OperatorEventType, PlannedSlot, RecordMeta,
+    RecordSource, Schedule, SessionGoal, SlotAlignmentPolicy, SlotAssignmentReason,
+    SCHEMA_VERSION_V2,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -120,6 +121,79 @@ fn derives_actual_slot_state_from_operator_events() {
           }
         ]
         "###
+    );
+}
+
+#[test]
+fn v2_alignment_requires_explicit_actual_state_and_excludes_competing_facts() {
+    let starts_at = Utc.with_ymd_and_hms(2026, 7, 10, 20, 0, 0).unwrap();
+    let mut schedule = schedule_with_slots(starts_at);
+    schedule.schema_version = SCHEMA_VERSION_V2;
+    let mut confirmation = operator_event(
+        "confirm-b",
+        "slot-001",
+        OperatorEventType::Switched,
+        starts_at + chrono::Duration::seconds(3),
+    );
+    confirmation.meta.schema_version = SCHEMA_VERSION_V2;
+    confirmation.actual_antenna_label = Some("B".into());
+    let mut missed = operator_event(
+        "missed",
+        "slot-002",
+        OperatorEventType::MissedSlot,
+        starts_at + chrono::Duration::seconds(120),
+    );
+    missed.meta.schema_version = SCHEMA_VERSION_V2;
+    let mut conflicting_confirmation = operator_event(
+        "conflicting-confirmation",
+        "slot-002",
+        OperatorEventType::Switched,
+        starts_at + chrono::Duration::seconds(123),
+    );
+    conflicting_confirmation.meta.schema_version = SCHEMA_VERSION_V2;
+    conflicting_confirmation.actual_antenna_label = Some("B".into());
+    let observations = vec![
+        observation(
+            "explicit-actual",
+            starts_at + chrono::Duration::seconds(60),
+            Band::M20,
+        ),
+        observation(
+            "conflicting",
+            starts_at + chrono::Duration::seconds(180),
+            Band::M20,
+        ),
+        observation(
+            "unknown",
+            starts_at + chrono::Duration::seconds(300),
+            Band::M20,
+        ),
+    ];
+
+    let result = align_schedule_slots(
+        &schedule,
+        &[confirmation, missed, conflicting_confirmation],
+        &observations,
+        SlotAlignmentPolicy::default(),
+    );
+
+    assert_eq!(result.slots[0].actual_label.as_deref(), Some("B"));
+    assert_eq!(result.slots[0].status, AlignedSlotStatus::Switched);
+    assert_eq!(
+        result.slots[1].status,
+        AlignedSlotStatus::ConflictingEvidence
+    );
+    assert_eq!(
+        result.slots[2].status,
+        AlignedSlotStatus::UnknownActualState
+    );
+    assert_eq!(
+        result.observation_assignments[1].reason,
+        SlotAssignmentReason::ConflictingEvidence
+    );
+    assert_eq!(
+        result.observation_assignments[2].reason,
+        SlotAssignmentReason::UnknownActualState
     );
 }
 
@@ -443,6 +517,7 @@ fn operator_event(
         slot_id: Some(slot_id.to_string()),
         event_type,
         note: None,
+        actual_antenna_label: None,
     }
 }
 

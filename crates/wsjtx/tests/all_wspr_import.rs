@@ -1214,6 +1214,7 @@ fn operator_event(
         slot_id: Some(slot_id.to_string()),
         event_type: OperatorEventType::Switched,
         note: None,
+        actual_antenna_label: None,
     }
 }
 

@@ -42,10 +42,12 @@ pub struct AlignedSlot {
 #[serde(rename_all = "snake_case")]
 pub enum AlignedSlotStatus {
     PlannedNoSwitchEvent,
+    UnknownActualState,
     Switched,
     LateSwitch,
     Missed,
     Bad,
+    ConflictingEvidence,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,6 +69,8 @@ pub enum SlotAssignmentReason {
     BeforeObservedSwitch,
     MissedSlot,
     BadSlot,
+    UnknownActualState,
+    ConflictingEvidence,
     BandMismatch,
     OutsideSchedule,
 }
@@ -80,7 +84,13 @@ pub fn align_schedule_slots(
     let slots = schedule
         .slots
         .iter()
-        .map(|slot| align_slot(slot, events))
+        .map(|slot| {
+            align_slot(
+                slot,
+                events,
+                schedule.schema_version >= crate::SCHEMA_VERSION_V2,
+            )
+        })
         .collect::<Vec<_>>();
     let observation_assignments = observations
         .iter()
@@ -114,26 +124,45 @@ pub fn apply_slot_assignments(
         .collect()
 }
 
-fn align_slot(slot: &PlannedSlot, events: &[OperatorEvent]) -> AlignedSlot {
+fn align_slot(slot: &PlannedSlot, events: &[OperatorEvent], schema_v2: bool) -> AlignedSlot {
     let slot_events = events
         .iter()
         .filter(|event| event.slot_id.as_deref() == Some(slot.slot_id.as_str()))
         .collect::<Vec<_>>();
-    let switch_event = slot_events
+    let switch_events = slot_events
         .iter()
         .copied()
         .filter(|event| event.event_type == OperatorEventType::Switched)
-        .min_by_key(|event| event.meta.timestamp);
-    let has_bad_event = slot_events
+        .collect::<Vec<_>>();
+    let bad_events = slot_events
         .iter()
-        .any(|event| event.event_type == OperatorEventType::BadSlot);
-    let has_missed_event = slot_events
+        .filter(|event| event.event_type == OperatorEventType::BadSlot)
+        .count();
+    let missed_events = slot_events
         .iter()
-        .any(|event| event.event_type == OperatorEventType::MissedSlot);
+        .filter(|event| event.event_type == OperatorEventType::MissedSlot)
+        .count();
     let guard_end = slot.starts_at + Duration::seconds(slot.guard_seconds.into());
     let ends_at = slot.starts_at + Duration::seconds(slot.duration_seconds.into());
+    let active_fact_count = switch_events.len() + bad_events + missed_events;
+    if schema_v2 && active_fact_count > 1 {
+        return AlignedSlot {
+            slot_id: slot.slot_id.clone(),
+            sequence_number: slot.sequence_number,
+            band: slot.band,
+            planned_label: slot.antenna_label.clone(),
+            actual_label: None,
+            status: AlignedSlotStatus::ConflictingEvidence,
+            starts_at: slot.starts_at,
+            ends_at,
+            usable_start: guard_end,
+            switch_event_id: None,
+            switch_timestamp: None,
+            switch_delay_seconds: None,
+        };
+    }
 
-    if has_bad_event {
+    if bad_events > 0 {
         return AlignedSlot {
             slot_id: slot.slot_id.clone(),
             sequence_number: slot.sequence_number,
@@ -150,7 +179,7 @@ fn align_slot(slot: &PlannedSlot, events: &[OperatorEvent]) -> AlignedSlot {
         };
     }
 
-    if has_missed_event {
+    if missed_events > 0 {
         return AlignedSlot {
             slot_id: slot.slot_id.clone(),
             sequence_number: slot.sequence_number,
@@ -167,7 +196,10 @@ fn align_slot(slot: &PlannedSlot, events: &[OperatorEvent]) -> AlignedSlot {
         };
     }
 
-    match switch_event {
+    match switch_events
+        .into_iter()
+        .min_by_key(|event| event.meta.timestamp)
+    {
         Some(event) => {
             let status = if event.meta.timestamp <= guard_end {
                 AlignedSlotStatus::Switched
@@ -179,7 +211,10 @@ fn align_slot(slot: &PlannedSlot, events: &[OperatorEvent]) -> AlignedSlot {
                 sequence_number: slot.sequence_number,
                 band: slot.band,
                 planned_label: slot.antenna_label.clone(),
-                actual_label: Some(slot.antenna_label.clone()),
+                actual_label: event
+                    .actual_antenna_label
+                    .clone()
+                    .or_else(|| (!schema_v2).then(|| slot.antenna_label.clone())),
                 status,
                 starts_at: slot.starts_at,
                 ends_at,
@@ -189,6 +224,20 @@ fn align_slot(slot: &PlannedSlot, events: &[OperatorEvent]) -> AlignedSlot {
                 switch_delay_seconds: Some(switch_delay_seconds(slot, event)),
             }
         }
+        None if schema_v2 => AlignedSlot {
+            slot_id: slot.slot_id.clone(),
+            sequence_number: slot.sequence_number,
+            band: slot.band,
+            planned_label: slot.antenna_label.clone(),
+            actual_label: None,
+            status: AlignedSlotStatus::UnknownActualState,
+            starts_at: slot.starts_at,
+            ends_at,
+            usable_start: guard_end,
+            switch_event_id: None,
+            switch_timestamp: None,
+            switch_delay_seconds: None,
+        },
         None => AlignedSlot {
             slot_id: slot.slot_id.clone(),
             sequence_number: slot.sequence_number,
@@ -240,6 +289,24 @@ fn assign_observation_to_slot(
     }
 
     match slot.status {
+        AlignedSlotStatus::ConflictingEvidence => {
+            return assignment(
+                observation,
+                Some(slot),
+                None,
+                0.0,
+                SlotAssignmentReason::ConflictingEvidence,
+            );
+        }
+        AlignedSlotStatus::UnknownActualState => {
+            return assignment(
+                observation,
+                Some(slot),
+                None,
+                0.0,
+                SlotAssignmentReason::UnknownActualState,
+            );
+        }
         AlignedSlotStatus::Bad => {
             return assignment(
                 observation,
@@ -320,7 +387,10 @@ fn assign_observation_to_slot(
             0.95,
             SlotAssignmentReason::Interior,
         ),
-        AlignedSlotStatus::Bad | AlignedSlotStatus::Missed => unreachable!("handled above"),
+        AlignedSlotStatus::Bad
+        | AlignedSlotStatus::Missed
+        | AlignedSlotStatus::UnknownActualState
+        | AlignedSlotStatus::ConflictingEvidence => unreachable!("handled above"),
     }
 }
 

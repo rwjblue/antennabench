@@ -357,7 +357,9 @@ impl EligibilityPlan {
                     (Some(BundleRecordKind::Slot), Some(index)) => {
                         excluded_slots.insert(index);
                     }
-                    (Some(BundleRecordKind::OperatorEvent), Some(index)) => {
+                    (Some(BundleRecordKind::OperatorEvent), Some(index))
+                        if diagnostic.code != codes::V2_EVENT_CONFLICT =>
+                    {
                         excluded_events.insert(index);
                     }
                     _ => {}
@@ -431,6 +433,7 @@ fn is_fatal_for_analysis(diagnostic: &BundleDiagnostic) -> bool {
                 | codes::V2_ADAPTER_LINK
                 | codes::V2_ATTACHMENT
                 | codes::V2_MUTATION
+                | codes::V2_LIFECYCLE_MISMATCH
         )
     {
         return true;
@@ -489,7 +492,9 @@ fn eligibility_category(diagnostic: &BundleDiagnostic) -> EligibilityExclusionCa
         | codes::V2_CHECKPOINT_MISMATCH
         | codes::V2_ADAPTER_LINK
         | codes::V2_ATTACHMENT
-        | codes::V2_MUTATION => EligibilityExclusionCategory::Contradictory,
+        | codes::V2_MUTATION
+        | codes::V2_EVENT_CONFLICT
+        | codes::V2_LIFECYCLE_MISMATCH => EligibilityExclusionCategory::Contradictory,
         codes::INVALID_JSON
         | codes::INVALID_SLOT_CONFIDENCE
         | codes::INVALID_IDENTITY
@@ -499,6 +504,7 @@ fn eligibility_category(diagnostic: &BundleDiagnostic) -> EligibilityExclusionCa
         | codes::INVALID_SLOT_GUARD
         | codes::NON_FINITE_NUMBER
         | codes::INVALID_RANGE => EligibilityExclusionCategory::Malformed,
+        codes::V2_EVENT_SEMANTICS => EligibilityExclusionCategory::Malformed,
         _ => EligibilityExclusionCategory::Unsupported,
     }
 }
@@ -627,6 +633,12 @@ fn classify_assignment(assignment: &ObservationSlotAssignment) -> ObservationDis
         }
         SlotAssignmentReason::BadSlot => {
             ObservationDisposition::Excluded(ObservationExclusionReason::BadSlot)
+        }
+        SlotAssignmentReason::UnknownActualState => {
+            ObservationDisposition::Excluded(ObservationExclusionReason::MissingEvidence)
+        }
+        SlotAssignmentReason::ConflictingEvidence => {
+            ObservationDisposition::Excluded(ObservationExclusionReason::ContradictoryEvidence)
         }
         SlotAssignmentReason::BandMismatch => {
             ObservationDisposition::Excluded(ObservationExclusionReason::BandMismatch)

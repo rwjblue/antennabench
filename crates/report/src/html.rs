@@ -1195,10 +1195,12 @@ fn format_signed(value: f64) -> String {
 fn slot_status(value: AlignedSlotStatus) -> &'static str {
     match value {
         AlignedSlotStatus::PlannedNoSwitchEvent => "Planned; no switch event",
+        AlignedSlotStatus::UnknownActualState => "Actual antenna unknown",
         AlignedSlotStatus::Switched => "Switched",
         AlignedSlotStatus::LateSwitch => "Late switch",
         AlignedSlotStatus::Missed => "Missed",
         AlignedSlotStatus::Bad => "Bad",
+        AlignedSlotStatus::ConflictingEvidence => "Conflicting operator evidence",
     }
 }
 fn exclusion_reason(value: ObservationExclusionReason) -> &'static str {

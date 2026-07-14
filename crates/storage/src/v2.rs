@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -9,8 +9,9 @@ use antennabench_core::{
     codes, validate_bundle_report, validate_machine_identity, AdapterInput, AttachmentReference,
     BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation, BundleDiagnosticSeverity,
     BundleFileRole, BundleFilesV2, BundleManifestV2, BundleRecordKind, BundleV2Contents,
-    BundleValidationProfile, BundleValidationReport, StreamCheckpointV2, ALL_TYPED_OPERATIONS,
-    SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
+    BundleValidationProfile, BundleValidationReport, CorrectableOperatorEventPayloadV2,
+    SessionLifecycleV2, StreamCheckpointV2, ALL_TYPED_OPERATIONS, ANALYSIS_AND_WRITE_OPERATIONS,
+    SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX, WRITE_OPERATIONS,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
@@ -372,7 +373,8 @@ impl BundleStore {
         bundle: &BundleV2Contents,
         profile: BundleValidationProfile,
     ) -> Result<(), BundleStoreError> {
-        let report = validate_bundle_report(&bundle.clone().into_current().bundle);
+        let mut report = validate_bundle_report(&bundle.clone().into_current().bundle);
+        report.extend(validate_v2_event_model(bundle));
         if !report.allows(profile) {
             return Err(antennabench_core::BundleValidationError::from_report(report).into());
         }
@@ -458,9 +460,13 @@ impl BundleStore {
             create_directory(&paths.attachments_dir)?;
 
             let diagnostics = validate_v2_bundle(self, bundle, &paths, false);
-            if !diagnostics.is_empty() {
+            let blocking = diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.blocks(profile))
+                .collect::<Vec<_>>();
+            if !blocking.is_empty() {
                 return Err(BundleStoreError::InvalidV2Bundle {
-                    message: diagnostics
+                    message: blocking
                         .iter()
                         .map(|diagnostic| diagnostic.message.as_str())
                         .collect::<Vec<_>>()
@@ -677,6 +683,7 @@ fn validate_v2_bundle(
 ) -> Vec<BundleDiagnostic> {
     let mut diagnostics = Vec::new();
     diagnostics.extend(duplicate_member_diagnostics(store, paths));
+    diagnostics.extend(validate_v2_event_model(bundle));
     let session_id = bundle.manifest.session_id.as_str();
     for (file, schema, actual_session) in [
         (
@@ -1213,4 +1220,147 @@ fn v2_diagnostic(
         message,
         related_locations: Vec::new(),
     }
+}
+
+fn validate_v2_event_model(bundle: &BundleV2Contents) -> Vec<BundleDiagnostic> {
+    let reduction =
+        antennabench_core::reduce_operator_events_v2(SessionLifecycleV2::Ready, &bundle.events);
+    let mut diagnostics = reduction
+        .diagnostics
+        .iter()
+        .map(|event_diagnostic| BundleDiagnostic {
+            code: codes::V2_EVENT_SEMANTICS.into(),
+            category: BundleDiagnosticCategory::Semantic,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: WRITE_OPERATIONS.to_vec(),
+            location: BundleDiagnosticLocation {
+                file: BundleFileRole::Events,
+                record_kind: Some(BundleRecordKind::OperatorEvent),
+                record_id: Some(event_diagnostic.event_id.clone()),
+                record_index: bundle
+                    .events
+                    .iter()
+                    .position(|event| event.event_id == event_diagnostic.event_id),
+                physical_line: None,
+                field_path: None,
+            },
+            message: event_diagnostic.message.clone(),
+            related_locations: event_diagnostic
+                .related_event_id
+                .iter()
+                .map(|event_id| BundleDiagnosticLocation {
+                    file: BundleFileRole::Events,
+                    record_kind: Some(BundleRecordKind::OperatorEvent),
+                    record_id: Some(event_id.clone()),
+                    record_index: bundle
+                        .events
+                        .iter()
+                        .position(|event| event.event_id == *event_id),
+                    physical_line: None,
+                    field_path: None,
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+
+    if reduction.lifecycle != bundle.session_state.lifecycle {
+        diagnostics.push(BundleDiagnostic {
+            code: codes::V2_LIFECYCLE_MISMATCH.into(),
+            category: BundleDiagnosticCategory::Structural,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: BundleDiagnosticLocation::file(BundleFileRole::SessionState),
+            message: format!(
+                "checkpoint lifecycle {:?} does not match append-ordered event lifecycle {:?}",
+                bundle.session_state.lifecycle, reduction.lifecycle
+            ),
+            related_locations: Vec::new(),
+        });
+    }
+
+    let antenna_labels = bundle
+        .antennas
+        .antennas
+        .iter()
+        .map(|antenna| antenna.label.as_str())
+        .collect::<HashSet<_>>();
+    let mut slot_facts = HashMap::<&str, Vec<&str>>::new();
+    for event in &reduction.effective_events {
+        if let CorrectableOperatorEventPayloadV2::AntennaStateConfirmed { antenna_label, .. } =
+            &event.payload
+        {
+            if !antenna_labels.contains(antenna_label.as_str()) {
+                diagnostics.push(BundleDiagnostic {
+                    code: codes::UNKNOWN_ANTENNA_LABEL.into(),
+                    category: BundleDiagnosticCategory::Structural,
+                    severity: BundleDiagnosticSeverity::Error,
+                    blocked_operations: ANALYSIS_AND_WRITE_OPERATIONS.to_vec(),
+                    location: BundleDiagnosticLocation {
+                        file: BundleFileRole::Events,
+                        record_kind: Some(BundleRecordKind::OperatorEvent),
+                        record_id: Some(event.source_event_id.clone()),
+                        record_index: bundle
+                            .events
+                            .iter()
+                            .position(|candidate| candidate.event_id == event.source_event_id),
+                        physical_line: None,
+                        field_path: Some("/payload/antenna_label".into()),
+                    },
+                    message: format!(
+                        "actual antenna label {antenna_label:?} is not defined by antennas.json"
+                    ),
+                    related_locations: Vec::new(),
+                });
+            }
+        }
+        if !matches!(
+            event.payload,
+            CorrectableOperatorEventPayloadV2::NoteAdded { .. }
+        ) {
+            if let Some(slot_id) = event.slot_id.as_deref() {
+                slot_facts
+                    .entry(slot_id)
+                    .or_default()
+                    .push(event.source_event_id.as_str());
+            }
+        }
+    }
+    for (slot_id, event_ids) in slot_facts {
+        if event_ids.len() < 2 {
+            continue;
+        }
+        diagnostics.push(BundleDiagnostic {
+            code: codes::V2_EVENT_CONFLICT.into(),
+            category: BundleDiagnosticCategory::Eligibility,
+            severity: BundleDiagnosticSeverity::Warning,
+            blocked_operations: vec![BundleValidationProfile::Analysis],
+            location: BundleDiagnosticLocation {
+                file: BundleFileRole::Events,
+                record_kind: None,
+                record_id: None,
+                record_index: None,
+                physical_line: None,
+                field_path: Some(format!("/slot/{slot_id}")),
+            },
+            message: format!(
+                "slot {slot_id:?} has competing active operator facts and is conservatively excluded"
+            ),
+            related_locations: event_ids
+                .into_iter()
+                .map(|event_id| BundleDiagnosticLocation {
+                    file: BundleFileRole::Events,
+                    record_kind: Some(BundleRecordKind::OperatorEvent),
+                    record_id: Some(event_id.to_string()),
+                    record_index: bundle
+                        .events
+                        .iter()
+                        .position(|event| event.event_id == event_id),
+                    physical_line: None,
+                    field_path: None,
+                })
+                .collect(),
+        });
+    }
+
+    diagnostics
 }

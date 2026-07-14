@@ -4,7 +4,8 @@ use std::{
 };
 
 use antennabench_core::{
-    codes, AdapterDisposition, AdapterInput, BundleManifestV2, SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
+    codes, AdapterDisposition, AdapterInput, BundleManifestV2, OperatorEventPayloadV2,
+    SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{BundleAttachment, BundleStore, BundleStoreError};
 
@@ -263,6 +264,40 @@ fn v2_serialization_is_deterministic_and_duplicate_members_fail_closed() {
         })
     ));
     assert!(!copy.exists());
+}
+
+#[test]
+fn strict_v2_write_rejects_unknown_explicit_actual_antenna_labels() {
+    let source = fixtures_root().join("analysis-rich-whole-station.session.wsprabundle");
+    let temp = tempfile::tempdir().unwrap();
+    let baseline = temp.path().join(format!("baseline{V2_BUNDLE_SUFFIX}"));
+    let baseline_store = BundleStore::new(source)
+        .upgrade_v1_to_v2(&baseline)
+        .unwrap();
+    let mut bundle = baseline_store.read_v2().unwrap();
+    bundle.events[0].payload = OperatorEventPayloadV2::AntennaStateConfirmed {
+        antenna_label: "not-defined".into(),
+        note: None,
+    };
+    for observation in bundle
+        .observations
+        .iter_mut()
+        .filter(|observation| observation.slot_id.as_deref() == Some("slot-001"))
+    {
+        observation.slot_label = Some("not-defined".into());
+    }
+    BundleStore::refresh_v2_checkpoint(&mut bundle).unwrap();
+
+    let authored = temp.path().join(format!("invalid{V2_BUNDLE_SUFFIX}"));
+    let error = BundleStore::new(&authored).write_v2(&bundle).unwrap_err();
+    let BundleStoreError::Validation { source: validation } = error else {
+        panic!("expected validation error, got {error:?}");
+    };
+    assert!(validation.report().diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == codes::UNKNOWN_ANTENNA_LABEL
+            && diagnostic.message.contains("not-defined")
+    }));
+    assert!(!authored.exists());
 }
 
 #[test]

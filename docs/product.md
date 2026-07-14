@@ -115,7 +115,9 @@ durable, validation, and resource boundaries:
 1. Schema-v2, layered validation, strict write preflight, and bounded storage
    establish what can be created and mutated (#46, #50, #51, and #55).
 2. Checkpointed persistence/recovery and pure lifecycle/correction semantics
-   establish the auditable session state (#53 and #54).
+   establish the auditable session state (#53 and #54). The pure event,
+   lifecycle, correction, explicit-actual-state, and conflict-exclusion layer is
+   implemented; checkpointed live persistence remains the next prerequisite.
 3. Validated setup creates a new bundle, then the manual/no-rig conductor runs
    it without depending on any optional adapter (#61 and #62).
 4. Bounded WSJT-X ingress and desktop orchestration add live evidence without

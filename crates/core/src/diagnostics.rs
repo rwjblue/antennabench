@@ -178,6 +178,9 @@ pub mod codes {
     pub const V2_ADAPTER_LINK: &str = "bundle.structure.v2_adapter_link";
     pub const V2_ATTACHMENT: &str = "bundle.structure.v2_attachment";
     pub const V2_MUTATION: &str = "bundle.structure.v2_mutation";
+    pub const V2_EVENT_SEMANTICS: &str = "bundle.semantic.v2_operator_event";
+    pub const V2_EVENT_CONFLICT: &str = "bundle.eligibility.v2_operator_event_conflict";
+    pub const V2_LIFECYCLE_MISMATCH: &str = "bundle.structure.v2_lifecycle_mismatch";
 }
 
 pub const ALL_TYPED_OPERATIONS: [BundleValidationProfile; 4] = [
