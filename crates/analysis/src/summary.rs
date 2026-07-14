@@ -324,7 +324,7 @@ fn snr_statistics(samples: &[f64]) -> Option<SnrStatistics> {
     }
 
     let middle = samples.len() / 2;
-    let median_db = if samples.len() % 2 == 0 {
+    let median_db = if samples.len().is_multiple_of(2) {
         (samples[middle - 1] + samples[middle]) / 2.0
     } else {
         samples[middle]

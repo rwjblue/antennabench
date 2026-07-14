@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Check workspace metadata and targets on the declared Rust minimum"
+
+set -euo pipefail
+
+msrv="1.89.0"
+
+rustup run "$msrv" cargo metadata --locked --format-version 1 --no-deps >/dev/null
+rustup run "$msrv" cargo check --locked --workspace --all-targets

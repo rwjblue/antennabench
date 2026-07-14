@@ -1,4 +1,4 @@
 [tools]
 "cargo:tauri-cli" = "2.11.4"
 node = "24"
-rust = { version = "stable", components = ["rustfmt", "clippy"] }
+rust = { version = "1.96.1", components = ["rustfmt", "clippy"] }

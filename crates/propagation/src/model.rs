@@ -63,14 +63,14 @@ pub fn should_acquire(
 ) -> bool {
     match phase {
         SessionAcquisitionPhase::Start | SessionAcquisitionPhase::End => true,
-        SessionAcquisitionPhase::ActivePoll => last_attempt_at.map_or(true, |last| {
-            now - last >= product.policy().minimum_poll_interval
-        }),
+        SessionAcquisitionPhase::ActivePoll => {
+            last_attempt_at.is_none_or(|last| now - last >= product.policy().minimum_poll_interval)
+        }
     }
 }
 
 pub fn retry_allowed(last_failure_at: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
-    last_failure_at.map_or(true, |last| now - last >= RETRY_BACKOFF)
+    last_failure_at.is_none_or(|last| now - last >= RETRY_BACKOFF)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

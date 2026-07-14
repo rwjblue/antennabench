@@ -60,6 +60,29 @@ and decision work. Implementation issues begin with `agent-ready` and
   orchestration where typed public errors are not part of the API.
 - Prefer `insta` inline snapshots for structured test output.
 
+## Rust Toolchain Policy
+
+The workspace declares Rust 1.89 as its minimum supported Rust version (MSRV).
+Every package inherits that value from the root `Cargo.toml`. The repository
+pins routine development, lint, test, and future release builds to Rust 1.96.1
+in both `rust-toolchain.toml` and Mise so those results do not move when a new
+stable compiler is published.
+
+CI separately installs Rust 1.89.0 and runs `mise run msrv`, which proves that
+locked Cargo metadata and every workspace target still compile at the declared
+floor. To run the same check locally:
+
+```bash
+rustup toolchain install 1.89.0 --profile minimal
+mise run msrv
+```
+
+Routine dependency updates may require a newer compiler. Such an update must
+raise the workspace declaration and the MSRV task together, document the new
+floor, and pass both the minimum-version job and the pinned current-toolchain
+quality suite. Updating the routine compiler pin is a separate deliberate
+maintenance change and does not by itself raise the compatibility floor.
+
 ## Verification
 
 Before declaring Rust behavior complete, run:
@@ -106,13 +129,14 @@ is limited to the requested files.
 
 ## Continuous Integration
 
-Pull requests and pushes to `main` run three standard GitHub-hosted jobs. Linux
-is the canonical full-quality job: it installs the Linux Tauri prerequisites
-and runs `mise run ci`, including formatting, Clippy, all workspace targets,
-frontend state tests, and the unattended desktop workflow. The macOS and
-Windows jobs each run the portable workspace tests, frontend state tests,
-unattended desktop workflow, and `mise run desktop:build` for a native debug
-`--no-bundle` compilation.
+Pull requests and pushes to `main` run four standard GitHub-hosted jobs. The
+Rust 1.89 job checks locked metadata and all workspace targets at the declared
+minimum. Linux is the canonical full-quality job on the pinned routine
+toolchain: it installs the Linux Tauri prerequisites and runs `mise run ci`,
+including formatting, Clippy, all workspace targets, frontend state tests, and
+the unattended desktop workflow. The macOS and Windows jobs each run the
+portable workspace tests, frontend state tests, unattended desktop workflow,
+and `mise run desktop:build` for a native debug `--no-bundle` compilation.
 
 Project-local Mise tasks remain the command source of truth on every platform.
 The portability jobs explicitly select `shell: bash`; on Windows, GitHub Actions
