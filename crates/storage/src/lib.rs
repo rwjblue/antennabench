@@ -1,19 +1,21 @@
 use std::{
     collections::HashSet,
     fs,
-    io::{BufRead, BufReader, Write},
+    io::Write,
     path::{Component, Path, PathBuf},
 };
 
 use antennabench_core::{
-    normalize_bundle, validate_bundle, BundleContents, BundleFiles, BundleManifest,
-    BundleValidationError,
+    normalize_bundle, validate_bundle_report, BundleContents, BundleFiles, BundleValidationError,
+    BundleValidationProfile,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
+mod inspection;
 mod lossless_copy;
 
+pub use inspection::BundleInspection;
 pub use lossless_copy::BundleCopyError;
 
 #[derive(Debug, Clone)]
@@ -54,39 +56,33 @@ impl BundleStore {
     }
 
     pub fn read(&self) -> Result<BundleContents, BundleStoreError> {
-        ensure_bundle_root(&self.root)?;
-        let default_files = BundleFiles::default();
-        let manifest_path = self.bundle_path(default_files.manifest.as_str())?;
-        let manifest: BundleManifest = read_json(&manifest_path)?;
-        let paths = self.bundle_paths(&manifest.files)?;
-        paths.ensure_readable_targets()?;
-        ensure_directory(&paths.attachments_dir)?;
-
-        Ok(BundleContents {
-            station: read_json(&paths.station)?,
-            antennas: read_json(&paths.antennas)?,
-            schedule: read_json(&paths.schedule)?,
-            events: read_jsonl(&paths.events)?,
-            observations: read_jsonl(&paths.observations)?,
-            wsjtx: read_jsonl(&paths.wsjtx)?,
-            rig: read_jsonl(&paths.rig)?,
-            propagation: read_jsonl(&paths.propagation)?,
-            analysis: read_json(&paths.analysis)?,
-            manifest,
-        })
+        let (bundle, report) = self.inspect()?.into_parts();
+        bundle.ok_or_else(|| BundleValidationError::from_report(report).into())
     }
 
     /// Reads a bundle and validates persisted annotations exactly as stored.
     pub fn read_validated(&self) -> Result<BundleContents, BundleStoreError> {
-        let bundle = self.read()?;
-        validate_bundle(&bundle)?;
-        Ok(bundle)
+        let (bundle, report) = self.inspect()?.into_parts();
+        if !report.is_empty() {
+            return Err(BundleValidationError::from_report(report).into());
+        }
+        bundle.ok_or_else(|| BundleValidationError::from_report(report).into())
     }
 
     /// Reads a bundle, regenerates observation slot annotations, then validates it.
     pub fn read_normalized_validated(&self) -> Result<BundleContents, BundleStoreError> {
-        let bundle = normalize_bundle(self.read()?);
-        validate_bundle(&bundle)?;
+        let (bundle, report) = self.inspect()?.into_parts();
+        if !report.allows(BundleValidationProfile::Analysis) {
+            return Err(BundleValidationError::from_report(report).into());
+        }
+        let Some(bundle) = bundle else {
+            return Err(BundleValidationError::from_report(report).into());
+        };
+        let bundle = normalize_bundle(bundle);
+        let report = validate_bundle_report(&bundle);
+        if !report.allows(BundleValidationProfile::Analysis) {
+            return Err(BundleValidationError::from_report(report).into());
+        }
         Ok(bundle)
     }
 
@@ -348,19 +344,6 @@ fn ensure_directory(path: &Path) -> Result<(), BundleStoreError> {
     }
 }
 
-fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, BundleStoreError> {
-    let path = path.as_ref();
-    let contents = fs::read_to_string(path).map_err(|source| BundleStoreError::Read {
-        path: path.to_path_buf(),
-        source,
-    })?;
-
-    serde_json::from_str(&contents).map_err(|source| BundleStoreError::ParseJson {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
 fn write_json<T: Serialize>(path: impl AsRef<Path>, value: &T) -> Result<(), BundleStoreError> {
     let path = path.as_ref();
     let mut contents =
@@ -374,31 +357,6 @@ fn write_json<T: Serialize>(path: impl AsRef<Path>, value: &T) -> Result<(), Bun
         path: path.to_path_buf(),
         source,
     })
-}
-
-fn read_jsonl<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<Vec<T>, BundleStoreError> {
-    let path = path.as_ref();
-    let file = fs::File::open(path).map_err(|source| BundleStoreError::Read {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    let reader = BufReader::new(file);
-    let mut records = Vec::new();
-
-    for line in reader.lines() {
-        let line = line.map_err(|source| BundleStoreError::Read {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        records.push(serde_json::from_str(&line).map_err(|source| {
-            BundleStoreError::ParseJson {
-                path: path.to_path_buf(),
-                source,
-            }
-        })?);
-    }
-
-    Ok(records)
 }
 
 fn write_jsonl<T: Serialize>(

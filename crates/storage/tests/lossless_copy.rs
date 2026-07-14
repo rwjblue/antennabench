@@ -1,5 +1,6 @@
 use std::{fs, io, path::Path};
 
+use antennabench_core::{codes, BundleValidationProfile};
 use antennabench_storage::{BundleCopyError, BundleStore};
 use tempfile::TempDir;
 
@@ -90,6 +91,99 @@ fn copies_root_bytes_nested_attachments_and_reopens_without_mutating_source() {
     exported
         .read_normalized_validated()
         .expect("export reopens through canonical import path");
+}
+
+#[test]
+fn copies_ambiguous_modeled_json_byte_for_byte_without_typed_projection() {
+    let temp = TempDir::new().unwrap();
+    let source = copy_fixture(&temp);
+    let station_path = source.join("station.json");
+    let station = fs::read_to_string(&station_path).unwrap().replace(
+        "  \"callsign\": \"N0CALL\",",
+        "  \"callsign\": \"FIRST\",\n  \"callsign\": \"SECOND\",",
+    );
+    fs::write(&station_path, station).unwrap();
+    assert!(BundleStore::new(&source).read().is_err());
+    let before = snapshot_files(&source).unwrap();
+    let destination = temp.path().join("preserved-ambiguous.session.wsprabundle");
+
+    let exported = BundleStore::new(&source)
+        .copy_losslessly_to(&destination)
+        .expect("storage-safe copy does not require typed projection");
+
+    assert_eq!(snapshot_files(&destination).unwrap(), before);
+    assert!(exported.read().is_err());
+}
+
+#[test]
+fn copies_structurally_blocked_bundle_without_sending_it_to_analysis() {
+    let temp = TempDir::new().unwrap();
+    let source = copy_fixture(&temp);
+    let events_path = source.join("events.jsonl");
+    let events = fs::read_to_string(&events_path).unwrap().replacen(
+        "\"slot_id\":\"slot-001\"",
+        "\"slot_id\":\"missing-slot\"",
+        1,
+    );
+    fs::write(&events_path, events).unwrap();
+    let store = BundleStore::new(&source);
+    let inspection = store.inspect().unwrap();
+    assert!(inspection.bundle().is_none());
+    assert!(inspection
+        .report()
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.code == codes::UNKNOWN_EVENT_SLOT));
+    let before = snapshot_files(&source).unwrap();
+    let destination = temp.path().join("preserved-structural.session.wsprabundle");
+
+    store.copy_losslessly_to(&destination).unwrap();
+
+    assert_eq!(snapshot_files(&destination).unwrap(), before);
+    assert!(BundleStore::new(destination)
+        .read_normalized_validated()
+        .is_err());
+}
+
+#[test]
+fn reports_but_preserves_duplicate_members_in_legacy_raw_evidence() {
+    let temp = TempDir::new().unwrap();
+    let source = copy_fixture(&temp);
+    let observations_path = source.join("observations.jsonl");
+    let observations = fs::read_to_string(&observations_path).unwrap().replacen(
+        "\"fixture\":\"canonical-sample-report\"",
+        "\"fixture\":\"first\",\"fixture\":\"second\"",
+        1,
+    );
+    fs::write(&observations_path, observations).unwrap();
+
+    let store = BundleStore::new(&source);
+    let inspection = store.inspect().unwrap();
+    assert!(inspection.bundle().is_some());
+    let duplicate = inspection
+        .report()
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == codes::DUPLICATE_RAW_MEMBER)
+        .expect("duplicate raw member warning");
+    assert_eq!(
+        duplicate.location.field_path.as_deref(),
+        Some("/raw/fixture")
+    );
+    assert!(inspection
+        .report()
+        .allows(BundleValidationProfile::CompatibilityRead));
+    assert!(inspection
+        .report()
+        .allows(BundleValidationProfile::Analysis));
+    assert!(!inspection
+        .report()
+        .allows(BundleValidationProfile::StrictCreation));
+
+    let before = snapshot_files(&source).unwrap();
+    let destination = temp.path().join("preserved-raw.session.wsprabundle");
+    store.copy_losslessly_to(&destination).unwrap();
+    assert_eq!(snapshot_files(&destination).unwrap(), before);
 }
 
 #[test]

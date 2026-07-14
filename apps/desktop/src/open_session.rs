@@ -203,7 +203,7 @@ fn storage_error_payload(error: BundleStoreError) -> SessionErrorPayload {
         BundleStoreError::Validation { source } => SessionErrorPayload::new(
             SessionErrorKind::Validation,
             "The session bundle did not pass validation.",
-            format!("{} validation issue(s): {source}", source.issues().len()),
+            validation_error_detail(&source),
         ),
         error => SessionErrorPayload::new(
             SessionErrorKind::Filesystem,
@@ -220,7 +220,7 @@ fn report_error_payload(error: ReportError) -> SessionErrorPayload {
         ReportError::Analysis(AnalysisError::InvalidBundle(source)) => SessionErrorPayload::new(
             SessionErrorKind::Validation,
             "The normalized session was not valid for reporting.",
-            format!("{} validation issue(s): {source}", source.issues().len()),
+            validation_error_detail(&source),
         ),
         ReportError::Analysis(error) => SessionErrorPayload::new(
             SessionErrorKind::Analysis,
@@ -228,6 +228,40 @@ fn report_error_payload(error: ReportError) -> SessionErrorPayload {
             error.to_string(),
         ),
     }
+}
+
+fn validation_error_detail(source: &antennabench_core::BundleValidationError) -> String {
+    const MAX_DISPLAYED_DIAGNOSTICS: usize = 5;
+    let diagnostics = source
+        .report()
+        .diagnostics()
+        .iter()
+        .take(MAX_DISPLAYED_DIAGNOSTICS)
+        .map(|diagnostic| {
+            let field = diagnostic
+                .location
+                .field_path
+                .as_deref()
+                .map_or_else(String::new, |field| format!(" {field}"));
+            format!(
+                "{} at {:?}{field}",
+                diagnostic.code, diagnostic.location.file
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    let remaining = source
+        .diagnostic_count()
+        .saturating_sub(MAX_DISPLAYED_DIAGNOSTICS);
+    let remainder = if remaining > 0 {
+        format!("; and {remaining} more")
+    } else {
+        String::new()
+    };
+    format!(
+        "{} validation issue(s): {diagnostics}{remainder}",
+        source.diagnostic_count(),
+    )
 }
 
 fn open_bundle(path: &Path) -> Result<ActiveSession, OpenSessionError> {
@@ -554,8 +588,9 @@ mod tests {
             .expect_err("reject malformed JSON")
             .into();
 
-        assert_eq!(error.kind, SessionErrorKind::JsonParse);
-        assert!(error.detail.contains("station.json"));
+        assert_eq!(error.kind, SessionErrorKind::Validation);
+        assert!(error.detail.contains("bundle.wire.invalid_json"));
+        assert!(error.detail.contains("Station"));
     }
 
     #[test]
@@ -735,8 +770,9 @@ mod tests {
             "desktop-e2e result=typed-failure kind={:?} detail={}",
             error.kind, error.detail
         );
-        assert_eq!(error.kind, SessionErrorKind::JsonParse);
-        assert!(error.detail.contains("station.json"));
+        assert_eq!(error.kind, SessionErrorKind::Validation);
+        assert!(error.detail.contains("bundle.wire.invalid_json"));
+        assert!(error.detail.contains("Station"));
         assert!(active_session_report_for(&state).is_err());
     }
 }

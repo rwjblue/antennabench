@@ -45,12 +45,23 @@ session bundle JSON/JSONL
         +--> hosted rendering
 ```
 
-The current storage API exposes three read modes:
+The current storage API exposes inspection plus three profiled read modes:
 
-- `BundleStore::read()`: parse-only filesystem read.
-- `BundleStore::read_validated()`: strict read and validation.
-- `BundleStore::read_normalized_validated()`: tolerant read, normalization, and
-  validation.
+- `BundleStore::inspect()`: deterministic diagnostics plus an optional
+  all-or-none typed bundle.
+- `BundleStore::read()`: compatibility read; warnings may remain visible via
+  inspection while ambiguous or structurally unsafe input is rejected.
+- `BundleStore::read_validated()`: strict clean-report read.
+- `BundleStore::read_normalized_validated()`: analysis-profile read followed by
+  deterministic alignment normalization and validation.
+
+The diagnostic contract separates wire, structural, and semantic failures and
+states which of compatibility read, analysis, strict creation, or upgrade each
+diagnostic blocks. It detects duplicate JSON object members before ordinary
+deserialization can collapse them. Unknown fields and duplicate members inside
+legacy `raw` evidence stay reportable without granting typed code permission to
+rewrite the source. [Decision 0009](decisions/0009-use-layered-bundle-validation-profiles.md)
+defines this boundary.
 
 Analysis accepts normalized bundle contents, validates them without mutation,
 and reuses core alignment to derive slot status and evidence eligibility. It

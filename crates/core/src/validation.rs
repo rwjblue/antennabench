@@ -5,13 +5,17 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::{
-    align_schedule_slots, BundleContents, PlannedSlot, SlotAlignmentPolicy, SCHEMA_VERSION,
+    align_schedule_slots, codes, BundleContents, BundleDiagnostic, BundleDiagnosticCategory,
+    BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleRecordKind, BundleValidationProfile,
+    BundleValidationReport, PlannedSlot, SlotAlignmentPolicy, ALL_TYPED_OPERATIONS,
+    ANALYSIS_AND_WRITE_OPERATIONS, SCHEMA_VERSION,
 };
 
 #[derive(Debug, Error, Clone, PartialEq)]
 #[error("bundle validation failed with one or more issues")]
 pub struct BundleValidationError {
     issues: Vec<BundleValidationIssue>,
+    report: BundleValidationReport,
 }
 
 impl BundleValidationError {
@@ -20,7 +24,33 @@ impl BundleValidationError {
             !issues.is_empty(),
             "BundleValidationError requires at least one issue"
         );
-        Self { issues }
+        let diagnostics = issues
+            .iter()
+            .map(|issue| diagnostic_from_issue(issue, None))
+            .collect();
+        Self {
+            issues,
+            report: BundleValidationReport::new(diagnostics),
+        }
+    }
+
+    pub fn from_report(report: BundleValidationReport) -> Self {
+        assert!(
+            !report.is_empty(),
+            "BundleValidationError requires at least one diagnostic"
+        );
+        Self {
+            issues: Vec::new(),
+            report,
+        }
+    }
+
+    fn from_issues_and_report(
+        issues: Vec<BundleValidationIssue>,
+        report: BundleValidationReport,
+    ) -> Self {
+        assert!(!issues.is_empty() || !report.is_empty());
+        Self { issues, report }
     }
 
     pub fn issues(&self) -> &[BundleValidationIssue] {
@@ -29,6 +59,14 @@ impl BundleValidationError {
 
     pub fn into_issues(self) -> Vec<BundleValidationIssue> {
         self.issues
+    }
+
+    pub fn report(&self) -> &BundleValidationReport {
+        &self.report
+    }
+
+    pub fn diagnostic_count(&self) -> usize {
+        self.report.diagnostics().len()
     }
 }
 
@@ -84,7 +122,7 @@ pub enum BundleValidationIssue {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BundleFileRole {
     Manifest,
     Station,
@@ -98,7 +136,7 @@ pub enum BundleFileRole {
     Analysis,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BundleIdKind {
     Slot,
     OperatorEvent,
@@ -121,8 +159,15 @@ pub fn validate_bundle(bundle: &BundleContents) -> Result<(), BundleValidationEr
     if issues.is_empty() {
         Ok(())
     } else {
-        Err(BundleValidationError::new(issues))
+        let report = report_from_issues(bundle, &issues);
+        Err(BundleValidationError::from_issues_and_report(
+            issues, report,
+        ))
     }
+}
+
+pub fn validate_bundle_report(bundle: &BundleContents) -> BundleValidationReport {
+    report_from_issues(bundle, &validate_bundle_issues(bundle))
 }
 
 fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue> {
@@ -512,4 +557,423 @@ fn push_alignment_annotation_mismatch(
         expected,
         actual,
     });
+}
+
+fn report_from_issues(
+    bundle: &BundleContents,
+    issues: &[BundleValidationIssue],
+) -> BundleValidationReport {
+    BundleValidationReport::new(
+        issues
+            .iter()
+            .map(|issue| diagnostic_from_issue(issue, Some(bundle)))
+            .collect(),
+    )
+}
+
+fn diagnostic_from_issue(
+    issue: &BundleValidationIssue,
+    bundle: Option<&BundleContents>,
+) -> BundleDiagnostic {
+    match issue {
+        BundleValidationIssue::UnexpectedSchemaVersion {
+            file,
+            record_id,
+            expected,
+            actual,
+        } => BundleDiagnostic {
+            code: codes::UNSUPPORTED_SCHEMA_VERSION.to_string(),
+            category: BundleDiagnosticCategory::Wire,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: record_location(
+                bundle,
+                *file,
+                record_id.as_deref(),
+                record_id
+                    .as_ref()
+                    .map_or("/schema_version", |_| "/meta/schema_version"),
+            ),
+            message: format!(
+                "schema version {actual} is not supported; expected {expected}"
+            ),
+            related_locations: Vec::new(),
+        },
+        BundleValidationIssue::SessionIdMismatch {
+            file,
+            record_id,
+            expected,
+            actual,
+        } => BundleDiagnostic {
+            code: codes::SESSION_ID_MISMATCH.to_string(),
+            category: BundleDiagnosticCategory::Structural,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: record_location(
+                bundle,
+                *file,
+                record_id.as_deref(),
+                record_id
+                    .as_ref()
+                    .map_or("/session_id", |_| "/meta/session_id"),
+            ),
+            message: format!("session ID {actual:?} does not match manifest ID {expected:?}"),
+            related_locations: vec![BundleDiagnosticLocation {
+                field_path: Some("/session_id".to_string()),
+                ..BundleDiagnosticLocation::file(BundleFileRole::Manifest)
+            }],
+        },
+        BundleValidationIssue::DuplicateId { kind, id } => {
+            let (location, related_locations) = duplicate_id_locations(bundle, *kind, id);
+            BundleDiagnostic {
+                code: codes::DUPLICATE_ID.to_string(),
+                category: BundleDiagnosticCategory::Structural,
+                severity: BundleDiagnosticSeverity::Error,
+                blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+                location,
+                message: format!("durable {:?} ID {id:?} is duplicated", kind),
+                related_locations,
+            }
+        }
+        BundleValidationIssue::UnknownAntennaLabel {
+            slot_id,
+            antenna_label,
+        } => BundleDiagnostic {
+            code: codes::UNKNOWN_ANTENNA_LABEL.to_string(),
+            category: BundleDiagnosticCategory::Structural,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: slot_location(bundle, slot_id, "/antenna_label"),
+            message: format!(
+                "slot {slot_id:?} references unknown antenna label {antenna_label:?}"
+            ),
+            related_locations: Vec::new(),
+        },
+        BundleValidationIssue::SlotWindowOutOfOrder {
+            previous_slot_id,
+            slot_id,
+        } => BundleDiagnostic {
+            code: codes::SLOT_WINDOW_OUT_OF_ORDER.to_string(),
+            category: BundleDiagnosticCategory::Structural,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: slot_location(bundle, slot_id, "/starts_at"),
+            message: format!(
+                "slot {slot_id:?} starts before preceding slot {previous_slot_id:?}"
+            ),
+            related_locations: vec![slot_location(bundle, previous_slot_id, "/starts_at")],
+        },
+        BundleValidationIssue::SlotWindowOverlap {
+            previous_slot_id,
+            previous_ends_at,
+            slot_id,
+            starts_at,
+        } => BundleDiagnostic {
+            code: codes::SLOT_WINDOW_OVERLAP.to_string(),
+            category: BundleDiagnosticCategory::Structural,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: slot_location(bundle, slot_id, "/starts_at"),
+            message: format!(
+                "slot {slot_id:?} starts at {starts_at} before slot {previous_slot_id:?} ends at {previous_ends_at}"
+            ),
+            related_locations: vec![slot_location(bundle, previous_slot_id, "/duration_seconds")],
+        },
+        BundleValidationIssue::UnknownEventSlot { event_id, slot_id } => BundleDiagnostic {
+            code: codes::UNKNOWN_EVENT_SLOT.to_string(),
+            category: BundleDiagnosticCategory::Structural,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: record_location(
+                bundle,
+                BundleFileRole::Events,
+                Some(event_id),
+                "/slot_id",
+            ),
+            message: format!("event {event_id:?} references unknown slot {slot_id:?}"),
+            related_locations: Vec::new(),
+        },
+        BundleValidationIssue::UnknownObservationSlot {
+            observation_id,
+            slot_id,
+        } => BundleDiagnostic {
+            code: codes::UNKNOWN_OBSERVATION_SLOT.to_string(),
+            category: BundleDiagnosticCategory::Structural,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ALL_TYPED_OPERATIONS.to_vec(),
+            location: record_location(
+                bundle,
+                BundleFileRole::Observations,
+                Some(observation_id),
+                "/slot_id",
+            ),
+            message: format!(
+                "observation {observation_id:?} references unknown slot {slot_id:?}"
+            ),
+            related_locations: Vec::new(),
+        },
+        BundleValidationIssue::InvalidSlotConfidence {
+            observation_id,
+            slot_confidence,
+        } => BundleDiagnostic {
+            code: codes::INVALID_SLOT_CONFIDENCE.to_string(),
+            category: BundleDiagnosticCategory::Semantic,
+            severity: BundleDiagnosticSeverity::Error,
+            blocked_operations: ANALYSIS_AND_WRITE_OPERATIONS.to_vec(),
+            location: record_location(
+                bundle,
+                BundleFileRole::Observations,
+                Some(observation_id),
+                "/slot_confidence",
+            ),
+            message: format!(
+                "observation {observation_id:?} has slot confidence {slot_confidence}, outside [0, 1]"
+            ),
+            related_locations: Vec::new(),
+        },
+        BundleValidationIssue::AlignmentAnnotationMismatch {
+            observation_id,
+            field,
+            expected,
+            actual,
+        } => {
+            let field_path = match field {
+                AlignmentAnnotationField::SlotId => "/slot_id",
+                AlignmentAnnotationField::SlotLabel => "/slot_label",
+                AlignmentAnnotationField::SlotConfidence => "/slot_confidence",
+            };
+            BundleDiagnostic {
+                code: codes::ALIGNMENT_ANNOTATION_MISMATCH.to_string(),
+                category: BundleDiagnosticCategory::Semantic,
+                severity: BundleDiagnosticSeverity::Warning,
+                blocked_operations: vec![BundleValidationProfile::StrictCreation],
+                location: record_location(
+                    bundle,
+                    BundleFileRole::Observations,
+                    Some(observation_id),
+                    field_path,
+                ),
+                message: format!(
+                    "persisted alignment annotation for observation {observation_id:?} is {actual}; regenerated value is {expected}"
+                ),
+                related_locations: Vec::new(),
+            }
+        }
+    }
+}
+
+fn record_location(
+    bundle: Option<&BundleContents>,
+    file: BundleFileRole,
+    record_id: Option<&str>,
+    field_path: &str,
+) -> BundleDiagnosticLocation {
+    let (record_kind, record_index) = record_id.map_or((None, None), |record_id| {
+        let (kind, index) = match (bundle, file) {
+            (Some(bundle), BundleFileRole::Events) => (
+                Some(BundleRecordKind::OperatorEvent),
+                bundle
+                    .events
+                    .iter()
+                    .position(|record| record.event_id == record_id),
+            ),
+            (Some(bundle), BundleFileRole::Observations) => (
+                Some(BundleRecordKind::Observation),
+                bundle
+                    .observations
+                    .iter()
+                    .position(|record| record.observation_id == record_id),
+            ),
+            (Some(bundle), BundleFileRole::WsjtX) => (
+                Some(BundleRecordKind::WsjtXRecord),
+                bundle
+                    .wsjtx
+                    .iter()
+                    .position(|record| record.record_id == record_id),
+            ),
+            (Some(bundle), BundleFileRole::Rig) => (
+                Some(BundleRecordKind::RigRecord),
+                bundle
+                    .rig
+                    .iter()
+                    .position(|record| record.record_id == record_id),
+            ),
+            (Some(bundle), BundleFileRole::Propagation) => (
+                Some(BundleRecordKind::PropagationRecord),
+                bundle
+                    .propagation
+                    .iter()
+                    .position(|record| record.record_id == record_id),
+            ),
+            _ => (None, None),
+        };
+        (kind, index)
+    });
+
+    BundleDiagnosticLocation {
+        file,
+        record_kind,
+        record_id: record_id.map(str::to_string),
+        record_index,
+        physical_line: None,
+        field_path: Some(field_path.to_string()),
+    }
+}
+
+fn slot_location(
+    bundle: Option<&BundleContents>,
+    slot_id: &str,
+    field_path: &str,
+) -> BundleDiagnosticLocation {
+    let record_index = bundle.and_then(|bundle| {
+        bundle
+            .schedule
+            .slots
+            .iter()
+            .position(|slot| slot.slot_id == slot_id)
+    });
+    BundleDiagnosticLocation {
+        file: BundleFileRole::Schedule,
+        record_kind: Some(BundleRecordKind::Slot),
+        record_id: Some(slot_id.to_string()),
+        record_index,
+        physical_line: None,
+        field_path: Some(record_index.map_or_else(
+            || field_path.to_string(),
+            |index| format!("/slots/{index}{field_path}"),
+        )),
+    }
+}
+
+fn duplicate_id_locations(
+    bundle: Option<&BundleContents>,
+    kind: BundleIdKind,
+    id: &str,
+) -> (BundleDiagnosticLocation, Vec<BundleDiagnosticLocation>) {
+    let (file, record_kind, indices): (BundleFileRole, BundleRecordKind, Vec<usize>) =
+        match (bundle, kind) {
+            (Some(bundle), BundleIdKind::Slot) => (
+                BundleFileRole::Schedule,
+                BundleRecordKind::Slot,
+                bundle
+                    .schedule
+                    .slots
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, record)| (record.slot_id == id).then_some(index))
+                    .collect(),
+            ),
+            (Some(bundle), BundleIdKind::OperatorEvent) => (
+                BundleFileRole::Events,
+                BundleRecordKind::OperatorEvent,
+                bundle
+                    .events
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, record)| (record.event_id == id).then_some(index))
+                    .collect(),
+            ),
+            (Some(bundle), BundleIdKind::Observation) => (
+                BundleFileRole::Observations,
+                BundleRecordKind::Observation,
+                bundle
+                    .observations
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, record)| (record.observation_id == id).then_some(index))
+                    .collect(),
+            ),
+            (Some(bundle), BundleIdKind::WsjtXRecord) => (
+                BundleFileRole::WsjtX,
+                BundleRecordKind::WsjtXRecord,
+                bundle
+                    .wsjtx
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, record)| (record.record_id == id).then_some(index))
+                    .collect(),
+            ),
+            (Some(bundle), BundleIdKind::RigRecord) => (
+                BundleFileRole::Rig,
+                BundleRecordKind::RigRecord,
+                bundle
+                    .rig
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, record)| (record.record_id == id).then_some(index))
+                    .collect(),
+            ),
+            (Some(bundle), BundleIdKind::PropagationRecord) => (
+                BundleFileRole::Propagation,
+                BundleRecordKind::PropagationRecord,
+                bundle
+                    .propagation
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, record)| (record.record_id == id).then_some(index))
+                    .collect(),
+            ),
+            (None, BundleIdKind::Slot) => {
+                (BundleFileRole::Schedule, BundleRecordKind::Slot, Vec::new())
+            }
+            (None, BundleIdKind::OperatorEvent) => (
+                BundleFileRole::Events,
+                BundleRecordKind::OperatorEvent,
+                Vec::new(),
+            ),
+            (None, BundleIdKind::Observation) => (
+                BundleFileRole::Observations,
+                BundleRecordKind::Observation,
+                Vec::new(),
+            ),
+            (None, BundleIdKind::WsjtXRecord) => (
+                BundleFileRole::WsjtX,
+                BundleRecordKind::WsjtXRecord,
+                Vec::new(),
+            ),
+            (None, BundleIdKind::RigRecord) => {
+                (BundleFileRole::Rig, BundleRecordKind::RigRecord, Vec::new())
+            }
+            (None, BundleIdKind::PropagationRecord) => (
+                BundleFileRole::Propagation,
+                BundleRecordKind::PropagationRecord,
+                Vec::new(),
+            ),
+        };
+    let field_name = if kind == BundleIdKind::Slot {
+        "slot_id"
+    } else if kind == BundleIdKind::OperatorEvent {
+        "event_id"
+    } else if kind == BundleIdKind::Observation {
+        "observation_id"
+    } else {
+        "record_id"
+    };
+    let make_location = |index: Option<usize>| BundleDiagnosticLocation {
+        file,
+        record_kind: Some(record_kind),
+        record_id: Some(id.to_string()),
+        record_index: index,
+        physical_line: matches!(
+            file,
+            BundleFileRole::Events
+                | BundleFileRole::Observations
+                | BundleFileRole::WsjtX
+                | BundleFileRole::Rig
+                | BundleFileRole::Propagation
+        )
+        .then(|| index.map(|index| index + 1))
+        .flatten(),
+        field_path: Some(match (kind, index) {
+            (BundleIdKind::Slot, Some(index)) => format!("/slots/{index}/{field_name}"),
+            _ => format!("/{field_name}"),
+        }),
+    };
+    let location = make_location(indices.get(1).copied());
+    let related = indices
+        .first()
+        .copied()
+        .map(|index| vec![make_location(Some(index))])
+        .unwrap_or_default();
+    (location, related)
 }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use antennabench_core::normalize_bundle;
+use antennabench_core::{codes, normalize_bundle, BundleFileRole, BundleValidationProfile};
 use antennabench_storage::{BundleStore, BundleStoreError};
 
 #[test]
@@ -20,7 +20,7 @@ fn missing_manifest_returns_read_error_with_path() {
 }
 
 #[test]
-fn invalid_jsonl_returns_parse_error_with_path() {
+fn invalid_jsonl_returns_typed_diagnostic_with_path() {
     let tempdir = tempfile::tempdir().unwrap();
     let bundle_path = tempdir.path().join("invalid-jsonl.session.wsprabundle");
     std::fs::create_dir_all(bundle_path.join("attachments")).unwrap();
@@ -29,12 +29,14 @@ fn invalid_jsonl_returns_parse_error_with_path() {
 
     let error = BundleStore::new(&bundle_path).read().unwrap_err();
 
-    match error {
-        BundleStoreError::ParseJson { path, .. } => {
-            assert!(path.ends_with("events.jsonl"));
-        }
-        other => panic!("expected parse JSON error, got {other:?}"),
-    }
+    let BundleStoreError::Validation { source } = error else {
+        panic!("expected validation error, got {error:?}");
+    };
+    let diagnostic = &source.report().diagnostics()[0];
+    assert_eq!(diagnostic.code, codes::INVALID_JSON);
+    assert_eq!(diagnostic.location.file, BundleFileRole::Events);
+    assert_eq!(diagnostic.location.record_index, Some(0));
+    assert_eq!(diagnostic.location.physical_line, Some(1));
 }
 
 #[test]
@@ -54,10 +56,99 @@ fn read_validated_returns_validation_error_for_parseable_invalid_bundle() {
 
     match error {
         BundleStoreError::Validation { source } => {
-            assert_eq!(source.issues().len(), 1);
+            assert_eq!(source.diagnostic_count(), 1);
         }
         other => panic!("expected validation error, got {other:?}"),
     }
+}
+
+#[test]
+fn unknown_modeled_fields_are_visible_but_compatible_with_read_and_analysis() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let bundle_path = tempdir.path().join("unknown-field.session.wsprabundle");
+    std::fs::create_dir_all(bundle_path.join("attachments")).unwrap();
+    write_minimal_bundle_files(&bundle_path);
+    let station_path = bundle_path.join("station.json");
+    let station = std::fs::read_to_string(&station_path).unwrap().replace(
+        "  \"operator_notes\": null",
+        "  \"operator_notes\": null,\n  \"future_field\": 42",
+    );
+    std::fs::write(&station_path, station).unwrap();
+
+    let store = BundleStore::new(&bundle_path);
+    let inspection = store.inspect().unwrap();
+    assert!(inspection.bundle().is_some());
+    assert_eq!(inspection.report().diagnostics().len(), 1);
+    let diagnostic = &inspection.report().diagnostics()[0];
+    assert_eq!(diagnostic.code, codes::UNKNOWN_FIELD);
+    assert_eq!(diagnostic.location.file, BundleFileRole::Station);
+    assert_eq!(
+        diagnostic.location.field_path.as_deref(),
+        Some("/future_field")
+    );
+    assert!(inspection
+        .report()
+        .allows(BundleValidationProfile::CompatibilityRead));
+    assert!(inspection
+        .report()
+        .allows(BundleValidationProfile::Analysis));
+    assert!(!inspection
+        .report()
+        .allows(BundleValidationProfile::StrictCreation));
+    assert!(!inspection.report().allows(BundleValidationProfile::Upgrade));
+    assert_eq!(store.read().unwrap().station.callsign, "N1RWJ");
+    store.read_normalized_validated().unwrap();
+    assert!(matches!(
+        store.read_validated(),
+        Err(BundleStoreError::Validation { .. })
+    ));
+
+    let destination = tempdir
+        .path()
+        .join("unknown-field-copy.session.wsprabundle");
+    store.copy_losslessly_to(&destination).unwrap();
+    assert_eq!(
+        std::fs::read(&station_path).unwrap(),
+        std::fs::read(destination.join("station.json")).unwrap()
+    );
+}
+
+#[test]
+fn duplicate_modeled_members_block_typed_projection_without_being_collapsed() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let bundle_path = tempdir.path().join("duplicate-member.session.wsprabundle");
+    std::fs::create_dir_all(bundle_path.join("attachments")).unwrap();
+    write_minimal_bundle_files(&bundle_path);
+    let station_path = bundle_path.join("station.json");
+    let station = std::fs::read_to_string(&station_path).unwrap().replace(
+        "  \"callsign\": \"N1RWJ\",",
+        "  \"callsign\": \"FIRST\",\n  \"callsign\": \"SECOND\",",
+    );
+    std::fs::write(&station_path, station).unwrap();
+
+    let store = BundleStore::new(&bundle_path);
+    let inspection = store.inspect().unwrap();
+    assert!(inspection.bundle().is_none());
+    let duplicate = inspection
+        .report()
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == codes::DUPLICATE_MEMBER)
+        .expect("duplicate member diagnostic");
+    assert_eq!(duplicate.location.file, BundleFileRole::Station);
+    assert_eq!(duplicate.location.field_path.as_deref(), Some("/callsign"));
+    for profile in [
+        BundleValidationProfile::CompatibilityRead,
+        BundleValidationProfile::Analysis,
+        BundleValidationProfile::StrictCreation,
+        BundleValidationProfile::Upgrade,
+    ] {
+        assert!(!inspection.report().allows(profile));
+    }
+    assert!(matches!(
+        store.read(),
+        Err(BundleStoreError::Validation { .. })
+    ));
 }
 
 #[test]
@@ -166,6 +257,7 @@ fn write_minimal_bundle_files(bundle_path: &std::path::Path) {
     )
     .unwrap();
     std::fs::write(bundle_path.join("observations.jsonl"), "").unwrap();
+    std::fs::write(bundle_path.join("events.jsonl"), "").unwrap();
     std::fs::write(bundle_path.join("wsjtx.jsonl"), "").unwrap();
     std::fs::write(bundle_path.join("rig.jsonl"), "").unwrap();
     std::fs::write(bundle_path.join("propagation.jsonl"), "").unwrap();

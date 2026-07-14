@@ -11,19 +11,24 @@ impl BundleStore {
     /// Copies the original durable bundle representation without serializing it.
     ///
     /// The destination must not already exist. Manifest-declared root files and
-    /// the complete attachments tree are copied byte-for-byte, then the copy is
-    /// reopened through the normalized and validated import path. A newly
-    /// created destination is removed if copying or verification fails and it
-    /// is still safe to do so.
+    /// the complete attachments tree are copied byte-for-byte. Only the
+    /// manifest and filesystem layout must be safe to traverse; modeled data
+    /// may remain unavailable to typed readers. A newly created destination is
+    /// removed if copying or verification fails and it is still safe to do so.
     pub fn copy_losslessly_to(
         &self,
         destination: impl AsRef<Path>,
     ) -> Result<BundleStore, BundleCopyError> {
-        let bundle = self
-            .read_normalized_validated()
+        let manifest = self
+            .inspect_manifest_layout()
             .map_err(|source| BundleCopyError::Source { source })?;
         let source_paths = self
-            .bundle_paths(&bundle.manifest.files)
+            .bundle_paths(&manifest.files)
+            .map_err(|source| BundleCopyError::Source { source })?;
+        source_paths
+            .ensure_readable_targets()
+            .map_err(|source| BundleCopyError::Source { source })?;
+        super::ensure_directory(&source_paths.attachments_dir)
             .map_err(|source| BundleCopyError::Source { source })?;
         let destination = destination.as_ref();
 
@@ -42,7 +47,7 @@ impl BundleStore {
             }
         })?;
 
-        let result = copy_and_verify(destination, &source_paths, &bundle.manifest.files);
+        let result = copy_and_verify(destination, &source_paths, &manifest.files);
 
         match result {
             Ok(store) => Ok(store),
@@ -72,7 +77,7 @@ fn copy_and_verify(
     )?;
 
     destination_store
-        .read_normalized_validated()
+        .inspect_manifest_layout()
         .map_err(|source| BundleCopyError::Verification { source })?;
 
     Ok(destination_store)

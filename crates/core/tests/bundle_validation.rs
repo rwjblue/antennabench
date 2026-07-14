@@ -1,8 +1,9 @@
 use antennabench_core::{
-    validate_bundle, AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, BundleContents,
-    BundleFiles, BundleManifest, BundleValidationIssue, ExperimentMode, ObservationKind,
-    ObservationRecord, OperatorEvent, OperatorEventType, PlannedSlot, PropagationRecord,
-    RecordMeta, RecordSource, RigRecord, Schedule, SessionGoal, Station, WsjtXRecord,
+    codes, validate_bundle, validate_bundle_report, AnalysisFile, AnalysisStatus, Antenna,
+    AntennasFile, Band, BundleContents, BundleFiles, BundleManifest, BundleValidationIssue,
+    BundleValidationProfile, ExperimentMode, ObservationKind, ObservationRecord, OperatorEvent,
+    OperatorEventType, PlannedSlot, PropagationRecord, RecordMeta, RecordSource, RigRecord,
+    Schedule, SessionGoal, Station, WsjtXRecord,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -280,6 +281,109 @@ fn reports_persisted_alignment_annotation_mismatches() {
     ]
     "###
     );
+}
+
+#[test]
+fn validation_profiles_distinguish_compatibility_analysis_and_writes() {
+    let mut stale = valid_bundle();
+    stale.observations[0].slot_label = Some("stale".to_string());
+    let stale_report = validate_bundle_report(&stale);
+    assert!(stale_report.allows(BundleValidationProfile::CompatibilityRead));
+    assert!(stale_report.allows(BundleValidationProfile::Analysis));
+    assert!(!stale_report.allows(BundleValidationProfile::StrictCreation));
+    assert!(stale_report.allows(BundleValidationProfile::Upgrade));
+
+    let mut semantically_invalid = valid_bundle();
+    semantically_invalid.observations[0].slot_confidence = Some(1.5);
+    let semantic_report = validate_bundle_report(&semantically_invalid);
+    assert!(semantic_report.allows(BundleValidationProfile::CompatibilityRead));
+    assert!(!semantic_report.allows(BundleValidationProfile::Analysis));
+    assert!(!semantic_report.allows(BundleValidationProfile::StrictCreation));
+    assert!(!semantic_report.allows(BundleValidationProfile::Upgrade));
+
+    let mut structurally_invalid = valid_bundle();
+    structurally_invalid.events[0].slot_id = Some("missing-slot".to_string());
+    let structural_report = validate_bundle_report(&structurally_invalid);
+    for profile in [
+        BundleValidationProfile::CompatibilityRead,
+        BundleValidationProfile::Analysis,
+        BundleValidationProfile::StrictCreation,
+        BundleValidationProfile::Upgrade,
+    ] {
+        assert!(!structural_report.allows(profile));
+    }
+}
+
+#[test]
+fn diagnostic_records_have_stable_codes_locations_and_ordering() {
+    let mut bundle = valid_bundle();
+    bundle.events[0].slot_id = Some("missing-slot".to_string());
+    bundle.observations[0].slot_confidence = Some(1.5);
+
+    let report = validate_bundle_report(&bundle);
+    let summary = report
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code == codes::UNKNOWN_EVENT_SLOT
+                || diagnostic.code == codes::INVALID_SLOT_CONFIDENCE
+        })
+        .map(|diagnostic| {
+            (
+                diagnostic.code.as_str(),
+                diagnostic.location.file,
+                diagnostic.location.record_id.as_deref(),
+                diagnostic.location.record_index,
+                diagnostic.location.physical_line,
+                diagnostic.location.field_path.as_deref(),
+                diagnostic.blocked_operations.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    insta::assert_debug_snapshot!(summary, @r###"
+    [
+        (
+            "bundle.structure.unknown_event_slot",
+            Events,
+            Some(
+                "event-001",
+            ),
+            Some(
+                0,
+            ),
+            None,
+            Some(
+                "/slot_id",
+            ),
+            [
+                CompatibilityRead,
+                Analysis,
+                StrictCreation,
+                Upgrade,
+            ],
+        ),
+        (
+            "bundle.semantic.invalid_slot_confidence",
+            Observations,
+            Some(
+                "obs-001",
+            ),
+            Some(
+                0,
+            ),
+            None,
+            Some(
+                "/slot_confidence",
+            ),
+            [
+                Analysis,
+                StrictCreation,
+                Upgrade,
+            ],
+        ),
+    ]
+    "###);
 }
 
 fn valid_bundle() -> BundleContents {
