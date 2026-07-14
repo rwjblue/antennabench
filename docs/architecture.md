@@ -124,6 +124,31 @@ persisted in the bundle. `analysis.json` remains bundle metadata rather than a
 serialized analysis summary or report. Report construction and rendering do
 not change the bundle format or schema version.
 
+## Planned Local Resource Boundary
+
+[Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md)
+defines the fixed `local-standard-v1` safety envelope for future bundle
+inspection, writes, adapters, analysis, reports, copies, and desktop delivery.
+The profile separates a 256 MiB modeled-data pool from a 2 GiB opaque
+attachment pool, bounds records, lines, JSON nesting, tree traversal, UDP/HTTP
+state, analysis intermediates, report rows, HTML, and IPC, and uses
+cooperative cancellation instead of a local wall-clock timeout.
+
+Resource failures are typed operational outcomes, not evidence-quality
+judgments. They never return a complete typed bundle from a prefix. A
+storage-safe lossless copy remains independent from typed interpretation, and
+a live adapter that cannot accept more data records an explicit completeness
+gap before it stops. Full report detail may become an explicitly labeled
+aggregate overview with complete omission counts, but it is never silently
+sampled.
+
+This boundary is approved design rather than current enforcement. Implementation
+is split across [#55](https://github.com/rwjblue/antennabench/issues/55),
+[#56](https://github.com/rwjblue/antennabench/issues/56), and
+[#57](https://github.com/rwjblue/antennabench/issues/57). Hosted upload and
+archive limits remain a separate decision in
+[#11](https://github.com/rwjblue/antennabench/issues/11).
+
 ## Planned Live-Session Persistence
 
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md)

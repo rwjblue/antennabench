@@ -82,6 +82,28 @@ WSJT-X companion mode is the expected first integration path. Native WSPR,
 mobile operation, deeper rig control, public search, and hosted publishing are
 later layers.
 
+## Bounded Local Operation
+
+Local-first does not mean that every selected directory, adapter response, or
+UDP sender has unlimited trust or capacity.
+[Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md)
+defines a fixed first-product envelope for bundle bytes and records,
+attachments, adapter queues and state, analysis work, report size, and desktop
+IPC. Production users do not receive a hidden override for these limits.
+
+A limit failure is explicit and scoped. It never turns a prefix into a
+complete session, never silently samples report detail, and never changes the
+scientific meaning of accepted evidence. Manual/no-rig conduction remains
+available when an optional adapter stops. Storage-safe export remains separate
+from analysis/report eligibility, and a live acquisition overflow becomes an
+auditable completeness gap.
+
+The policy is approved but not yet implemented. Storage, adapter, and
+report/desktop enforcement are tracked by
+[#55](https://github.com/rwjblue/antennabench/issues/55),
+[#56](https://github.com/rwjblue/antennabench/issues/56), and
+[#57](https://github.com/rwjblue/antennabench/issues/57).
+
 ## Hosted Sharing
 
 Hosted sharing is an optional extension of the local workflow, not a dependency

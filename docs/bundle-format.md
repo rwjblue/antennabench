@@ -36,6 +36,37 @@ Version 1 is never silently rewritten to gain these semantics. It remains
 readable and losslessly copyable; live mutation requires an explicit v2 upgrade
 to a new `.session.antennabundle` destination.
 
+## Planned Local Resource Profile
+
+[Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md)
+selects one fixed first-product profile, `local-standard-v1`. It is an
+operational policy rather than a schema invariant, and its implementation is
+tracked by [#55](https://github.com/rwjblue/antennabench/issues/55),
+[#56](https://github.com/rwjblue/antennabench/issues/56), and
+[#57](https://github.com/rwjblue/antennabench/issues/57).
+
+The selected modeled-data limits are 4 MiB per root JSON file, 256 KiB per
+JSONL line, 128 MiB and 250,000 records per JSONL stream, and 256 MiB plus
+500,000 records across modeled files. JSON nesting stops at 64 containers and
+a general modeled scalar string stops at 128 KiB; narrower semantic rules
+still apply.
+
+Opaque root files and attachments use a separate pool: 512 MiB per file, 2 GiB
+total, 4,096 entries, and eight directory levels below `attachments/`.
+Strict creation refuses unmodeled root entries. A legacy operation that claims
+to be lossless must preserve safe opaque entries within this pool rather than
+silently skipping them.
+
+Readers preflight metadata and enforce the same counters while streaming, so a
+growing or replaced file cannot bypass the limits. Typed read returns the
+whole bundle or no typed bundle. Storage-safe preservation remains separate
+from parsing and analysis, and strict writes or live checkpoints never promote
+bytes that cross the profile.
+
+These limits are not yet enforced by the current schema-v1 reader. Until the
+implementation issues land, operator-selected input should still be treated as
+potentially unbounded.
+
 ## Root Files
 
 - `manifest.json`: schema version, session id, creation time, app version, and
