@@ -4,6 +4,7 @@
 
 set -euo pipefail
 
+mise run toolchain
 mise run desktop:e2e
 mise run desktop:frontend-test
 mise run fmt

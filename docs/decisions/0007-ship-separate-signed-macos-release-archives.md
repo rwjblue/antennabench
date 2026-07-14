@@ -2,6 +2,9 @@
 
 Date: 2026-07-13
 
+Toolchain policy amended by
+[Decision 0014](0014-use-one-pinned-rust-toolchain.md).
+
 ## Decision
 
 The first public AntennaBench desktop release will support macOS 15 and later
@@ -122,10 +125,11 @@ the release manifest, and every public filename must agree before the workflow
 imports credentials or creates a draft release.
 
 Release builds use the exact routine compiler pinned by `rust-toolchain.toml`
-and Mise, rather than a moving `stable` channel. The separate MSRV check proves
-the lower compatibility claim but does not select the release compiler.
-Compiler-pin updates are reviewed and verified like dependency updates, and a
-release manifest records the exact compiler version used for each artifact.
+and Mise, rather than a moving `stable` channel. The workspace supports that
+single compiler for development, CI, and release builds; it does not maintain a
+separate older compatibility floor. Compiler-pin updates are reviewed and
+verified like dependency updates, and a release manifest records the exact
+compiler version used for each artifact.
 
 Public prerelease versions are not supported initially. The first candidate is
 validated as a private draft release for its eventual stable tag. This avoids

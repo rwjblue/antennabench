@@ -2,6 +2,9 @@
 
 Date: 2026-07-14
 
+Toolchain policy amended by
+[Decision 0014](0014-use-one-pinned-rust-toolchain.md).
+
 ## Decision
 
 AntennaBench will use a combined GitHub-native and Rust-native dependency and
@@ -32,13 +35,13 @@ The repository was inspected on 2026-07-14:
 - crates.io is the only external Rust package source;
 - the desktop depends on Tauri, and the propagation adapter depends on
   network-facing reqwest/rustls code;
-- Rust 1.96.1 is the exact routine compiler and Rust 1.89 is the separately
-  enforced compatibility floor;
+- Rust 1.96.1 is the single exact compiler for development, CI, and future
+  release builds;
 - cargo-tauri 2.11.4 is exact in Mise, but Cargo-backed tool installation still
   needs an explicit locked-install guarantee;
 - Node runs dependency-free frontend tests and timing helpers, but no
   package.json or Node lockfile exists and the Node runtime is not yet pinned;
-- the only workflow has seven external Action uses across actions/checkout,
+- the only workflow has five external Action uses across actions/checkout,
   jdx/mise-action, and actions/upload-artifact;
 - every Action currently uses a moving major tag rather than an immutable SHA;
 - ordinary workflow permission is contents: read, with no release credentials;
@@ -74,7 +77,7 @@ review before it can be admitted.
 Cargo.lock is never regenerated incidentally inside unrelated work. A focused
 update records the requested direct or transitive packages, before/after
 versions, advisory or maintenance reason, important feature changes, duplicate
-effects, MSRV impact, and verification.
+effects, compiler-pin impact, and verification.
 
 ### Node And Tauri Tooling
 
@@ -316,9 +319,9 @@ A routine dependency pull request:
 
 1. identifies the requested packages, Actions, tools, or runner labels;
 2. reviews upstream release notes and provenance;
-3. inspects manifest, lockfile, features, source, license, duplicate, and MSRV
-   changes;
-4. runs the Rust 1.89 compatibility job and Rust 1.96.1 full suite;
+3. inspects manifest, lockfile, features, source, license, duplicate, and
+   compiler-requirement changes;
+4. verifies the Rust pins agree and runs the full suite on that compiler;
 5. runs dependency review, cargo-deny, CodeQL, and action-pin validation;
 6. records any exception with an issue and expiry; and
 7. merges only through the required main ruleset.
@@ -334,9 +337,9 @@ cargo-deny, or runner-OS update is focused and independently reversible.
 
 ### Pull Requests
 
-All pull requests require existing CI/MSRV checks, action-pin/tool-pin policy,
-deterministic cargo-deny license/source/bans checks, dependency review, and
-CodeQL.
+All pull requests require the existing CI check, including toolchain-pin
+consistency, plus action-pin/tool-pin policy, deterministic cargo-deny
+license/source/bans checks, dependency review, and CodeQL.
 
 A dependency-changing pull request also requires a fresh RustSec advisory
 check. Moderate-or-higher introduced vulnerabilities block dependency review;
@@ -471,9 +474,9 @@ flow while making every executed revision explicit.
 ### Immediate Auto-Merge
 
 Auto-merge would reduce maintenance work but could combine an upstream
-regression, MSRV change, toolchain change, or Action compromise with trusted
-release work. It is deferred until the project has enough evidence to define
-safe categories.
+regression, compiler-requirement change, toolchain change, or Action compromise
+with trusted release work. It is deferred until the project has enough evidence
+to define safe categories.
 
 ### Block Every Duplicate And Unmaintained Transitive Crate
 
@@ -510,4 +513,3 @@ time-owned maintenance work.
 - [RustSec advisory database](https://rustsec.org/)
 - [cargo-deny checks](https://embarkstudios.github.io/cargo-deny/checks/)
 - [GitHub-hosted runner images](https://github.com/actions/runner-images)
-

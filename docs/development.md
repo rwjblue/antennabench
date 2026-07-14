@@ -64,26 +64,28 @@ and decision work. Implementation issues begin with `agent-ready` and
 
 ## Rust Toolchain Policy
 
-The workspace declares Rust 1.89 as its minimum supported Rust version (MSRV).
-Every package inherits that value from the root `Cargo.toml`. The repository
-pins routine development, lint, test, and future release builds to Rust 1.96.1
-in both `rust-toolchain.toml` and Mise so those results do not move when a new
-stable compiler is published.
+The project supports one exact Rust toolchain for development, CI, and future
+release builds. Rust 1.96.1 is declared by the workspace and pinned in both
+`rust-toolchain.toml` and Mise so builds do not move when a new stable compiler
+is published. Every package inherits the workspace declaration.
 
-CI separately installs Rust 1.89.0 and runs `mise run msrv`, which proves that
-locked Cargo metadata and every workspace target still compile at the declared
-floor. To run the same check locally:
+AntennaBench is an application whose build and release environment the project
+controls; its internal workspace crates are not currently published as a
+separately supported library surface. The project therefore does not maintain
+an older minimum-supported-Rust-version compatibility promise. Run the pin
+consistency check locally with:
 
 ```bash
-rustup toolchain install 1.89.0 --profile minimal
-mise run msrv
+mise run toolchain
 ```
 
-Routine dependency updates may require a newer compiler. Such an update must
-raise the workspace declaration and the MSRV task together, document the new
-floor, and pass both the minimum-version job and the pinned current-toolchain
-quality suite. Updating the routine compiler pin is a separate deliberate
-maintenance change and does not by itself raise the compatibility floor.
+Compiler updates are focused maintenance changes. They update the workspace
+declaration, `rust-toolchain.toml`, and Mise together, document relevant
+dependency or release effects, and pass the full quality suite. A future plan
+to publish supported Rust libraries must establish a compatibility policy
+before publication rather than inheriting an accidental application MSRV.
+[Decision 0014](decisions/0014-use-one-pinned-rust-toolchain.md) records the
+rationale for replacing the former dual-toolchain policy.
 
 ## Planned Supply-Chain Maintenance
 
@@ -150,14 +152,14 @@ is limited to the requested files.
 
 ## Continuous Integration
 
-Pull requests and pushes to `main` run four standard GitHub-hosted jobs. The
-Rust 1.89 job checks locked metadata and all workspace targets at the declared
-minimum. Linux is the canonical full-quality job on the pinned routine
-toolchain: it installs the Linux Tauri prerequisites and runs `mise run ci`,
-including formatting, Clippy, all workspace targets, frontend state tests, and
-the unattended desktop workflow. The macOS and Windows jobs each run the
-portable workspace tests, frontend state tests, unattended desktop workflow,
-and `mise run desktop:build` for a native debug `--no-bundle` compilation.
+Pull requests and pushes to `main` run three standard GitHub-hosted jobs. Linux
+is the canonical full-quality job on the single pinned toolchain: it verifies
+the Rust pins agree, installs the Linux Tauri prerequisites, and runs the
+remaining `mise run ci` checks, including formatting, Clippy, all workspace
+targets, frontend state tests, and the unattended desktop workflow. The macOS
+and Windows jobs each run the portable workspace tests, frontend state tests,
+unattended desktop workflow, and `mise run desktop:build` for a native debug
+`--no-bundle` compilation.
 
 Project-local Mise tasks remain the command source of truth on every platform.
 The portability jobs explicitly select `shell: bash`; on Windows, GitHub Actions
