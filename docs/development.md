@@ -153,6 +153,14 @@ strict v1/v2 writes create no destination. It also proves a warning-bearing v1
 source stays byte-identical, compatibility-readable, losslessly copyable, and
 upgradeable when its warning is representable.
 
+`crates/storage/src/resource.rs` pins the fixed `local-standard-v1` storage
+profile and its typed diagnostic contract. Unit tests inject narrow profiles to
+exercise exact-limit and first-byte-over boundaries for root JSON, JSONL lines,
+record counts, JSON shape, root entries, attachments, aggregate counters, and
+cooperative cancellation. Storage integration tests keep lossless copy separate
+from typed projection and verify rollback, unsafe-entry rejection, v1/v2 reopen,
+and byte identity.
+
 Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, accessible chart tables, and all
 report sections. Separate hostile-string and empty-data cases pin escaping and

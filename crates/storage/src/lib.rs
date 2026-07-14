@@ -1,7 +1,6 @@
 use std::{
     collections::HashSet,
     fs,
-    io::Write,
     path::{Component, Path, PathBuf},
 };
 
@@ -9,29 +8,75 @@ use antennabench_core::{
     normalize_bundle, validate_bundle_report, BundleContents, BundleFiles, BundleValidationError,
     BundleValidationProfile,
 };
-use serde::Serialize;
 use thiserror::Error;
 
 mod inspection;
 mod lossless_copy;
+mod resource;
 mod upgrade;
 mod v2;
 
 pub use inspection::BundleInspection;
 pub use lossless_copy::BundleCopyError;
+pub use resource::{
+    BundleResourceProfile, CancellationToken, ResourceDiagnostic, ResourceError, ResourceOperation,
+    ResourceStage, ResourceUnit, LOCAL_RESOURCE_PROFILE_NAME, LOCAL_RESOURCE_PROFILE_VERSION,
+    LOCAL_STANDARD_V1,
+};
 pub use upgrade::BundleUpgradeError;
 pub use v2::BundleAttachment;
 
 #[derive(Debug, Clone)]
 pub struct BundleStore {
     root: PathBuf,
+    profile: BundleResourceProfile,
+    cancellation: CancellationToken,
 }
 
 impl BundleStore {
     pub fn new(root: impl AsRef<Path>) -> Self {
         Self {
             root: root.as_ref().to_path_buf(),
+            profile: LOCAL_STANDARD_V1,
+            cancellation: CancellationToken::default(),
         }
+    }
+
+    pub fn with_cancellation(root: impl AsRef<Path>, cancellation: CancellationToken) -> Self {
+        Self {
+            root: root.as_ref().to_path_buf(),
+            profile: LOCAL_STANDARD_V1,
+            cancellation,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_profile(root: impl AsRef<Path>, profile: BundleResourceProfile) -> Self {
+        Self {
+            root: root.as_ref().to_path_buf(),
+            profile,
+            cancellation: CancellationToken::default(),
+        }
+    }
+
+    fn derived(&self, root: impl AsRef<Path>) -> Self {
+        Self {
+            root: root.as_ref().to_path_buf(),
+            profile: self.profile,
+            cancellation: self.cancellation.clone(),
+        }
+    }
+
+    pub fn resource_profile(&self) -> BundleResourceProfile {
+        self.profile
+    }
+
+    fn profile(&self) -> BundleResourceProfile {
+        self.profile
+    }
+
+    fn cancellation(&self) -> &CancellationToken {
+        &self.cancellation
     }
 
     pub fn root(&self) -> &Path {
@@ -50,21 +95,77 @@ impl BundleStore {
         ensure_writable_root(&self.root)?;
         let paths = self.bundle_paths(&bundle.manifest.files)?;
         paths.ensure_writable_targets()?;
+        if self.root.exists() {
+            let allowed = [
+                &paths.manifest,
+                &paths.station,
+                &paths.antennas,
+                &paths.schedule,
+                &paths.events,
+                &paths.observations,
+                &paths.wsjtx,
+                &paths.rig,
+                &paths.propagation,
+                &paths.analysis,
+                &paths.attachments_dir,
+            ]
+            .into_iter()
+            .collect::<HashSet<_>>();
+            for entry in self.inventory_root(ResourceOperation::Write)? {
+                if !allowed.contains(&entry) {
+                    return Err(BundleStoreError::UnexpectedRootEntry { path: entry });
+                }
+            }
+        }
+
+        // Serialize the entire modeled representation before creating the
+        // destination, so strict writes fail without partial output.
+        let mut budget = resource::ModeledBudget::default();
+        let manifest =
+            resource::serialize_root_bounded(self, &paths.manifest, &bundle.manifest, &mut budget)?;
+        let station =
+            resource::serialize_root_bounded(self, &paths.station, &bundle.station, &mut budget)?;
+        let antennas =
+            resource::serialize_root_bounded(self, &paths.antennas, &bundle.antennas, &mut budget)?;
+        let schedule =
+            resource::serialize_root_bounded(self, &paths.schedule, &bundle.schedule, &mut budget)?;
+        let events =
+            resource::serialize_jsonl_bounded(self, &paths.events, &bundle.events, &mut budget)?;
+        let observations = resource::serialize_jsonl_bounded(
+            self,
+            &paths.observations,
+            &bundle.observations,
+            &mut budget,
+        )?;
+        let wsjtx =
+            resource::serialize_jsonl_bounded(self, &paths.wsjtx, &bundle.wsjtx, &mut budget)?;
+        let rig = resource::serialize_jsonl_bounded(self, &paths.rig, &bundle.rig, &mut budget)?;
+        let propagation = resource::serialize_jsonl_bounded(
+            self,
+            &paths.propagation,
+            &bundle.propagation,
+            &mut budget,
+        )?;
+        let analysis =
+            resource::serialize_root_bounded(self, &paths.analysis, &bundle.analysis, &mut budget)?;
         create_directory(&self.root)?;
-
-        write_json(&paths.manifest, &bundle.manifest)?;
-        write_json(&paths.station, &bundle.station)?;
-        write_json(&paths.antennas, &bundle.antennas)?;
-        write_json(&paths.schedule, &bundle.schedule)?;
-        write_jsonl(&paths.events, &bundle.events)?;
-        write_jsonl(&paths.observations, &bundle.observations)?;
-        write_jsonl(&paths.wsjtx, &bundle.wsjtx)?;
-        write_jsonl(&paths.rig, &bundle.rig)?;
-        write_jsonl(&paths.propagation, &bundle.propagation)?;
-        write_json(&paths.analysis, &bundle.analysis)?;
-        create_directory(&paths.attachments_dir)?;
-
-        Ok(())
+        let result = (|| {
+            write_bytes(&paths.manifest, &manifest)?;
+            write_bytes(&paths.station, &station)?;
+            write_bytes(&paths.antennas, &antennas)?;
+            write_bytes(&paths.schedule, &schedule)?;
+            write_bytes(&paths.events, &events)?;
+            write_bytes(&paths.observations, &observations)?;
+            write_bytes(&paths.wsjtx, &wsjtx)?;
+            write_bytes(&paths.rig, &rig)?;
+            write_bytes(&paths.propagation, &propagation)?;
+            write_bytes(&paths.analysis, &analysis)?;
+            create_directory(&paths.attachments_dir)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(self.root());
+        }
+        result
     }
 
     pub fn read(&self) -> Result<BundleContents, BundleStoreError> {
@@ -293,6 +394,13 @@ pub enum BundleStoreError {
         source: serde_json::Error,
     },
 
+    #[error("JSON text is not UTF-8: {path}")]
+    InvalidUtf8 {
+        path: PathBuf,
+        #[source]
+        source: std::str::Utf8Error,
+    },
+
     #[error("failed to serialize JSON for {path}")]
     SerializeJson {
         path: PathBuf,
@@ -311,6 +419,9 @@ pub enum BundleStoreError {
 
     #[error("bundle attachments path must exist as a directory: {path}")]
     InvalidAttachmentsDirectory { path: PathBuf },
+
+    #[error("strict bundle creation refuses an unmodeled root entry: {path}")]
+    UnexpectedRootEntry { path: PathBuf },
 
     #[error("bundle root must be a directory path and cannot be a symlink: {path}")]
     InvalidBundleRoot { path: PathBuf },
@@ -335,6 +446,9 @@ pub enum BundleStoreError {
 
     #[error("attachment digest or size does not match its reference: {path}")]
     AttachmentMismatch { path: PathBuf },
+
+    #[error(transparent)]
+    Resource(#[from] ResourceError),
 
     #[error(transparent)]
     Validation {
@@ -384,44 +498,9 @@ fn ensure_directory(path: &Path) -> Result<(), BundleStoreError> {
     }
 }
 
-fn write_json<T: Serialize>(path: impl AsRef<Path>, value: &T) -> Result<(), BundleStoreError> {
-    let path = path.as_ref();
-    let mut contents =
-        serde_json::to_string_pretty(value).map_err(|source| BundleStoreError::SerializeJson {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    contents.push('\n');
-
-    fs::write(path, contents).map_err(|source| BundleStoreError::Write {
+fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), BundleStoreError> {
+    fs::write(path, bytes).map_err(|source| BundleStoreError::Write {
         path: path.to_path_buf(),
         source,
     })
-}
-
-fn write_jsonl<T: Serialize>(
-    path: impl AsRef<Path>,
-    records: &[T],
-) -> Result<(), BundleStoreError> {
-    let path = path.as_ref();
-    let mut file = fs::File::create(path).map_err(|source| BundleStoreError::Write {
-        path: path.to_path_buf(),
-        source,
-    })?;
-
-    for record in records {
-        serde_json::to_writer(&mut file, record).map_err(|source| {
-            BundleStoreError::SerializeJson {
-                path: path.to_path_buf(),
-                source,
-            }
-        })?;
-        file.write_all(b"\n")
-            .map_err(|source| BundleStoreError::Write {
-                path: path.to_path_buf(),
-                source,
-            })?;
-    }
-
-    Ok(())
 }

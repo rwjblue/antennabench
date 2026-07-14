@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs, io,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -12,9 +13,14 @@ use antennabench_core::{
     Provenance, RecordMeta, RecordMetaV2, RigRecordV2, SessionLifecycleV2, SessionStateV2,
     StreamCheckpointV2, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2,
 };
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::{
+    resource::{
+        copy_bounded_file, inventory_attachment_tree, inventory_complete_tree, read_bounded,
+        ResourceOperation, ResourceStage,
+    },
     v2::{checkpoint_for_bytes, serialize_json, serialize_jsonl, sha256_hex},
     BundleStore, BundleStoreError,
 };
@@ -25,7 +31,7 @@ impl BundleStore {
         &self,
         destination: impl AsRef<Path>,
     ) -> Result<BundleStore, BundleUpgradeError> {
-        let source_before = snapshot_tree(self.root())?;
+        let source_before = snapshot_tree(self)?;
         ensure_destination_outside_source(self.root(), destination.as_ref())?;
         let inspection = self.inspect()?;
         if !inspection.report().allows(BundleValidationProfile::Upgrade) {
@@ -45,11 +51,20 @@ impl BundleStore {
                 actual: bundle.manifest.schema_version,
             });
         }
-        let wsjtx_lines = fs::read_to_string(self.root().join(&bundle.manifest.files.wsjtx))
-            .map_err(|source| BundleUpgradeError::ReadLegacyEvidence {
-                path: self.root().join(&bundle.manifest.files.wsjtx),
+        let wsjtx_path = self.root().join(&bundle.manifest.files.wsjtx);
+        let wsjtx_bytes = read_bounded(
+            self,
+            &wsjtx_path,
+            self.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Read,
+        )?;
+        let wsjtx_text =
+            std::str::from_utf8(&wsjtx_bytes).map_err(|source| BundleStoreError::InvalidUtf8 {
+                path: wsjtx_path,
                 source,
-            })?
+            })?;
+        let wsjtx_lines = wsjtx_text
             .lines()
             .filter(|line| !line.trim().is_empty())
             .map(str::to_string)
@@ -57,10 +72,11 @@ impl BundleStore {
         let v2 = migrate_bundle(&bundle, &wsjtx_lines)?;
         verify_semantic_projection(&bundle, v2.clone().into_current().bundle)?;
 
-        let destination_store = BundleStore::new(destination);
+        let destination_store = self.derived(destination);
         destination_store.write_v2_for_upgrade(&v2)?;
         let result = (|| {
             copy_legacy_attachments(
+                self,
                 &self.root().join(&bundle.manifest.files.attachments_dir),
                 &destination_store
                     .root()
@@ -75,7 +91,7 @@ impl BundleStore {
             return Err(error);
         }
 
-        let source_after = snapshot_tree(self.root())?;
+        let source_after = snapshot_tree(self)?;
         if source_before != source_after {
             let _ = fs::remove_dir_all(destination_store.root());
             return Err(BundleUpgradeError::SourceChanged);
@@ -610,88 +626,66 @@ fn verify_semantic_projection(
     }
 }
 
-fn copy_legacy_attachments(source: &Path, destination: &Path) -> Result<(), BundleUpgradeError> {
-    for entry in
-        fs::read_dir(source).map_err(|source_error| BundleUpgradeError::CopyAttachments {
-            path: source.to_path_buf(),
-            source: source_error,
-        })?
-    {
-        let entry = entry.map_err(|source_error| BundleUpgradeError::CopyAttachments {
-            path: source.to_path_buf(),
-            source: source_error,
-        })?;
-        let from = entry.path();
-        let to = destination.join(entry.file_name());
-        let metadata = fs::symlink_metadata(&from).map_err(|source_error| {
-            BundleUpgradeError::CopyAttachments {
-                path: from.clone(),
-                source: source_error,
-            }
-        })?;
-        if metadata.file_type().is_symlink() || (!metadata.is_file() && !metadata.is_dir()) {
-            return Err(BundleUpgradeError::UnsafeAttachment { path: from });
-        }
-        if metadata.is_dir() {
+fn copy_legacy_attachments(
+    store: &BundleStore,
+    source: &Path,
+    destination: &Path,
+) -> Result<(), BundleUpgradeError> {
+    let entries = inventory_attachment_tree(store, source, ResourceOperation::Copy)?;
+    let mut total = 0;
+    for (from, directory) in entries {
+        let to = destination.join(from.strip_prefix(source).expect("inventoried below root"));
+        if directory {
             fs::create_dir(&to).map_err(|source_error| BundleUpgradeError::CopyAttachments {
-                path: to.clone(),
+                path: to,
                 source: source_error,
             })?;
-            copy_legacy_attachments(&from, &to)?;
         } else {
-            fs::copy(&from, &to).map_err(|source_error| BundleUpgradeError::CopyAttachments {
-                path: from.clone(),
-                source: source_error,
-            })?;
+            copy_bounded_file(
+                store,
+                &from,
+                &to,
+                store.profile().attachment_file_bytes,
+                &mut total,
+            )?;
         }
     }
     Ok(())
 }
 
-fn snapshot_tree(root: &Path) -> Result<Vec<(PathBuf, String)>, BundleUpgradeError> {
-    fn visit(
-        root: &Path,
-        current: &Path,
-        output: &mut Vec<(PathBuf, String)>,
-    ) -> Result<(), BundleUpgradeError> {
-        for entry in fs::read_dir(current).map_err(|source| BundleUpgradeError::SnapshotSource {
-            path: current.to_path_buf(),
-            source,
-        })? {
-            let entry = entry.map_err(|source| BundleUpgradeError::SnapshotSource {
-                path: current.to_path_buf(),
+fn snapshot_tree(store: &BundleStore) -> Result<Vec<(PathBuf, String)>, BundleUpgradeError> {
+    let mut output = Vec::new();
+    for (path, directory) in inventory_complete_tree(store)? {
+        if directory {
+            continue;
+        }
+        let mut file =
+            fs::File::open(&path).map_err(|source| BundleUpgradeError::SnapshotSource {
+                path: path.clone(),
                 source,
             })?;
-            let path = entry.path();
-            let metadata = fs::symlink_metadata(&path).map_err(|source| {
-                BundleUpgradeError::SnapshotSource {
-                    path: path.clone(),
-                    source,
-                }
-            })?;
-            if metadata.file_type().is_symlink() || (!metadata.is_file() && !metadata.is_dir()) {
-                return Err(BundleUpgradeError::UnsafeAttachment { path });
-            }
-            if metadata.is_dir() {
-                visit(root, &path, output)?;
-            } else {
-                let bytes =
-                    fs::read(&path).map_err(|source| BundleUpgradeError::SnapshotSource {
+        let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            store.check_cancelled(ResourceOperation::Read, ResourceStage::Stream, &path)?;
+            let read =
+                file.read(&mut buffer)
+                    .map_err(|source| BundleUpgradeError::SnapshotSource {
                         path: path.clone(),
                         source,
                     })?;
-                output.push((
-                    path.strip_prefix(root)
-                        .expect("visited below root")
-                        .to_path_buf(),
-                    sha256_hex(&bytes),
-                ));
+            if read == 0 {
+                break;
             }
+            hasher.update(&buffer[..read]);
         }
-        Ok(())
+        output.push((
+            path.strip_prefix(store.root())
+                .expect("inventoried below root")
+                .to_path_buf(),
+            format!("{:x}", hasher.finalize()),
+        ));
     }
-    let mut output = Vec::new();
-    visit(root, root, &mut output)?;
     output.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(output)
 }

@@ -95,14 +95,14 @@ The upgrader verifies projected semantic equivalence, checkpoint/stream
 digests, retained evidence counts, destination reopen, and a before/after
 snapshot of every source file. There is no v2-to-v1 downgrade.
 
-## Planned Local Resource Profile
+## Local Resource Profile
 
 [Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md)
 selects one fixed first-product profile, `local-standard-v1`. It is an
-operational policy rather than a schema invariant, and its implementation is
-tracked by [#55](https://github.com/rwjblue/antennabench/issues/55),
-[#56](https://github.com/rwjblue/antennabench/issues/56), and
-[#57](https://github.com/rwjblue/antennabench/issues/57).
+operational policy rather than a schema invariant. Bundle storage enforces its
+filesystem portion; adapter, analysis/report, and desktop-delivery enforcement
+are tracked separately by [#56](https://github.com/rwjblue/antennabench/issues/56)
+and [#57](https://github.com/rwjblue/antennabench/issues/57).
 
 The selected modeled-data limits are 4 MiB per root JSON file, 256 KiB per
 JSONL line, 128 MiB and 250,000 records per JSONL stream, and 256 MiB plus
@@ -122,9 +122,14 @@ whole bundle or no typed bundle. Storage-safe preservation remains separate
 from parsing and analysis, and strict writes or live checkpoints never promote
 bytes that cross the profile.
 
-These limits are not yet enforced by the current schema-v1 reader. Until the
-implementation issues land, operator-selected input should still be treated as
-potentially unbounded.
+Schema-v1 and schema-v2 reads, strict writes, upgrades, attachment access, and
+lossless copies use this same fixed profile. Production callers cannot override
+it. Tests can inject a tiny equivalent to exercise exact boundaries and
+mid-operation failures deterministically. Resource failures expose a stable
+code plus profile/version, operation, stage, path, limit, observed value, unit,
+retryability, completeness, and evidence-gap fields. Cancellation is checked
+during directory traversal, between JSONL records, and at each 64 KiB file-copy
+chunk.
 
 ## Root Files
 
@@ -270,8 +275,8 @@ it never clamps, trims, renumbers, or otherwise repairs the source.
 
 `BundleStore::copy_losslessly_to()` creates a new bundle directory by copying
 the source representation instead of serializing a typed in-memory model.
-Manifest-declared durable root files and the complete nested `attachments/`
-tree retain their original bytes. The source need not be safe for typed
+The complete safe root tree, including unmodeled opaque root entries and the
+nested `attachments/` tree, retains its original bytes. The source need not be safe for typed
 interpretation: duplicate modeled members, duplicate legacy raw members, and
 unknown fields remain preservable. The manifest and filesystem layout must
 still be safe to traverse. The source is never modified.

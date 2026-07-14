@@ -62,6 +62,9 @@ fn copies_root_bytes_nested_attachments_and_reopens_without_mutating_source() {
     let nested = source.join("attachments/captures/2026-03-14");
     fs::create_dir_all(&nested).unwrap();
     fs::write(nested.join("waterfall.bin"), [0, 1, 2, 0xff, 0x80]).unwrap();
+    fs::write(source.join("opaque-root.bin"), [0xde, 0xad, 0xbe, 0xef]).unwrap();
+    fs::create_dir(source.join("opaque-root-dir")).unwrap();
+    fs::write(source.join("opaque-root-dir/evidence.txt"), b"preserve me").unwrap();
 
     // Make persisted derived annotations stale. Normalized import repairs these
     // in memory, while lossless copy must preserve the original bytes.

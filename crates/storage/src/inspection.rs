@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, path::Path};
 
 use antennabench_core::{
     codes, validate_bundle_report, AnalysisFile, AntennasFile, BundleContents, BundleDiagnostic,
@@ -14,7 +14,11 @@ use serde::{
 };
 use serde_json::Value;
 
-use super::{ensure_bundle_root, BundleStore, BundleStoreError};
+use super::{
+    ensure_bundle_root,
+    resource::{inventory_attachment_tree, ModeledBudget, ResourceOperation},
+    BundleStore, BundleStoreError,
+};
 
 #[derive(Debug, Clone)]
 pub struct BundleInspection {
@@ -98,8 +102,10 @@ struct InspectedDocument {
 impl BundleStore {
     pub(super) fn inspect_manifest_layout(&self) -> Result<BundleManifest, BundleStoreError> {
         ensure_bundle_root(self.root())?;
+        let mut budget = ModeledBudget::default();
         let manifest_path = self.bundle_path("manifest.json")?;
-        let contents = read_text(&manifest_path)?;
+        let contents =
+            self.read_root_json(&manifest_path, &mut budget, ResourceOperation::Inspect)?;
         let context = DocumentContext::root(BundleFileRole::Manifest);
         let document = inspect_document(&contents, context.clone());
         let mut report = BundleValidationReport::new(document.diagnostics);
@@ -123,8 +129,10 @@ impl BundleStore {
 
     pub fn inspect(&self) -> Result<BundleInspection, BundleStoreError> {
         ensure_bundle_root(self.root())?;
+        let mut budget = ModeledBudget::default();
         let manifest_path = self.bundle_path("manifest.json")?;
-        let manifest_contents = read_text(&manifest_path)?;
+        let manifest_contents =
+            self.read_root_json(&manifest_path, &mut budget, ResourceOperation::Inspect)?;
         let manifest_document = inspect_document(
             &manifest_contents,
             DocumentContext::root(BundleFileRole::Manifest),
@@ -184,38 +192,62 @@ impl BundleStore {
         let paths = self.bundle_paths(&manifest.files)?;
         paths.ensure_readable_targets()?;
         super::ensure_directory(&paths.attachments_dir)?;
+        self.inventory_root(ResourceOperation::Inspect)?;
+        inventory_attachment_tree(self, &paths.attachments_dir, ResourceOperation::Read)?;
 
-        let station =
-            inspect_root_file::<Station>(&paths.station, BundleFileRole::Station, &mut report)?;
-        let antennas = inspect_root_file::<AntennasFile>(
+        let station = self.inspect_root_file::<Station>(
+            &paths.station,
+            BundleFileRole::Station,
+            &mut report,
+            &mut budget,
+        )?;
+        let antennas = self.inspect_root_file::<AntennasFile>(
             &paths.antennas,
             BundleFileRole::Antennas,
             &mut report,
+            &mut budget,
         )?;
-        let schedule =
-            inspect_root_file::<Schedule>(&paths.schedule, BundleFileRole::Schedule, &mut report)?;
-        let events = inspect_jsonl_file::<OperatorEvent>(
+        let schedule = self.inspect_root_file::<Schedule>(
+            &paths.schedule,
+            BundleFileRole::Schedule,
+            &mut report,
+            &mut budget,
+        )?;
+        let events = self.inspect_jsonl_file::<OperatorEvent>(
             &paths.events,
             BundleFileRole::Events,
             &mut report,
+            &mut budget,
         )?;
-        let observations = inspect_jsonl_file::<ObservationRecord>(
+        let observations = self.inspect_jsonl_file::<ObservationRecord>(
             &paths.observations,
             BundleFileRole::Observations,
             &mut report,
+            &mut budget,
         )?;
-        let wsjtx =
-            inspect_jsonl_file::<WsjtXRecord>(&paths.wsjtx, BundleFileRole::WsjtX, &mut report)?;
-        let rig = inspect_jsonl_file::<RigRecord>(&paths.rig, BundleFileRole::Rig, &mut report)?;
-        let propagation = inspect_jsonl_file::<PropagationRecord>(
+        let wsjtx = self.inspect_jsonl_file::<WsjtXRecord>(
+            &paths.wsjtx,
+            BundleFileRole::WsjtX,
+            &mut report,
+            &mut budget,
+        )?;
+        let rig = self.inspect_jsonl_file::<RigRecord>(
+            &paths.rig,
+            BundleFileRole::Rig,
+            &mut report,
+            &mut budget,
+        )?;
+        let propagation = self.inspect_jsonl_file::<PropagationRecord>(
             &paths.propagation,
             BundleFileRole::Propagation,
             &mut report,
+            &mut budget,
         )?;
-        let analysis = inspect_root_file::<AnalysisFile>(
+        let analysis = self.inspect_root_file::<AnalysisFile>(
             &paths.analysis,
             BundleFileRole::Analysis,
             &mut report,
+            &mut budget,
         )?;
 
         let Some((
@@ -287,6 +319,55 @@ impl BundleStore {
             report,
         })
     }
+    fn inspect_root_file<T: DeserializeOwned>(
+        &self,
+        path: &Path,
+        file: BundleFileRole,
+        report: &mut BundleValidationReport,
+        budget: &mut ModeledBudget,
+    ) -> Result<Option<T>, BundleStoreError> {
+        let contents = self.read_root_json(path, budget, ResourceOperation::Read)?;
+        let context = DocumentContext::root(file);
+        let document = inspect_document(&contents, context.clone());
+        report.extend(document.diagnostics);
+        Ok(document
+            .value
+            .and_then(|value| project_value(value, context, report)))
+    }
+
+    fn inspect_jsonl_file<T: DeserializeOwned>(
+        &self,
+        path: &Path,
+        file: BundleFileRole,
+        report: &mut BundleValidationReport,
+        budget: &mut ModeledBudget,
+    ) -> Result<Option<Vec<T>>, BundleStoreError> {
+        let mut records = Vec::new();
+        let mut projected = true;
+        self.for_each_jsonl(
+            path,
+            budget,
+            ResourceOperation::Read,
+            |physical_line, record_index, line| {
+                let base_context = DocumentContext::record(file, record_index, physical_line);
+                let document = inspect_document(line, base_context.clone());
+                report.extend(document.diagnostics);
+                match document.value {
+                    Some(value) => {
+                        let context = base_context.with_record_id(&value);
+                        if let Some(record) = project_value(value, context, report) {
+                            records.push(record);
+                        } else {
+                            projected = false;
+                        }
+                    }
+                    None => projected = false,
+                }
+                Ok(())
+            },
+        )?;
+        Ok(projected.then_some(records))
+    }
 }
 
 fn unsupported_schema_version_diagnostic(schema_version: u16) -> BundleDiagnostic {
@@ -304,54 +385,6 @@ fn unsupported_schema_version_diagnostic(schema_version: u16) -> BundleDiagnosti
         ),
         related_locations: Vec::new(),
     }
-}
-
-fn inspect_root_file<T: DeserializeOwned>(
-    path: &Path,
-    file: BundleFileRole,
-    report: &mut BundleValidationReport,
-) -> Result<Option<T>, BundleStoreError> {
-    let contents = read_text(path)?;
-    let context = DocumentContext::root(file);
-    let document = inspect_document(&contents, context.clone());
-    report.extend(document.diagnostics);
-    Ok(document
-        .value
-        .and_then(|value| project_value(value, context, report)))
-}
-
-fn inspect_jsonl_file<T: DeserializeOwned>(
-    path: &Path,
-    file: BundleFileRole,
-    report: &mut BundleValidationReport,
-) -> Result<Option<Vec<T>>, BundleStoreError> {
-    let contents = read_text(path)?;
-    let mut records = Vec::new();
-    let mut projected = true;
-    let mut record_index = 0;
-
-    for (line_index, line) in contents.lines().enumerate() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let base_context = DocumentContext::record(file, record_index, line_index + 1);
-        let document = inspect_document(line, base_context.clone());
-        report.extend(document.diagnostics);
-        match document.value {
-            Some(value) => {
-                let context = base_context.with_record_id(&value);
-                if let Some(record) = project_value(value, context, report) {
-                    records.push(record);
-                } else {
-                    projected = false;
-                }
-            }
-            None => projected = false,
-        }
-        record_index += 1;
-    }
-
-    Ok(projected.then_some(records))
 }
 
 fn inspect_document(contents: &str, context: DocumentContext) -> InspectedDocument {
@@ -418,13 +451,6 @@ fn project_value<T: DeserializeOwned>(
             None
         }
     }
-}
-
-fn read_text(path: &Path) -> Result<String, BundleStoreError> {
-    fs::read_to_string(path).map_err(|source| BundleStoreError::Read {
-        path: path.to_path_buf(),
-        source,
-    })
 }
 
 fn invalid_json_diagnostic(context: &DocumentContext, message: String) -> BundleDiagnostic {

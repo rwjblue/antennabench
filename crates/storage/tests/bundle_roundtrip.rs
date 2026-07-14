@@ -30,6 +30,24 @@ fn writes_and_reads_bundle_contents() {
 }
 
 #[test]
+fn strict_write_rejects_unmodeled_root_entries_without_touching_them() {
+    let bundle = sample_bundle();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path().join("example.session.wsprabundle");
+    std::fs::create_dir(&path).unwrap();
+    std::fs::write(path.join("opaque.bin"), b"keep").unwrap();
+
+    let error = BundleStore::new(&path).write(&bundle).unwrap_err();
+
+    assert!(matches!(
+        error,
+        BundleStoreError::UnexpectedRootEntry { .. }
+    ));
+    assert_eq!(std::fs::read(path.join("opaque.bin")).unwrap(), b"keep");
+    assert!(!path.join("manifest.json").exists());
+}
+
+#[test]
 fn write_uses_fixed_manifest_bootstrap_path() {
     let mut bundle = sample_bundle();
     bundle.manifest.files.manifest = "custom-manifest.json".to_string();

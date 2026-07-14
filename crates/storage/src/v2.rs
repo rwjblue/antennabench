@@ -16,7 +16,13 @@ use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::{
-    create_directory, ensure_bundle_root, ensure_directory, inspection::scan_duplicate_members,
+    create_directory, ensure_bundle_root, ensure_directory,
+    inspection::scan_duplicate_members,
+    resource::{
+        inventory_attachment_tree, preflight_attachment_write, read_bounded,
+        serialize_jsonl_bounded, serialize_root_bounded, ModeledBudget, ResourceOperation,
+        ResourceStage,
+    },
     BundleInspection, BundleStore, BundleStoreError,
 };
 
@@ -112,21 +118,16 @@ impl BundleStore {
     /// Recomputes the static v2 plan and stream heads before a new destination write.
     /// Live checkpoint promotion remains the responsibility of the persistence layer.
     pub fn refresh_v2_checkpoint(bundle: &mut BundleV2Contents) -> Result<(), BundleStoreError> {
-        let station =
-            serialize_json(&bundle.station).map_err(|source| BundleStoreError::SerializeJson {
-                path: PathBuf::from("station.json"),
-                source,
-            })?;
+        let store = BundleStore::new(".");
+        let mut budget = ModeledBudget::default();
+        let station_path = PathBuf::from("station.json");
+        let antennas_path = PathBuf::from("antennas.json");
+        let schedule_path = PathBuf::from("schedule.json");
+        let station = serialize_root_bounded(&store, &station_path, &bundle.station, &mut budget)?;
         let antennas =
-            serialize_json(&bundle.antennas).map_err(|source| BundleStoreError::SerializeJson {
-                path: PathBuf::from("antennas.json"),
-                source,
-            })?;
+            serialize_root_bounded(&store, &antennas_path, &bundle.antennas, &mut budget)?;
         let schedule =
-            serialize_json(&bundle.schedule).map_err(|source| BundleStoreError::SerializeJson {
-                path: PathBuf::from("schedule.json"),
-                source,
-            })?;
+            serialize_root_bounded(&store, &schedule_path, &bundle.schedule, &mut budget)?;
         let station_sha256 = sha256_hex(&station);
         let antennas_sha256 = sha256_hex(&antennas);
         let schedule_sha256 = sha256_hex(&schedule);
@@ -139,34 +140,32 @@ impl BundleStore {
                 .as_bytes(),
         );
 
-        let events =
-            serialize_jsonl(&bundle.events).map_err(|source| BundleStoreError::SerializeJson {
-                path: PathBuf::from("events.jsonl"),
-                source,
-            })?;
-        let observations = serialize_jsonl(&bundle.observations).map_err(|source| {
-            BundleStoreError::SerializeJson {
-                path: PathBuf::from("observations.jsonl"),
-                source,
-            }
-        })?;
-        let adapter_records = serialize_jsonl(&bundle.adapter_records).map_err(|source| {
-            BundleStoreError::SerializeJson {
-                path: PathBuf::from("adapter-records.jsonl"),
-                source,
-            }
-        })?;
+        let events = serialize_jsonl_bounded(
+            &store,
+            Path::new("events.jsonl"),
+            &bundle.events,
+            &mut budget,
+        )?;
+        let observations = serialize_jsonl_bounded(
+            &store,
+            Path::new("observations.jsonl"),
+            &bundle.observations,
+            &mut budget,
+        )?;
+        let adapter_records = serialize_jsonl_bounded(
+            &store,
+            Path::new("adapter-records.jsonl"),
+            &bundle.adapter_records,
+            &mut budget,
+        )?;
         let rig =
-            serialize_jsonl(&bundle.rig).map_err(|source| BundleStoreError::SerializeJson {
-                path: PathBuf::from("rig.jsonl"),
-                source,
-            })?;
-        let propagation = serialize_jsonl(&bundle.propagation).map_err(|source| {
-            BundleStoreError::SerializeJson {
-                path: PathBuf::from("propagation.jsonl"),
-                source,
-            }
-        })?;
+            serialize_jsonl_bounded(&store, Path::new("rig.jsonl"), &bundle.rig, &mut budget)?;
+        let propagation = serialize_jsonl_bounded(
+            &store,
+            Path::new("propagation.jsonl"),
+            &bundle.propagation,
+            &mut budget,
+        )?;
         bundle.session_state.streams = [
             (
                 "events".to_string(),
@@ -255,7 +254,7 @@ impl BundleStore {
         mut report: BundleValidationReport,
     ) -> Result<BundleInspection, BundleStoreError> {
         let (bundle, paths) = self.load_v2_bundle()?;
-        report.extend(validate_v2_bundle(&bundle, &paths, true));
+        report.extend(validate_v2_bundle(self, &bundle, &paths, true));
         let current = bundle.into_current();
         report.extend(validate_bundle_report(&current.bundle).into_diagnostics());
         let current = report
@@ -266,7 +265,8 @@ impl BundleStore {
 
     pub fn read_v2(&self) -> Result<BundleV2Contents, BundleStoreError> {
         let (bundle, paths) = self.load_v2_bundle()?;
-        let mut report = BundleValidationReport::new(validate_v2_bundle(&bundle, &paths, true));
+        let mut report =
+            BundleValidationReport::new(validate_v2_bundle(self, &bundle, &paths, true));
         report.extend(
             validate_bundle_report(&bundle.clone().into_current().bundle).into_diagnostics(),
         );
@@ -279,7 +279,9 @@ impl BundleStore {
     fn load_v2_bundle(
         &self,
     ) -> Result<(BundleV2Contents, ResolvedBundlePathsV2), BundleStoreError> {
-        let manifest: BundleManifestV2 = read_json(&self.bundle_path("manifest.json")?)?;
+        let mut budget = ModeledBudget::default();
+        let manifest: BundleManifestV2 =
+            self.read_json_bounded(&self.bundle_path("manifest.json")?, &mut budget)?;
         if manifest.schema_version != SCHEMA_VERSION_V2 {
             return Err(BundleStoreError::UnsupportedSchemaVersion {
                 actual: manifest.schema_version,
@@ -287,19 +289,21 @@ impl BundleStore {
         }
         let paths = self.v2_paths(&manifest.files)?;
         paths.ensure_readable()?;
+        self.inventory_root(ResourceOperation::Read)?;
+        inventory_attachment_tree(self, &paths.attachments_dir, ResourceOperation::Read)?;
 
         let bundle = BundleV2Contents {
             manifest,
-            session_state: read_json(&paths.session_state)?,
-            station: read_json(&paths.station)?,
-            antennas: read_json(&paths.antennas)?,
-            schedule: read_json(&paths.schedule)?,
-            events: read_jsonl(&paths.events)?,
-            observations: read_jsonl(&paths.observations)?,
-            adapter_records: read_jsonl(&paths.adapter_records)?,
-            rig: read_jsonl(&paths.rig)?,
-            propagation: read_jsonl(&paths.propagation)?,
-            analysis: read_json(&paths.analysis)?,
+            session_state: self.read_json_bounded(&paths.session_state, &mut budget)?,
+            station: self.read_json_bounded(&paths.station, &mut budget)?,
+            antennas: self.read_json_bounded(&paths.antennas, &mut budget)?,
+            schedule: self.read_json_bounded(&paths.schedule, &mut budget)?,
+            events: self.read_jsonl_bounded(&paths.events, &mut budget)?,
+            observations: self.read_jsonl_bounded(&paths.observations, &mut budget)?,
+            adapter_records: self.read_jsonl_bounded(&paths.adapter_records, &mut budget)?,
+            rig: self.read_jsonl_bounded(&paths.rig, &mut budget)?,
+            propagation: self.read_jsonl_bounded(&paths.propagation, &mut budget)?,
+            analysis: self.read_json_bounded(&paths.analysis, &mut budget)?,
         };
 
         Ok((bundle, paths))
@@ -403,22 +407,57 @@ impl BundleStore {
             });
         }
         let paths = self.v2_paths(&bundle.manifest.files)?;
+        let mut budget = ModeledBudget::default();
+        let manifest =
+            serialize_root_bounded(self, &paths.manifest, &bundle.manifest, &mut budget)?;
+        let session_state = serialize_root_bounded(
+            self,
+            &paths.session_state,
+            &bundle.session_state,
+            &mut budget,
+        )?;
+        let station = serialize_root_bounded(self, &paths.station, &bundle.station, &mut budget)?;
+        let antennas =
+            serialize_root_bounded(self, &paths.antennas, &bundle.antennas, &mut budget)?;
+        let schedule =
+            serialize_root_bounded(self, &paths.schedule, &bundle.schedule, &mut budget)?;
+        let events = serialize_jsonl_bounded(self, &paths.events, &bundle.events, &mut budget)?;
+        let observations =
+            serialize_jsonl_bounded(self, &paths.observations, &bundle.observations, &mut budget)?;
+        let adapter_records = serialize_jsonl_bounded(
+            self,
+            &paths.adapter_records,
+            &bundle.adapter_records,
+            &mut budget,
+        )?;
+        let rig = serialize_jsonl_bounded(self, &paths.rig, &bundle.rig, &mut budget)?;
+        let propagation =
+            serialize_jsonl_bounded(self, &paths.propagation, &bundle.propagation, &mut budget)?;
+        let analysis =
+            serialize_root_bounded(self, &paths.analysis, &bundle.analysis, &mut budget)?;
         create_directory(self.root())?;
         let result = (|| {
-            write_json_bytes(&paths.manifest, &bundle.manifest)?;
-            write_json_bytes(&paths.session_state, &bundle.session_state)?;
-            write_json_bytes(&paths.station, &bundle.station)?;
-            write_json_bytes(&paths.antennas, &bundle.antennas)?;
-            write_json_bytes(&paths.schedule, &bundle.schedule)?;
-            write_jsonl_bytes(&paths.events, &bundle.events)?;
-            write_jsonl_bytes(&paths.observations, &bundle.observations)?;
-            write_jsonl_bytes(&paths.adapter_records, &bundle.adapter_records)?;
-            write_jsonl_bytes(&paths.rig, &bundle.rig)?;
-            write_jsonl_bytes(&paths.propagation, &bundle.propagation)?;
-            write_json_bytes(&paths.analysis, &bundle.analysis)?;
+            for (path, bytes) in [
+                (&paths.manifest, manifest.as_slice()),
+                (&paths.session_state, session_state.as_slice()),
+                (&paths.station, station.as_slice()),
+                (&paths.antennas, antennas.as_slice()),
+                (&paths.schedule, schedule.as_slice()),
+                (&paths.events, events.as_slice()),
+                (&paths.observations, observations.as_slice()),
+                (&paths.adapter_records, adapter_records.as_slice()),
+                (&paths.rig, rig.as_slice()),
+                (&paths.propagation, propagation.as_slice()),
+                (&paths.analysis, analysis.as_slice()),
+            ] {
+                fs::write(path, bytes).map_err(|source| BundleStoreError::Write {
+                    path: path.to_path_buf(),
+                    source,
+                })?;
+            }
             create_directory(&paths.attachments_dir)?;
 
-            let diagnostics = validate_v2_bundle(bundle, &paths, false);
+            let diagnostics = validate_v2_bundle(self, bundle, &paths, false);
             if !diagnostics.is_empty() {
                 return Err(BundleStoreError::InvalidV2Bundle {
                     message: diagnostics
@@ -454,23 +493,46 @@ impl BundleStore {
             container,
             source_locator,
         };
-        let manifest: BundleManifestV2 = read_json(&self.bundle_path("manifest.json")?)?;
+        let mut budget = ModeledBudget::default();
+        let manifest: BundleManifestV2 =
+            self.read_json_bounded(&self.bundle_path("manifest.json")?, &mut budget)?;
         let paths = self.v2_paths(&manifest.files)?;
         let digest_dir = paths.attachments_dir.join("sha256");
-        create_directory(&digest_dir)?;
         let path = digest_dir.join(digest);
+        let path_exists = fs::symlink_metadata(&path).is_ok();
+        let additional_entries = u64::from(!path_exists) + u64::from(!digest_dir.exists());
+        preflight_attachment_write(
+            self,
+            &paths.attachments_dir,
+            &path,
+            reference.byte_size,
+            additional_entries,
+        )?;
+        create_directory(&digest_dir)?;
         match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(mut file) => file
-                .write_all(bytes)
-                .map_err(|source| BundleStoreError::Write {
-                    path: path.clone(),
-                    source,
-                })?,
+            Ok(mut file) => {
+                let result = bytes.chunks(64 * 1024).try_for_each(|chunk| {
+                    self.check_cancelled(ResourceOperation::Write, ResourceStage::Stream, &path)?;
+                    file.write_all(chunk)
+                        .map_err(|source| BundleStoreError::Write {
+                            path: path.clone(),
+                            source,
+                        })
+                });
+                if let Err(error) = result {
+                    drop(file);
+                    let _ = fs::remove_file(&path);
+                    return Err(error);
+                }
+            }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let existing = fs::read(&path).map_err(|source| BundleStoreError::Read {
-                    path: path.clone(),
-                    source,
-                })?;
+                let existing = read_bounded(
+                    self,
+                    &path,
+                    self.profile().attachment_file_bytes,
+                    "resource.attachments.file_bytes",
+                    ResourceOperation::Write,
+                )?;
                 if existing != bytes {
                     return Err(BundleStoreError::AttachmentMismatch { path });
                 }
@@ -494,7 +556,9 @@ impl BundleStore {
                 message: format!("invalid SHA-256 digest {}", reference.sha256),
             }
         })?;
-        let manifest: BundleManifestV2 = read_json(&self.bundle_path("manifest.json")?)?;
+        let mut budget = ModeledBudget::default();
+        let manifest: BundleManifestV2 =
+            self.read_json_bounded(&self.bundle_path("manifest.json")?, &mut budget)?;
         let paths = self.v2_paths(&manifest.files)?;
         let path = paths.attachments_dir.join(relative);
         let metadata = fs::symlink_metadata(&path).map_err(|source| BundleStoreError::Read {
@@ -506,16 +570,49 @@ impl BundleStore {
                 message: format!("attachment is not a regular file: {}", path.display()),
             });
         }
-        let bytes = fs::read(&path).map_err(|source| BundleStoreError::Read {
-            path: path.clone(),
-            source,
-        })?;
+        let bytes = read_bounded(
+            self,
+            &path,
+            self.profile().attachment_file_bytes,
+            "resource.attachments.file_bytes",
+            ResourceOperation::Read,
+        )?;
         if u64::try_from(bytes.len()).ok() != Some(reference.byte_size)
             || sha256_hex(&bytes) != reference.sha256
         {
             return Err(BundleStoreError::AttachmentMismatch { path });
         }
         Ok(bytes)
+    }
+
+    fn read_json_bounded<T: DeserializeOwned>(
+        &self,
+        path: &Path,
+        budget: &mut ModeledBudget,
+    ) -> Result<T, BundleStoreError> {
+        let contents = self.read_root_json(path, budget, ResourceOperation::Read)?;
+        serde_json::from_str(&contents).map_err(|source| BundleStoreError::ParseJson {
+            path: path.to_path_buf(),
+            source,
+        })
+    }
+
+    fn read_jsonl_bounded<T: DeserializeOwned>(
+        &self,
+        path: &Path,
+        budget: &mut ModeledBudget,
+    ) -> Result<Vec<T>, BundleStoreError> {
+        let mut records = Vec::new();
+        self.for_each_jsonl(path, budget, ResourceOperation::Read, |_, _, line| {
+            records.push(serde_json::from_str(line).map_err(|source| {
+                BundleStoreError::ParseJson {
+                    path: path.to_path_buf(),
+                    source,
+                }
+            })?);
+            Ok(())
+        })?;
+        Ok(records)
     }
 }
 
@@ -532,56 +629,6 @@ pub(super) fn serialize_jsonl<T: Serialize>(records: &[T]) -> Result<Vec<u8>, se
         bytes.push(b'\n');
     }
     Ok(bytes)
-}
-
-fn write_json_bytes<T: Serialize>(path: &Path, value: &T) -> Result<(), BundleStoreError> {
-    let bytes = serialize_json(value).map_err(|source| BundleStoreError::SerializeJson {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    fs::write(path, bytes).map_err(|source| BundleStoreError::Write {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn write_jsonl_bytes<T: Serialize>(path: &Path, value: &[T]) -> Result<(), BundleStoreError> {
-    let bytes = serialize_jsonl(value).map_err(|source| BundleStoreError::SerializeJson {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    fs::write(path, bytes).map_err(|source| BundleStoreError::Write {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, BundleStoreError> {
-    let bytes = fs::read(path).map_err(|source| BundleStoreError::Read {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    serde_json::from_slice(&bytes).map_err(|source| BundleStoreError::ParseJson {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, BundleStoreError> {
-    let contents = fs::read_to_string(path).map_err(|source| BundleStoreError::Read {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    contents
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            serde_json::from_str(line).map_err(|source| BundleStoreError::ParseJson {
-                path: path.to_path_buf(),
-                source,
-            })
-        })
-        .collect()
 }
 
 pub(super) fn ensure_v2_suffix(path: &Path) -> Result<(), BundleStoreError> {
@@ -619,12 +666,13 @@ pub(super) fn checkpoint_for_bytes(
 }
 
 fn validate_v2_bundle(
+    store: &BundleStore,
     bundle: &BundleV2Contents,
     paths: &ResolvedBundlePathsV2,
     verify_attachments: bool,
 ) -> Vec<BundleDiagnostic> {
     let mut diagnostics = Vec::new();
-    diagnostics.extend(duplicate_member_diagnostics(paths));
+    diagnostics.extend(duplicate_member_diagnostics(store, paths));
     let session_id = bundle.manifest.session_id.as_str();
     for (file, schema, actual_session) in [
         (
@@ -721,9 +769,7 @@ fn validate_v2_bundle(
                 ));
             } else if verify_attachments
                 && paths.attachments_dir.exists()
-                && BundleStore::new(paths.manifest.parent().expect("bundle root"))
-                    .read_attachment(attachment)
-                    .is_err()
+                && store.read_attachment(attachment).is_err()
             {
                 diagnostics.push(v2_diagnostic(
                     codes::V2_ATTACHMENT,
@@ -858,11 +904,14 @@ fn validate_v2_bundle(
         );
     }
 
-    diagnostics.extend(validate_checkpoint(bundle, paths));
+    diagnostics.extend(validate_checkpoint(store, bundle, paths));
     diagnostics
 }
 
-fn duplicate_member_diagnostics(paths: &ResolvedBundlePathsV2) -> Vec<BundleDiagnostic> {
+fn duplicate_member_diagnostics(
+    store: &BundleStore,
+    paths: &ResolvedBundlePathsV2,
+) -> Vec<BundleDiagnostic> {
     let mut diagnostics = Vec::new();
     for (file, path) in [
         (BundleFileRole::Manifest, paths.manifest.as_path()),
@@ -872,8 +921,17 @@ fn duplicate_member_diagnostics(paths: &ResolvedBundlePathsV2) -> Vec<BundleDiag
         (BundleFileRole::Schedule, paths.schedule.as_path()),
         (BundleFileRole::Analysis, paths.analysis.as_path()),
     ] {
-        if let Ok(contents) = fs::read_to_string(path) {
-            if let Ok(duplicates) = scan_duplicate_members(&contents) {
+        if let Ok(bytes) = read_bounded(
+            store,
+            path,
+            store.profile().root_json_bytes,
+            "resource.bundle.root_json_bytes",
+            ResourceOperation::Inspect,
+        ) {
+            let Ok(contents) = std::str::from_utf8(&bytes) else {
+                continue;
+            };
+            if let Ok(duplicates) = scan_duplicate_members(contents) {
                 diagnostics.extend(duplicates.into_iter().map(|field_path| {
                     let mut diagnostic = v2_diagnostic(
                         codes::DUPLICATE_MEMBER,
@@ -897,7 +955,16 @@ fn duplicate_member_diagnostics(paths: &ResolvedBundlePathsV2) -> Vec<BundleDiag
         (BundleFileRole::Rig, paths.rig.as_path()),
         (BundleFileRole::Propagation, paths.propagation.as_path()),
     ] {
-        if let Ok(contents) = fs::read_to_string(path) {
+        if let Ok(bytes) = read_bounded(
+            store,
+            path,
+            store.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Inspect,
+        ) {
+            let Ok(contents) = std::str::from_utf8(&bytes) else {
+                continue;
+            };
             for (line_index, line) in contents.lines().enumerate() {
                 if line.trim().is_empty() {
                     continue;
@@ -992,6 +1059,7 @@ fn validate_reciprocal_link(
 }
 
 fn validate_checkpoint(
+    store: &BundleStore,
     bundle: &BundleV2Contents,
     paths: &ResolvedBundlePathsV2,
 ) -> Vec<BundleDiagnostic> {
@@ -1015,7 +1083,13 @@ fn validate_checkpoint(
     ];
     let mut plan_digests = Vec::new();
     for (name, path, expected) in plan {
-        if let Ok(bytes) = fs::read(path) {
+        if let Ok(bytes) = read_bounded(
+            store,
+            path,
+            store.profile().root_json_bytes,
+            "resource.bundle.root_json_bytes",
+            ResourceOperation::Inspect,
+        ) {
             let actual = sha256_hex(&bytes);
             plan_digests.push(actual.clone());
             if actual != expected {
@@ -1091,7 +1165,13 @@ fn validate_checkpoint(
             ));
             continue;
         };
-        if let Ok(bytes) = fs::read(path) {
+        if let Ok(bytes) = read_bounded(
+            store,
+            path,
+            store.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Inspect,
+        ) {
             let actual = checkpoint_for_bytes(&bytes, count, last_id);
             if &actual != expected {
                 diagnostics.push(v2_diagnostic(
