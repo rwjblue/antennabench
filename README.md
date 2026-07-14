@@ -65,3 +65,14 @@ project decisions.
 Agent planning files under `docs/superpowers/` are intentionally ignored. They
 are useful working notes while agents execute tasks, but they are not maintained
 as project documentation.
+
+## License
+
+AntennaBench is licensed under either of the following, at your option:
+
+- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT License](LICENSE-MIT)
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in AntennaBench is licensed under the same terms, without
+additional terms or conditions.
