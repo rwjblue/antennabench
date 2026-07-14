@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use crate::{
     DiscardedItem, HttpMetadata, InvalidItemReason, ParsedSwpcRecord, SourceFreshness, SwpcProduct,
+    FUTURE_CLOCK_SKEW_ALLOWANCE,
 };
 
 const MIN_F107_SFU: f64 = 0.0;
@@ -74,7 +75,7 @@ pub fn parse_response(
     let mut candidates = Vec::new();
     let mut discarded_items = Vec::new();
     for (index, item) in items.iter().enumerate() {
-        match parse_candidate(product, item) {
+        match parse_candidate(product, captured_at, item) {
             Ok(candidate) => candidates.push(candidate),
             Err(reason) => discarded_items.push(DiscardedItem { index, reason }),
         }
@@ -136,13 +137,20 @@ struct Candidate {
     selected: Value,
 }
 
-fn parse_candidate(product: SwpcProduct, item: &Value) -> Result<Candidate, InvalidItemReason> {
+fn parse_candidate(
+    product: SwpcProduct,
+    captured_at: DateTime<Utc>,
+    item: &Value,
+) -> Result<Candidate, InvalidItemReason> {
     let object = item.as_object().ok_or(InvalidItemReason::NotAnObject)?;
     let time_tag = object
         .get("time_tag")
         .and_then(Value::as_str)
         .ok_or(InvalidItemReason::MissingTimeTag)?;
     let observed_at = parse_time_tag(time_tag).ok_or(InvalidItemReason::InvalidTimeTag)?;
+    if observed_at - captured_at > FUTURE_CLOCK_SKEW_ALLOWANCE {
+        return Err(InvalidItemReason::FutureDatedObservation);
+    }
     let field = match product {
         SwpcProduct::SolarFluxF107 => "flux",
         SwpcProduct::EstimatedPlanetaryKp => "estimated_kp",

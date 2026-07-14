@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use antennabench_analysis::{
-    summarize_bundle, ComparisonAvailability, ComparisonOrder, PathDirection,
+    summarize_bundle, ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder,
+    PathDirection,
 };
 use antennabench_core::{
     normalize_bundle, Band, BundleContents, ExperimentMode, ObservationKind, ObservationRecord,
@@ -50,6 +51,30 @@ fn exposes_every_comparison_availability_state() {
         summary(paired).comparison.availability,
         ComparisonAvailability::DescriptivePairsAvailable
     );
+}
+
+#[test]
+fn duplicate_schedule_sequence_numbers_cannot_produce_paired_evidence() {
+    let mut bundle = bundle_with_layout(&["A", "B"]);
+    bundle.schedule.slots[1].sequence_number = bundle.schedule.slots[0].sequence_number;
+    bundle.observations = vec![
+        tx_observation(&bundle, "left", 0, "K1PAIR", Some(-20.0)),
+        tx_observation(&bundle, "right", 1, "K1PAIR", Some(-18.0)),
+    ];
+
+    let comparison = summary(bundle).comparison;
+
+    assert_eq!(
+        comparison.availability,
+        ComparisonAvailability::NoEligibleBlocks
+    );
+    assert_eq!(comparison.diagnostics.eligible_block_count, 0);
+    assert_eq!(comparison.diagnostics.invalid_block_count, 1);
+    assert!(comparison.paired_rows.is_empty());
+    assert!(comparison.blocks.iter().all(|block| {
+        block.eligibility == ComparisonBlockEligibility::AmbiguousSequenceOrder
+            && block.order.is_none()
+    }));
 }
 
 #[test]

@@ -185,6 +185,7 @@ pub enum ComparisonOrder {
 #[serde(rename_all = "snake_case")]
 pub enum ComparisonBlockEligibility {
     Eligible,
+    AmbiguousSequenceOrder,
     IncompleteSameBandRun,
     MissingActualLabel,
     RepeatedLabel,

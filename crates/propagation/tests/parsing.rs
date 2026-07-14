@@ -205,6 +205,54 @@ fn classifies_staleness_and_suppresses_only_unchanged_source_observations() {
 }
 
 #[test]
+fn rejects_far_future_observations_and_clamps_allowed_clock_skew() {
+    let payload = br#"[
+      {"time_tag":"2026-07-13T21:35:01","estimated_kp":8.0},
+      {"time_tag":"2026-07-13T21:20:00","estimated_kp":0.67}
+    ]"#;
+    let parsed =
+        parse_estimated_kp_response("session-test", captured_at(), payload, http()).unwrap();
+
+    assert_eq!(parsed.record.kp_index, Some(0.67));
+    assert_eq!(
+        parsed.discarded_items,
+        vec![DiscardedItem {
+            index: 0,
+            reason: InvalidItemReason::FutureDatedObservation,
+        }]
+    );
+
+    let allowed_skew = br#"[
+      {"time_tag":"2026-07-13T21:30:00","estimated_kp":1.0}
+    ]"#;
+    let parsed =
+        parse_estimated_kp_response("session-test", captured_at(), allowed_skew, http()).unwrap();
+    assert_eq!(
+        parsed.freshness,
+        SourceFreshness::Current { age_seconds: 0 }
+    );
+
+    let only_far_future = br#"[
+      {"time_tag":"2026-07-13T21:30:01","estimated_kp":1.0}
+    ]"#;
+    assert!(matches!(
+        parse_estimated_kp_response(
+            "session-test",
+            captured_at(),
+            only_far_future,
+            http()
+        ),
+        Err(ParseError::NoValidObservation {
+            product: SwpcProduct::EstimatedPlanetaryKp,
+            discarded_items,
+        }) if discarded_items == vec![DiscardedItem {
+            index: 0,
+            reason: InvalidItemReason::FutureDatedObservation,
+        }]
+    ));
+}
+
+#[test]
 fn exposes_start_active_end_polling_and_retry_policy() {
     let now = captured_at();
     assert!(should_acquire(

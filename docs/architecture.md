@@ -67,7 +67,9 @@ orientation from the first two scheduled labels, and distinguishes transmit and
 receive paths. Paired rows remain stratified by band, normalized signal mode,
 observation kind, and record source; unmatched sides, missing or invalid mode,
 missing SNR, ambiguous paths, exact duplicates, conflicts, invalid blocks, time,
-and order stay explicit. Signal mode normalization trims surrounding whitespace
+and order stay explicit. Duplicate schedule sequence numbers make the ordering
+ambiguous, so no block in that schedule is eligible for paired evidence. Signal
+mode normalization trims surrounding whitespace
 and folds ASCII letters to uppercase without aliasing distinct mode names.
 Repeated rows are
 reduced to a per-path median before the stratum median so prolific paths do not
@@ -184,6 +186,9 @@ The durable boundaries are:
   object and HTTP metadata, and exposes freshness, polling, retry, conditional
   request, duplicate-suppression, and best-effort two-product outcomes. Captured
   fixtures and transport substitution keep tests independent of live networks.
+  Source times up to five minutes ahead of capture are tolerated as clock skew
+  and reported with zero age; later values are discarded explicitly and cannot
+  displace a valid current observation.
 - Local stores, disposable indexes, and publishers consume the session bundle;
   they do not replace it as the evidence source of truth.
 

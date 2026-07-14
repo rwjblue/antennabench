@@ -46,6 +46,7 @@ pub struct ProductPolicy {
 }
 
 pub const RETRY_BACKOFF: Duration = Duration::minutes(1);
+pub const FUTURE_CLOCK_SKEW_ALLOWANCE: Duration = Duration::minutes(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionAcquisitionPhase {
@@ -85,7 +86,7 @@ impl SourceFreshness {
         observed_at: DateTime<Utc>,
         captured_at: DateTime<Utc>,
     ) -> Self {
-        let age_seconds = (captured_at - observed_at).num_seconds();
+        let age_seconds = (captured_at - observed_at).num_seconds().max(0);
         if age_seconds > product.policy().stale_after.num_seconds() {
             Self::Stale { age_seconds }
         } else {
@@ -160,6 +161,7 @@ pub enum InvalidItemReason {
     NotAnObject,
     MissingTimeTag,
     InvalidTimeTag,
+    FutureDatedObservation,
     MissingValue,
     InvalidValue,
     OutOfRangeValue,

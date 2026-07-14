@@ -325,6 +325,9 @@ fn scheduled_labels(bundle: &BundleContents) -> Vec<String> {
 
 fn build_blocks(slots: &[&AlignedSlot], left: &str, right: &str) -> Vec<ComparisonBlock> {
     let mut blocks = Vec::new();
+    let has_ambiguous_sequence_order = slots
+        .windows(2)
+        .any(|pair| pair[0].sequence_number == pair[1].sequence_number);
     let mut run_start = 0;
     while run_start < slots.len() {
         let band = slots[run_start].band;
@@ -335,7 +338,11 @@ fn build_blocks(slots: &[&AlignedSlot], left: &str, right: &str) -> Vec<Comparis
         for pair in slots[run_start..run_end].chunks(2) {
             let first = pair[0];
             let second = pair.get(1).copied();
-            let (order, eligibility) = block_state(first, second, left, right);
+            let (order, eligibility) = if has_ambiguous_sequence_order {
+                (None, ComparisonBlockEligibility::AmbiguousSequenceOrder)
+            } else {
+                block_state(first, second, left, right)
+            };
             blocks.push(ComparisonBlock {
                 block_index: blocks.len(),
                 band,
