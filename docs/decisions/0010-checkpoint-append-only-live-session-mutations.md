@@ -317,8 +317,8 @@ clocks, IDs, filesystem operations, and write failpoints. Failpoints cover:
 - every plan file write and synchronization;
 - stream writes before, within, and after a line;
 - every changed-stream synchronization;
-- checkpoint temporary write, synchronization, replacement, directory sync,
-  reopen/verification, and post-commit response;
+- checkpoint temporary write, synchronization, replacement, platform metadata
+  durability barrier, reopen/verification, and post-commit response;
 - disk full, permission loss, cleanup failure, and cancellation;
 - process restart before and after each boundary;
 - two cooperative writers, an ignored advisory lock, and external file edits;
@@ -397,6 +397,6 @@ adapter, and explicit tail recovery.
 - [Decision 0008](0008-use-provider-neutral-adapter-evidence-in-bundle-v2.md)
 - [Rust `File` synchronization and locking](https://doc.rust-lang.org/stable/std/fs/struct.File.html)
 - [Rust `rename` platform behavior](https://doc.rust-lang.org/stable/std/fs/fn.rename.html)
-- [Windows `ReplaceFileW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew)
+- [Windows `MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
 - [Windows flushing system-buffered I/O](https://learn.microsoft.com/en-us/windows/win32/fileio/flushing-system-buffered-i-o-data-to-disk)
 - [Apple write-barrier and full-sync guidance](https://developer.apple.com/documentation/xcode/reducing-disk-writes)

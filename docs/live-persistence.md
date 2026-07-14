@@ -111,20 +111,25 @@ session as `interrupted` before returning.
 ## Platform And Filesystem Boundary
 
 On Unix targets the adapter uses standard file locks, `sync_all`, same-directory
-rename replacement, and directory synchronization. On Windows it uses standard
-file locks and directory synchronization plus `ReplaceFileW` with write-through
-and a backup checkpoint. The real integration tests execute lock, append,
-replace, reopen, and recovery behavior on every supported CI target.
+rename replacement, and directory synchronization. Windows does not expose a
+supported directory-`fsync` equivalent, so the adapter synchronizes every
+regular file before it becomes reachable and promotes the prior and current
+checkpoints with `MoveFileExW(MOVEFILE_REPLACE_EXISTING |
+MOVEFILE_WRITE_THROUGH)`. Opening a Windows writer or recovery handle first
+probes that exact synchronized replacement operation in the bundle directory.
+The real integration tests execute lock, append, replacement, reopen, and
+recovery behavior on every supported CI target.
 
 The guarantee is capability-based, not a claim about every device or power-loss
 mode. Opening a live writer fails with a typed capability error when the bundle
-is not a regular directory or the host cannot provide OS locking or directory
-synchronization. Advisory locks cannot stop a non-cooperating editor, so every
-mutation also rechecks checkpoint, plan, length, and prefix digests and freezes
-the handle without overwriting unexpected bytes. Provider-managed, network,
-removable, or virtual filesystems are not supported merely because they expose
-a path; only a filesystem on which these required operations actually succeed
-is inside the acknowledged-write boundary.
+is not a regular directory or the host cannot provide OS locking and the
+platform durability barrier: directory synchronization on Unix or synchronized
+write-through replacement on Windows. Advisory locks cannot stop a
+non-cooperating editor, so every mutation also rechecks checkpoint, plan,
+length, and prefix digests and freezes the handle without overwriting unexpected
+bytes. Provider-managed, network, removable, or virtual filesystems are not
+supported merely because they expose a path; only a filesystem on which these
+required operations actually succeed is inside the acknowledged-write boundary.
 
 ## Deterministic Verification
 

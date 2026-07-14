@@ -418,8 +418,8 @@ impl BundleStore {
             }
         }
 
-        sync_directory(self.root()).map_err(|source| LivePersistenceError::Capability {
-            message: format!("bundle directory synchronization failed: {source}"),
+        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
+            message: format!("live persistence durability probe failed: {source}"),
         })?;
         let bundle = self.read_v2()?;
         let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
@@ -464,6 +464,10 @@ impl BundleStore {
                 })
             }
         }
+
+        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
+            message: format!("live persistence durability probe failed: {source}"),
+        })?;
 
         let (mut bundle, restore_selected_checkpoint) = load_recovery_bundle(self)?;
         let starting_revision = bundle.session_state.revision;
@@ -2694,37 +2698,77 @@ fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Resul
 
 #[cfg(windows)]
 fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Result<()> {
-    use std::{ffi::c_void, os::windows::ffi::OsStrExt};
+    let previous_temp = previous.with_extension("json.next");
+    remove_file_if_present(&previous_temp)?;
+    fs::copy(current, &previous_temp)?;
+    File::open(&previous_temp)?.sync_all()?;
+    move_file_write_through(&previous_temp, previous)?;
+    move_file_write_through(temp, current)
+}
+
+#[cfg(unix)]
+fn probe_live_persistence(path: &Path) -> io::Result<()> {
+    sync_directory(path)
+}
+
+#[cfg(windows)]
+fn probe_live_persistence(path: &Path) -> io::Result<()> {
+    let probe_id = Uuid::new_v4().simple();
+    let current = path.join(format!(".antennabench-durability-{probe_id}.current"));
+    let replacement = path.join(format!(".antennabench-durability-{probe_id}.next"));
+    let result = (|| {
+        write_synced_probe(&current, b"current")?;
+        write_synced_probe(&replacement, b"replacement")?;
+        move_file_write_through(&replacement, &current)?;
+        if fs::read(&current)? != b"replacement" {
+            return Err(io::Error::other(
+                "write-through replacement did not preserve the replacement bytes",
+            ));
+        }
+        Ok(())
+    })();
+    let cleanup_current = remove_file_if_present(&current);
+    let cleanup_replacement = remove_file_if_present(&replacement);
+    result.and(cleanup_current).and(cleanup_replacement)
+}
+
+#[cfg(windows)]
+fn write_synced_probe(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
+}
+
+#[cfg(windows)]
+fn move_file_write_through(source: &Path, destination: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x0000_0001;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x0000_0008;
 
     unsafe extern "system" {
-        fn ReplaceFileW(
-            replaced_file_name: *const u16,
-            replacement_file_name: *const u16,
-            backup_file_name: *const u16,
-            replace_flags: u32,
-            exclude: *mut c_void,
-            reserved: *mut c_void,
+        fn MoveFileExW(
+            existing_file_name: *const u16,
+            new_file_name: *const u16,
+            flags: u32,
         ) -> i32;
     }
 
-    fn wide(path: &Path) -> Vec<u16> {
-        path.as_os_str().encode_wide().chain(Some(0)).collect()
-    }
-
-    if previous.exists() {
-        fs::remove_file(previous)?;
-    }
-    let current = wide(current);
-    let temp = wide(temp);
-    let previous = wide(previous);
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
     let result = unsafe {
-        ReplaceFileW(
-            current.as_ptr(),
-            temp.as_ptr(),
-            previous.as_ptr(),
-            0x0000_0001,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
         )
     };
     if result == 0 {
@@ -2734,18 +2778,25 @@ fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Resul
     }
 }
 
+#[cfg(windows)]
+fn remove_file_if_present(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 #[cfg(unix)]
 fn sync_directory(path: &Path) -> io::Result<()> {
     File::open(path)?.sync_all()
 }
 
 #[cfg(windows)]
-fn sync_directory(path: &Path) -> io::Result<()> {
-    use std::os::windows::fs::OpenOptionsExt;
-    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
-        .open(path)?
-        .sync_all()
+fn sync_directory(_path: &Path) -> io::Result<()> {
+    // Windows has no supported directory-fsync equivalent. Regular files are
+    // synchronized before they become reachable, while checkpoint promotion
+    // and the capability probe use MoveFileExW with MOVEFILE_WRITE_THROUGH as
+    // the metadata durability barrier.
+    Ok(())
 }
