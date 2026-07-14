@@ -6,6 +6,7 @@ export function initialState(workflow = "setup") {
       activeWorkflow: "setup",
       openStatus: "idle",
       session: null,
+      reportPresentationId: 0,
       error: null,
       notice: null,
       exportStatus: "idle",
@@ -51,6 +52,7 @@ export function openSessionSucceeded(state, session) {
     activeWorkflow: "report",
     openStatus: "ready",
     session,
+    reportPresentationId: state.reportPresentationId + 1,
     error: null,
     notice: null,
     exportStatus: "idle",
@@ -146,6 +148,17 @@ export function invokeExportSession(invoke) {
   return invoke("export_active_session");
 }
 
+export function updateReportFrame(reportFrame, state) {
+  if (state.session === null) return false;
+
+  const presentationId = String(state.reportPresentationId);
+  if (reportFrame.dataset.presentationId === presentationId) return false;
+
+  reportFrame.srcdoc = state.session.reportHtml;
+  reportFrame.dataset.presentationId = presentationId;
+  return true;
+}
+
 function mount(root, browserWindow) {
   let state = initialState(workflowFromHash(browserWindow.location.hash));
   const navigation = [...root.querySelectorAll("[data-workflow]")];
@@ -218,10 +231,7 @@ function mount(root, browserWindow) {
     if (hasSession) {
       reportBundleName.textContent = state.session.bundleName;
       reportSummary.textContent = `${state.session.callsign} · ${state.session.grid} · ${state.session.antennaCount} antennas · ${state.session.slotCount} slots · ${state.session.observationCount} observations`;
-      if (reportFrame.dataset.sessionId !== state.session.sessionId) {
-        reportFrame.srcdoc = state.session.reportHtml;
-        reportFrame.dataset.sessionId = state.session.sessionId;
-      }
+      updateReportFrame(reportFrame, state);
     }
   };
 

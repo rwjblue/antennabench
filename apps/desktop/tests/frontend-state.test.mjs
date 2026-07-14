@@ -16,6 +16,7 @@ import {
   openSessionFailed,
   openSessionSucceeded,
   selectWorkflow,
+  updateReportFrame,
   viewModel,
   workflowFromHash,
 } from "../frontend/app.mjs";
@@ -25,6 +26,7 @@ test("the shell starts in session setup", () => {
     activeWorkflow: "setup",
     openStatus: "idle",
     session: null,
+    reportPresentationId: 0,
     error: null,
     notice: null,
     exportStatus: "idle",
@@ -43,6 +45,44 @@ test("opening a session transitions through loading and ready", () => {
   assert.equal(ready.openStatus, "ready");
   assert.equal(ready.activeWorkflow, "report");
   assert.equal(ready.session, session);
+  assert.equal(ready.reportPresentationId, 1);
+});
+
+test("same-ID successful opens refresh only the new report presentation", () => {
+  const reportFrame = { dataset: {}, srcdoc: "" };
+  const first = openSessionSucceeded(initialState("transfer"), {
+    sessionId: "session-1",
+    reportHtml: "<!doctype html><title>first</title>",
+  });
+
+  assert.equal(updateReportFrame(reportFrame, first), true);
+  assert.equal(reportFrame.srcdoc, "<!doctype html><title>first</title>");
+
+  const navigated = selectWorkflow(first, "transfer");
+  const exporting = beginExportSession(navigated);
+  const exported = exportSessionSucceeded(exporting, "session-1-copy.session.wsprabundle");
+  assert.equal(updateReportFrame(reportFrame, navigated), false);
+  assert.equal(updateReportFrame(reportFrame, exporting), false);
+  assert.equal(updateReportFrame(reportFrame, exported), false);
+
+  const cancelled = openSessionCancelled(beginOpenSession(first));
+  const failed = openSessionFailed(beginOpenSession(first), {
+    kind: "validation",
+    message: "The replacement bundle did not pass validation.",
+    detail: "invalid station data",
+  });
+  assert.equal(updateReportFrame(reportFrame, cancelled), false);
+  assert.equal(updateReportFrame(reportFrame, failed), false);
+  assert.equal(reportFrame.srcdoc, "<!doctype html><title>first</title>");
+
+  const second = openSessionSucceeded(beginOpenSession(first), {
+    sessionId: "session-1",
+    reportHtml: "<!doctype html><title>second</title>",
+  });
+  assert.equal(second.session.sessionId, first.session.sessionId);
+  assert.notEqual(second.reportPresentationId, first.reportPresentationId);
+  assert.equal(updateReportFrame(reportFrame, second), true);
+  assert.equal(reportFrame.srcdoc, "<!doctype html><title>second</title>");
 });
 
 test("cancelling the native picker is a normal non-error transition", () => {
