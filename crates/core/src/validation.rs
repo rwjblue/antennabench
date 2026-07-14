@@ -8,7 +8,7 @@ use crate::{
     align_schedule_slots, codes, BundleContents, BundleDiagnostic, BundleDiagnosticCategory,
     BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleRecordKind, BundleValidationProfile,
     BundleValidationReport, PlannedSlot, SlotAlignmentPolicy, ALL_TYPED_OPERATIONS,
-    ANALYSIS_AND_WRITE_OPERATIONS, SCHEMA_VERSION,
+    ANALYSIS_AND_WRITE_OPERATIONS, LATEST_SCHEMA_VERSION, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2,
 };
 
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -125,11 +125,13 @@ pub enum BundleValidationIssue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BundleFileRole {
     Manifest,
+    SessionState,
     Station,
     Antennas,
     Schedule,
     Events,
     Observations,
+    AdapterRecords,
     WsjtX,
     Rig,
     Propagation,
@@ -173,11 +175,25 @@ pub fn validate_bundle_report(bundle: &BundleContents) -> BundleValidationReport
 fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue> {
     let mut issues = Vec::new();
     let expected_session_id = bundle.manifest.session_id.as_str();
+    let expected_schema_version = bundle.manifest.schema_version;
+
+    if !matches!(
+        expected_schema_version,
+        SCHEMA_VERSION_V1 | SCHEMA_VERSION_V2
+    ) {
+        issues.push(BundleValidationIssue::UnexpectedSchemaVersion {
+            file: BundleFileRole::Manifest,
+            record_id: None,
+            expected: LATEST_SCHEMA_VERSION,
+            actual: expected_schema_version,
+        });
+    }
 
     validate_root_schema_and_session(
         &mut issues,
         BundleFileRole::Manifest,
         bundle.manifest.schema_version,
+        expected_schema_version,
         bundle.manifest.session_id.as_str(),
         expected_session_id,
     );
@@ -185,6 +201,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Station,
         bundle.station.schema_version,
+        expected_schema_version,
         bundle.station.session_id.as_str(),
         expected_session_id,
     );
@@ -192,6 +209,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Antennas,
         bundle.antennas.schema_version,
+        expected_schema_version,
         bundle.antennas.session_id.as_str(),
         expected_session_id,
     );
@@ -199,6 +217,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Schedule,
         bundle.schedule.schema_version,
+        expected_schema_version,
         bundle.schedule.session_id.as_str(),
         expected_session_id,
     );
@@ -206,6 +225,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Analysis,
         bundle.analysis.schema_version,
+        expected_schema_version,
         bundle.analysis.session_id.as_str(),
         expected_session_id,
     );
@@ -214,6 +234,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Events,
         expected_session_id,
+        expected_schema_version,
         bundle.events.iter().map(|record| {
             (
                 record.event_id.as_str(),
@@ -226,6 +247,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Observations,
         expected_session_id,
+        expected_schema_version,
         bundle.observations.iter().map(|record| {
             (
                 record.observation_id.as_str(),
@@ -238,6 +260,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::WsjtX,
         expected_session_id,
+        expected_schema_version,
         bundle.wsjtx.iter().map(|record| {
             (
                 record.record_id.as_str(),
@@ -250,6 +273,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Rig,
         expected_session_id,
+        expected_schema_version,
         bundle.rig.iter().map(|record| {
             (
                 record.record_id.as_str(),
@@ -262,6 +286,7 @@ fn validate_bundle_issues(bundle: &BundleContents) -> Vec<BundleValidationIssue>
         &mut issues,
         BundleFileRole::Propagation,
         expected_session_id,
+        expected_schema_version,
         bundle.propagation.iter().map(|record| {
             (
                 record.record_id.as_str(),
@@ -324,14 +349,15 @@ fn validate_root_schema_and_session(
     issues: &mut Vec<BundleValidationIssue>,
     file: BundleFileRole,
     actual_schema_version: u16,
+    expected_schema_version: u16,
     actual_session_id: &str,
     expected_session_id: &str,
 ) {
-    if actual_schema_version != SCHEMA_VERSION {
+    if actual_schema_version != expected_schema_version {
         issues.push(BundleValidationIssue::UnexpectedSchemaVersion {
             file,
             record_id: None,
-            expected: SCHEMA_VERSION,
+            expected: expected_schema_version,
             actual: actual_schema_version,
         });
     }
@@ -350,14 +376,15 @@ fn validate_record_meta<'a>(
     issues: &mut Vec<BundleValidationIssue>,
     file: BundleFileRole,
     expected_session_id: &str,
+    expected_schema_version: u16,
     records: impl IntoIterator<Item = (&'a str, u16, &'a str)>,
 ) {
     for (record_id, actual_schema_version, actual_session_id) in records {
-        if actual_schema_version != SCHEMA_VERSION {
+        if actual_schema_version != expected_schema_version {
             issues.push(BundleValidationIssue::UnexpectedSchemaVersion {
                 file,
                 record_id: Some(record_id.to_string()),
-                expected: SCHEMA_VERSION,
+                expected: expected_schema_version,
                 actual: actual_schema_version,
             });
         }

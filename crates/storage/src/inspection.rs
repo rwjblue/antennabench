@@ -4,8 +4,9 @@ use antennabench_core::{
     codes, validate_bundle_report, AnalysisFile, AntennasFile, BundleContents, BundleDiagnostic,
     BundleDiagnosticCategory, BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleFileRole,
     BundleManifest, BundleRecordKind, BundleValidationError, BundleValidationProfile,
-    BundleValidationReport, ObservationRecord, OperatorEvent, PropagationRecord, RigRecord,
-    Schedule, Station, WsjtXRecord, ALL_TYPED_OPERATIONS, SCHEMA_VERSION, WRITE_OPERATIONS,
+    BundleValidationReport, CurrentBundleContents, ObservationRecord, OperatorEvent,
+    PropagationRecord, RigRecord, Schedule, Station, WsjtXRecord, ALL_TYPED_OPERATIONS,
+    SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, WRITE_OPERATIONS,
 };
 use serde::{
     de::{DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess, Visitor},
@@ -17,13 +18,17 @@ use super::{ensure_bundle_root, BundleStore, BundleStoreError};
 
 #[derive(Debug, Clone)]
 pub struct BundleInspection {
-    bundle: Option<BundleContents>,
-    report: BundleValidationReport,
+    pub(super) current: Option<CurrentBundleContents>,
+    pub(super) report: BundleValidationReport,
 }
 
 impl BundleInspection {
     pub fn bundle(&self) -> Option<&BundleContents> {
-        self.bundle.as_ref()
+        self.current.as_ref().map(|current| &current.bundle)
+    }
+
+    pub fn current(&self) -> Option<&CurrentBundleContents> {
+        self.current.as_ref()
     }
 
     pub fn report(&self) -> &BundleValidationReport {
@@ -31,7 +36,11 @@ impl BundleInspection {
     }
 
     pub fn into_parts(self) -> (Option<BundleContents>, BundleValidationReport) {
-        (self.bundle, self.report)
+        (self.current.map(|current| current.bundle), self.report)
+    }
+
+    pub fn into_current_parts(self) -> (Option<CurrentBundleContents>, BundleValidationReport) {
+        (self.current, self.report)
     }
 }
 
@@ -69,6 +78,7 @@ impl DocumentContext {
         let field = match self.file {
             BundleFileRole::Events => "event_id",
             BundleFileRole::Observations => "observation_id",
+            BundleFileRole::AdapterRecords => "record_id",
             BundleFileRole::WsjtX | BundleFileRole::Rig | BundleFileRole::Propagation => {
                 "record_id"
             }
@@ -99,7 +109,7 @@ impl BundleStore {
         let Some(manifest) = manifest else {
             return Err(BundleValidationError::from_report(report).into());
         };
-        if manifest.schema_version != SCHEMA_VERSION {
+        if manifest.schema_version != SCHEMA_VERSION_V1 {
             report.extend([unsupported_schema_version_diagnostic(
                 manifest.schema_version,
             )]);
@@ -122,15 +132,33 @@ impl BundleStore {
         let mut report = BundleValidationReport::new(manifest_document.diagnostics);
         let Some(manifest_value) = manifest_document.value else {
             return Ok(BundleInspection {
-                bundle: None,
+                current: None,
                 report,
             });
         };
         if !report.allows(BundleValidationProfile::CompatibilityRead) {
             return Ok(BundleInspection {
-                bundle: None,
+                current: None,
                 report,
             });
+        }
+
+        let schema_version = manifest_value
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .and_then(|value| u16::try_from(value).ok());
+        if schema_version == Some(SCHEMA_VERSION_V2) {
+            let report = BundleValidationReport::new(
+                report
+                    .into_diagnostics()
+                    .into_iter()
+                    .filter(|diagnostic| diagnostic.code != codes::UNKNOWN_FIELD)
+                    .collect(),
+            );
+            return self.inspect_v2(report);
+        }
+        if let Some(actual) = schema_version.filter(|version| *version != SCHEMA_VERSION_V1) {
+            return Err(BundleStoreError::UnsupportedSchemaVersion { actual });
         }
 
         let Some(manifest) = project_value::<BundleManifest>(
@@ -139,16 +167,16 @@ impl BundleStore {
             &mut report,
         ) else {
             return Ok(BundleInspection {
-                bundle: None,
+                current: None,
                 report,
             });
         };
-        if manifest.schema_version != SCHEMA_VERSION {
+        if manifest.schema_version != SCHEMA_VERSION_V1 {
             report.extend([unsupported_schema_version_diagnostic(
                 manifest.schema_version,
             )]);
             return Ok(BundleInspection {
-                bundle: None,
+                current: None,
                 report,
             });
         }
@@ -232,7 +260,7 @@ impl BundleStore {
             )
         else {
             return Ok(BundleInspection {
-                bundle: None,
+                current: None,
                 report,
             });
         };
@@ -254,7 +282,10 @@ impl BundleStore {
             .allows(BundleValidationProfile::CompatibilityRead)
             .then_some(bundle);
 
-        Ok(BundleInspection { bundle, report })
+        Ok(BundleInspection {
+            current: bundle.map(CurrentBundleContents::from_v1),
+            report,
+        })
     }
 }
 
@@ -269,7 +300,7 @@ fn unsupported_schema_version_diagnostic(schema_version: u16) -> BundleDiagnosti
             ..BundleDiagnosticLocation::file(BundleFileRole::Manifest)
         },
         message: format!(
-            "schema version {schema_version} is not supported; expected {SCHEMA_VERSION}"
+            "schema version {schema_version} is not supported; supported versions are {SCHEMA_VERSION_V1} and {SCHEMA_VERSION_V2}"
         ),
         related_locations: Vec::new(),
     }
@@ -324,21 +355,17 @@ fn inspect_jsonl_file<T: DeserializeOwned>(
 }
 
 fn inspect_document(contents: &str, context: DocumentContext) -> InspectedDocument {
-    let mut duplicates = Vec::new();
-    let mut deserializer = serde_json::Deserializer::from_str(contents);
-    let scan_result = JsonScanSeed {
-        path: String::new(),
-        duplicates: &mut duplicates,
-    }
-    .deserialize(&mut deserializer)
-    .and_then(|()| deserializer.end());
+    let scan_result = scan_duplicate_members(contents);
 
-    if let Err(error) = scan_result {
-        return InspectedDocument {
-            value: None,
-            diagnostics: vec![invalid_json_diagnostic(&context, error.to_string())],
-        };
-    }
+    let mut duplicates = match scan_result {
+        Ok(duplicates) => duplicates,
+        Err(error) => {
+            return InspectedDocument {
+                value: None,
+                diagnostics: vec![invalid_json_diagnostic(&context, error)],
+            };
+        }
+    };
 
     let value = match serde_json::from_str::<Value>(contents) {
         Ok(value) => value,
@@ -362,6 +389,21 @@ fn inspect_document(contents: &str, context: DocumentContext) -> InspectedDocume
         value: Some(value),
         diagnostics,
     }
+}
+
+pub(super) fn scan_duplicate_members(contents: &str) -> Result<Vec<String>, String> {
+    let mut duplicates = Vec::new();
+    let mut deserializer = serde_json::Deserializer::from_str(contents);
+    JsonScanSeed {
+        path: String::new(),
+        duplicates: &mut duplicates,
+    }
+    .deserialize(&mut deserializer)
+    .and_then(|()| deserializer.end())
+    .map_err(|error| error.to_string())?;
+    duplicates.sort();
+    duplicates.dedup();
+    Ok(duplicates)
 }
 
 fn project_value<T: DeserializeOwned>(
@@ -469,6 +511,7 @@ fn unknown_field_diagnostics(context: &DocumentContext, value: &Value) -> Vec<Bu
                 );
             }
         }
+        BundleFileRole::SessionState | BundleFileRole::AdapterRecords => {}
         BundleFileRole::Station => collect_unknown(
             value,
             "",
@@ -724,6 +767,7 @@ fn is_raw_path(file: BundleFileRole, path: &str) -> bool {
     matches!(
         file,
         BundleFileRole::Observations
+            | BundleFileRole::AdapterRecords
             | BundleFileRole::WsjtX
             | BundleFileRole::Rig
             | BundleFileRole::Propagation
@@ -734,6 +778,7 @@ fn record_kind_for_file(file: BundleFileRole) -> Option<BundleRecordKind> {
     match file {
         BundleFileRole::Events => Some(BundleRecordKind::OperatorEvent),
         BundleFileRole::Observations => Some(BundleRecordKind::Observation),
+        BundleFileRole::AdapterRecords => Some(BundleRecordKind::AdapterRecord),
         BundleFileRole::WsjtX => Some(BundleRecordKind::WsjtXRecord),
         BundleFileRole::Rig => Some(BundleRecordKind::RigRecord),
         BundleFileRole::Propagation => Some(BundleRecordKind::PropagationRecord),

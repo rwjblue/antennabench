@@ -14,9 +14,13 @@ use thiserror::Error;
 
 mod inspection;
 mod lossless_copy;
+mod upgrade;
+mod v2;
 
 pub use inspection::BundleInspection;
 pub use lossless_copy::BundleCopyError;
+pub use upgrade::BundleUpgradeError;
+pub use v2::BundleAttachment;
 
 #[derive(Debug, Clone)]
 pub struct BundleStore {
@@ -34,6 +38,10 @@ impl BundleStore {
         &self.root
     }
 
+    /// Writes the legacy schema-v1 compatibility representation.
+    ///
+    /// New authored sessions should use [`Self::write_v2`] so provenance and
+    /// lifecycle state are retained in the provider-neutral schema.
     pub fn write(&self, bundle: &BundleContents) -> Result<(), BundleStoreError> {
         ensure_writable_root(&self.root)?;
         let paths = self.bundle_paths(&bundle.manifest.files)?;
@@ -57,6 +65,13 @@ impl BundleStore {
 
     pub fn read(&self) -> Result<BundleContents, BundleStoreError> {
         let (bundle, report) = self.inspect()?.into_parts();
+        bundle.ok_or_else(|| BundleValidationError::from_report(report).into())
+    }
+
+    pub fn read_current(
+        &self,
+    ) -> Result<antennabench_core::CurrentBundleContents, BundleStoreError> {
+        let (bundle, report) = self.inspect()?.into_current_parts();
         bundle.ok_or_else(|| BundleValidationError::from_report(report).into())
     }
 
@@ -295,6 +310,27 @@ pub enum BundleStoreError {
 
     #[error("bundle root must be a directory path and cannot be a symlink: {path}")]
     InvalidBundleRoot { path: PathBuf },
+
+    #[error("bundle destination already exists: {path}")]
+    DestinationExists { path: PathBuf },
+
+    #[error("bundle path has the wrong suffix for schema version {schema_version}: {path}")]
+    InvalidBundleSuffix { path: PathBuf, schema_version: u16 },
+
+    #[error("unsupported bundle schema version {actual}; supported versions are 1 and 2")]
+    UnsupportedSchemaVersion { actual: u16 },
+
+    #[error("bundle manifest is ambiguous and cannot safely select file paths: {message}")]
+    AmbiguousManifest { message: String },
+
+    #[error("invalid schema-v2 bundle invariant: {message}")]
+    InvalidV2Bundle { message: String },
+
+    #[error("attachment reference is invalid: {message}")]
+    InvalidAttachmentReference { message: String },
+
+    #[error("attachment digest or size does not match its reference: {path}")]
+    AttachmentMismatch { path: PathBuf },
 
     #[error(transparent)]
     Validation {

@@ -7,10 +7,11 @@ source of truth; everything else is derived from it.
 
 Current crates:
 
-- `crates/core`: serializable bundle model, schedule alignment, normalization,
-  and validation.
-- `crates/storage`: filesystem read/write APIs for `.session.wsprabundle`
-  directories.
+- `crates/core`: distinct schema-v1 and schema-v2 wire types, a shared current
+  projection, schedule alignment, normalization, and validation.
+- `crates/storage`: dispatched read/write, non-destructive upgrade, verified
+  attachment, and lossless-copy APIs for `.session.wsprabundle` v1 and
+  `.session.antennabundle` v2 directories.
 - `crates/wsjtx`: offline WSPR `ALL_WSPR.TXT` import plus a live WSJT-X UDP
   companion boundary, producing preserved adapter records and eligible local
   decode observations.
@@ -54,6 +55,16 @@ The current storage API exposes inspection plus three profiled read modes:
 - `BundleStore::read_validated()`: strict clean-report read.
 - `BundleStore::read_normalized_validated()`: analysis-profile read followed by
   deterministic alignment normalization and validation.
+- `BundleStore::read_current()`: the shared projection with v2 structured
+  provenance, generic adapter evidence, and checkpoint sidecars retained.
+- `BundleStore::read_v2()`: the explicitly versioned v2 wire representation.
+
+`BundleStore::upgrade_v1_to_v2()` is the only migration boundary. It creates a
+new neutral-suffix destination, preserves the v1 source bytes, maps all legacy
+source and WSJT-X evidence, and verifies semantic equivalence and the v2
+checkpoint. New v2 writes use `write_v2()` or
+`write_v2_with_attachments()`; `write()` remains the explicit v1 compatibility
+writer for legacy fixtures and integrations.
 
 The diagnostic contract separates wire, structural, and semantic failures and
 states which of compatibility read, analysis, strict creation, or upgrade each
@@ -160,10 +171,12 @@ is split across [#55](https://github.com/rwjblue/antennabench/issues/55),
 archive limits remain a separate decision in
 [#11](https://github.com/rwjblue/antennabench/issues/11).
 
-## Planned Live-Session Persistence
+## Schema-V2 Foundation And Planned Live Persistence
 
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md)
-defines the future schema-v2 mutation boundary. Complete draft plan generations
+defines the schema-v2 mutation boundary. The implemented v2 wire foundation
+includes provider-neutral evidence, mutation member envelopes, and the complete
+`session-state.json` checkpoint shape. Complete draft plan generations
 will be staged and validated before one checkpoint selects them. During a run,
 operator, adapter, observation, rig, and propagation evidence will append; a
 small atomically replaced `session-state.json` will identify the one committed
@@ -173,9 +186,11 @@ One Rust-owned writer lock, checkpoint/digest comparison, durable mutation IDs,
 and explicit tail recovery prevent cooperative concurrent writes, retry
 duplication, and silent overwrite of external changes. Reports and active
 exports will consume one checkpoint revision rather than racing live files.
-This is an approved design, not implemented behavior: current schema-v1 bundles
-remain static read/report/export inputs and must be upgraded non-destructively
-before a future conductor mutates them.
+Static v2 creation, read, attachment verification, lossless copy, and explicit
+v1 upgrade are implemented. Atomic append/promotion, locking, recovery,
+checkpoint-aware active export, and lifecycle/correction reduction remain in
+#53 and #54. Schema-v1 bundles remain static read/report/export inputs and must
+be upgraded non-destructively before a future conductor mutates them.
 
 ## Planned Conductor Delivery
 

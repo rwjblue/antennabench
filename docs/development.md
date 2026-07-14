@@ -136,6 +136,14 @@ normalizes, validates, exports, reopens, analyzes, and builds report data from
 the bundle. The test pins important scenario counts without snapshotting the
 entire fixture.
 
+`crates/storage/tests/v2_bundle.rs` treats every checked-in v1 bundle as a
+migration fixture. It upgrades each source into a temporary
+`.session.antennabundle`, proves the source tree is byte-identical, verifies
+the v2 checkpoint and adapter backlinks, compares retained WSJT-X physical
+lines, reopens the current projection, and makes/reopens a byte-identical v2
+lossless copy. `crates/core/tests/v2_types.rs` pins every legacy provenance
+mapping and the lowercase-ASCII identity boundaries.
+
 Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, accessible chart tables, and all
 report sections. Separate hostile-string and empty-data cases pin escaping and

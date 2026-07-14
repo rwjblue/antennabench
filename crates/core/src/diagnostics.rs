@@ -28,6 +28,7 @@ pub enum BundleRecordKind {
     Slot,
     OperatorEvent,
     Observation,
+    AdapterRecord,
     WsjtXRecord,
     RigRecord,
     PropagationRecord,
@@ -159,6 +160,10 @@ pub mod codes {
     pub const UNKNOWN_OBSERVATION_SLOT: &str = "bundle.structure.unknown_observation_slot";
     pub const INVALID_SLOT_CONFIDENCE: &str = "bundle.semantic.invalid_slot_confidence";
     pub const ALIGNMENT_ANNOTATION_MISMATCH: &str = "bundle.semantic.alignment_annotation_mismatch";
+    pub const V2_CHECKPOINT_MISMATCH: &str = "bundle.structure.v2_checkpoint_mismatch";
+    pub const V2_ADAPTER_LINK: &str = "bundle.structure.v2_adapter_link";
+    pub const V2_ATTACHMENT: &str = "bundle.structure.v2_attachment";
+    pub const V2_MUTATION: &str = "bundle.structure.v2_mutation";
 }
 
 pub const ALL_TYPED_OPERATIONS: [BundleValidationProfile; 4] = [

@@ -1,9 +1,10 @@
 # Bundle Format
 
-A session bundle is a directory ending in `.session.wsprabundle`. It contains
-JSON root files, JSONL streams, and an attachments directory.
+A session bundle is a directory containing JSON root files, JSONL streams, and
+an attachments directory. Schema version 1 uses `.session.wsprabundle`; schema
+version 2 uses the provider-neutral `.session.antennabundle` suffix.
 
-Default file layout:
+Version 1 layout:
 
 ```text
 example.session.wsprabundle/
@@ -20,21 +21,79 @@ example.session.wsprabundle/
   attachments/
 ```
 
-The implemented schema version is `1`.
+Version 2 layout:
 
-Schema version 2 is approved but not yet implemented. In addition to the
-provider-neutral adapter evidence in
-[Decision 0008](decisions/0008-use-provider-neutral-adapter-evidence-in-bundle-v2.md),
-new mutable sessions will use versioned plan generations and a
-`session-state.json` checkpoint that commits one lifecycle state and coherent
-prefix of every append-only stream. Mutation IDs, committed byte lengths,
-record heads, and digests make retry, recovery, active report refresh, and
-export deterministic. The complete persistence and operator-event contract is
-[Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md).
+```text
+example.session.antennabundle/
+  manifest.json
+  session-state.json
+  station.json
+  antennas.json
+  schedule.json
+  events.jsonl
+  observations.jsonl
+  adapter-records.jsonl
+  rig.jsonl
+  propagation.jsonl
+  analysis.json
+  attachments/
+    sha256/
+```
+
+Storage reads `manifest.schema_version` first and dispatches into distinct v1
+and v2 wire models. Unknown versions fail with a typed unsupported-version
+error. Both versions project into one current model; v2 projection retains a
+provider-neutral provenance sidecar, generic adapter records, and the session
+checkpoint while existing consumers migrate away from the legacy source enum.
+
+Version 2 implements the static wire foundation selected by
+[Decision 0008](decisions/0008-use-provider-neutral-adapter-evidence-in-bundle-v2.md).
+Its `session-state.json` reserves the checkpoint selected by
+[Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md):
+revision, lifecycle, active-plan/root digests, committed byte
+length/count/last-ID/digest for every stream, and the last mutation ID. Every
+v2 stream record carries mutation ID and member index/count. Live append,
+atomic promotion, locking, recovery, and lifecycle/correction reduction remain
+tracked by #53 and #54.
 
 Version 1 is never silently rewritten to gain these semantics. It remains
 readable and losslessly copyable; live mutation requires an explicit v2 upgrade
 to a new `.session.antennabundle` destination.
+
+## Provider-Neutral Evidence
+
+Every v2 provenance contains `provider_id`, `source_id`,
+`acquisition_channel`, `adapter_id`, and a separate `adapter_version`. The four
+identities are lowercase ASCII, at most 128 bytes, and consist of alphanumeric
+segments separated by a single `.`, `_`, or `-`. They are validated strings,
+not closed provider enums, so an unknown valid provider remains readable.
+
+`adapter-records.jsonl` replaces v1's provider-specific `wsjtx.jsonl`. Records
+contain capture/source times, provider record type, typed accepted, malformed,
+filtered, duplicate, unsupported, or partially-normalized disposition, stable
+reason identity, normalized-record links, and attributed input. Input is
+exact/near-raw inline text or an attachment reference containing lowercase
+SHA-256, byte size, media type, encoding/container, and source locator.
+
+Attachment bytes live at `attachments/sha256/<digest>`. Reads verify size and
+digest. `BundleAttachment` with `write_v2_with_attachments()` creates a new v2
+destination containing referenced attachment bytes; `write_attachment()` and
+`read_attachment()` expose the same verified content-addressed store.
+
+## Explicit V1 Upgrade
+
+`BundleStore::upgrade_v1_to_v2()` accepts only an upgrade-eligible v1 source and
+an absent v2 destination. It never writes the source. Every legacy
+`RecordSource` maps conservatively to structured provenance; provider-only
+sources use `legacy-unspecified` acquisition instead of an invented channel.
+Every legacy WSJT-X record becomes generic adapter evidence and retains its
+original physical JSONL line exactly. Normalized observations, rig records,
+and propagation records receive adapter-evidence backlinks and deterministic
+migration mutation membership.
+
+The upgrader verifies projected semantic equivalence, checkpoint/stream
+digests, retained evidence counts, destination reopen, and a before/after
+snapshot of every source file. There is no v2-to-v1 downgrade.
 
 ## Planned Local Resource Profile
 
@@ -82,7 +141,7 @@ potentially unbounded.
 - `events.jsonl`: operator events such as session start, switched, missed slot,
   bad slot, note added, and session end.
 - `observations.jsonl`: local decodes, public reports, and imported spots.
-- `wsjtx.jsonl`: raw or near-raw WSJT-X adapter records, including
+- v1 `wsjtx.jsonl`: raw or near-raw WSJT-X adapter records, including
   `all_wspr_decode` for parsed decode rows and `all_wspr_malformed` for
   preserved lines that could not become observations. Live companion records
   use `udp_heartbeat`, `udp_status`, `udp_wspr_decode`, and `udp_close`.
@@ -95,8 +154,9 @@ potentially unbounded.
   retrieval time, provider/semantics attribution, and available HTTP metadata.
   Repeated unchanged source observations are not appended.
 
-Every JSONL record includes `meta` with schema version, session id, timestamp,
-and source.
+Every v1 JSONL record includes `meta` with schema version, session id,
+timestamp, and legacy source. Every v2 record instead uses structured
+provenance and mutation membership.
 
 Offline WSJT-X WSPR log import preserves every nonblank imported line in
 `wsjtx.jsonl`. Valid `ALL_WSPR.TXT`-style decode rows also produce
@@ -163,9 +223,14 @@ Structural and semantic validation checks:
 - event and observation slot references point to known planned slots
 - observation slot confidence values are in `0.0..=1.0`
 - persisted slot annotations match regenerated alignment output
+- v2 mutation membership and record schema/session identities agree
+- normalized v2 records link to existing generic adapter evidence
+- attachment digests/sizes, active-plan digests, and committed stream heads
+  match `session-state.json`
 
 Use `BundleStore::inspect()` to retain the report beside an optional all-or-none
-typed bundle. `read()` applies the compatibility profile,
+current projection. `read_current()` retains provider-neutral sidecars and
+`read_v2()` exposes the v2 wire model. `read()` applies the compatibility profile,
 `read_validated()` requires a completely clean report, and
 `read_normalized_validated()` applies the analysis profile after regenerating
 observation alignment annotations. The complete policy is recorded in
@@ -187,6 +252,8 @@ filesystem entries are rejected. If copying or verification fails, the newly
 created destination is removed when it remains safe to do so. Verification
 reopens the copied manifest and checks the storage layout; it does not require
 typed projection of the preserved evidence.
+The same operation supports v1 and v2 and requires the destination suffix to
+match the source schema.
 
 ## Fixtures
 

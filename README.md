@@ -16,7 +16,11 @@ Implemented:
   crates.
 - Canonical bundle model for station, antennas, schedules, operator events,
   observations, adapter records, propagation snapshots, and analysis metadata.
-- Filesystem read/write support for `.session.wsprabundle` directories.
+- Filesystem read/write support for schema-v1 `.session.wsprabundle` and
+  provider-neutral schema-v2 `.session.antennabundle` directories.
+- Explicit non-destructive v1-to-v2 upgrade with structured provenance,
+  generic adapter evidence, mutation/checkpoint envelopes, verified SHA-256
+  attachments, semantic-equivalence checks, and lossless copy for both versions.
 - Deterministic schedule slot alignment and observation annotation.
 - Strict bundle validation for schema/session drift, duplicate IDs, references,
   slot windows, confidence ranges, and stale alignment annotations.

@@ -5,15 +5,13 @@ use std::{
 };
 
 use antennabench_analysis::AnalysisError;
-use antennabench_core::BundleContents;
+use antennabench_core::{BundleContents, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX};
 use antennabench_report::{build_report, render_standalone_html, ReportError};
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use thiserror::Error;
-
-const BUNDLE_SUFFIX: &str = ".session.wsprabundle";
 
 #[derive(Default)]
 pub(crate) struct ActiveSessionState(Mutex<Option<ActiveSession>>);
@@ -117,7 +115,7 @@ impl From<OpenSessionError> for SessionErrorPayload {
         match error {
             OpenSessionError::InvalidBundleSelection { name } => Self::new(
                 SessionErrorKind::Selection,
-                "Choose a .session.wsprabundle directory.",
+                "Choose a .session.antennabundle or .session.wsprabundle directory.",
                 format!("Selected directory: {name}"),
             ),
             OpenSessionError::Storage(error) => storage_error_payload(error),
@@ -136,7 +134,7 @@ impl From<ExportSessionError> for SessionErrorPayload {
             ),
             ExportSessionError::InvalidDestination { name } => Self::new(
                 SessionErrorKind::Destination,
-                "Save the copy as a .session.wsprabundle directory.",
+                "Keep the source bundle's .session.antennabundle or .session.wsprabundle suffix.",
                 format!("Selected destination: {name}"),
             ),
             ExportSessionError::Copy(error) => copy_error_payload(error),
@@ -268,7 +266,7 @@ fn open_bundle(path: &Path) -> Result<ActiveSession, OpenSessionError> {
     let bundle_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .filter(|name| name.ends_with(BUNDLE_SUFFIX))
+        .filter(|name| bundle_suffix(name).is_some())
         .ok_or_else(|| OpenSessionError::InvalidBundleSelection {
             name: path.file_name().map_or_else(
                 || path.display().to_string(),
@@ -285,10 +283,13 @@ fn suggested_export_name(source: &Path) -> String {
     source
         .file_name()
         .and_then(|name| name.to_str())
-        .and_then(|name| name.strip_suffix(BUNDLE_SUFFIX))
+        .and_then(|name| bundle_suffix(name).map(|suffix| (name, suffix)))
         .map_or_else(
-            || format!("session-copy{BUNDLE_SUFFIX}"),
-            |stem| format!("{stem}-copy{BUNDLE_SUFFIX}"),
+            || format!("session-copy{V2_BUNDLE_SUFFIX}"),
+            |(name, suffix)| {
+                let stem = name.strip_suffix(suffix).expect("matched suffix");
+                format!("{stem}-copy{suffix}")
+            },
         )
 }
 
@@ -296,7 +297,13 @@ fn export_bundle(source: &Path, destination: &Path) -> Result<String, ExportSess
     let bundle_name = destination
         .file_name()
         .and_then(|name| name.to_str())
-        .filter(|name| name.ends_with(BUNDLE_SUFFIX))
+        .filter(|name| {
+            source
+                .file_name()
+                .and_then(|source| source.to_str())
+                .and_then(bundle_suffix)
+                .is_some_and(|suffix| name.ends_with(suffix))
+        })
         .ok_or_else(|| ExportSessionError::InvalidDestination {
             name: destination.file_name().map_or_else(
                 || destination.display().to_string(),
@@ -307,6 +314,12 @@ fn export_bundle(source: &Path, destination: &Path) -> Result<String, ExportSess
 
     BundleStore::new(source).copy_losslessly_to(destination)?;
     Ok(bundle_name)
+}
+
+fn bundle_suffix(name: &str) -> Option<&'static str> {
+    [V2_BUNDLE_SUFFIX, V1_BUNDLE_SUFFIX]
+        .into_iter()
+        .find(|suffix| name.ends_with(suffix))
 }
 
 fn build_active_session(
@@ -443,7 +456,10 @@ pub(crate) async fn export_active_session(
             .set_title("Export an AntennaBench session bundle copy")
             .set_file_name(suggested_export_name(source))
             .set_can_create_directories(true)
-            .add_filter("AntennaBench session bundle", &["wsprabundle"]);
+            .add_filter(
+                "AntennaBench session bundle",
+                &["antennabundle", "wsprabundle"],
+            );
         if let Some(parent) = source.parent() {
             dialog = dialog.set_directory(parent);
         }
