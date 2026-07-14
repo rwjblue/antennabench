@@ -64,9 +64,12 @@ contributing-slot counts; they are not comparative evidence.
 defines the paired descriptive boundary. Analysis partitions uninterrupted
 same-band runs into non-overlapping adjacent two-slot blocks, fixes delta
 orientation from the first two scheduled labels, and distinguishes transmit and
-receive paths. Paired rows remain stratified by band, observation kind, and
-record source; unmatched sides, missing SNR, ambiguous paths, exact duplicates,
-conflicts, invalid blocks, time, and order stay explicit. Repeated rows are
+receive paths. Paired rows remain stratified by band, normalized signal mode,
+observation kind, and record source; unmatched sides, missing or invalid mode,
+missing SNR, ambiguous paths, exact duplicates, conflicts, invalid blocks, time,
+and order stay explicit. Signal mode normalization trims surrounding whitespace
+and folds ASCII letters to uppercase without aliasing distinct mode names.
+Repeated rows are
 reduced to a per-path median before the stratum median so prolific paths do not
 receive extra headline weight. Uncertainty intervals and automated conclusions
 remain deferred.

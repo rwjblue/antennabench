@@ -149,6 +149,7 @@ pub struct ComparisonDiagnostics {
     pub unmatched_right_count: usize,
     pub missing_snr_left_count: usize,
     pub missing_snr_right_count: usize,
+    pub missing_or_invalid_mode_count: usize,
     pub ambiguous_path_count: usize,
     pub exact_duplicate_count: usize,
     pub conflicting_duplicate_group_count: usize,
@@ -204,10 +205,29 @@ pub enum PathDirection {
     Receive,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SignalMode(String);
+
+impl SignalMode {
+    pub fn normalize(value: &str) -> Option<Self> {
+        let value = value.trim();
+        if value.is_empty() || value.chars().any(char::is_control) {
+            return None;
+        }
+        Some(Self(value.to_ascii_uppercase()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ComparisonStratum {
     pub direction: PathDirection,
     pub band: Band,
+    pub mode: SignalMode,
     pub observation_kind: ObservationKind,
     pub source: RecordSource,
 }
@@ -242,6 +262,7 @@ pub struct ComparisonTimelineRow {
     pub usable_observation_count: usize,
     pub excluded_observation_count: usize,
     pub missing_snr_count: usize,
+    pub missing_or_invalid_mode_count: usize,
     pub ambiguous_path_count: usize,
     pub exact_duplicate_count: usize,
     pub conflicting_duplicate_group_count: usize,

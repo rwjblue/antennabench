@@ -10,10 +10,10 @@ use crate::{
     ComparisonAvailability, ComparisonBlock, ComparisonBlockEligibility, ComparisonDiagnostics,
     ComparisonOrder, ComparisonSide, ComparisonStratum, ComparisonTimelineRow, DeltaOrientation,
     PairedComparisonAnalysis, PairedObservationRow, PairedPathSummary, PairedStratumSummary,
-    PathDirection, PathOverlapRow,
+    PathDirection, PathOverlapRow, SignalMode,
 };
 
-type StratumKey = (u8, u8, u8, u8);
+type StratumKey = (u8, u8, String, u8, u8);
 type GroupKey = (StratumKey, usize, String);
 
 pub(crate) fn analyze_paired_comparison(
@@ -104,16 +104,31 @@ pub(crate) fn analyze_paired_comparison(
             Some(label) if label == right_label => ComparisonSide::Right,
             _ => continue,
         };
-        let Some((direction, remote_path)) = path_identity(bundle, classified.observation) else {
+        let path = path_identity(bundle, classified.observation);
+        if path.is_none() {
             diagnostics.ambiguous_path_count += 1;
             if let Some(index) = slot_locations.get(slot_id).copied() {
                 timeline_rows[index].ambiguous_path_count += 1;
             }
+        }
+        let mode = classified
+            .observation
+            .mode
+            .as_deref()
+            .and_then(SignalMode::normalize);
+        if mode.is_none() {
+            diagnostics.missing_or_invalid_mode_count += 1;
+            if let Some(index) = slot_locations.get(slot_id).copied() {
+                timeline_rows[index].missing_or_invalid_mode_count += 1;
+            }
+        }
+        let (Some((direction, remote_path)), Some(mode)) = (path, mode) else {
             continue;
         };
         let stratum = ComparisonStratum {
             direction,
             band: classified.observation.band,
+            mode,
             observation_kind: classified.observation.observation_kind,
             source: classified.observation.meta.source,
         };
@@ -129,7 +144,7 @@ pub(crate) fn analyze_paired_comparison(
     let mut stratum_accumulators = BTreeMap::<StratumKey, StratumAccumulator>::new();
 
     for ((key, block_index, remote_path), mut group) in groups {
-        let stratum = stratum_from_key(key);
+        let stratum = stratum_from_key(&key);
         let block = &blocks[block_index];
         let left = group.left.resolve();
         let right = group.right.resolve();
@@ -151,7 +166,7 @@ pub(crate) fn analyze_paired_comparison(
         let conflict_count = usize::from(left.conflict) + usize::from(right.conflict);
         diagnostics.exact_duplicate_count += duplicate_count;
         diagnostics.conflicting_duplicate_group_count += conflict_count;
-        let accumulator = stratum_accumulators.entry(key).or_default();
+        let accumulator = stratum_accumulators.entry(key.clone()).or_default();
         accumulator.exact_duplicate_count += duplicate_count;
         accumulator.conflicting_duplicate_group_count += conflict_count;
         accumulator.blocks.insert(block_index);
@@ -238,7 +253,7 @@ pub(crate) fn analyze_paired_comparison(
     paired_rows.sort_by(paired_row_cmp);
     let overlap_rows = overlap_accumulators
         .into_iter()
-        .map(|((key, remote_path), row)| row.finish(stratum_from_key(key), remote_path))
+        .map(|((key, remote_path), row)| row.finish(stratum_from_key(&key), remote_path))
         .collect::<Vec<_>>();
     let path_summaries = build_path_summaries(&paired_rows);
     let strata = build_strata(stratum_accumulators, &path_summaries);
@@ -443,6 +458,7 @@ fn timeline_row(
         usable_observation_count: 0,
         excluded_observation_count: 0,
         missing_snr_count: 0,
+        missing_or_invalid_mode_count: 0,
         ambiguous_path_count: 0,
         exact_duplicate_count: 0,
         conflicting_duplicate_group_count: 0,
@@ -653,7 +669,7 @@ fn build_path_summaries(rows: &[PairedObservationRow]) -> Vec<PairedPathSummary>
         .map(|((key, remote_path), mut deltas)| {
             deltas.sort_by(f64::total_cmp);
             PairedPathSummary {
-                stratum: stratum_from_key(key),
+                stratum: stratum_from_key(&key),
                 remote_path,
                 paired_row_count: deltas.len(),
                 median_delta_right_minus_left_db: median(&deltas),
@@ -677,7 +693,7 @@ fn build_strata(
                 .collect::<Vec<_>>();
             path_medians.sort_by(f64::total_cmp);
             PairedStratumSummary {
-                stratum: stratum_from_key(key),
+                stratum: stratum_from_key(&key),
                 paired_row_count: accumulator.deltas.len(),
                 unique_path_count: path_medians.len(),
                 contributing_block_count: accumulator.paired_blocks.len(),
@@ -731,6 +747,7 @@ fn stratum_key(stratum: &ComparisonStratum) -> StratumKey {
             PathDirection::Receive => 1,
         },
         band_rank(stratum.band),
+        stratum.mode.as_str().to_string(),
         match stratum.observation_kind {
             ObservationKind::LocalDecode => 0,
             ObservationKind::PublicReport => 1,
@@ -740,7 +757,7 @@ fn stratum_key(stratum: &ComparisonStratum) -> StratumKey {
     )
 }
 
-fn stratum_from_key(key: StratumKey) -> ComparisonStratum {
+fn stratum_from_key(key: &StratumKey) -> ComparisonStratum {
     ComparisonStratum {
         direction: if key.0 == 0 {
             PathDirection::Transmit
@@ -748,12 +765,13 @@ fn stratum_from_key(key: StratumKey) -> ComparisonStratum {
             PathDirection::Receive
         },
         band: band_from_rank(key.1),
-        observation_kind: match key.2 {
+        mode: SignalMode::normalize(&key.2).expect("stratum keys contain normalized modes"),
+        observation_kind: match key.3 {
             0 => ObservationKind::LocalDecode,
             1 => ObservationKind::PublicReport,
             _ => ObservationKind::ImportedSpot,
         },
-        source: source_from_rank(key.3),
+        source: source_from_rank(key.4),
     }
 }
 

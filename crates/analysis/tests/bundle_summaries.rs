@@ -284,6 +284,7 @@ fn summarizes_the_minimal_whole_station_fixture() {
           "unmatched_right_count": 0,
           "missing_snr_left_count": 0,
           "missing_snr_right_count": 0,
+          "missing_or_invalid_mode_count": 0,
           "ambiguous_path_count": 0,
           "exact_duplicate_count": 0,
           "conflicting_duplicate_group_count": 0,
@@ -339,6 +340,7 @@ fn summarizes_the_minimal_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -357,6 +359,7 @@ fn summarizes_the_minimal_whole_station_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -375,6 +378,7 @@ fn summarizes_the_minimal_whole_station_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -393,6 +397,7 @@ fn summarizes_the_minimal_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -618,6 +623,7 @@ fn summarizes_only_observations_from_the_wsjtx_hardening_fixture() {
           "unmatched_right_count": 0,
           "missing_snr_left_count": 0,
           "missing_snr_right_count": 0,
+          "missing_or_invalid_mode_count": 0,
           "ambiguous_path_count": 0,
           "exact_duplicate_count": 0,
           "conflicting_duplicate_group_count": 0,
@@ -673,6 +679,7 @@ fn summarizes_only_observations_from_the_wsjtx_hardening_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -691,6 +698,7 @@ fn summarizes_only_observations_from_the_wsjtx_hardening_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -709,6 +717,7 @@ fn summarizes_only_observations_from_the_wsjtx_hardening_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0

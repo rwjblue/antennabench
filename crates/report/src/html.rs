@@ -258,6 +258,11 @@ fn render_comparison_diagnostics(out: &mut String, report: &SessionReport) {
         "Missing SNR right",
         diagnostics.missing_snr_right_count,
     );
+    comparison_stat(
+        out,
+        "Missing or invalid mode",
+        diagnostics.missing_or_invalid_mode_count,
+    );
     comparison_stat(out, "Ambiguous paths", diagnostics.ambiguous_path_count);
     comparison_stat(
         out,
@@ -317,6 +322,7 @@ fn render_comparison_timeline(out: &mut String, report: &SessionReport) {
         let invalid = if row.block_eligible { "" } else { " invalid" };
         let issue = if row.excluded_observation_count > 0
             || row.missing_snr_count > 0
+            || row.missing_or_invalid_mode_count > 0
             || row.ambiguous_path_count > 0
             || row.conflicting_duplicate_group_count > 0
         {
@@ -332,7 +338,7 @@ fn render_comparison_timeline(out: &mut String, report: &SessionReport) {
             slot_status(row.status)
         );
     }
-    out.push_str("</div><div class=\"table-wrap\"><table><caption>Data-quality timeline details</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Eligible</th><th scope=\"col\">Sequence</th><th scope=\"col\">Slot</th><th scope=\"col\">Starts</th><th scope=\"col\">Band</th><th scope=\"col\">Actual label</th><th scope=\"col\">Side</th><th scope=\"col\">Status</th><th scope=\"col\">Total</th><th scope=\"col\">Usable</th><th scope=\"col\">Excluded</th><th scope=\"col\">Missing SNR</th><th scope=\"col\">Ambiguous</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
+    out.push_str("</div><div class=\"table-wrap\"><table><caption>Data-quality timeline details</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Eligible</th><th scope=\"col\">Sequence</th><th scope=\"col\">Slot</th><th scope=\"col\">Starts</th><th scope=\"col\">Band</th><th scope=\"col\">Actual label</th><th scope=\"col\">Side</th><th scope=\"col\">Status</th><th scope=\"col\">Total</th><th scope=\"col\">Usable</th><th scope=\"col\">Excluded</th><th scope=\"col\">Missing SNR</th><th scope=\"col\">Missing/invalid mode</th><th scope=\"col\">Ambiguous</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
     for row in &report.comparison.timeline_rows {
         timeline_table_row(out, row);
     }
@@ -340,7 +346,7 @@ fn render_comparison_timeline(out: &mut String, report: &SessionReport) {
 }
 
 fn timeline_table_row(out: &mut String, row: &ComparisonTimelineRow) {
-    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.block_index + 1, yes_no(row.block_eligible), row.sequence_number, escape_html(&row.slot_id), timestamp(row.starts_at), band(row.band), escape_html(row.actual_label.as_deref().unwrap_or("Not recorded")), row.side.map(comparison_side).unwrap_or("Unavailable"), slot_status(row.status), row.total_observation_count, row.usable_observation_count, row.excluded_observation_count, row.missing_snr_count, row.ambiguous_path_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.block_index + 1, yes_no(row.block_eligible), row.sequence_number, escape_html(&row.slot_id), timestamp(row.starts_at), band(row.band), escape_html(row.actual_label.as_deref().unwrap_or("Not recorded")), row.side.map(comparison_side).unwrap_or("Unavailable"), slot_status(row.status), row.total_observation_count, row.usable_observation_count, row.excluded_observation_count, row.missing_snr_count, row.missing_or_invalid_mode_count, row.ambiguous_path_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
 }
 
 fn render_paired_differences(out: &mut String, report: &SessionReport) {
@@ -994,9 +1000,10 @@ fn comparison_order(value: ComparisonOrder) -> &'static str {
 }
 fn comparison_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
     format!(
-        "{} · {} · {} · {}",
+        "{} · {} · {} · {} · {}",
         path_direction(value.direction),
         band(value.band),
+        escape_html(value.mode.as_str()),
         observation_kind(value.observation_kind),
         record_source(value.source)
     )

@@ -147,7 +147,79 @@ fn keeps_missing_unmatched_ambiguous_duplicate_and_conflict_diagnostics_visible(
 }
 
 #[test]
-fn separates_band_direction_kind_and_source_and_is_observation_order_independent() {
+fn separates_signal_modes_and_normalizes_case_and_surrounding_whitespace() {
+    let mut bundle = bundle_with_layout(&["A", "B", "A", "B", "A", "B"]);
+    let mut wspr_left = tx_observation(&bundle, "wspr-left", 0, "K1MODE", Some(-20.0));
+    wspr_left.mode = Some("  wspr ".to_string());
+    let mut wspr_right = tx_observation(&bundle, "wspr-right", 1, "K1MODE", Some(-18.0));
+    wspr_right.mode = Some("WSPR".to_string());
+    let mut cross_mode_left = tx_observation(&bundle, "cw-left-only", 0, "K1MODE", Some(-15.0));
+    cross_mode_left.mode = Some("CW".to_string());
+    let mut cw_left = tx_observation(&bundle, "cw-left", 2, "K1MODE", Some(-17.0));
+    cw_left.mode = Some("cw".to_string());
+    let mut cw_right = tx_observation(&bundle, "cw-right", 3, "K1MODE", Some(-16.0));
+    cw_right.mode = Some(" CW ".to_string());
+    let mut rtty_left = tx_observation(&bundle, "rtty-left", 4, "K1MODE", Some(-14.0));
+    rtty_left.mode = Some("RTTY".to_string());
+    let mut rtty_right = tx_observation(&bundle, "rtty-right", 5, "K1MODE", Some(-13.0));
+    rtty_right.mode = Some("rtty".to_string());
+    bundle.observations = vec![
+        wspr_left,
+        wspr_right,
+        cross_mode_left,
+        cw_left,
+        cw_right,
+        rtty_left,
+        rtty_right,
+    ];
+
+    let forward = summary(bundle.clone()).comparison;
+    bundle.observations.reverse();
+    let reversed = summary(bundle).comparison;
+
+    assert_eq!(forward, reversed);
+    assert_eq!(forward.paired_rows.len(), 3);
+    assert_eq!(forward.diagnostics.unmatched_left_count, 1);
+    assert_eq!(
+        forward
+            .strata
+            .iter()
+            .map(|row| row.stratum.mode.as_str())
+            .collect::<Vec<_>>(),
+        vec!["CW", "RTTY", "WSPR"]
+    );
+    assert!(forward
+        .paired_rows
+        .iter()
+        .all(|row| row.left_observation_id != "cw-left-only"));
+}
+
+#[test]
+fn counts_missing_and_invalid_modes_without_pairing_them() {
+    let mut bundle = bundle_with_layout(&["A", "B"]);
+    let mut missing = tx_observation(&bundle, "missing-mode", 0, "K1MODE", Some(-20.0));
+    missing.mode = None;
+    let mut blank = tx_observation(&bundle, "blank-mode", 1, "K1MODE", Some(-18.0));
+    blank.mode = Some(" \t ".to_string());
+    let mut invalid = tx_observation(&bundle, "invalid-mode", 1, "K2MODE", Some(-17.0));
+    invalid.mode = Some("CW\0RTTY".to_string());
+    bundle.observations = vec![missing, blank, invalid];
+
+    let comparison = summary(bundle).comparison;
+
+    assert_eq!(
+        comparison.availability,
+        ComparisonAvailability::NoMatchedPaths
+    );
+    assert_eq!(comparison.diagnostics.missing_or_invalid_mode_count, 3);
+    assert_eq!(comparison.timeline_rows[0].missing_or_invalid_mode_count, 1);
+    assert_eq!(comparison.timeline_rows[1].missing_or_invalid_mode_count, 2);
+    assert!(comparison.paired_rows.is_empty());
+    assert!(comparison.overlap_rows.is_empty());
+}
+
+#[test]
+fn separates_band_direction_mode_kind_and_source_and_is_observation_order_independent() {
     let mut bundle = bundle_with_layout(&["A", "B", "A", "B"]);
     bundle.schedule.slots[2].band = Band::M40;
     bundle.schedule.slots[3].band = Band::M40;
@@ -171,6 +243,7 @@ fn separates_band_direction_kind_and_source_and_is_observation_order_independent
     assert_eq!(forward.strata.len(), 2);
     assert_eq!(forward.strata[0].stratum.direction, PathDirection::Transmit);
     assert_eq!(forward.strata[0].stratum.band, Band::M20);
+    assert_eq!(forward.strata[0].stratum.mode.as_str(), "WSPR");
     assert_eq!(
         forward.strata[0].stratum.observation_kind,
         ObservationKind::LocalDecode
@@ -178,6 +251,7 @@ fn separates_band_direction_kind_and_source_and_is_observation_order_independent
     assert_eq!(forward.strata[0].stratum.source, RecordSource::WsjtxLog);
     assert_eq!(forward.strata[1].stratum.direction, PathDirection::Receive);
     assert_eq!(forward.strata[1].stratum.band, Band::M40);
+    assert_eq!(forward.strata[1].stratum.mode.as_str(), "WSPR");
     assert_eq!(
         forward.strata[1].stratum.observation_kind,
         ObservationKind::PublicReport

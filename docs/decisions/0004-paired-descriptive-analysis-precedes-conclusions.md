@@ -116,8 +116,12 @@ eligible block:
 - observations whose direction or remote endpoint is ambiguous remain visible
   as evidence but are unavailable for pairing.
 
-Rows are stratified by direction, band, observation kind, and record source.
-They are never pooled across those boundaries. Source normalization or
+Rows are stratified by direction, band, signal mode, observation kind, and
+record source. Signal mode is normalized only by trimming surrounding
+whitespace and folding ASCII letters to uppercase; distinct mode names are not
+aliased. Missing, blank, or control-character-bearing modes are counted and
+remain available to non-comparison evidence, but are unavailable for pairing.
+Rows are never pooled across those boundaries. Source normalization or
 cross-source deduplication requires an explicit adapter contract; apparent
 duplicates must not be counted as independent evidence. Exact duplicates may
 collapse deterministically, while conflicting duplicates are reported and

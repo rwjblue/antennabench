@@ -366,6 +366,7 @@ fn reports_the_minimal_whole_station_fixture() {
           "unmatched_right_count": 0,
           "missing_snr_left_count": 0,
           "missing_snr_right_count": 0,
+          "missing_or_invalid_mode_count": 0,
           "ambiguous_path_count": 0,
           "exact_duplicate_count": 0,
           "conflicting_duplicate_group_count": 0,
@@ -421,6 +422,7 @@ fn reports_the_minimal_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -439,6 +441,7 @@ fn reports_the_minimal_whole_station_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -457,6 +460,7 @@ fn reports_the_minimal_whole_station_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -475,6 +479,7 @@ fn reports_the_minimal_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -911,6 +916,7 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
           "unmatched_right_count": 0,
           "missing_snr_left_count": 0,
           "missing_snr_right_count": 0,
+          "missing_or_invalid_mode_count": 0,
           "ambiguous_path_count": 0,
           "exact_duplicate_count": 0,
           "conflicting_duplicate_group_count": 0,
@@ -966,6 +972,7 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -984,6 +991,7 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -1002,6 +1010,7 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "usable_observation_count": 0,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -1667,6 +1676,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
           "unmatched_right_count": 5,
           "missing_snr_left_count": 1,
           "missing_snr_right_count": 1,
+          "missing_or_invalid_mode_count": 0,
           "ambiguous_path_count": 0,
           "exact_duplicate_count": 0,
           "conflicting_duplicate_group_count": 0,
@@ -1743,6 +1753,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
@@ -1761,6 +1772,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
@@ -1779,6 +1791,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
@@ -1797,6 +1810,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
@@ -1815,6 +1829,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
@@ -1833,6 +1848,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
@@ -1851,6 +1867,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
@@ -1869,6 +1886,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
@@ -1887,6 +1905,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "receive",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },
@@ -1905,6 +1924,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "receive",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },
@@ -1923,6 +1943,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "receive",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },
@@ -1941,6 +1962,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "receive",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },
@@ -1971,6 +1993,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 2,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -1989,6 +2012,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 2,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -2007,6 +2031,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 1,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -2025,6 +2050,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -2043,6 +2069,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 2,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -2061,6 +2088,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 2,
             "excluded_observation_count": 0,
             "missing_snr_count": 0,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -2079,6 +2107,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 0,
             "missing_snr_count": 1,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -2097,6 +2126,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "usable_observation_count": 1,
             "excluded_observation_count": 1,
             "missing_snr_count": 1,
+            "missing_or_invalid_mode_count": 0,
             "ambiguous_path_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0
@@ -2109,6 +2139,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
@@ -2131,6 +2162,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
@@ -2153,6 +2185,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
@@ -2175,6 +2208,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "transmit",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
@@ -2197,6 +2231,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "receive",
               "band": "40m",
+              "mode": "WSPR",
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },
@@ -2219,6 +2254,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "stratum": {
               "direction": "receive",
               "band": "20m",
+              "mode": "WSPR",
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },

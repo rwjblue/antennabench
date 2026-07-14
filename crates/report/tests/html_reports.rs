@@ -292,11 +292,12 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
     for fact in [
         "Delta orientation:",
         "B minus A (right minus left)",
-        "TX path · 20 m · Local decode · WSJT-X log",
+        "TX path · 20 m · WSPR · Local decode · WSJT-X log",
         "Left then right",
         "Right then left",
         "Unmatched left",
         "Missing SNR left",
+        "Missing or invalid mode",
         "Exact duplicates collapsed",
         "Conflicting duplicate groups",
         "Adjacent switched slots reduce elapsed time but do not remove propagation or time confounding.",
@@ -340,8 +341,8 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     assert!(html.contains("Unique paths in stratum"));
     assert!(html.contains("Unique paths with location"));
     assert!(html.contains("Most populated 45° display sector"));
-    assert!(html.contains("TX path · 20 m · Local decode · WSJT-X log"));
-    assert!(html.contains("RX path · 40 m · Public report · WSPRnet"));
+    assert!(html.contains("TX path · 20 m · WSPR · Local decode · WSJT-X log"));
+    assert!(html.contains("RX path · 40 m · WSPR · Public report · WSPRnet"));
     assert!(html.contains("<caption>Observed distance path-context data</caption>"));
     assert!(html.contains("<caption>Observed azimuth path-context data</caption>"));
     assert!(html.contains("Distance and azimuth describe only the remote paths observed"));
