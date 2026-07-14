@@ -1,18 +1,15 @@
 ---
-name: Agent-ready implementation
-about: Define a bounded implementation slice that can be handed directly to an agent
+name: Planned implementation
+about: Preserve a bounded future slice whose blocking dependencies remain open
 title: ""
-labels: "agent-ready, enhancement"
+labels: "enhancement"
 assignees: ""
 ---
 
-Use this template only when every blocking dependency has landed and the issue
-can be handed to an agent immediately. Use the planned implementation template
-when preserving a future contract whose dependencies remain open.
-
 ## Outcome
 
-Describe the concrete result this issue should deliver.
+Describe the concrete result this issue should deliver after its dependencies
+land.
 
 ## Context
 
@@ -27,9 +24,6 @@ The implementation must:
 - Reuse existing public APIs where their semantics already fit.
 - Update maintained documentation when behavior changes.
 - Avoid durable format or schema changes unless explicitly authorized here.
-
-The implementing agent may choose internal file structure, private APIs, and
-test organization consistent with repository conventions.
 
 ## Scope
 
@@ -55,21 +49,22 @@ test organization consistent with repository conventions.
 
 ## Dependencies
 
-- Depends on: None
-- Blocks: None
+- Depends on: Open blocking issue(s)
+- Blocks: Downstream issue(s)
+
+## Readiness transition
+
+Do not apply `agent-ready` until every blocking dependency has landed, the
+contract is still current, and the acceptance criteria remain objectively
+verifiable. The agent that lands the final dependency should reassess this
+issue.
 
 ## Implementation discretion
 
-The agent may decide internal module organization, private types, and test
-decomposition without further approval.
-
-The agent must stop and request direction if a durable schema change, material
-public-behavior expansion, new external authority, or unresolved architectural
-choice becomes necessary.
-
-## References
-
-- Relevant docs, ADRs, APIs, fixtures, and related issues
+Once explicitly handed off, the agent may decide internal module organization,
+private types, and test decomposition without further approval. It must stop
+for material public behavior, durable schema, architecture, or external
+authority expansion.
 
 ## Completion evidence
 

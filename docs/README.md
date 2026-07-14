@@ -10,6 +10,8 @@ plans.
 - [Bundle Format](bundle-format.md): session bundle files, records, and
   validation rules.
 - [Development](development.md): local workflow, tests, and repo conventions.
+- [Work Tracking](work-tracking.md): how milestones, tracking issues, labels,
+  dependencies, human handoffs, and completion evidence fit together.
 - [Roadmap](roadmap.md): current, next, and later work.
 - [Decisions](decisions/): short records of project decisions that should remain
   easy to find.
@@ -17,8 +19,11 @@ plans.
 ## Work Tracking
 
 The roadmap stays intentionally high-level. GitHub Issues are the durable source
-of truth for unfinished work and open implementation decisions. Agent-ready
-implementation and decision templates live under `.github/ISSUE_TEMPLATE/`.
+of truth for unfinished work and open implementation decisions. Templates for
+planned, agent-ready, tracking, decision, and human-validation work live under
+`.github/ISSUE_TEMPLATE/`.
+See [Work Tracking](work-tracking.md) for the human-facing issue lifecycle,
+milestone map, label meanings, and useful backlog queries.
 
 Detailed agent plans under `docs/superpowers/` may elaborate on an approved
 issue while work is active, but they are ignored scratch artifacts and must not

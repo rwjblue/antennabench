@@ -21,12 +21,17 @@ GitHub Issues are the durable source of truth for unfinished work and open
 implementation decisions. The roadmap describes direction; issues define
 focused outcomes, scope, non-goals, and acceptance criteria.
 
+[Work Tracking](work-tracking.md) is the maintained human-facing guide to
+milestones, tracking issues, labels, dependencies, human-required work, useful
+queries, and completion evidence. This section records the agent execution
+rules.
+
 An issue is agent-ready when its outcome is unambiguous, blocking decisions are
-resolved or explicitly delegated, dependencies are identified, and its
-acceptance criteria are objectively verifiable. The `agent-ready` label means
-the issue can be handed to an agent; it does not authorize implementation by
-itself. Explicitly instructing an agent to implement the issue approves that
-issue's scope.
+resolved or explicitly delegated, every blocking dependency has landed, and
+its acceptance criteria are objectively verifiable. The `agent-ready` label
+means the issue can be handed to an agent immediately; it does not authorize
+implementation by itself. Explicitly instructing an agent to implement the
+issue approves that issue's scope.
 
 Agents may create ignored detailed plans while executing an approved issue. A
 local plan must not be the only record of unfinished work. Material expansion
@@ -46,12 +51,19 @@ as complete.
 Before closing an implementation issue, land the work and record the delivered
 behavior, Jujutsu change or commit, verification results, documentation updates,
 and any follow-up issues discovered. The agent should close the focused issue
-and update any parent tracking issue. If work is only committed locally, the
-issue remains open.
+and update any parent tracking issue. It should then review the dependent open
+issues and apply `agent-ready` to newly executable work. If work is only
+committed locally, the issue remains open and does not satisfy a remote
+dependency.
 
-Use the templates under `.github/ISSUE_TEMPLATE/` for agent-ready implementation
-and decision work. Implementation issues begin with `agent-ready` and
-`enhancement`; decision tasks begin with `agent-ready` and `decision`.
+Use the templates under `.github/ISSUE_TEMPLATE/`. Planned implementation
+issues begin with `enhancement` only; apply `agent-ready` after their blocking
+dependencies land. Agent-ready implementation issues begin with `agent-ready`
+and `enhancement`; agent-ready technical decisions begin with `agent-ready` and
+`decision`. Product/owner decisions, tracking issues, and human-validation work
+deliberately do not begin agent-ready. `human-required` means an agent cannot
+satisfy the issue's complete outcome without owner action, credentials, human
+judgment, or real participant evidence.
 
 ## Rust Conventions
 

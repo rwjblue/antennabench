@@ -1,10 +1,14 @@
 ---
-name: Implementation decision
-about: Resolve a choice that materially affects an implementation slice
+name: Agent-ready technical decision
+about: Hand a bounded technical choice directly to an implementation agent
 title: "Decision: "
 labels: "agent-ready, decision"
 assignees: ""
 ---
+
+Use this template only when every blocking dependency has landed and an agent
+may resolve the choice now. Use the product/owner decision template when the
+selection itself requires human judgment or authority.
 
 ## Decision needed
 
