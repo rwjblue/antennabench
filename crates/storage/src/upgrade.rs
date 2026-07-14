@@ -21,7 +21,7 @@ use super::{
         copy_bounded_file, inventory_attachment_tree, inventory_complete_tree, read_bounded,
         ResourceOperation, ResourceStage,
     },
-    v2::{checkpoint_for_bytes, serialize_json, serialize_jsonl, sha256_hex},
+    v2::{checkpoint_for_bytes, encode_lower_hex, serialize_json, serialize_jsonl, sha256_hex},
     BundleStore, BundleStoreError,
 };
 
@@ -683,7 +683,7 @@ fn snapshot_tree(store: &BundleStore) -> Result<Vec<(PathBuf, String)>, BundleUp
             path.strip_prefix(store.root())
                 .expect("inventoried below root")
                 .to_path_buf(),
-            format!("{:x}", hasher.finalize()),
+            encode_lower_hex(hasher.finalize()),
         ));
     }
     output.sort_by(|left, right| left.0.cmp(&right.0));
