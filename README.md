@@ -26,7 +26,7 @@ Implemented:
   `wsjtx.jsonl` preservation, and local decode observation conversion.
 - Conservative in-memory A/B evidence summaries with observation eligibility,
   exclusion reasons, per-antenna/band/slot counts, SNR descriptive statistics,
-  and insufficient/weak/moderate evidence-quality labels.
+  and insufficient/weak/moderate evidence-coverage labels.
 - Deterministic, in-memory report data derived from one bundle, with session
   context, conservative evidence sections, typed notices, and concrete
   renderer-neutral rows for antenna SNR, band evidence, and slot evidence.

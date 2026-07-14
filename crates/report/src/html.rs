@@ -189,8 +189,9 @@ fn render_overall(out: &mut String, report: &SessionReport) {
     out.push_str("<section class=\"panel\" aria-labelledby=\"evidence-title\"><h2 id=\"evidence-title\">Evidence overview</h2>");
     write_html!(
         out,
-        "<p>Evidence quality: <span class=\"badge\">{}</span></p>",
-        evidence_quality(report.evidence.evidence_quality)
+        "<p>Evidence coverage: <span class=\"badge\">{}</span></p>\
+<p class=\"muted\">Coverage reflects usable observations and contributing slots; it is not evidence that one antenna is better.</p>",
+        evidence_coverage(report.evidence.evidence_quality)
     );
     evidence_summary(out, &report.evidence.overall);
     out.push_str("</section>");
@@ -202,7 +203,7 @@ fn render_antenna_section(out: &mut String, report: &SessionReport) {
     if report.evidence.antennas.is_empty() {
         out.push_str("<p class=\"empty\">No per-antenna evidence is available.</p>");
     } else {
-        out.push_str("<div class=\"table-wrap\"><table><caption>Evidence by antenna</caption><thead><tr><th scope=\"col\">Antenna</th><th scope=\"col\">Quality</th><th scope=\"col\">Contributing slots</th><th scope=\"col\">Counts</th><th scope=\"col\">Usable kinds</th><th scope=\"col\">Exclusions</th><th scope=\"col\">SNR</th></tr></thead><tbody>");
+        out.push_str("<div class=\"table-wrap\"><table><caption>Evidence by antenna</caption><thead><tr><th scope=\"col\">Antenna</th><th scope=\"col\">Coverage</th><th scope=\"col\">Contributing slots</th><th scope=\"col\">Counts</th><th scope=\"col\">Usable kinds</th><th scope=\"col\">Exclusions</th><th scope=\"col\">SNR</th></tr></thead><tbody>");
         for antenna in &report.evidence.antennas {
             evidence_row(out, antenna);
         }
@@ -358,7 +359,7 @@ fn evidence_row(out: &mut String, row: &AntennaEvidenceSection) {
         out,
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
         escape_html(&row.antenna_label),
-        evidence_quality(row.evidence_quality),
+        evidence_coverage(row.evidence_quality),
         row.contributing_slot_count,
         counts_text(row.evidence.observation_counts),
         kinds_text(row.evidence.usable_observation_kinds),
@@ -530,7 +531,7 @@ fn session_goal(value: SessionGoal) -> &'static str {
         SessionGoal::SingleAntennaProfiling => "Single-antenna profiling",
     }
 }
-fn evidence_quality(value: EvidenceQuality) -> &'static str {
+fn evidence_coverage(value: EvidenceQuality) -> &'static str {
     match value {
         EvidenceQuality::Insufficient => "Insufficient",
         EvidenceQuality::Weak => "Weak",

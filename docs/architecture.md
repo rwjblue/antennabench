@@ -55,7 +55,7 @@ The current storage API exposes three read modes:
 Analysis accepts normalized bundle contents, validates them without mutation,
 and reuses core alignment to derive slot status and evidence eligibility. It
 returns observation counts, exclusions, per-antenna/band/slot evidence, SNR
-descriptive statistics, and conservative evidence-quality labels. It does not
+descriptive statistics, and conservative evidence-coverage labels. It does not
 select a winner or perform effect-size, confidence, or significance analysis.
 Those labels measure descriptive evidence coverage from usable-observation and
 contributing-slot counts; they are not comparative evidence.

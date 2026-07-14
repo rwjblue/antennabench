@@ -146,6 +146,31 @@ fn renders_empty_and_unavailable_data_as_explicit_states() {
     assert!(!html.contains("Infinity"));
 }
 
+#[test]
+fn renders_every_evidence_coverage_value_with_non_comparative_explanation() {
+    for (coverage, label) in [
+        (EvidenceQuality::Insufficient, "Insufficient"),
+        (EvidenceQuality::Weak, "Weak"),
+        (EvidenceQuality::Moderate, "Moderate"),
+    ] {
+        let mut report = canonical_report();
+        report.evidence.evidence_quality = coverage;
+        report.evidence.antennas[0].evidence_quality = coverage;
+
+        let html = render_standalone_html(&report);
+
+        assert!(html.contains(&format!(
+            "Evidence coverage: <span class=\"badge\">{label}</span>"
+        )));
+        assert!(html.contains(&format!("<td>{label}</td>")));
+        assert!(html.contains(
+            "Coverage reflects usable observations and contributing slots; it is not evidence that one antenna is better."
+        ));
+        assert!(!html.contains("Evidence quality"));
+        assert!(!html.contains("<th scope=\"col\">Quality</th>"));
+    }
+}
+
 fn canonical_report() -> SessionReport {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/session-bundles/canonical-sample-report.session.wsprabundle");

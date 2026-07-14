@@ -15,7 +15,7 @@ The current implementation focus is the bundle-first Rust foundation:
 - live WSJT-X schema 2/3 UDP heartbeat, status, and WSPR decode ingestion with
   auditable raw datagrams and conservative observation production
 - in-memory conservative A/B summaries with descriptive SNR statistics and
-  insufficient/weak/moderate evidence-quality labels
+  insufficient/weak/moderate evidence-coverage labels
 - deterministic, renderer-neutral report data with session context,
   conservative evidence sections, typed notices, and concrete chart-ready rows
 - deterministic standalone local HTML rendering with embedded visualizations,
