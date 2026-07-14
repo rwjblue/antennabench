@@ -157,6 +157,17 @@ The uploaded bundle remains the evidence input. Normalized copies, metadata,
 report pages, charts, and discovery indexes are derived artifacts. Architecture,
 storage, validation, lifecycle, cost, and abuse-control choices follow
 [ADR 0013](decisions/0013-use-an-optional-static-hosted-sharing-adapter.md).
-Authentication, callsign claims, ownership, visibility defaults, raw-download
-exposure, and moderation remain deliberately unsettled and tracked by
-[#12](https://github.com/rwjblue/antennabench/issues/12).
+Identity and publishing policy follow
+[ADR 0014](decisions/0014-require-account-owned-private-to-unlisted-publishing.md).
+Every user upload requires one verified-email account owner and begins private;
+publication is an explicit previewed transition to a non-discoverable unlisted
+URL. Callsigns remain unverified report content and accepted raw archives remain
+private with no hosted download in the first product.
+
+The installed application and website are complete independent clients of the
+same hosted account and report lifecycle. Either can enroll, upload, preview,
+publish, unpublish, and delete without requiring the other. Desktop enrollment
+uses an in-app email code and stores its revocable session through a
+cross-platform credential abstraction owned by Rust; the web client also
+supports passkeys. None of this identity state enters a session bundle or
+changes account-free offline behavior.

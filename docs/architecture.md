@@ -317,9 +317,23 @@ transaction.
 
 [ADR 0013](decisions/0013-use-an-optional-static-hosted-sharing-adapter.md)
 defines the platform, profile, lifecycle, cost, and verification boundary.
-Identity, authorization, visibility, raw download, and moderation remain
-deferred to
-[#12](https://github.com/rwjblue/antennabench/issues/12).
+[ADR 0014](decisions/0014-require-account-owned-private-to-unlisted-publishing.md)
+defines the identity and policy boundary. Every upload is owned by one
+verified-email account and begins private. Desktop and web clients share the
+same account and report service while remaining independently complete.
+
+Web sessions use narrow secure cookies. Desktop enrollment and recovery occur
+inside the application with email codes; Rust stores a separately revocable
+bearer session through a macOS, Windows, or Linux platform credential-store
+adapter and performs authenticated hosted requests. The webview receives no
+credential or general network authority. A missing or expired hosted session
+never affects local bundle operations.
+
+Only an explicit previewed transition creates immutable unlisted HTML in the
+public bucket. Callsigns have no authorization meaning, raw accepted archives
+remain private without an initial download endpoint, and owner or moderator
+lifecycle actions pass through the authenticated Worker boundary. Unpublishing
+retires the public URL permanently; republishing creates a new immutable URL.
 
 ## Live WSJT-X Boundary
 
