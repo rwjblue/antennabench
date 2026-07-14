@@ -6,4 +6,4 @@
 set -euo pipefail
 
 cd apps/desktop
-exec cargo tauri dev
+exec cargo-tauri dev

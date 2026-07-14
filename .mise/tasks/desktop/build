@@ -5,4 +5,4 @@
 set -euo pipefail
 
 cd apps/desktop
-cargo tauri build --debug --no-bundle
+cargo-tauri build --debug --no-bundle
