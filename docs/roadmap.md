@@ -83,8 +83,12 @@ Later tracks:
   ([#26](https://github.com/rwjblue/antennabench/issues/26)).
 - Optional rig observation or control
   ([#14](https://github.com/rwjblue/antennabench/issues/14)).
-- Public spot source and polling integration
-  ([#13](https://github.com/rwjblue/antennabench/issues/13)).
+- Import-first WSPR public reports, followed by live polling only after source
+  access and usage terms are authorized
+  ([Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
+  [#84](https://github.com/rwjblue/antennabench/issues/84)).
+- Import-first RBN transmit evidence and its provider-specific experiment
+  workflow ([#31](https://github.com/rwjblue/antennabench/issues/31)).
 - Safe hosted report viewing, upload validation, identity, and publishing
   ([#10](https://github.com/rwjblue/antennabench/issues/10)).
 - Native WSPR or mobile-specific operation.
