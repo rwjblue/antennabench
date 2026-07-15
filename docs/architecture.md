@@ -382,15 +382,15 @@ The durable boundaries are:
   and no rig adapter.
 - Public-spot and propagation sources preserve provenance and raw or near-raw
   inputs before normalizing supported values into bundle records. The first
-  WSPR public-spot boundary is a deterministic import of a bounded WSPR.live
-  ClickHouse JSON result supplied by the operator. It performs no hidden
-  network access, preserves the exact response as attachment evidence, and
-  emits TX `ImportedSpot` observations only after repeating callsign, UTC
-  window, band, and WSPR-mode filters. Direct polling remains deferred until
-  source access and usage terms clearly authorize the desktop workflow; see
-  [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md)
-  and implementation issue
-  [#84](https://github.com/rwjblue/antennabench/issues/84).
+  WSPR public-spot boundary preserves each bounded WSPR.live ClickHouse JSON
+  response as exact attachment evidence and emits TX `ImportedSpot`
+  observations only after repeating callsign, UTC-window, band, and WSPR-mode
+  filters. Manual file import is the offline/recovery path; an operator-opted-in
+  HTTPS client reuses the same parser for automatic acquisition. Neither path
+  makes public reports a session prerequisite; see
+  [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
+  [#84](https://github.com/rwjblue/antennabench/issues/84), and
+  [#85](https://github.com/rwjblue/antennabench/issues/85).
 - `crates/propagation` implements the first optional NOAA/NWS SWPC boundary. It
   selects observed F10.7 and provisional `estimated_kp` from two fixed endpoints,
   emits separate sparse schema-version-1 records, preserves the selected source
@@ -403,8 +403,8 @@ The durable boundaries are:
 - Local stores, disposable indexes, and publishers consume the session bundle;
   they do not replace it as the evidence source of truth.
 
-These seams describe responsibilities. The selected import-first WSPR
-public-spot boundary is recorded by
+These seams describe responsibilities. The selected WSPR.live import and
+opt-in automatic-acquisition boundary is recorded by
 [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
 and the first optional rig-control milestone is tracked by
 [#14](https://github.com/rwjblue/antennabench/issues/14).

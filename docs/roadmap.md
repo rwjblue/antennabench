@@ -93,10 +93,9 @@ Later tracks:
   ([#26](https://github.com/rwjblue/antennabench/issues/26)).
 - Optional rig observation or control
   ([#14](https://github.com/rwjblue/antennabench/issues/14)).
-- Import-first WSPR public reports, followed by live polling only after source
-  access and usage terms are authorized
+- Opt-in automatic WSPR.live public-report acquisition reusing the shipped
+  offline importer and exact-evidence boundary
   ([Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
-  [#84](https://github.com/rwjblue/antennabench/issues/84),
   [#85](https://github.com/rwjblue/antennabench/issues/85)).
 - Import-first RBN transmit evidence and its provider-specific experiment
   workflow ([#31](https://github.com/rwjblue/antennabench/issues/31)).

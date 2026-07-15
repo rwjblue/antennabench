@@ -99,11 +99,11 @@ destination containing referenced attachment bytes; `write_attachment()` and
 `read_attachment()` expose the same verified content-addressed store.
 
 The selected first WSPR public-spot boundary uses these generic records rather
-than adding another provider-specific stream. A bounded operator-supplied
-WSPR.live ClickHouse JSON response is retained as an exact attachment; row
-records preserve near-raw values and link accepted TX `ImportedSpot`
-observations. Callsign, UTC window, band, and WSPR mode are repeated during
-import, and missing public reports remain missing evidence. See
+than adding another provider-specific stream. A bounded operator-supplied or
+automatically acquired WSPR.live ClickHouse JSON response is retained as an
+exact attachment; row records preserve near-raw values and link accepted TX
+`ImportedSpot` observations. Callsign, UTC window, band, and WSPR mode are
+repeated in both paths, and missing public reports remain missing evidence. See
 [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md).
 
 ## Explicit V1 Upgrade

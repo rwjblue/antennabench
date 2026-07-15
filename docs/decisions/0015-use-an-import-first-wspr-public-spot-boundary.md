@@ -1,4 +1,4 @@
-# 0015: Use An Import-First WSPR Public-Spot Boundary
+# 0015: Use WSPR.live With Import-First Evidence And Opt-In Acquisition
 
 Date: 2026-07-14
 
@@ -6,41 +6,43 @@ Amended: 2026-07-15
 
 ## Decision
 
-AntennaBench will introduce transmit-path WSPR public reports through a
-deterministic file importer before it adds live public-spot polling. The first
-source-specific input is a bounded WSPR.live ClickHouse `FORMAT JSON` result
-document supplied by the operator. Parsing and normalization perform no hidden
-network access.
+AntennaBench selects WSPR.live's documented, read-only ClickHouse HTTPS
+interface as its first automatic source of transmit-path WSPR public reports.
+The deterministic `FORMAT JSON` importer shipped first in
+[#84](https://github.com/rwjblue/antennabench/issues/84), establishing exact
+response preservation, filtering, normalization, replay, atomic persistence,
+and reporting without network availability. The automatic acquisition in
+[#85](https://github.com/rwjblue/antennabench/issues/85) reuses that complete
+evidence boundary; it does not introduce a second parser or normalization path.
 
-This decision does not authorize AntennaBench to query WSPR.live in production.
-The service permits personal research and projects only when results remain
-freely accessible, and it prohibits commercial or profit-oriented use. Those
-terms do not clearly cover a generally distributed Apache-licensed desktop app,
-private local reports, or every downstream use that the license permits. A live
-WSPR.live transport therefore requires written clarification from its operator
-covering installed applications, retained local evidence, private reports,
-attribution, and commercial-capable distribution.
+WSPR.live permits use for personal research and projects whose results remain
+freely accessible and prohibits commercial or profit-oriented use. The
+project's intended use is local, noncommercial amateur-radio research:
+AntennaBench is freely available, does not gate or sell WSPR.live data or
+derived results, and identifies and attributes the service. The free-results
+condition prevents turning the volunteer data service into a gated product; it
+does not require an operator to publish a private local research artifact.
 
-## 2026-07-15 Usage Determination And Automatic Follow-Up
+Apache-2.0 permits downstream commercial use of AntennaBench, but that does not
+make this project's use of WSPR.live commercial or transfer permission to use a
+third-party service outside its terms. Downstream users remain responsible for
+their own service use. Voluntary project donations do not sell WSPR.live access
+or results and do not change this determination. Revisit the decision before
+the project sells access or derived results, operates the workflow for profit,
+materially changes redistribution, or if WSPR.live changes its terms.
 
-The project owner has determined that AntennaBench's intended WSPR.live use is
-within the service's published terms: it is an explicitly initiated,
-noncommercial amateur-radio research workflow; AntennaBench and its research
-functionality are freely available; neither the query service nor derived
-results are sold; and the product identifies and attributes WSPR.live. This is
-the project's usage determination, not a representation that the WSPR.live
-operator granted terms beyond those currently published. It must be revisited
-before any commercial or profit-oriented use, paid result access, materially
-different redistribution, or change to the published source terms.
+Separate written permission is not a prerequisite for this intended use.
+Contacting the WSPR.live operator remains worthwhile coordination: explain the
+bounded client, confirm that its traffic pattern is welcome, and invite any
+preferred attribution or operational guidance. That outreach is not a release
+gate.
 
-That determination resolves the product-owner authorization gate for the
-bounded read-only transport tracked by
-[#85](https://github.com/rwjblue/antennabench/issues/85). The original
-import-first sequencing remains useful and complete: exact response handling,
-normalization, replay, atomic persistence, reporting, and manual recovery are
-established before network orchestration is added.
-For this narrowly defined workflow, the amendment supersedes the earlier
-requirement for separate written clarification from the service operator.
+Automatic acquisition is opt-in. A session does not query WSPR.live until the
+operator enables public-spot acquisition after seeing the source attribution,
+usage terms, requested callsign/time/band data, and unknown-completeness
+warning. Once enabled, ordinary antenna confirmations authorize and trigger
+the bounded acquisitions; the operator does not repeat consent or click a
+separate fetch action for each segment.
 
 WSPR.live documents that its scraper checks WSPRnet every few minutes, while
 its exporter describes real-time rows as delayed by a few minutes. It also
@@ -65,7 +67,7 @@ and trigger, without a second fetch/import action:
 Five minutes is a conservative product grace period, not a source guarantee.
 Reports continue to label WSPR.live completeness unknown. Manual JSON import
 remains available as an offline and recovery escape hatch rather than the
-normal workflow.
+normal connected workflow.
 
 AntennaBench will not scrape WSPRnet's HTML database pages. WSPRnet is the
 authoritative upload destination used by WSJT-X, but its anonymous public
@@ -76,9 +78,10 @@ interfaces are human-oriented recent-result pages and very large monthly
 archives. Direct WSPRnet acquisition may be reconsidered if its administrators
 document and grant an appropriate API contract.
 
-Network polling is therefore deliberately `none` in the first slice. Sessions
-remain complete local workflows without spot import, and failure or omission of
-public reports never stops the conductor.
+Network access remains optional. Sessions are complete local workflows when
+automatic acquisition is disabled, offline, or unavailable. Failure or
+omission of public reports never invalidates local evidence or prevents an
+explicit end-without-spots recovery.
 
 ## What WSJT-X Uploads
 
@@ -135,37 +138,41 @@ filters. Its scraper normally imports new WSPRnet rows within a few minutes and
 later reconciles missed or delayed rows. The service currently limits clients
 to 20 requests per minute and may change limits to protect shared capacity.
 
-Technically, this is the best candidate for a later live transport. Operational
-and licensing terms prevent selecting that transport today: availability and
-stability are explicitly not guaranteed, commercial/profit-oriented use is
-forbidden, and the requirement that results remain freely accessible is
-ambiguous for private local reports. AntennaBench will not turn those
-constraints into hidden application assumptions.
+Disposable ten-minute checks on 2026-07-15 returned 4,767 WSPR-2 rows on 40 m
+and 9,301 on 20 m. The newest rows were respectively 83 and 203 seconds behind
+the database clock. This confirmed practical near-real-time availability for
+the selected query shape; it is operational evidence, not a source guarantee.
 
-### Import First
+This is the selected automatic source. Its published research use matches the
+intended local workflow, and its application examples expressly support
+read-only clients. Availability and correctness are not guaranteed, so the
+integration is optional, bounded, attributed, and explicit about partial
+evidence rather than treating the service as a session dependency.
+
+### Import-First Evidence Boundary
 
 Import-first is selected because it separates three responsibilities:
 
-1. the operator obtains a bounded result under terms and authority applicable
-   to that operator;
-2. a deterministic adapter parses and normalizes exact supplied bytes; and
-3. later network orchestration can reuse the same parser only after its source
-   and polling contract is authorized.
+1. a deterministic adapter parses and normalizes exact response bytes whether
+   they came from a selected file or the bounded HTTPS client;
+2. durable evidence behavior is testable without a network service; and
+3. network orchestration remains replaceable and cannot reinterpret source
+   rows differently from offline recovery.
 
 The first format is WSPR.live's documented ClickHouse `FORMAT JSON` response,
 not an AntennaBench-invented spot interchange format. This keeps the file useful
-with existing WSPR.live query/export tools and exercises the same response
-shape a future HTTPS transport would receive.
+with existing WSPR.live query/export tools and gives file import and HTTPS
+acquisition exactly the same response shape.
 
-## Import Contract
+## Shared Response Contract
 
-The import operation accepts one complete JSON response plus explicit operator
-inputs. It records:
+The shared acquisition operation accepts one complete JSON response plus an
+explicit typed query scope. It records:
 
 - normalized session transmitter callsign;
 - half-open UTC source window `[window_start, window_end)`;
 - selected WSPR bands and WSPR-2 mode;
-- import capture time and source locator when supplied;
+- acquisition capture time and source locator when supplied;
 - the exact result bytes as a content-addressed attachment;
 - parser/adapter version and the expected column contract; and
 - accepted, malformed, filtered, unsupported, duplicate, and conflicting
@@ -180,35 +187,36 @@ The expected query projection is:
 The source query should constrain `tx_sign` to the exact normalized session
 callsign, constrain `time` to the explicit half-open window, constrain `band`
 to the session's supported bands, constrain `code` to WSPR-2, order by
-`time, id`, and use `FORMAT JSON`. The importer repeats every safety filter; it
+`time, id`, and use `FORMAT JSON`. The adapter repeats every safety filter; it
 never trusts the query description or filename to have selected correctly.
 
-The normal import window is the schedule's earliest slot start through latest
+The normal source window is the schedule's earliest slot start through latest
 slot end. A caller may deliberately supply a wider bounded source result, but
 rows outside the schedule window remain filtered evidence and cannot become
 observations. Source timestamps identify the WSPR receive period and continue
-through the existing slot-alignment and guard-time policy; import time is not
-used as the observation time.
+through the existing slot-alignment and guard-time policy; acquisition time is
+not used as the observation time.
 
 Structural JSON failure, missing required columns, duplicate column names, an
 unsupported response shape, or a resource-limit breach fails the complete
-import. Individual bounded rows with invalid values remain auditable adapter
-dispositions and do not become normalized observations.
+acquisition. Individual bounded rows with invalid values remain auditable
+adapter dispositions and do not become normalized observations.
 
 ## Provenance And Normalization
 
-Imported evidence uses schema-v2 provider-neutral provenance:
+WSPR.live evidence uses schema-v2 provider-neutral provenance:
 
 - provider: `wspr-live`;
 - source: `wsprnet-spots-mirror`;
-- acquisition channel: `file-import`;
+- acquisition channel: `file-import` for a selected file or `https-query` for the
+  automatic client;
 - adapter: `antennabench.wspr-live-json`; and
 - the AntennaBench adapter version.
 
-The import summary references the exact response attachment. Row-level adapter
-records preserve each selected near-raw object and link to any normalized
-observation. This avoids one oversized summary record while retaining exact
-reproduction input.
+The acquisition summary references the exact response attachment. Row-level
+adapter records preserve each selected near-raw object and link to any
+normalized observation. This avoids one oversized summary record while
+retaining exact reproduction input.
 
 An accepted row becomes an `ImportedSpot` observation with:
 
@@ -220,14 +228,14 @@ An accepted row becomes an `ImportedSpot` observation with:
 - dBm converted to watts using the existing WSPR conversion;
 - provider distance and transmitter-to-receiver azimuth when valid; and
 - upstream WSPRnet spot ID, WSPR.live mode code, receiver software version,
-  import capture time, and near-raw values retained as adapter evidence.
+  acquisition capture time, and near-raw values retained as adapter evidence.
 
 The provider's `id` is the primary replay identity within this source. Repeated
-imports of an identical ID and row are duplicates and do not append a second
-observation. Reuse of one ID with conflicting semantic values is retained as a
-conflict and produces no observation. AntennaBench does not deduplicate across
-WSPR.live, a future direct WSPRnet source, RBN, or another provider merely
-because callsign, time, and band happen to match.
+acquisitions of an identical ID and row are duplicates and do not append a
+second observation. Reuse of one ID with conflicting semantic values is
+retained as a conflict and produces no observation. AntennaBench does not
+deduplicate across WSPR.live, a future direct WSPRnet source, RBN, or another
+provider merely because callsign, time, and band happen to match.
 
 WSPR, RBN CW, RBN RTTY, and other provider/mode strata remain separate. Missing
 public reports are missing evidence, never zero-SNR observations. Provider
@@ -237,35 +245,36 @@ recomputed or inferred when absent or invalid.
 ## Freshness, Completeness, And Errors
 
 A file import has no polling interval, retries, backoff, conditional requests,
-or cache revalidation. The exact file attachment is its immutable cache. A
-failed import does not mutate the bundle.
+or cache revalidation. Automatic acquisition follows the five-minute grace,
+cumulative-overlap, coalescing, single-flight, and ten-second minimum interval
+defined above. It performs no automatic transport retry; later opted-in
+acquisitions overlap earlier windows, while a final failure offers explicit
+retry. The exact complete response attachment is the immutable cache in both
+paths. A failed acquisition does not mutate the bundle.
 
-The report presents the import capture time, source window, accepted count, and
-all disposition counts. It labels completeness as unknown because WSPR.live
+The report presents the acquisition capture time, source window, accepted
+count, and all disposition counts. It labels completeness as unknown because WSPR.live
 documents scrape lag, later reconciliation, duplicates, false spots, outages,
-and no availability guarantee. Importing a later result may add newly arrived
+and no availability guarantee. Acquiring a later result may add newly arrived
 provider IDs, but it does not rewrite earlier evidence or imply that the final
 set is complete.
 
-If a future authorized live transport is added, its issue must define a bounded
-poll cadence below the provider's published rate, overlap/window watermarks for
-late rows, retry and `Retry-After` behavior, stop/finalization timing, network
-timeouts, source-error adapter records, and explicit partial/stale UI. This ADR
-does not silently pre-authorize those network choices.
-
 ## Offline And Privacy Behavior
 
-Public-spot import is optional. Setup, conduction, local WSJT-X ingestion,
-analysis, reports, and export work without it. The desktop never uploads the
-session bundle or local operator events as part of import.
+Public-spot acquisition is optional. Setup, conduction, local WSJT-X ingestion,
+analysis, reports, and export work without it. Automatic acquisition is off
+until the operator opts in for the session. The desktop never uploads the
+session bundle, local observations, operator notes, antenna labels, or grid.
+The request contains only the public transmitter callsign, bounded UTC window,
+selected bands, and fixed WSPR-2 mode needed to find public reports.
 
 The source callsigns, grids, signal reports, and times are already publicly
 reported data, but their inclusion in a session still receives source
 attribution and remains under the operator's control. AntennaBench does not
-republish imported rows automatically. The import UI must identify WSPR.live as
-a volunteer WSPRnet mirror, link its current usage terms, and require the
-operator to confirm that the supplied file may be used for the intended
-purpose.
+republish acquired rows automatically. The opt-in UI identifies WSPR.live as a
+volunteer WSPRnet mirror, links its current usage terms, explains the bounded
+request and attribution, and states that completeness is unknown. Manual file
+import remains available without enabling automatic network access.
 
 ## Test Policy
 
@@ -282,23 +291,33 @@ Contract coverage includes:
 - exact replay, conflicting provider IDs, and observation-link integrity;
 - missing grids/location/version without inference;
 - resource limits and cancellation;
-- exact attachment digest/round-trip and lossless bundle export; and
-- stable partial/completeness and attribution presentation.
+- exact attachment digest/round-trip and lossless bundle export;
+- stable partial/completeness and attribution presentation;
+- no request before session opt-in and no per-segment consent prompt afterward;
+- typed SQL/URL construction, every band mapping, and injection rejection;
+- grace, cumulative overlap, coalescing, restart, and finalizing transitions;
+- HTTP status, timeout, cancellation, and response-size failures without
+  mutation; and
+- identical normalization with distinct `file-import` and `https-query`
+  provenance.
 
-A disposable, minimal query may be run manually against WSPR.live when its
-current terms authorize that check. Its data is not retained in the repository
-and its success is not a release or CI prerequisite.
+A disposable, minimal query may be run manually against WSPR.live for an
+operational smoke check. Its data is not retained in the repository and its
+success is not a release or CI prerequisite.
 
 ## Consequences
 
 - AntennaBench gains a useful TX public-report boundary without making network
   availability part of a session.
-- The parser and normalization contract can be reused by a later authorized
+- The landed parser and normalization contract is reused by the opt-in
   WSPR.live HTTPS adapter.
-- Near-real-time automatic fetching remains unavailable in the first slice.
-- Operators must obtain and retain authority for imported WSPR.live results.
+- Normal connected operation acquires public reports automatically after the
+  documented ingestion grace period; manual import remains the offline and
+  recovery path.
+- AntennaBench attributes WSPR.live, links its terms, bounds every query, and
+  does not gate or sell the service or derived results.
 - WSPRnet remains the authoritative upstream publisher, while provenance
-  accurately records that the imported representation came through WSPR.live.
+  accurately records that the acquired representation came through WSPR.live.
 - The RBN archive adapter in #29 remains a separate provider-specific import
   that shares generic adapter evidence and TX observation analysis, not WSPR
   parsing or acquisition policy.
@@ -310,10 +329,10 @@ and its success is not a release or CI prerequisite.
 Rejected because the markup is a presentation surface with no documented
 automation, rate, or stability contract.
 
-### Query WSPR.live Directly Now
+### Make Automatic Acquisition Mandatory
 
-Rejected until source terms clearly authorize installed applications, private
-local reports, retained evidence, and commercial-capable distribution.
+Rejected because network availability and a volunteer third-party service must
+not become prerequisites for conducting, preserving, or analyzing a session.
 
 ### Import Whole WSPRnet Monthly Archives First
 
@@ -333,6 +352,7 @@ observations, not in pretending raw formats are identical.
 
 - [Decision issue #13](https://github.com/rwjblue/antennabench/issues/13)
 - [WSPR.live JSON import adapter #84](https://github.com/rwjblue/antennabench/issues/84)
+- [Automatic WSPR.live acquisition #85](https://github.com/rwjblue/antennabench/issues/85)
 - [RBN tracking issue #31](https://github.com/rwjblue/antennabench/issues/31)
 - [RBN archive adapter #29](https://github.com/rwjblue/antennabench/issues/29)
 - [Decision 0008](0008-use-provider-neutral-adapter-evidence-in-bundle-v2.md)
