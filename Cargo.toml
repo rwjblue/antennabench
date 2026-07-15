@@ -24,4 +24,4 @@ tauri-plugin-dialog = "2.7.1"
 tempfile = "3.10.1"
 thiserror = "2.0.18"
 uuid = { version = "1.23.5", features = ["v4"] }
-zip = { version = "6.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
