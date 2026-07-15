@@ -12,6 +12,7 @@ import {
   beginSetupCreation,
   beginSetupReview,
   beginWsjtxAction,
+  beginWsprLiveAcquisition,
   beginWsprLiveImport,
   conductorLoadSucceeded,
   conductorMutationFailed,
@@ -33,6 +34,7 @@ import {
   invokeActiveSessionWsjtxStatus,
   invokeStartSessionWsjtx,
   invokeStopSessionWsjtx,
+  invokeAdvanceSessionWsprLive,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
@@ -51,6 +53,8 @@ import {
   workflowFromHash,
   wsjtxActionFailed,
   wsjtxActionSucceeded,
+  wsprLiveAcquisitionFailed,
+  wsprLiveAcquisitionSucceeded,
   wsprLiveImportCancelled,
   wsprLiveImportFailed,
   wsprLiveImportSucceeded,
@@ -86,6 +90,9 @@ test("the shell starts in session setup", () => {
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
+    wsprLiveAcquisitionStatus: "idle",
+    wsprLiveAcquisition: null,
+    wsprLiveAcquisitionError: null,
   });
 });
 
@@ -234,6 +241,37 @@ test("WSJT-X state and bridge stay focused on status plus start/stop intent", as
   assert.equal(started.wsjtx.phase, "running");
   assert.equal(stopped.wsjtx.phase, "stopped");
   assert.equal(failed.wsjtxError.kind, "resource");
+});
+
+test("automatic WSPR.live acquisition remains typed and accepts only retry intent", async () => {
+  const calls = [];
+  const invoke = async (...args) => {
+    calls.push(args);
+    return {
+      status: "waiting",
+      completedSlotId: "slot-1",
+      notBefore: "2026-07-15T20:07:00Z",
+      capturedThrough: null,
+    };
+  };
+  const active = openSessionSucceeded(initialState(), { sessionId: "session-1" });
+  const fetching = beginWsprLiveAcquisition(active);
+  const outcome = await invokeAdvanceSessionWsprLive(invoke);
+  const waiting = wsprLiveAcquisitionSucceeded(fetching, outcome);
+  const failed = wsprLiveAcquisitionFailed(fetching, {
+    kind: "resource",
+    message: "WSPR.live spots could not be fetched.",
+    detail: "offline",
+  });
+  await invokeAdvanceSessionWsprLive(invoke, true);
+
+  assert.equal(fetching.wsprLiveAcquisitionStatus, "fetching");
+  assert.equal(waiting.wsprLiveAcquisition.status, "waiting");
+  assert.equal(failed.wsprLiveAcquisitionError.detail, "offline");
+  assert.deepEqual(calls, [
+    ["advance_active_session_wspr_live", { request: { retry: false } }],
+    ["advance_active_session_wspr_live", { request: { retry: true } }],
+  ]);
 });
 
 test("setup bridge exposes only review and reviewed-creation commands", async () => {

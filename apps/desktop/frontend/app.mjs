@@ -31,6 +31,9 @@ export function initialState(workflow = "setup") {
       wsjtxStatus: "idle",
       wsjtx: null,
       wsjtxError: null,
+      wsprLiveAcquisitionStatus: "idle",
+      wsprLiveAcquisition: null,
+      wsprLiveAcquisitionError: null,
     },
     workflow,
   );
@@ -154,6 +157,9 @@ export function setupCreationSucceeded(state, session) {
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
+    wsprLiveAcquisitionStatus: "idle",
+    wsprLiveAcquisition: null,
+    wsprLiveAcquisitionError: null,
   };
 }
 
@@ -194,6 +200,9 @@ export function openSessionSucceeded(state, session) {
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
+    wsprLiveAcquisitionStatus: "idle",
+    wsprLiveAcquisition: null,
+    wsprLiveAcquisitionError: null,
   };
 }
 
@@ -349,6 +358,33 @@ export function wsjtxActionFailed(state, error) {
   };
 }
 
+export function beginWsprLiveAcquisition(state) {
+  return {
+    ...state,
+    wsprLiveAcquisitionStatus: "fetching",
+    wsprLiveAcquisitionError: null,
+  };
+}
+
+export function wsprLiveAcquisitionSucceeded(state, outcome) {
+  return {
+    ...state,
+    openStatus: outcome.status === "captured" ? "ready" : state.openStatus,
+    session: outcome.status === "captured" ? outcome.session : state.session,
+    wsprLiveAcquisitionStatus: "ready",
+    wsprLiveAcquisition: outcome,
+    wsprLiveAcquisitionError: null,
+  };
+}
+
+export function wsprLiveAcquisitionFailed(state, error) {
+  return {
+    ...state,
+    wsprLiveAcquisitionStatus: "error",
+    wsprLiveAcquisitionError: normalizeOpenError(error),
+  };
+}
+
 export function invokeOpenSession(invoke) {
   return invoke("open_session_bundle");
 }
@@ -399,6 +435,10 @@ export function invokeStartSessionWsjtx(invoke, request) {
 
 export function invokeStopSessionWsjtx(invoke) {
   return invoke("stop_active_session_wsjtx");
+}
+
+export function invokeAdvanceSessionWsprLive(invoke, retry = false) {
+  return invoke("advance_active_session_wspr_live", { request: { retry } });
 }
 
 export function updateReportFrame(reportFrame, state) {
@@ -520,6 +560,10 @@ function mount(root, browserWindow) {
   const conductorFeedbackDetail = root.querySelector("[data-conductor-feedback-detail]");
   const conductorDiagnostics = root.querySelector("[data-conductor-diagnostics]");
   const conductorEvents = root.querySelector("[data-conductor-events]");
+  const wsprLivePhase = root.querySelector("[data-wspr-live-phase]");
+  const wsprLiveDetail = root.querySelector("[data-wspr-live-detail]");
+  const wsprLiveDiagnostic = root.querySelector("[data-wspr-live-diagnostic]");
+  const wsprLiveRetry = root.querySelector("[data-wspr-live-retry]");
   const wsjtxForm = root.querySelector("[data-wsjtx-form]");
   const wsjtxBindAddress = root.querySelector("[data-wsjtx-bind-address]");
   const wsjtxPort = root.querySelector("[data-wsjtx-port]");
@@ -723,6 +767,13 @@ function mount(root, browserWindow) {
         wsjtxDiagnostic.textContent = adapterDiagnostic.message ?? adapterDiagnostic.detail;
         if (adapterDiagnostic.code) wsjtxDiagnostic.textContent += ` (${adapterDiagnostic.code})`;
       }
+      const wsprLiveModel = wsprLiveAcquisitionModel(state);
+      wsprLivePhase.textContent = wsprLiveModel.phase;
+      wsprLiveDetail.textContent = wsprLiveModel.detail;
+      wsprLiveDiagnostic.hidden = wsprLiveModel.diagnostic.length === 0;
+      wsprLiveDiagnostic.textContent = wsprLiveModel.diagnostic;
+      wsprLiveRetry.hidden = !wsprLiveModel.retry;
+      wsprLiveRetry.disabled = conductorBusy || state.wsprLiveAcquisitionStatus === "fetching";
     } else {
       lifecycleButtons.forEach((button) => { button.disabled = true; });
       conductorDiagnostics.replaceChildren();
@@ -817,7 +868,30 @@ function mount(root, browserWindow) {
     }
   };
 
-  const refreshConductor = async () => {
+  const advanceWsprLive = async (retry = false) => {
+    if (
+      state.conductor?.lifecycle !== "running"
+      || state.wsprLiveAcquisitionStatus === "fetching"
+    ) return;
+    state = beginWsprLiveAcquisition(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      const outcome = await invokeAdvanceSessionWsprLive(invoke, retry);
+      state = wsprLiveAcquisitionSucceeded(state, outcome);
+      render();
+      if (outcome.status === "captured") {
+        await refreshConductor(false);
+        await refreshReport();
+      }
+    } catch (error) {
+      state = wsprLiveAcquisitionFailed(state, error);
+      render();
+    }
+  };
+
+  const refreshConductor = async (advanceAcquisition = true) => {
     if (["loading", "refreshing", "mutating"].includes(state.conductorStatus)) return;
     state = beginConductorLoad(state);
     render();
@@ -834,7 +908,12 @@ function mount(root, browserWindow) {
       state = conductorMutationFailed(state, error);
     }
     render();
-    if (state.conductor) await refreshWsjtxStatus();
+    if (state.conductor) {
+      await refreshWsjtxStatus();
+      if (advanceAcquisition && state.conductor.lifecycle === "running") {
+        await advanceWsprLive();
+      }
+    }
   };
 
   const refreshWsjtxStatus = async () => {
@@ -896,6 +975,7 @@ function mount(root, browserWindow) {
     render();
     if (state.conductorStatus === "ready") {
       await refreshWsjtxStatus();
+      await advanceWsprLive();
       await refreshReport();
     }
   };
@@ -924,6 +1004,8 @@ function mount(root, browserWindow) {
   conductorRefreshButtons.forEach((button) => {
     button.addEventListener("click", refreshConductor);
   });
+
+  wsprLiveRetry.addEventListener("click", () => advanceWsprLive(true));
 
   lifecycleButtons.forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1227,6 +1309,64 @@ function conductorFeedbackModel(state) {
     };
   }
   return null;
+}
+
+function wsprLiveAcquisitionModel(state) {
+  if (state.wsprLiveAcquisitionStatus === "fetching") {
+    return {
+      phase: "Fetching from WSPR.live…",
+      detail: "The bounded native client is retrieving one cumulative response.",
+      diagnostic: "",
+      retry: false,
+    };
+  }
+  if (state.wsprLiveAcquisitionError) {
+    return {
+      phase: "Automatic acquisition unavailable",
+      detail: state.wsprLiveAcquisitionError.message,
+      diagnostic: state.wsprLiveAcquisitionError.detail,
+      retry: true,
+    };
+  }
+  const outcome = state.wsprLiveAcquisition;
+  if (!outcome || outcome.status === "dormant") {
+    return {
+      phase: "Waiting for antenna confirmation",
+      detail: "The first confirmation establishes actual state. Later confirmations authorize the preceding segment; the final confirmed segment is captured after it ends.",
+      diagnostic: "",
+      retry: false,
+    };
+  }
+  if (outcome.status === "waiting") {
+    return {
+      phase: "Waiting for source ingestion",
+      detail: `Segment ${outcome.completedSlotId} becomes eligible at ${formatReviewTime(outcome.notBefore)}. Later requests overlap earlier windows to recover delayed spots.`,
+      diagnostic: "",
+      retry: false,
+    };
+  }
+  if (outcome.status === "up_to_date") {
+    return {
+      phase: "Captured through authorized segments",
+      detail: `WSPR.live evidence is committed through ${formatReviewTime(outcome.capturedThrough)}. Completeness remains unknown.`,
+      diagnostic: "",
+      retry: false,
+    };
+  }
+  if (outcome.status === "captured") {
+    return {
+      phase: "Public spots captured",
+      detail: `${outcome.observationsCreated} observation(s) committed through ${formatReviewTime(outcome.capturedThrough)}; ${outcome.duplicate} duplicate(s) and ${outcome.conflict} conflict(s) retained explicitly.`,
+      diagnostic: "",
+      retry: false,
+    };
+  }
+  return {
+    phase: "WSPR.live acquisition failed",
+    detail: outcome.message,
+    diagnostic: outcome.detail,
+    retry: true,
+  };
 }
 
 function lifecycleActionAvailability(lifecycle) {

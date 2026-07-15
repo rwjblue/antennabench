@@ -1,13 +1,17 @@
+use std::collections::BTreeSet;
+
 use antennabench_core::{
     AdapterDisposition, AttachmentReference, Band, ObservationKind, PlannedSlot,
 };
 use antennabench_wsjtx::{
     derive_wspr_live_query_scope, latest_due_wspr_live_acquisition,
     parse_wspr_live_json_with_limits, plan_wspr_live_acquisition_for_completed_slot,
-    plan_wspr_live_query, prepare_wspr_live_import, AdapterCancellationToken, WsprLiveImportConfig,
-    WsprLiveImportError, WsprLiveImportLimits, WsprLiveQueryScope, WsprLiveRowDisposition,
-    WsprLiveRowReason, WSPR_LIVE_COLUMNS, WSPR_LIVE_INGESTION_GRACE_SECONDS,
-    WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS, WSPR_LIVE_QUERY_ENDPOINT,
+    plan_wspr_live_acquisitions_for_confirmed_slots, plan_wspr_live_query,
+    prepare_wspr_live_acquisition, prepare_wspr_live_import, AdapterCancellationToken,
+    WsprLiveAcquisitionChannel, WsprLiveImportConfig, WsprLiveImportError, WsprLiveImportLimits,
+    WsprLiveQueryScope, WsprLiveRowDisposition, WsprLiveRowReason, WSPR_LIVE_COLUMNS,
+    WSPR_LIVE_INGESTION_GRACE_SECONDS, WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS,
+    WSPR_LIVE_QUERY_ENDPOINT,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{json, Value};
@@ -272,6 +276,54 @@ fn acquisition_planning_rejects_unknown_completed_slots() {
     ));
 }
 
+#[test]
+fn durable_antenna_confirmations_authorize_prior_and_final_segments() {
+    let started_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 0).unwrap();
+    let slots = [
+        planned_slot("slot-1", 1, started_at, Band::M40),
+        planned_slot(
+            "slot-2",
+            2,
+            started_at + chrono::Duration::seconds(120),
+            Band::M20,
+        ),
+        planned_slot(
+            "slot-3",
+            3,
+            started_at + chrono::Duration::seconds(240),
+            Band::M40,
+        ),
+    ];
+
+    let first_only = BTreeSet::from(["slot-1".to_string()]);
+    assert!(
+        plan_wspr_live_acquisitions_for_confirmed_slots("N1RWJ", &slots, &first_only)
+            .unwrap()
+            .is_empty()
+    );
+
+    let second = BTreeSet::from(["slot-1".to_string(), "slot-2".to_string()]);
+    let plans = plan_wspr_live_acquisitions_for_confirmed_slots("N1RWJ", &slots, &second).unwrap();
+    assert_eq!(plans.len(), 1);
+    assert_eq!(plans[0].completed_slot_id, "slot-1");
+
+    let final_confirmation = BTreeSet::from([
+        "slot-1".to_string(),
+        "slot-2".to_string(),
+        "slot-3".to_string(),
+    ]);
+    let plans =
+        plan_wspr_live_acquisitions_for_confirmed_slots("N1RWJ", &slots, &final_confirmation)
+            .unwrap();
+    assert_eq!(
+        plans
+            .iter()
+            .map(|plan| plan.completed_slot_id.as_str())
+            .collect::<Vec<_>>(),
+        ["slot-1", "slot-2", "slot-3"]
+    );
+}
+
 fn planned_slot(
     slot_id: &str,
     sequence_number: u32,
@@ -523,6 +575,47 @@ fn prepares_provenance_linked_imported_spot_evidence() {
         adapter.normalized_records[0].record_id,
         observation.observation_id
     );
+}
+
+#[test]
+fn automatic_acquisition_uses_https_provenance_without_changing_normalization() {
+    let parsed = parse_wspr_live_json_with_limits(
+        &document(vec![row(7001)]),
+        &config(),
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+    let prepared = prepare_wspr_live_acquisition(
+        &parsed,
+        &config(),
+        "session-1",
+        "automatic-one",
+        attachment(),
+        &[],
+        WsprLiveAcquisitionChannel::HttpsQuery,
+    );
+
+    assert_eq!(prepared.summary.observations_created, 1);
+    assert_eq!(
+        prepared.adapter_records[0]
+            .meta
+            .provenance
+            .acquisition_channel
+            .as_str(),
+        "https-query"
+    );
+    assert_eq!(
+        prepared.observations[0].observation_kind,
+        ObservationKind::ImportedSpot
+    );
+    let summary = match &prepared.adapter_records[1].input {
+        antennabench_core::AdapterInput::Inline { data, .. } => {
+            serde_json::from_str::<Value>(data).unwrap()
+        }
+        _ => panic!("summary must be inline"),
+    };
+    assert_eq!(summary["acquisition_channel"], "https-query");
 }
 
 #[test]

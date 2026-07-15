@@ -20,6 +20,7 @@ pub const WSPR_LIVE_ADAPTER_ID: &str = "antennabench.wspr-live-json";
 pub const WSPR_LIVE_PROVIDER_ID: &str = "wspr-live";
 pub const WSPR_LIVE_SOURCE_ID: &str = "wsprnet-spots-mirror";
 pub const WSPR_LIVE_ACQUISITION_CHANNEL: &str = "file-import";
+pub const WSPR_LIVE_HTTPS_ACQUISITION_CHANNEL: &str = "https-query";
 pub const WSPR_LIVE_ADAPTER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const WSPR_LIVE_WSPR2_CODE: i16 = 1;
 pub const WSPR_LIVE_QUERY_ENDPOINT: &str = "https://db1.wspr.live/";
@@ -228,6 +229,21 @@ pub struct PreparedWsprLiveImport {
     pub summary: WsprLiveImportSummary,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WsprLiveAcquisitionChannel {
+    FileImport,
+    HttpsQuery,
+}
+
+impl WsprLiveAcquisitionChannel {
+    fn id(self) -> &'static str {
+        match self {
+            Self::FileImport => WSPR_LIVE_ACQUISITION_CHANNEL,
+            Self::HttpsQuery => WSPR_LIVE_HTTPS_ACQUISITION_CHANNEL,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum WsprLiveImportError {
     #[error(transparent)]
@@ -334,6 +350,41 @@ pub fn plan_wspr_live_acquisition_for_completed_slot(
         not_before,
         query: plan_wspr_live_query(&scope)?,
     })
+}
+
+pub fn plan_wspr_live_acquisitions_for_confirmed_slots(
+    session_callsign: &str,
+    slots: &[PlannedSlot],
+    confirmed_slot_ids: &BTreeSet<String>,
+) -> Result<Vec<WsprLiveAcquisitionPlan>, WsprLiveImportError> {
+    if slots.is_empty() {
+        return Err(WsprLiveImportError::Config(
+            "schedule must contain at least one slot".into(),
+        ));
+    }
+    let mut authorized_completed_slots = BTreeSet::<usize>::new();
+    for (index, slot) in slots.iter().enumerate() {
+        if !confirmed_slot_ids.contains(&slot.slot_id) {
+            continue;
+        }
+        if index > 0 {
+            authorized_completed_slots.insert(index - 1);
+        }
+        if index + 1 == slots.len() {
+            authorized_completed_slots.insert(index);
+        }
+    }
+
+    authorized_completed_slots
+        .into_iter()
+        .map(|index| {
+            plan_wspr_live_acquisition_for_completed_slot(
+                session_callsign,
+                slots,
+                &slots[index].slot_id,
+            )
+        })
+        .collect()
 }
 
 pub fn latest_due_wspr_live_acquisition(
@@ -465,8 +516,29 @@ pub fn prepare_wspr_live_import(
     exact_response: AttachmentReference,
     existing: &[AdapterRecordV2],
 ) -> PreparedWsprLiveImport {
+    prepare_wspr_live_acquisition(
+        parsed,
+        config,
+        session_id,
+        import_id,
+        exact_response,
+        existing,
+        WsprLiveAcquisitionChannel::FileImport,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_wspr_live_acquisition(
+    parsed: &ParsedWsprLiveJson,
+    config: &WsprLiveImportConfig,
+    session_id: &str,
+    import_id: &str,
+    exact_response: AttachmentReference,
+    existing: &[AdapterRecordV2],
+    channel: WsprLiveAcquisitionChannel,
+) -> PreparedWsprLiveImport {
     let mutation_id = format!("wspr-live-import-{import_id}");
-    let provenance = wspr_live_provenance();
+    let provenance = wspr_live_provenance(channel);
     let mut replay = existing_wspr_live_spots(existing, config);
     let mut adapter_records = Vec::with_capacity(parsed.rows.len() + 2);
     let mut observations = Vec::with_capacity(parsed.summary.accepted);
@@ -590,6 +662,7 @@ pub fn prepare_wspr_live_import(
         *data = serde_json::to_string(&serde_json::json!({
             "provider_id": WSPR_LIVE_PROVIDER_ID,
             "source_id": WSPR_LIVE_SOURCE_ID,
+            "acquisition_channel": channel.id(),
             "session_callsign": config.session_callsign,
             "captured_at": config.captured_at,
             "window_start": config.window_start,
@@ -667,11 +740,11 @@ fn validate_query_scope(scope: &WsprLiveQueryScope) -> Result<(), WsprLiveImport
     Ok(())
 }
 
-fn wspr_live_provenance() -> Provenance {
+fn wspr_live_provenance(channel: WsprLiveAcquisitionChannel) -> Provenance {
     Provenance {
         provider_id: ProviderId::new(WSPR_LIVE_PROVIDER_ID).expect("static provider identity"),
         source_id: SourceId::new(WSPR_LIVE_SOURCE_ID).expect("static source identity"),
-        acquisition_channel: AcquisitionChannelId::new(WSPR_LIVE_ACQUISITION_CHANNEL)
+        acquisition_channel: AcquisitionChannelId::new(channel.id())
             .expect("static acquisition identity"),
         adapter_id: AdapterId::new(WSPR_LIVE_ADAPTER_ID).expect("static adapter identity"),
         adapter_version: WSPR_LIVE_ADAPTER_VERSION.into(),

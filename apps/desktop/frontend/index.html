@@ -201,6 +201,13 @@
                 <button type="button" class="text-action" data-conductor-refresh>Refresh</button>
               </div>
 
+              <section class="receiver-panel" data-wspr-live-panel>
+                <div class="receiver-heading"><div><p class="eyebrow">Automatic public evidence</p><h2>WSPR.live spots</h2></div><strong data-wspr-live-phase>Waiting for antenna confirmation</strong></div>
+                <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror after the ingestion grace period. No separate fetch action is required.</p>
+                <p class="receiver-diagnostic" data-wspr-live-diagnostic hidden></p>
+                <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry acquisition</button></div>
+              </section>
+
               <form class="receiver-panel" data-wsjtx-form>
                 <div class="receiver-heading"><div><p class="eyebrow">Optional bounded adapter</p><h2>Live WSJT-X reception</h2></div><strong data-wsjtx-phase>Not started</strong></div>
                 <p class="field-help" data-wsjtx-counts>Manual operation remains available without WSJT-X.</p>

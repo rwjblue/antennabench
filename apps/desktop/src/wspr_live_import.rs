@@ -3,8 +3,9 @@ use std::{fs, path::Path};
 use antennabench_core::SessionLifecycleV2;
 use antennabench_storage::{BundleStore, LiveMutationMemberV2, LiveMutationV2};
 use antennabench_wsjtx::{
-    derive_wspr_live_query_scope, parse_wspr_live_json, prepare_wspr_live_import,
-    AdapterCancellationToken, WsprLiveImportConfig, WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
+    derive_wspr_live_query_scope, parse_wspr_live_json, prepare_wspr_live_acquisition,
+    AdapterCancellationToken, WsprLiveAcquisitionChannel, WsprLiveImportConfig,
+    WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -41,6 +42,12 @@ pub(crate) enum WsprLiveImportOutcome {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WsprLiveImportRequest {
     authority_confirmed: bool,
+}
+
+pub(crate) struct CommittedWsprLiveResponse {
+    pub(crate) session: OpenedSession,
+    pub(crate) revision: u64,
+    pub(crate) summary: WsprLiveImportSummary,
 }
 
 #[tauri::command]
@@ -131,7 +138,37 @@ fn import_file(
         captured_at,
         source_locator: source_locator.clone(),
     };
-    let parsed = parse_wspr_live_json(&bytes, &config, &AdapterCancellationToken::default())
+    let committed = commit_wspr_live_response(
+        state,
+        &bundle_path,
+        &bytes,
+        config,
+        WsprLiveAcquisitionChannel::FileImport,
+    )?;
+    let summary = committed.summary;
+    Ok(WsprLiveImportOutcome::Imported {
+        session: Box::new(committed.session),
+        revision: committed.revision,
+        total: summary.total,
+        accepted: summary.accepted,
+        malformed: summary.malformed,
+        filtered: summary.filtered,
+        unsupported: summary.unsupported,
+        duplicate: summary.duplicate,
+        conflict: summary.conflict,
+        observations_created: summary.observations_created,
+        evidence_completeness_known: summary.evidence_completeness_known,
+    })
+}
+
+pub(crate) fn commit_wspr_live_response(
+    state: &ActiveSessionState,
+    bundle_path: &Path,
+    bytes: &[u8],
+    config: WsprLiveImportConfig,
+    channel: WsprLiveAcquisitionChannel,
+) -> Result<CommittedWsprLiveResponse, SessionErrorPayload> {
+    let parsed = parse_wspr_live_json(bytes, &config, &AdapterCancellationToken::default())
         .map_err(|error| {
             SessionErrorPayload::new(
                 SessionErrorKind::Validation,
@@ -139,7 +176,7 @@ fn import_file(
                 error.to_string(),
             )
         })?;
-
+    let store = BundleStore::new(bundle_path);
     let mut writer = store
         .open_v2_writer()
         .map_err(crate::conductor::live_error_payload)?;
@@ -147,28 +184,30 @@ fn import_file(
     if current.session_state.lifecycle != SessionLifecycleV2::Running {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Conflict,
-            "The session stopped before the WSPR.live import could commit.",
-            "no adapter or observation records were appended",
+            "The session stopped before the WSPR.live response could commit.",
+            "no attachment, adapter, or observation records were appended",
         ));
     }
     let import_id = writer.allocate_id("import");
     let expected_revision = writer.checkpoint().revision;
+    let source_locator = config.source_locator.clone();
     let mut summary = None::<WsprLiveImportSummary>;
     let (_, receipt) = writer
         .append_with_attachment(
-            &bytes,
+            bytes,
             "application/json",
             None,
             Some("clickhouse-format-json".into()),
             source_locator,
             |attachment| {
-                let prepared = prepare_wspr_live_import(
+                let prepared = prepare_wspr_live_acquisition(
                     &parsed,
                     &config,
                     &current.manifest.session_id,
                     &import_id,
                     attachment,
                     &current.adapter_records,
+                    channel,
                 );
                 summary = Some(prepared.summary);
                 let members = prepared
@@ -191,20 +230,10 @@ fn import_file(
         )
         .map_err(crate::conductor::live_error_payload)?;
     drop(writer);
-    let session = reload_active_session(state, &bundle_path)?;
-    let summary = summary.expect("attachment mutation builder runs before append");
-    Ok(WsprLiveImportOutcome::Imported {
-        session: Box::new(session),
+    Ok(CommittedWsprLiveResponse {
+        session: reload_active_session(state, bundle_path)?,
         revision: receipt.revision,
-        total: summary.total,
-        accepted: summary.accepted,
-        malformed: summary.malformed,
-        filtered: summary.filtered,
-        unsupported: summary.unsupported,
-        duplicate: summary.duplicate,
-        conflict: summary.conflict,
-        observations_created: summary.observations_created,
-        evidence_completeness_known: summary.evidence_completeness_known,
+        summary: summary.expect("attachment mutation builder runs before append"),
     })
 }
 

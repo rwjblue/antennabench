@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-advance-active-session-wspr-live"
+description = "Enables the advance_active_session_wspr_live command without any pre-configured scope."
+commands.allow = ["advance_active_session_wspr_live"]
+
+[[permission]]
+identifier = "deny-advance-active-session-wspr-live"
+description = "Denies the advance_active_session_wspr_live command without any pre-configured scope."
+commands.deny = ["advance_active_session_wspr_live"]

@@ -12,6 +12,7 @@ fn main() {
         "active_session_wsjtx_status",
         "start_active_session_wsjtx",
         "stop_active_session_wsjtx",
+        "advance_active_session_wspr_live",
         "import_active_session_wspr_live",
     ]);
 
