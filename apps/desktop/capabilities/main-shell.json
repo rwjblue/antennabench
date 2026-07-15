@@ -17,6 +17,7 @@
     "allow-start-active-session-wsjtx",
     "allow-stop-active-session-wsjtx",
     "allow-advance-active-session-wspr-live",
-    "allow-import-active-session-wspr-live"
+    "allow-import-active-session-wspr-live",
+    "allow-import-active-session-rbn"
   ]
 }

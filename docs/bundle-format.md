@@ -102,6 +102,10 @@ attachments, manifest dispatch, lossless export, and deterministic direct
 v1-to-v3 and v2-to-v3 upgrades are implemented. Upgrades preserve legacy
 evidence but create no signal plans, slot allocations, confirmations, or rig
 power facts. Existing v1/v2 read and lossless-copy behavior is unchanged.
+The schema-v3 writer can also append attachment-backed adapter records and
+normalized observations in one checkpoint revision. It admits this evidence
+after a session has started, including post-session import into ended or
+interrupted sessions, without changing lifecycle state.
 
 ## Provider-Neutral Evidence
 
@@ -130,6 +134,24 @@ exact attachment; row records preserve near-raw values and link accepted TX
 `ImportedSpot` observations. Callsign, UTC window, band, and WSPR mode are
 repeated in both paths, and missing public reports remain missing evidence. See
 [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md).
+
+The RBN daily-archive boundary uses provider `reverse-beacon-network`, source
+`rbn-daily-archive`, acquisition channel `file-import`, and adapter
+`antennabench.rbn-daily-archive`. One `rbn_archive_capture` record references
+the exact selected ZIP at `attachments/sha256/<digest>`, one summary records
+the pinned header, scope, member name, and disposition counts, and one
+`rbn_archive_row` record retains each bounded near-raw field array. Accepted
+rows link to TX `PublicReport` observations with reporter/heard callsigns,
+timestamp, band, exact Hz frequency, CW or RTTY mode, and SNR. Reporter/heard
+grids, distance, azimuth, drift, and transmitter power are absent because the
+archive does not provide them.
+
+Malformed, wrong-callsign, out-of-window, unselected/unsupported-band,
+unsupported-mode, within-archive duplicate, replay duplicate, and replay
+conflict outcomes remain adapter records and never become observations. Exact
+replay uses the RBN spot identity and content fingerprint only within this
+adapter; no cross-file/provider analysis deduplication is added. CW and RTTY
+remain different mode strata.
 
 ## Explicit V1 Upgrade
 

@@ -15,6 +15,9 @@ Current crates:
 - `crates/wsjtx`: offline WSPR `ALL_WSPR.TXT` import plus a live WSJT-X UDP
   companion boundary, producing preserved adapter records and eligible local
   decode observations.
+- `crates/rbn`: bounded offline parsing of official RBN daily ZIP/CSV archives
+  plus schema-v3 provenance, disposition, replay, and `PublicReport`
+  preparation.
 - `crates/analysis`: conservative, descriptive A/B evidence summaries derived
   in memory from validated bundle contents and core schedule alignment.
 - `crates/report`: deterministic, renderer-neutral report data derived in
@@ -28,7 +31,6 @@ Planned crates and apps:
 
 - `apps/web`: hosted report viewer and publishing surface.
 - `crates/rig`: optional rig-observation or control adapters.
-- `crates/public-spots`: source-neutral public and imported spot adapters.
 
 ## Data Flow
 
@@ -391,6 +393,14 @@ The durable boundaries are:
   [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
   [#84](https://github.com/rwjblue/antennabench/issues/84), and
   [#85](https://github.com/rwjblue/antennabench/issues/85).
+- The RBN boundary accepts only an operator-selected local daily ZIP. It pins
+  the documented CSV header, streams the compressed member under fixed bounds,
+  repeats exact heard-callsign, half-open UTC-window, and selected-band filters,
+  and keeps CW and RTTY separate. The exact ZIP is a content-addressed
+  attachment; every retained row is an adapter record, and accepted rows link
+  to TX `PublicReport` observations. Location, distance, azimuth, drift, and
+  power remain absent. No RBN network client, archive scheduler, dashboard
+  scraper, or telnet client exists.
 - `crates/propagation` implements the first optional NOAA/NWS SWPC boundary. It
   selects observed F10.7 and provisional `estimated_kp` from two fixed endpoints,
   emits separate sparse schema-version-1 records, preserves the selected source
@@ -412,8 +422,12 @@ transmit signal plans is recorded by
 The schema-v3 wire model, validation, checkpoint persistence, manifest dispatch,
 lossless export, and deterministic v1/v2 migration are implemented under
 [#86](https://github.com/rwjblue/antennabench/issues/86). Desktop authoring and
-conductor integration remain within that issue,
-and the first optional rig-control milestone is tracked by
+conductor integration are implemented. Schema-v3 evidence persistence also
+commits attachment-backed adapter records and observations as one deterministic
+cross-stream mutation. Exact mutation replay is idempotent, conflicting reuse
+fails, and a pre-checkpoint failure rolls all affected tails and a new
+attachment back together.
+The first optional rig-control milestone is tracked by
 [#14](https://github.com/rwjblue/antennabench/issues/14).
 
 ## Hosted Trust Boundary

@@ -148,6 +148,18 @@ under `fixtures/wsjtx/udp/`; no operator capture or third-party spot data is
 committed. Loopback UDP coverage verifies only the receiver boundary. It does
 not require WSJT-X or network access during the test suite.
 
+The RBN tests use only the purpose-built
+`crates/rbn/tests/fixtures/synthetic-current.csv` fixture. It models the
+documented 13-column header and covers CW, RTTY, malformed, filtered,
+unsupported-band/mode, exact duplicate, replay, conflict, schema drift, ZIP,
+and resource bounds without committing third-party spot rows. The adapter,
+schema-v3 persistence, and desktop state tests require no network. A disposable
+compatibility check against the official 2026-07-14 daily archive confirmed
+the pinned header and representative field conventions; the downloaded bytes
+were not added to the repository. Re-run such checks only in disposable local
+storage and never turn them into fixtures without confirmed redistribution
+permission.
+
 Desktop orchestration tests inject that same heartbeat/status/decode sequence
 below the socket and exercise atomic adapter/observation persistence,
 malformed/unsupported/client-mismatch/duplicate dispositions, lost
@@ -345,13 +357,20 @@ not repeat those checks with coordinate-driven automation. Stop the development
 process with Control-C and use `jj status` to confirm the fixture was unchanged.
 
 The main webview capability allowlists focused setup, conductor, receiver,
-session-open, checkpoint-export, report-read/refresh, and report-export
+session-open, manual WSPR.live/RBN import, checkpoint-export,
+report-read/refresh, and report-export
 commands. Native selection and all filesystem/domain work remain in Rust; the
 report commands return only a bounded revision-keyed presentation. No dialog-plugin or
 filesystem-plugin permission is granted to JavaScript; this is intentional
 even though the native dialog plugin is registered. The local report is loaded
 into a sandboxed frame and neither the shell nor report is given network
 authority.
+
+The transfer screen's RBN action is available only for schema-v3 sessions that
+have started. Rust derives the exact callsign, half-open schedule window, and
+distinct bands from the committed bundle, owns the native ZIP picker and
+bounded parsing, and commits the exact archive plus all retained dispositions
+under one checkpoint. The frontend receives only the bounded outcome summary.
 
 ## Documentation Updates
 

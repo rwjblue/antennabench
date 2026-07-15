@@ -71,6 +71,7 @@ version = "0.1.0"
 dependencies = [
  "antennabench-analysis",
  "antennabench-core",
+ "antennabench-rbn",
  "antennabench-report",
  "antennabench-storage",
  "antennabench-wsjtx",

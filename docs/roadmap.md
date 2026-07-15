@@ -31,6 +31,9 @@ The current implementation focus is the bundle-first Rust foundation:
 - bounded offline WSPR.live ClickHouse JSON import with exact attachments,
   provider-neutral provenance, replay/conflict evidence, and no production
   network transport
+- bounded offline RBN daily ZIP import with exact archive attachments,
+  schema-v3 `PublicReport` observations, preserved non-observation
+  dispositions, replay/conflict handling, and a focused desktop picker
 - one deterministic unattended setup-to-final-export scenario covering manual
   and synthetic evidence, retry/crash recovery, gap disclosure, report identity,
   collision safety, and checkpoint reopen without external processes or UI
@@ -97,11 +100,9 @@ Later tracks:
   the shipped offline importer and exact-evidence boundary
   ([Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
   [#85](https://github.com/rwjblue/antennabench/issues/85)).
-- Import-first RBN transmit evidence and its provider-specific experiment
-  workflow, beginning with the schema-v3 typed signal-plan foundation
-  ([Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md),
-  [#86](https://github.com/rwjblue/antennabench/issues/86),
-  [#31](https://github.com/rwjblue/antennabench/issues/31)).
+- Live or scheduled RBN acquisition only if a documented operationally
+  appropriate filtered source is identified; the shipped RBN workflow remains
+  explicit local-file import.
 - Safe hosted report viewing, upload validation, identity, and publishing
   ([#10](https://github.com/rwjblue/antennabench/issues/10)).
 - Native WSPR or mobile-specific operation.

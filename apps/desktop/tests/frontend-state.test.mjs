@@ -10,6 +10,7 @@ import {
   beginOpenSession,
   beginReportExport,
   beginReportRefresh,
+  beginRbnImport,
   beginSetupCreation,
   beginSetupReview,
   beginWsjtxAction,
@@ -28,6 +29,7 @@ import {
   invokeExportSession,
   invokeExportActiveSessionReport,
   invokeImportActiveSessionWsprLive,
+  invokeImportActiveSessionRbn,
   invokeOpenSession,
   invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
@@ -43,6 +45,9 @@ import {
   reportExportSucceeded,
   reportRefreshFailed,
   reportRefreshSucceeded,
+  rbnImportCancelled,
+  rbnImportFailed,
+  rbnImportSucceeded,
   readSetupDraft,
   readEvidenceAction,
   readEvidenceReplacement,
@@ -82,6 +87,7 @@ test("the shell starts in session setup", () => {
     exportNotice: null,
     exportedBundleName: null,
     importStatus: "idle",
+    importKind: null,
     importError: null,
     importNotice: null,
     setupStatus: "editing",
@@ -614,6 +620,44 @@ test("WSPR.live import preserves focused state and refreshes the active summary"
   assert.equal(failed.session, active.session);
 });
 
+test("RBN import preserves focused state and refreshes the schema-v3 summary", () => {
+  const active = openSessionSucceeded(initialState("transfer"), {
+    sessionId: "session-1",
+    schemaVersion: 3,
+    lifecycle: "ended",
+    observationCount: 2,
+    reportHtml: "old",
+  });
+  const loading = beginRbnImport(active);
+  const imported = rbnImportSucceeded(loading, {
+    status: "imported",
+    revision: 9,
+    observationsCreated: 2,
+    session: {
+      sessionId: "session-1",
+      schemaVersion: 3,
+      lifecycle: "ended",
+      revision: 9,
+      observationCount: 4,
+    },
+  });
+  const cancelled = rbnImportCancelled(beginRbnImport(active));
+  const failed = rbnImportFailed(beginRbnImport(active), {
+    kind: "validation",
+    message: "Invalid RBN archive.",
+    detail: "header drift",
+  });
+
+  assert.equal(loading.importKind, "rbn");
+  assert.equal(loading.importStatus, "loading");
+  assert.equal(imported.importStatus, "ready");
+  assert.equal(imported.session.observationCount, 4);
+  assert.equal(imported.session.reportHtml, null);
+  assert.equal(cancelled.importNotice, "cancelled");
+  assert.equal(failed.importError.kind, "validation");
+  assert.equal(failed.session, active.session);
+});
+
 test("the frontend invokes only the narrow session commands", async () => {
   const calls = [];
   const invoke = async (...args) => {
@@ -631,6 +675,7 @@ test("the frontend invokes only the narrow session commands", async () => {
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
   const reportExported = await invokeExportActiveSessionReport(invoke);
   const imported = await invokeImportActiveSessionWsprLive(invoke);
+  const rbnImported = await invokeImportActiveSessionRbn(invoke);
 
   assert.deepEqual(calls, [
     ["open_session_bundle"],
@@ -639,6 +684,7 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["refresh_active_session_report"],
     ["export_active_session_report"],
     ["import_active_session_wspr_live", { request: { authorityConfirmed: true } }],
+    ["import_active_session_rbn"],
   ]);
   assert.equal(result.status, "opened");
   assert.equal(report, "<!doctype html>");
@@ -646,6 +692,7 @@ test("the frontend invokes only the narrow session commands", async () => {
   assert.equal(refreshed.status, "exported");
   assert.equal(reportExported.status, "exported");
   assert.equal(imported.status, "exported");
+  assert.equal(rbnImported.status, "exported");
 });
 
 test("each declared workflow can become active without mutating prior state", () => {

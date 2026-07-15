@@ -20,6 +20,7 @@ tauri-build.workspace = true
 antennabench-analysis = { path = "../../crates/analysis" }
 antennabench-core = { path = "../../crates/core" }
 antennabench-report = { path = "../../crates/report" }
+antennabench-rbn = { path = "../../crates/rbn" }
 antennabench-storage = { path = "../../crates/storage" }
 antennabench-wsjtx = { path = "../../crates/wsjtx" }
 chrono.workspace = true

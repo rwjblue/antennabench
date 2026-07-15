@@ -60,6 +60,10 @@ Implemented:
   antenna segments, plus an offline `FORMAT JSON` import escape hatch. Both
   paths repeat session filters, preserve exact-response attachments, handle
   provider-ID duplicate/conflict replay, and atomically link imported spots.
+- Bounded offline Reverse Beacon Network daily ZIP import for schema-v3 signal
+  sessions, with exact content-addressed archive preservation, explicit row
+  dispositions, CW/RTTY-separated TX `PublicReport` observations, deterministic
+  replay/conflict handling, and a focused native desktop picker.
 - An unattended desktop integration path that verifies canonical open, report,
   lossless export, cancellation, typed failure, and reopen behavior without
   launching a window or taking foreground input.

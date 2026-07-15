@@ -19,6 +19,7 @@ export function initialState(workflow = "setup") {
       exportNotice: null,
       exportedBundleName: null,
       importStatus: "idle",
+      importKind: null,
       importError: null,
       importNotice: null,
       setupStatus: "editing",
@@ -149,6 +150,7 @@ export function setupCreationSucceeded(state, session) {
     exportNotice: null,
     exportedBundleName: null,
     importStatus: "idle",
+    importKind: null,
     importError: null,
     importNotice: null,
     conductorStatus: "idle",
@@ -192,6 +194,7 @@ export function openSessionSucceeded(state, session) {
     exportNotice: null,
     exportedBundleName: null,
     importStatus: "idle",
+    importKind: null,
     importError: null,
     importNotice: null,
     conductorStatus: "idle",
@@ -260,7 +263,13 @@ export function exportSessionFailed(state, error) {
 }
 
 export function beginWsprLiveImport(state) {
-  return { ...state, importStatus: "loading", importError: null, importNotice: null };
+  return {
+    ...state,
+    importStatus: "loading",
+    importKind: "wspr_live",
+    importError: null,
+    importNotice: null,
+  };
 }
 
 export function wsprLiveImportSucceeded(state, outcome) {
@@ -284,6 +293,33 @@ export function wsprLiveImportCancelled(state) {
 }
 
 export function wsprLiveImportFailed(state, error) {
+  return {
+    ...state,
+    importStatus: "error",
+    importError: normalizeOpenError(error),
+    importNotice: null,
+  };
+}
+
+export function beginRbnImport(state) {
+  return {
+    ...state,
+    importStatus: "loading",
+    importKind: "rbn",
+    importError: null,
+    importNotice: null,
+  };
+}
+
+export function rbnImportSucceeded(state, outcome) {
+  return wsprLiveImportSucceeded(state, outcome);
+}
+
+export function rbnImportCancelled(state) {
+  return { ...state, importStatus: "idle", importError: null, importNotice: "cancelled" };
+}
+
+export function rbnImportFailed(state, error) {
   return {
     ...state,
     importStatus: "error",
@@ -416,6 +452,10 @@ export function invokeExportSession(invoke) {
 
 export function invokeImportActiveSessionWsprLive(invoke, authorityConfirmed = true) {
   return invoke("import_active_session_wspr_live", { request: { authorityConfirmed } });
+}
+
+export function invokeImportActiveSessionRbn(invoke) {
+  return invoke("import_active_session_rbn");
 }
 
 export function invokeActiveSessionConductor(invoke) {
@@ -583,6 +623,7 @@ function mount(root, browserWindow) {
   const openButton = root.querySelector("[data-open-session]");
   const exportButton = root.querySelector("[data-export-session]");
   const importWsprLiveButton = root.querySelector("[data-import-wspr-live]");
+  const importRbnButton = root.querySelector("[data-import-rbn]");
   const importAuthority = root.querySelector("[data-import-authority]");
   const transferStatus = root.querySelector("[data-transfer-status]");
   const openFeedback = root.querySelector("[data-open-feedback]");
@@ -819,6 +860,18 @@ function mount(root, browserWindow) {
       : importLoading
         ? "Importing…"
         : "Choose WSPR.live JSON";
+    const rbnEligible = state.session?.schemaVersion === 3
+      && !["draft", "ready"].includes(state.session?.lifecycle);
+    importRbnButton.disabled = !rbnEligible || importLoading;
+    importRbnButton.textContent = state.session === null
+      ? "Open a session first"
+      : state.session.schemaVersion !== 3
+        ? "Schema v3 required"
+        : !rbnEligible
+          ? "Start the session first"
+          : importLoading
+            ? "Importing…"
+            : "Choose RBN ZIP";
     transferStatus.textContent = transferStatusText(state);
     transferStatus.classList.toggle("muted", state.openStatus !== "ready");
 
@@ -1275,6 +1328,30 @@ function mount(root, browserWindow) {
     if (state.importStatus === "ready") await refreshReport();
   });
   importAuthority.addEventListener("change", render);
+
+  importRbnButton.addEventListener("click", async () => {
+    const eligible = state.session?.schemaVersion === 3
+      && !["draft", "ready"].includes(state.session?.lifecycle);
+    if (!eligible || state.importStatus === "loading") return;
+    state = beginRbnImport(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      const outcome = await invokeImportActiveSessionRbn(invoke);
+      if (outcome.status === "cancelled") {
+        state = rbnImportCancelled(state);
+      } else if (outcome.status === "imported" && outcome.session) {
+        state = rbnImportSucceeded(state, outcome);
+      } else {
+        throw new Error("The desktop command returned an unexpected response.");
+      }
+    } catch (error) {
+      state = rbnImportFailed(state, error);
+    }
+    render();
+    if (state.importStatus === "ready") await refreshReport();
+  });
 
   reportRefreshButton.addEventListener("click", refreshReport);
   reportExportButton.addEventListener("click", async () => {
@@ -1778,26 +1855,33 @@ function exportFeedbackModel(state) {
 
 function importFeedbackModel(state) {
   if (state.importStatus === "loading") {
+    const rbn = state.importKind === "rbn";
     return {
       kind: "loading",
-      message: "Validating and committing WSPR.live evidence…",
-      detail: "The exact response and its bounded row dispositions commit under one checkpoint.",
+      message: rbn
+        ? "Validating and committing RBN archive evidence…"
+        : "Validating and committing WSPR.live evidence…",
+      detail: rbn
+        ? "The exact ZIP, bounded row dispositions, and public reports commit under one checkpoint."
+        : "The exact response and its bounded row dispositions commit under one checkpoint.",
     };
   }
   if (state.importError) return { kind: "error", ...state.importError };
   if (state.importNotice === "cancelled") {
+    const source = state.importKind === "rbn" ? "RBN archive" : "WSPR.live";
     return {
       kind: "cancelled",
-      message: "WSPR.live import cancelled.",
+      message: `${source} import cancelled.`,
       detail: "The active session was not changed.",
     };
   }
   if (state.importNotice) {
     const result = state.importNotice;
+    const omitted = result.omitted ? `, ${result.omitted} omitted by the retention bound` : "";
     return {
       kind: "ready",
       message: `${result.observationsCreated} imported spot observation(s) committed at revision ${result.revision}.`,
-      detail: `${result.total} rows: ${result.accepted} accepted, ${result.filtered} filtered, ${result.malformed} malformed, ${result.unsupported} unsupported, ${result.duplicate} duplicate, ${result.conflict} conflict. Source completeness is unknown.`,
+      detail: `${result.total} rows: ${result.accepted} accepted, ${result.filtered} filtered, ${result.malformed} malformed, ${result.unsupported} unsupported, ${result.duplicate} duplicate, ${result.conflict} conflict${omitted}. Source completeness is unknown.`,
     };
   }
   return null;

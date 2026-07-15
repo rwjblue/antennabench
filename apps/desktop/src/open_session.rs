@@ -130,6 +130,7 @@ pub(crate) struct OpenedSession {
     pub(crate) antenna_count: usize,
     pub(crate) slot_count: usize,
     pub(crate) observation_count: usize,
+    pub(crate) schema_version: u16,
     pub(crate) revision: Option<u64>,
     pub(crate) lifecycle: Option<SessionLifecycleV2>,
     pub(crate) report_available: bool,
@@ -435,6 +436,7 @@ fn validation_error_detail(source: &antennabench_core::BundleValidationError) ->
 
 struct LoadedSnapshot {
     bundle: BundleContents,
+    schema_version: u16,
     validation: BundleValidationReport,
     report_snapshot: ReportSnapshotContext,
     revision: Option<u64>,
@@ -503,6 +505,7 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
         let bundle = normalize_bundle(current.bundle);
         Ok(LoadedSnapshot {
             bundle,
+            schema_version,
             validation,
             report_snapshot,
             revision: Some(revision),
@@ -511,6 +514,7 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
     } else {
         let (bundle, validation) = store.read_for_analysis()?;
         Ok(LoadedSnapshot {
+            schema_version: bundle.manifest.schema_version,
             bundle,
             validation,
             report_snapshot: ReportSnapshotContext::default(),
@@ -736,6 +740,7 @@ fn build_active_session(
             antenna_count: snapshot.bundle.antennas.antennas.len(),
             slot_count: snapshot.bundle.schedule.slots.len(),
             observation_count: snapshot.bundle.observations.len(),
+            schema_version: snapshot.schema_version,
             revision: snapshot.revision,
             lifecycle: snapshot.lifecycle,
             report_available: presentation.is_some(),
@@ -1051,6 +1056,7 @@ fn refresh_active_session_report_for(
             antenna_count: snapshot.bundle.antennas.antennas.len(),
             slot_count: snapshot.bundle.schedule.slots.len(),
             observation_count: snapshot.bundle.observations.len(),
+            schema_version: snapshot.schema_version,
             revision: snapshot.revision,
             lifecycle: snapshot.lifecycle,
             report_available: true,

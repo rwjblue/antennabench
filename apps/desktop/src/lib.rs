@@ -1,5 +1,6 @@
 mod conductor;
 mod open_session;
+mod rbn_import;
 mod setup;
 mod wsjtx_session;
 mod wspr_live_acquisition;
@@ -10,6 +11,7 @@ use open_session::{
     active_session_report, export_active_session, export_active_session_report,
     open_session_bundle, refresh_active_session_report, ActiveSessionState,
 };
+use rbn_import::import_active_session_rbn;
 use setup::{create_session_from_review, review_session_setup, SetupSessionState};
 use wsjtx_session::{
     active_session_wsjtx_status, start_active_session_wsjtx, stop_active_session_wsjtx,
@@ -41,7 +43,8 @@ pub fn run() {
             start_active_session_wsjtx,
             stop_active_session_wsjtx,
             advance_active_session_wspr_live,
-            import_active_session_wspr_live
+            import_active_session_wspr_live,
+            import_active_session_rbn
         ])
         .run(tauri::generate_context!())
         .expect("error while running the AntennaBench desktop shell");
