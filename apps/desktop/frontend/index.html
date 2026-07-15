@@ -201,6 +201,18 @@
                 <button type="button" class="text-action" data-conductor-refresh>Refresh</button>
               </div>
 
+              <form class="receiver-panel" data-wsjtx-form>
+                <div class="receiver-heading"><div><p class="eyebrow">Optional bounded adapter</p><h2>Live WSJT-X reception</h2></div><strong data-wsjtx-phase>Not started</strong></div>
+                <p class="field-help" data-wsjtx-counts>Manual operation remains available without WSJT-X.</p>
+                <div class="field-grid receiver-fields">
+                  <label>Loopback address<input type="text" value="127.0.0.1" data-wsjtx-bind-address></label>
+                  <label>UDP port<input type="number" min="1" max="65535" value="2237" data-wsjtx-port></label>
+                  <label>Expected client identity<input type="text" maxlength="128" value="WSJT-X" data-wsjtx-client-id></label>
+                </div>
+                <p class="receiver-diagnostic" data-wsjtx-diagnostic hidden></p>
+                <div class="conductor-actions"><button type="button" data-wsjtx-start>Start receiver</button><button type="button" data-wsjtx-stop disabled>Stop receiver</button></div>
+              </form>
+
               <form class="evidence-form" data-evidence-form>
                 <div><p class="eyebrow">Explicit operator evidence</p><h2>Record what actually happened</h2></div>
                 <div class="field-grid">
@@ -220,7 +232,7 @@
                 <div data-conductor-events></div>
               </section>
 
-              <div class="boundary-note"><strong>Trusted boundary</strong><p>Rust owns checkpoint recovery, clocks, IDs, expected revisions, mutation idempotency, and lifecycle validation. The webview receives a bounded projection and submits only a Rust-issued action token plus focused operator intent.</p></div>
+              <div class="boundary-note"><strong>Trusted boundary</strong><p>Rust owns checkpoint recovery, clocks, IDs, expected revisions, mutation idempotency, lifecycle validation, the loopback UDP socket, client admission, and adapter persistence. The webview receives bounded status and submits only focused conductor or receiver intent.</p></div>
             </div>
           </section>
 

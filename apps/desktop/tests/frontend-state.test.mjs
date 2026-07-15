@@ -9,6 +9,7 @@ import {
   beginOpenSession,
   beginSetupCreation,
   beginSetupReview,
+  beginWsjtxAction,
   conductorLoadSucceeded,
   conductorMutationFailed,
   editSessionSetup,
@@ -23,6 +24,9 @@ import {
   invokeOpenSession,
   invokeReviewSessionSetup,
   invokeMutateSessionConductor,
+  invokeActiveSessionWsjtxStatus,
+  invokeStartSessionWsjtx,
+  invokeStopSessionWsjtx,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
@@ -35,6 +39,8 @@ import {
   updateReportFrame,
   viewModel,
   workflowFromHash,
+  wsjtxActionFailed,
+  wsjtxActionSucceeded,
 } from "../frontend/app.mjs";
 
 test("the shell starts in session setup", () => {
@@ -56,6 +62,9 @@ test("the shell starts in session setup", () => {
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
+    wsjtxStatus: "idle",
+    wsjtx: null,
+    wsjtxError: null,
   });
 });
 
@@ -166,6 +175,44 @@ test("the conductor bridge exposes only bounded read and focused mutation comman
   ]);
   assert.equal(view.revision, 4);
   assert.equal(updated.revision, 5);
+});
+
+test("WSJT-X state and bridge stay focused on status plus start/stop intent", async () => {
+  const calls = [];
+  const invoke = async (...args) => {
+    calls.push(args);
+    return { phase: args[0] === "stop_active_session_wsjtx" ? "stopped" : "running" };
+  };
+  const request = {
+    bindAddress: "127.0.0.1",
+    port: 2237,
+    expectedClientId: "WSJT-X",
+  };
+
+  const refreshing = beginWsjtxAction(initialState("run"));
+  const ready = wsjtxActionSucceeded(refreshing, await invokeActiveSessionWsjtxStatus(invoke));
+  const started = wsjtxActionSucceeded(
+    beginWsjtxAction(ready, "starting"),
+    await invokeStartSessionWsjtx(invoke, request),
+  );
+  const stopped = wsjtxActionSucceeded(
+    beginWsjtxAction(started, "stopping"),
+    await invokeStopSessionWsjtx(invoke),
+  );
+  const failed = wsjtxActionFailed(beginWsjtxAction(stopped), {
+    kind: "resource",
+    message: "Receiver failed.",
+    detail: "wsjtx.receiver.bind_failed",
+  });
+
+  assert.deepEqual(calls, [
+    ["active_session_wsjtx_status"],
+    ["start_active_session_wsjtx", { request }],
+    ["stop_active_session_wsjtx"],
+  ]);
+  assert.equal(started.wsjtx.phase, "running");
+  assert.equal(stopped.wsjtx.phase, "stopped");
+  assert.equal(failed.wsjtxError.kind, "resource");
 });
 
 test("setup bridge exposes only review and reviewed-creation commands", async () => {

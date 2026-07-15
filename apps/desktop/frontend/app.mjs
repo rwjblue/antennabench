@@ -20,6 +20,9 @@ export function initialState(workflow = "setup") {
       conductorStatus: "idle",
       conductor: null,
       conductorError: null,
+      wsjtxStatus: "idle",
+      wsjtx: null,
+      wsjtxError: null,
     },
     workflow,
   );
@@ -131,6 +134,9 @@ export function setupCreationSucceeded(state, session) {
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
+    wsjtxStatus: "idle",
+    wsjtx: null,
+    wsjtxError: null,
   };
 }
 
@@ -159,6 +165,9 @@ export function openSessionSucceeded(state, session) {
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
+    wsjtxStatus: "idle",
+    wsjtx: null,
+    wsjtxError: null,
   };
 }
 
@@ -265,6 +274,22 @@ export function conductorMutationFailed(state, error) {
   };
 }
 
+export function beginWsjtxAction(state, action = "refreshing") {
+  return { ...state, wsjtxStatus: action, wsjtxError: null };
+}
+
+export function wsjtxActionSucceeded(state, status) {
+  return { ...state, wsjtxStatus: "ready", wsjtx: status, wsjtxError: null };
+}
+
+export function wsjtxActionFailed(state, error) {
+  return {
+    ...state,
+    wsjtxStatus: "error",
+    wsjtxError: normalizeOpenError(error),
+  };
+}
+
 export function invokeOpenSession(invoke) {
   return invoke("open_session_bundle");
 }
@@ -291,6 +316,18 @@ export function invokeActiveSessionConductor(invoke) {
 
 export function invokeMutateSessionConductor(invoke, request) {
   return invoke("mutate_active_session_conductor", { request });
+}
+
+export function invokeActiveSessionWsjtxStatus(invoke) {
+  return invoke("active_session_wsjtx_status");
+}
+
+export function invokeStartSessionWsjtx(invoke, request) {
+  return invoke("start_active_session_wsjtx", { request });
+}
+
+export function invokeStopSessionWsjtx(invoke) {
+  return invoke("stop_active_session_wsjtx");
 }
 
 export function updateReportFrame(reportFrame, state) {
@@ -346,6 +383,15 @@ function mount(root, browserWindow) {
   const conductorFeedbackDetail = root.querySelector("[data-conductor-feedback-detail]");
   const conductorDiagnostics = root.querySelector("[data-conductor-diagnostics]");
   const conductorEvents = root.querySelector("[data-conductor-events]");
+  const wsjtxForm = root.querySelector("[data-wsjtx-form]");
+  const wsjtxBindAddress = root.querySelector("[data-wsjtx-bind-address]");
+  const wsjtxPort = root.querySelector("[data-wsjtx-port]");
+  const wsjtxClientId = root.querySelector("[data-wsjtx-client-id]");
+  const wsjtxStart = root.querySelector("[data-wsjtx-start]");
+  const wsjtxStop = root.querySelector("[data-wsjtx-stop]");
+  const wsjtxPhase = root.querySelector("[data-wsjtx-phase]");
+  const wsjtxCounts = root.querySelector("[data-wsjtx-counts]");
+  const wsjtxDiagnostic = root.querySelector("[data-wsjtx-diagnostic]");
   const openButton = root.querySelector("[data-open-session]");
   const exportButton = root.querySelector("[data-export-session]");
   const transferStatus = root.querySelector("[data-transfer-status]");
@@ -512,10 +558,29 @@ function mount(root, browserWindow) {
           conductorBusy || !evidenceAllowed,
         )),
       );
+      const wsjtxBusy = ["refreshing", "starting", "stopping"].includes(state.wsjtxStatus);
+      const wsjtxRunning = ["running", "stale"].includes(state.wsjtx?.phase);
+      wsjtxForm.setAttribute("aria-busy", String(wsjtxBusy));
+      wsjtxStart.disabled = conductorBusy || wsjtxBusy || wsjtxRunning || view.lifecycle !== "running";
+      wsjtxStop.disabled = conductorBusy || wsjtxBusy || !wsjtxRunning;
+      wsjtxPhase.textContent = state.wsjtx
+        ? `${humanizeIdentifier(state.wsjtx.phase)}${state.wsjtx.bindAddress ? ` · ${state.wsjtx.bindAddress}` : ""}`
+        : "Not started";
+      wsjtxCounts.textContent = state.wsjtx
+        ? `${state.wsjtx.receivedDatagrams} received · ${state.wsjtx.committedMutations} committed · ${state.wsjtx.ignoredDatagrams} explicit non-observation disposition(s)`
+        : "Manual operation remains available without WSJT-X.";
+      const adapterDiagnostic = state.wsjtxError ?? state.wsjtx?.diagnostic ?? null;
+      wsjtxDiagnostic.hidden = adapterDiagnostic === null;
+      if (adapterDiagnostic) {
+        wsjtxDiagnostic.textContent = adapterDiagnostic.message ?? adapterDiagnostic.detail;
+        if (adapterDiagnostic.code) wsjtxDiagnostic.textContent += ` (${adapterDiagnostic.code})`;
+      }
     } else {
       lifecycleButtons.forEach((button) => { button.disabled = true; });
       conductorDiagnostics.replaceChildren();
       conductorEvents.replaceChildren();
+      wsjtxStart.disabled = true;
+      wsjtxStop.disabled = true;
     }
 
     openButton.disabled = state.openStatus === "loading";
@@ -577,6 +642,21 @@ function mount(root, browserWindow) {
       state = conductorMutationFailed(state, error);
     }
     render();
+    if (state.conductor) await refreshWsjtxStatus();
+  };
+
+  const refreshWsjtxStatus = async () => {
+    if (["starting", "stopping"].includes(state.wsjtxStatus)) return;
+    state = beginWsjtxAction(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      state = wsjtxActionSucceeded(state, await invokeActiveSessionWsjtxStatus(invoke));
+    } catch (error) {
+      state = wsjtxActionFailed(state, error);
+    }
+    render();
   };
 
   const submitConductorAction = async (action) => {
@@ -601,6 +681,7 @@ function mount(root, browserWindow) {
       state = conductorMutationFailed(state, error);
     }
     render();
+    if (state.conductorStatus === "ready") await refreshWsjtxStatus();
   };
 
   for (const button of navigation) {
@@ -677,6 +758,36 @@ function mount(root, browserWindow) {
       replacement,
       reason,
     });
+  });
+
+  wsjtxStart.addEventListener("click", async () => {
+    state = beginWsjtxAction(state, "starting");
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      state = wsjtxActionSucceeded(state, await invokeStartSessionWsjtx(invoke, {
+        bindAddress: wsjtxBindAddress.value,
+        port: Number(wsjtxPort.value),
+        expectedClientId: wsjtxClientId.value,
+      }));
+    } catch (error) {
+      state = wsjtxActionFailed(state, error);
+    }
+    render();
+  });
+
+  wsjtxStop.addEventListener("click", async () => {
+    state = beginWsjtxAction(state, "stopping");
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      state = wsjtxActionSucceeded(state, await invokeStopSessionWsjtx(invoke));
+    } catch (error) {
+      state = wsjtxActionFailed(state, error);
+    }
+    render();
   });
 
   setupForm.addEventListener("input", () => {
