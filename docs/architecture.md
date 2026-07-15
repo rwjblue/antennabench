@@ -228,7 +228,7 @@ read/report/export inputs and must be upgraded non-destructively before a
 conductor mutates them. The exact boundary and filesystem limitations are in
 [Schema-V2 Live Persistence And Recovery](live-persistence.md).
 
-## Setup And Planned Conductor Delivery
+## Setup And Conductor Delivery
 
 The conductor tracker
 ([#45](https://github.com/rwjblue/antennabench/issues/45)) turns the approved
@@ -252,10 +252,10 @@ schema v2 + validation + bounded storage
 ```
 
 Schema and safety prerequisites are #46 and #50 through #57. The #61 validated
-setup and bundle-creation slice is implemented. Remaining product slices are
-#62 for the
-manual/no-rig conductor, #63 for live WSJT-X orchestration, #64 for coherent
-live/final report and export, and #65 for deterministic end-to-end coverage.
+setup/bundle-creation slice and #62 manual/no-rig conductor are implemented.
+Remaining product slices are #63 for live WSJT-X orchestration, #64 for
+coherent live/final report and export, and #65 for deterministic end-to-end
+coverage.
 The slices consume the checkpoint and event contracts; they do not define
 competing persistence, lifecycle, correction, or resource semantics.
 
@@ -264,18 +264,24 @@ typed draft, assigns trusted session/plan/slot identities and time, applies the
 strict creation profile, and retains the exact normalized commit candidate.
 Creation accepts only the retained review identity; Rust owns the native picker,
 synchronized sibling staging, live capability probe, complete publication, and
-active-session replacement. Conductor commands will add expected checkpoint
-revisions and trusted mutation identities. The frontend owns presentation and
-disposable input state only. It receives no general path, filesystem, socket,
-clock, identity, or network authority.
+active-session replacement. `active_session_conductor` recovers a newly active
+v2 source once and projects lifecycle, current/next slots, trusted-time phase,
+effective evidence, and diagnostics from one checkpoint. The focused mutation
+command accepts an expected revision, Rust-issued bounded action token, and
+typed operator intent. Rust assigns first-submission time/event identity and
+uses the existing checkpoint writer; committed lost acknowledgements and exact
+retries return idempotently. The frontend owns presentation and disposable
+input state only. It receives no general path, filesystem, socket, clock,
+identity, or network authority.
 
 Manual/no-rig operation is the first complete vertical path. Live WSJT-X is an
 optional bounded producer: admitted raw evidence and normalized observations
 commit together, and a resource or acquisition gap is explicit before affected
 intake stops. Reports, report export, and lossless bundle export select one
 verified checkpoint revision so derived views cannot mix live generations.
-Setup creation is shipped behavior; live conductor behavior remains deferred
-until its focused issues land.
+Setup creation and manual/no-rig conduction are shipped behavior. Optional
+WSJT-X orchestration and live/final report refresh remain deferred to their
+focused issues.
 
 ## Desktop Shell Boundary
 
@@ -290,6 +296,15 @@ antenna, and schedule input to stable field diagnostics and an exact normalized
 plan. `create_session_from_review` owns the native save dialog and checkpointed
 new-bundle publication, then makes the reopened bundle active. The webview sees
 only a review identity and the active-session summary.
+
+The allowlisted `active_session_conductor` and
+`mutate_active_session_conductor` commands expose the manual conductor. The
+read projection is bounded to 512 KiB and includes a Rust-issued action token,
+not host authority. Mutation reuses #53 expected-revision/idempotency semantics
+and #54 lifecycle/correction reducers. Planned antenna labels remain guidance;
+only effective explicit confirmations populate actual state. Competing
+confirmation/missed/bad facts stay visibly conflicting and conservatively
+unresolved.
 
 The allowlisted `open_session_bundle` application command owns the native
 directory picker and composes storage, normalization, validation, report
@@ -314,8 +329,9 @@ source bundle.
 
 Native open/save pickers are thin path-selection adapters around private Rust
 orchestration functions. The unattended desktop integration test substitutes
-only that selection result and deterministic setup hooks, then exercises the
-same review, checkpointed creation, storage, validation, analysis, report,
+only that selection result and deterministic setup/conductor hooks, then
+exercises the same review, checkpointed creation, manual lifecycle/evidence,
+correction, interruption/recovery, storage, validation, analysis, report,
 active-state, export-verification, and reopen code used by the Tauri commands.
 This seam adds no webview permission, path argument, or release-only behavior.
 Native picker presentation and OS path handoff remain a small optional

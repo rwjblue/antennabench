@@ -3,7 +3,8 @@
 Schema-v2 operator events are append-only evidence. The schedule says what was
 planned; only explicit effective operator evidence says what actually happened.
 The pure reducer is implemented independently of storage, Tauri, sockets, and
-hardware so the future mutation writer and every reader use the same rules.
+hardware. The checkpoint writer, shipped manual conductor, and every reader use
+the same rules.
 
 ## Time And Identity
 
@@ -42,6 +43,14 @@ Mutation validation compares the caller's expected checkpoint revision before
 reducing a proposed event. A stale revision, duplicate start, resume without an
 interruption, duplicate ID, or post-terminal event fails without changing the
 effective state.
+
+The desktop conductor issues a bounded action token for the displayed revision.
+Rust binds its mutation/event identity and first-submission time, so a duplicate
+click, exact retry, or lost response returns the committed mutation rather than
+appending a second fact. A different action using a committed token conflicts;
+an unused token for an older revision is stale. Restart recovery records one
+`recovery_system` interruption before exposing resume/end actions when the last
+verified lifecycle was running.
 
 ## Operator Evidence
 

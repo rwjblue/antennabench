@@ -22,6 +22,9 @@ The current implementation focus is the bundle-first Rust foundation:
   table fallbacks, escaped report text, and no network-loaded runtime
 - a minimal Tauri 2 desktop shell that opens local bundles, renders their report,
   and exports verified lossless copies through narrowly allowlisted commands
+- validated schema-v2 setup/bundle creation plus a complete manual/no-rig
+  conductor with durable lifecycle, explicit actual-antenna evidence,
+  append-only corrections, trusted schedule guidance, and restart recovery
 - a realistic, purpose-built synthetic canonical sample-report session spanning
   two antennas, two bands, usable and excluded evidence, and missing data
 - golden fixture coverage
@@ -44,8 +47,8 @@ validation, mutation/recovery, and bounded-resource policies are settled by
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md),
 and
 [Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md),
-validated setup and checkpointed bundle creation are now shipped. The live
-conductor remains planned.
+validated setup, checkpointed bundle creation, and the complete manual/no-rig
+conductor are now shipped. Optional live adapter orchestration remains planned.
 
 The dependency-ordered implementation path is:
 
@@ -53,8 +56,8 @@ The dependency-ordered implementation path is:
    storage (#46, #50, #51, and #55).
 2. Checkpointed persistence/recovery and the lifecycle/correction reducers are
    implemented (#53 and #54).
-3. Validated setup/bundle creation is implemented (#61); deliver the complete
-   manual/no-rig conductor next (#62).
+3. Validated setup/bundle creation and the complete manual/no-rig conductor are
+   implemented (#61 and #62).
 4. Bound adapter ingress and orchestrate live WSJT-X evidence (#56 and #63).
 5. Add granular evidence eligibility, bounded report/IPC behavior, and coherent
    live/final report refresh and export (#52, #57, and #64). The same-session

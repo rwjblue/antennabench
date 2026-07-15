@@ -24,7 +24,7 @@ The intended workflow is:
 7. Export a portable session bundle.
 8. Generate reports from the bundle.
 
-The planned conductor keeps planned and actual state distinct. A slot points to
+The shipped manual conductor keeps planned and actual state distinct. A slot points to
 the schedule's intended antenna, while each switch confirmation records the
 actual antenna independently. Missed/bad marks and later corrections append to
 the evidence history instead of rewriting it. Draft, ready, running,
@@ -108,8 +108,9 @@ lossless export remains available.
 ## Local Setup And Conductor Delivery
 
 The local conductor is tracked by
-[#45](https://github.com/rwjblue/antennabench/issues/45). Validated local setup
-and bundle creation are implemented; live conductor behavior remains split into
+[#45](https://github.com/rwjblue/antennabench/issues/45). Validated local setup,
+bundle creation, and the complete manual/no-rig conductor are implemented.
+Optional live evidence and coherent live-report behavior remain split into
 focused follow-up slices so the UI cannot outrun the durable, validation, and
 resource boundaries:
 
@@ -120,9 +121,11 @@ resource boundaries:
    lifecycle, correction, explicit-actual-state, conflict-exclusion, durable
    append, plan-generation, locking, snapshot, export, and recovery layers are
    implemented.
-3. Validated setup now creates and opens a new checkpointed schema-v2 bundle
-   from an exact normalized review (#61). The manual/no-rig conductor then runs
-   it without depending on any optional adapter (#62).
+3. Validated setup creates and opens a new checkpointed schema-v2 bundle from
+   an exact normalized review (#61). The manual/no-rig conductor runs it without
+   depending on any optional adapter, with current/next slot guidance, explicit
+   actual-antenna confirmation, missed/bad/note facts, append-only correction,
+   durable lifecycle transitions, and restart recovery (#62).
 4. Bounded WSJT-X ingress and desktop orchestration add live evidence without
    making adapter health a lifecycle prerequisite (#56 and #63).
 5. Granular evidence eligibility and bounded report/IPC behavior feed coherent
@@ -139,6 +142,14 @@ and verifies in a sibling staging directory, probes the live filesystem
 capability, and publishes the complete bundle before opening it as the active
 session. Cancellation, stale review, validation failure, and existing
 destinations do not replace active state or expose a partial destination.
+
+The active-run surface reads one verified checkpoint revision and derives its
+phase/countdown from a Rust-owned clock plus the durable schedule. A Rust-issued
+action token binds the first submission time and idempotent mutation identity;
+retrying a lost response cannot duplicate evidence, while a stale revision
+fails without overwrite. Opening a session left running records one durable
+recovery-system interruption before resume/end actions are offered. Ended and
+abandoned sessions are terminal, and schema-v1 sources remain read-only.
 
 All mutation, adapter, clock/identity, filesystem, and network authority stays
 behind focused Rust-owned commands. JavaScript presents typed drafts, actions,
