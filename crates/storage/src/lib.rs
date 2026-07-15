@@ -16,6 +16,7 @@ mod lossless_copy;
 mod resource;
 mod upgrade;
 mod v2;
+mod v3;
 
 pub use inspection::BundleInspection;
 pub use live::{
@@ -451,7 +452,7 @@ pub enum BundleStoreError {
     #[error("bundle path has the wrong suffix for schema version {schema_version}: {path}")]
     InvalidBundleSuffix { path: PathBuf, schema_version: u16 },
 
-    #[error("unsupported bundle schema version {actual}; supported versions are 1 and 2")]
+    #[error("unsupported bundle schema version {actual}; supported versions are 1, 2, and 3")]
     UnsupportedSchemaVersion { actual: u16 },
 
     #[error("bundle manifest is ambiguous and cannot safely select file paths: {message}")]
@@ -459,6 +460,9 @@ pub enum BundleStoreError {
 
     #[error("invalid schema-v2 bundle invariant: {message}")]
     InvalidV2Bundle { message: String },
+
+    #[error("invalid schema-v3 bundle invariant: {message}")]
+    InvalidV3Bundle { message: String },
 
     #[error("attachment reference is invalid: {message}")]
     InvalidAttachmentReference { message: String },

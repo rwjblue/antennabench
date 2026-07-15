@@ -623,7 +623,7 @@ impl BundleStore {
         Ok(bytes)
     }
 
-    fn read_json_bounded<T: DeserializeOwned>(
+    pub(super) fn read_json_bounded<T: DeserializeOwned>(
         &self,
         path: &Path,
         budget: &mut ModeledBudget,
@@ -635,7 +635,7 @@ impl BundleStore {
         })
     }
 
-    fn read_jsonl_bounded<T: DeserializeOwned>(
+    pub(super) fn read_jsonl_bounded<T: DeserializeOwned>(
         &self,
         path: &Path,
         budget: &mut ModeledBudget,
