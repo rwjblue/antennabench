@@ -12,6 +12,7 @@ publish = false
 
 [workspace.dependencies]
 chrono = { version = "0.4.38", default-features = false, features = ["clock", "serde", "std"] }
+csv = "1.4.0"
 insta = { version = "1.48.0", features = ["json"] }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
 serde = { version = "1.0.204", features = ["derive"] }
@@ -23,3 +24,4 @@ tauri-plugin-dialog = "2.7.1"
 tempfile = "3.10.1"
 thiserror = "2.0.18"
 uuid = { version = "1.23.5", features = ["v4"] }
+zip = { version = "6.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
