@@ -1,0 +1,186 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "antennabench-hosted-development",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "HOSTED_ENVIRONMENT": "development",
+    "HOSTED_PROFILE": "hosted-standard-v1",
+    "ADMISSION_ENABLED": "false"
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [
+    { "binding": "UPLOADS_PRIVATE", "bucket_name": "antennabench-hosted-development-uploads-private" },
+    { "binding": "DERIVED_PRIVATE", "bucket_name": "antennabench-hosted-development-derived-private" },
+    { "binding": "REPORTS_PUBLIC", "bucket_name": "antennabench-hosted-development-reports-public" }
+  ],
+  "d1_databases": [
+    {
+      "binding": "CONTROL_DB",
+      "database_name": "antennabench-hosted-development-control",
+      "database_id": "00000000-0000-4000-8000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "PROCESSOR_QUEUE", "queue": "antennabench-hosted-development-process" }
+    ],
+    "consumers": [
+      {
+        "queue": "antennabench-hosted-development-process",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "antennabench-hosted-development-process-dlq",
+        "max_concurrency": 2,
+        "retry_delay": 60
+      }
+    ]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "PROCESSOR", "class_name": "ProcessorContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProcessorContainer"] }],
+  "containers": [
+    {
+      "class_name": "ProcessorContainer",
+      "image": "./processor/Dockerfile",
+      "instance_type": "basic",
+      "max_instances": 2,
+      "ssh": { "enabled": false }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  },
+  "env": {
+    "preview": {
+      "name": "antennabench-hosted-preview",
+      "workers_dev": true,
+      "preview_urls": false,
+      "vars": {
+        "HOSTED_ENVIRONMENT": "preview",
+        "HOSTED_PROFILE": "hosted-standard-v1",
+        "ADMISSION_ENABLED": "false"
+      },
+      "assets": {
+        "directory": "./public",
+        "binding": "ASSETS",
+        "run_worker_first": ["/api/*"]
+      },
+      "r2_buckets": [
+        { "binding": "UPLOADS_PRIVATE", "bucket_name": "antennabench-hosted-preview-uploads-private" },
+        { "binding": "DERIVED_PRIVATE", "bucket_name": "antennabench-hosted-preview-derived-private" },
+        { "binding": "REPORTS_PUBLIC", "bucket_name": "antennabench-hosted-preview-reports-public" }
+      ],
+      "d1_databases": [
+        {
+          "binding": "CONTROL_DB",
+          "database_name": "antennabench-hosted-preview-control",
+          "database_id": "00000000-0000-4000-8000-000000000002",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "queues": {
+        "producers": [{ "binding": "PROCESSOR_QUEUE", "queue": "antennabench-hosted-preview-process" }],
+        "consumers": [
+          {
+            "queue": "antennabench-hosted-preview-process",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "antennabench-hosted-preview-process-dlq",
+            "max_concurrency": 2,
+            "retry_delay": 60
+          }
+        ]
+      },
+      "durable_objects": {
+        "bindings": [{ "name": "PROCESSOR", "class_name": "ProcessorContainer" }]
+      },
+      "containers": [
+        {
+          "class_name": "ProcessorContainer",
+          "image": "./processor/Dockerfile",
+          "instance_type": "basic",
+          "max_instances": 2,
+          "ssh": { "enabled": false }
+        }
+      ],
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "logs": { "invocation_logs": false }
+      }
+    },
+    "production": {
+      "name": "antennabench-hosted-production",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "HOSTED_ENVIRONMENT": "production",
+        "HOSTED_PROFILE": "hosted-standard-v1",
+        "ADMISSION_ENABLED": "false"
+      },
+      "assets": {
+        "directory": "./public",
+        "binding": "ASSETS",
+        "run_worker_first": ["/api/*"]
+      },
+      "r2_buckets": [
+        { "binding": "UPLOADS_PRIVATE", "bucket_name": "antennabench-hosted-production-uploads-private" },
+        { "binding": "DERIVED_PRIVATE", "bucket_name": "antennabench-hosted-production-derived-private" },
+        { "binding": "REPORTS_PUBLIC", "bucket_name": "antennabench-hosted-production-reports-public" }
+      ],
+      "d1_databases": [
+        {
+          "binding": "CONTROL_DB",
+          "database_name": "antennabench-hosted-production-control",
+          "database_id": "00000000-0000-4000-8000-000000000003",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "queues": {
+        "producers": [{ "binding": "PROCESSOR_QUEUE", "queue": "antennabench-hosted-production-process" }],
+        "consumers": [
+          {
+            "queue": "antennabench-hosted-production-process",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "antennabench-hosted-production-process-dlq",
+            "max_concurrency": 2,
+            "retry_delay": 60
+          }
+        ]
+      },
+      "durable_objects": {
+        "bindings": [{ "name": "PROCESSOR", "class_name": "ProcessorContainer" }]
+      },
+      "containers": [
+        {
+          "class_name": "ProcessorContainer",
+          "image": "./processor/Dockerfile",
+          "instance_type": "basic",
+          "max_instances": 2,
+          "ssh": { "enabled": false }
+        }
+      ],
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 0.1,
+        "logs": { "invocation_logs": false }
+      }
+    }
+  }
+}

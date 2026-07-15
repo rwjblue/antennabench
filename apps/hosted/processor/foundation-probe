@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+printf '%s\n' '{"event":"hosted_lifecycle","stage":"processor","outcome":"ready","code":"foundation_probe"}'

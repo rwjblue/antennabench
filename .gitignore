@@ -6,3 +6,6 @@
 /docs/superpowers/
 *.swp
 *.swo
+node_modules/
+.wrangler/
+/apps/hosted/dist/

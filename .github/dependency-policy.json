@@ -11,6 +11,15 @@
       "lockfile": "Cargo.lock",
       "update": "dependabot:cargo:/",
       "policy": "ADR 0012 and deny.toml"
+    },
+    {
+      "name": "hosted-npm",
+      "manifest_globs": [
+        "apps/hosted/package.json"
+      ],
+      "lockfile": "apps/hosted/package-lock.json",
+      "update": "dependabot:npm:/apps/hosted",
+      "policy": "ADR 0012 supply-chain review plus exact package.json and package-lock.json pins"
     }
   ]
 }

@@ -268,6 +268,19 @@ cargo run -p antennabench-report --example render_canonical_sample -- /tmp/anten
 For documentation-only changes, inspect the rendered intent and verify the diff
 is limited to the requested files.
 
+The optional hosted foundation is verified independently with:
+
+```bash
+mise run hosted:test
+```
+
+It uses locked npm dependencies, generated Wrangler binding types, fake service
+inventory tests, strict TypeScript, and a no-account dry build. The dry build
+uses `--containers-rollout=none` so ordinary CI needs no Docker daemon and does
+not provision or contact Cloudflare. Environment matrix tests pin distinct
+private-upload, private-derived, public-report, D1, Queue/DLQ, and bounded
+Container configuration. Local Rust and desktop tests never read hosted config.
+
 ## Continuous Integration
 
 Pull requests and pushes to `main` run three standard GitHub-hosted jobs. Linux

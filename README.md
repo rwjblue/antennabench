@@ -53,6 +53,9 @@ Implemented:
   analyzes them without mutation, refreshes revision-keyed live/final reports
   in an isolated frame, exports the exact visible standalone HTML snapshot,
   and exports verified checkpointed bundle copies through narrow Rust commands.
+- A separately buildable, admission-disabled Cloudflare hosted foundation with
+  Static Assets, typed private/public R2, D1, Queue, and bounded scale-to-zero
+  Container bindings; local product behavior has no dependency on it.
 - Validated schema-v2 session setup plus a complete manual/no-rig conductor
   with durable lifecycle, explicit actual-antenna evidence, corrections,
   restart recovery, and trusted schedule guidance.

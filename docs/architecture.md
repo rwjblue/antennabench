@@ -30,6 +30,8 @@ Current crates:
 Planned crates and apps:
 
 - `apps/web`: hosted report viewer and publishing surface.
+- `apps/hosted`: optional Cloudflare Static Assets and narrow Worker boundary,
+  with environment-isolated storage, Queue, D1, and Container declarations.
 - `crates/rig`: optional rig-observation or control adapters.
 
 ## Data Flow
