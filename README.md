@@ -17,10 +17,14 @@ Implemented:
 - Canonical bundle model for station, antennas, schedules, operator events,
   observations, adapter records, propagation snapshots, and analysis metadata.
 - Filesystem read/write support for schema-v1 `.session.wsprabundle` and
-  provider-neutral schema-v2 `.session.antennabundle` directories.
+  provider-neutral schema-v2/v3 `.session.antennabundle` directories.
 - Explicit non-destructive v1-to-v2 upgrade with structured provenance,
   generic adapter evidence, mutation/checkpoint envelopes, verified SHA-256
   attachments, semantic-equivalence checks, and lossless copy for both versions.
+- Typed schema-v3 CW/RTTY signal plans, per-slot frequency variants,
+  counterbalance validation, correctable manual signal-state evidence, static
+  checkpoint persistence, manifest dispatch, and deterministic v1/v2 upgrades
+  that invent no planned or actual signal facts.
 - Deterministic schedule slot alignment and observation annotation.
 - Strict bundle validation for schema/session drift, duplicate IDs, references,
   slot windows, confidence ranges, and stale alignment annotations.
@@ -52,11 +56,10 @@ Implemented:
 - Optional bounded loopback WSJT-X reception with expected-client admission,
   raw generic adapter evidence, atomically linked local-decode observations,
   typed status, and fail-closed acquisition gaps.
-- Offline WSPR.live ClickHouse `FORMAT JSON` import through a narrow native
-  picker, with explicit source-authority confirmation, repeated session
-  filters, exact-response attachments, provider-ID duplicate/conflict replay,
-  atomically linked imported-spot observations, and unknown-completeness report
-  disclosure. AntennaBench does not query WSPR.live directly.
+- Default-on, operator-configurable WSPR.live acquisition after confirmed
+  antenna segments, plus an offline `FORMAT JSON` import escape hatch. Both
+  paths repeat session filters, preserve exact-response attachments, handle
+  provider-ID duplicate/conflict replay, and atomically link imported spots.
 - An unattended desktop integration path that verifies canonical open, report,
   lossless export, cancellation, typed failure, and reopen behavior without
   launching a window or taking foreground input.
@@ -66,7 +69,7 @@ Implemented:
 Not implemented yet:
 
 - Rig control.
-- Public spot fetching.
+- Live RBN acquisition.
 - Winner selection and advanced statistical analysis.
 - Markdown, PDF, and image rendering.
 - Hosted report viewing or publishing.

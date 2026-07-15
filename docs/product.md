@@ -152,12 +152,13 @@ capability, and publishes the complete bundle before opening it as the active
 session. Cancellation, stale review, validation failure, and existing
 destinations do not replace active state or expose a partial destination.
 
-Controlled non-WSPR transmit comparisons will use reusable typed signal plans
+Controlled non-WSPR transmit comparisons use the schema-v3 foundation of reusable typed signal plans
 with explicit per-slot frequency variants and counterbalancing rather than
-freeform procedure notes. The schema-v3 boundary, manual actual-state evidence,
-and RBN collection constraints are selected by
+freeform procedure notes. The wire model, strict validation, persistence,
+migration, and manual actual-state evidence types are implemented; desktop
+authoring and conductor presentation remain in progress. The boundary and RBN collection constraints are selected by
 [Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md)
-and tracked for implementation in
+and tracked in
 [#86](https://github.com/rwjblue/antennabench/issues/86). Existing WSPR sessions
 and the WSJT-X execution path remain unchanged.
 

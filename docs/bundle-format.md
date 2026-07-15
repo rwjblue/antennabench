@@ -2,7 +2,7 @@
 
 A session bundle is a directory containing JSON root files, JSONL streams, and
 an attachments directory. Schema version 1 uses `.session.wsprabundle`; schema
-version 2 uses the provider-neutral `.session.antennabundle` suffix.
+versions 2 and 3 use the provider-neutral `.session.antennabundle` suffix.
 
 Version 1 layout:
 
@@ -21,7 +21,7 @@ example.session.wsprabundle/
   attachments/
 ```
 
-Version 2 layout:
+Versions 2 and 3 share this physical layout:
 
 ```text
 example.session.antennabundle/
@@ -47,11 +47,12 @@ example.session.antennabundle/
       generation.json
 ```
 
-Storage reads `manifest.schema_version` first and dispatches into distinct v1
-and v2 wire models. Unknown versions fail with a typed unsupported-version
-error. Both versions project into one current model; v2 projection retains a
+Storage reads `manifest.schema_version` first and dispatches into distinct v1,
+v2, and v3 wire models. Unknown versions fail with a typed unsupported-version
+error. All versions project into one current analysis model; v2/v3 projection retains a
 provider-neutral provenance sidecar, generic adapter records, and the session
-checkpoint while existing consumers migrate away from the legacy source enum.
+checkpoint. V3-only planned and confirmed signal facts are not coerced into
+legacy analysis fields.
 
 Version 2 implements the static wire foundation selected by
 [Decision 0008](decisions/0008-use-provider-neutral-adapter-evidence-in-bundle-v2.md).
@@ -83,12 +84,24 @@ readable and losslessly copyable; live mutation requires an explicit v2 upgrade
 to a new `.session.antennabundle` destination.
 
 [Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md)
-selects schema v3 for typed non-WSPR transmit signal plans. The version boundary
-is intentional: older v2 conductors must not silently ignore planned mode,
-identity, cadence, per-slot frequency, or counterbalancing and then run a
-materially different experiment. Implementation is tracked by
-[#86](https://github.com/rwjblue/antennabench/issues/86); current v1/v2 wire
-behavior remains unchanged until that focused migration lands.
+selects schema v3 for typed non-WSPR transmit signal plans. V3 adds reusable
+CW/RTTY plan definitions containing planned power, exact transmitted identity,
+cadence, and collection profile; each participating slot carries an exact
+frequency, frequency-variant identity, counterbalance block, and position. The
+pinned RBN CW profile rejects allocations less than 300 Hz apart when their
+transmissions are less than ten minutes apart, and RTTY cannot claim that CW
+profile. Strict validation also requires complete, position-balanced antenna ×
+frequency-variant blocks and explicit validation when transmitted identity
+differs from the station callsign.
+
+V3 events add correctable `signal_state_confirmed` evidence. Actual frequency,
+mode, optional power, exact transmitted identity, and cadence adherence remain
+separate from the plan; missing actual facts stay missing. Rig records add only
+optional observed/read-back power. Static checkpoint persistence, verified
+attachments, manifest dispatch, lossless export, and deterministic direct
+v1-to-v3 and v2-to-v3 upgrades are implemented. Upgrades preserve legacy
+evidence but create no signal plans, slot allocations, confirmations, or rig
+power facts. Existing v1/v2 read and lossless-copy behavior is unchanged.
 
 ## Provider-Neutral Evidence
 
@@ -131,7 +144,10 @@ migration mutation membership.
 
 The upgrader verifies projected semantic equivalence, checkpoint/stream
 digests, retained evidence counts, destination reopen, and a before/after
-snapshot of every source file. There is no v2-to-v1 downgrade.
+snapshot of every source file. `upgrade_v1_to_v3()` applies the same lossless
+legacy conversion directly, while `upgrade_v2_to_v3()` preserves v2 evidence
+and attachments. The direct and two-step v3 models are deterministic and
+equivalent. There is no downgrade to an older schema.
 
 ## Schema-V2 Operator Events
 
@@ -188,7 +204,7 @@ whole bundle or no typed bundle. Storage-safe preservation remains separate
 from parsing and analysis, and strict writes or live checkpoints never promote
 bytes that cross the profile.
 
-Schema-v1 and schema-v2 reads, strict writes, upgrades, attachment access, and
+Schema-v1, schema-v2, and schema-v3 reads, strict writes, upgrades, attachment access, and
 lossless copies use this same fixed profile. Production callers cannot override
 it. Tests can inject a tiny equivalent to exercise exact boundaries and
 mid-operation failures deterministically. Resource failures expose a stable
@@ -227,7 +243,7 @@ chunk.
 
 Every v1 JSONL record includes `meta` with schema version, session id,
 timestamp, and legacy source. Every v2 record instead uses structured
-provenance and mutation membership.
+provenance and mutation membership. V3 retains that envelope for every stream.
 
 Offline WSJT-X WSPR log import preserves every nonblank imported line in
 `wsjtx.jsonl`. Valid `ALL_WSPR.TXT`-style decode rows also produce

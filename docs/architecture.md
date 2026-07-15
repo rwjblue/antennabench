@@ -409,8 +409,10 @@ default-on, operator-configurable automatic-acquisition boundary is recorded by
 and the fail-closed schema-v3 boundary for reusable, counterbalanced non-WSPR
 transmit signal plans is recorded by
 [Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md).
-Implementation is tracked by
-[#86](https://github.com/rwjblue/antennabench/issues/86),
+The schema-v3 wire model, validation, checkpoint persistence, manifest dispatch,
+lossless export, and deterministic v1/v2 migration are implemented under
+[#86](https://github.com/rwjblue/antennabench/issues/86). Desktop authoring and
+conductor integration remain within that issue,
 and the first optional rig-control milestone is tracked by
 [#14](https://github.com/rwjblue/antennabench/issues/14).
 
