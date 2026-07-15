@@ -136,7 +136,26 @@
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>04</span> Optional public spots</legend>
+                <legend><span>04</span> Controlled transmit signal</legend>
+                <label class="authority-confirmation"><input type="checkbox" data-setup-field="signalPlanEnabled"> Add a manually conducted CW or RTTY signal plan (schema v3)</label>
+                <p class="field-help">AntennaBench will guide antenna and frequency changes, but will not key the transmitter or infer that planned settings were used. Enter every exact frequency in hertz; Rust expands them into complete, order-balanced antenna × frequency blocks.</p>
+                <div class="field-grid" data-signal-plan-fields hidden>
+                  <label>Mode<select data-setup-field="signalMode"><option value="cw">CW</option><option value="rtty">RTTY</option></select></label>
+                  <label>Evidence profile<select data-setup-field="signalCollectionProfile"><option value="manual_observation">Manual observation</option><option value="rbn_cw_v1">Reverse Beacon Network CW</option></select></label>
+                  <label>Planned power (W)<input data-setup-field="signalPlannedPowerWatts" inputmode="decimal" placeholder="5" /></label>
+                  <label>Exact transmitted callsign<input data-setup-field="signalTransmittedCallsign" autocomplete="off" placeholder="N1RWJ" /></label>
+                  <label class="authority-confirmation field-wide"><input type="checkbox" data-setup-field="signalDifferingIdentityValidated"> I verified that this transmitted identity is permitted when it differs from the station callsign</label>
+                  <label class="field-wide">Exact message<textarea data-setup-field="signalMessage" rows="2" placeholder="CQ CQ N1RWJ N1RWJ TEST"></textarea></label>
+                  <label>Repetitions<input data-setup-field="signalRepetitionCount" inputmode="numeric" value="2" /></label>
+                  <label>CW speed (WPM)<input data-setup-field="signalKeySpeedWpm" inputmode="numeric" value="20" /></label>
+                  <label>Transmit seconds<input data-setup-field="signalTransmitSeconds" inputmode="numeric" value="20" /></label>
+                  <label>Cadence interval (seconds)<input data-setup-field="signalIntervalSeconds" inputmode="numeric" value="30" /></label>
+                  <label class="field-wide">Exact frequencies (Hz, comma-separated)<input data-setup-field="signalFrequenciesHz" inputmode="numeric" placeholder="14050000, 14050300" /></label>
+                </div>
+              </fieldset>
+
+              <fieldset class="setup-section">
+                <legend><span>05</span> Optional public spots</legend>
                 <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Use WSPR.live public spots for this session</label>
                 <p class="field-help"><a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> is a volunteer WSPRnet mirror for personal research and freely accessible projects. If enabled, AntennaBench sends only the transmitter callsign, bounded UTC window, selected bands, and fixed WSPR-2 filter after durable antenna confirmations. It does not send the bundle, grid, antenna labels, observations, or notes. Source completeness is unknown. Automatic acquisition is enabled for new sessions; uncheck this box for a fully local session.</p>
               </fieldset>
@@ -156,7 +175,7 @@
             <section class="setup-review" data-setup-review hidden aria-labelledby="review-title">
               <div><p class="eyebrow">Exact commit candidate</p><h2 id="review-title">Normalized plan review</h2></div>
               <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div></dl>
-              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Band</th><th>Local time · UTC</th><th>Window</th></tr></thead><tbody data-review-slots></tbody></table></div>
+              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Band</th><th>Signal</th><th>Local time · UTC</th><th>Window</th></tr></thead><tbody data-review-slots></tbody></table></div>
             </section>
 
             <div class="boundary-note"><strong>Trusted boundary</strong><p>The webview submits typed draft values and a review ID only. Rust owns validation, normalized timestamps, collision-resistant IDs, the native destination picker, checkpointed creation, and active-session state.</p></div>

@@ -8,6 +8,7 @@ use antennabench_core::{
     normalize_bundle, validate_bundle_report, BundleContents, BundleFiles, BundleValidationError,
     BundleValidationProfile,
 };
+use serde::Deserialize;
 use thiserror::Error;
 
 mod inspection;
@@ -42,6 +43,18 @@ pub struct BundleStore {
 }
 
 impl BundleStore {
+    pub fn schema_version(&self) -> Result<u16, BundleStoreError> {
+        #[derive(Deserialize)]
+        struct ManifestVersion {
+            schema_version: u16,
+        }
+
+        let mut budget = resource::ModeledBudget::default();
+        let manifest: ManifestVersion =
+            self.read_json_bounded(&self.bundle_path("manifest.json")?, &mut budget)?;
+        Ok(manifest.schema_version)
+    }
+
     pub fn new(root: impl AsRef<Path>) -> Self {
         Self {
             root: root.as_ref().to_path_buf(),

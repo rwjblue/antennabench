@@ -10,7 +10,7 @@ use antennabench_analysis::AnalysisError;
 use antennabench_core::{
     normalize_bundle, AdapterDisposition, AdapterInput, Band, BundleContents,
     BundleValidationError, BundleValidationReport, OperatorEventPayloadV2, SessionLifecycleV2,
-    V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence, ReportCompleteness,
@@ -465,11 +465,32 @@ fn open_bundle(path: &Path) -> Result<ActiveSession, OpenSessionError> {
 fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenSessionError> {
     let store = BundleStore::new(path);
     if bundle_name.ends_with(V2_BUNDLE_SUFFIX) {
-        let bundle = store.read_v2_checkpointed()?;
-        let revision = bundle.session_state.revision;
-        let lifecycle = bundle.session_state.lifecycle;
-        let report_snapshot = report_snapshot(&bundle);
-        let current = bundle.into_current();
+        let schema_version = store.schema_version()?;
+        let (current, revision, lifecycle, report_snapshot) = match schema_version {
+            SCHEMA_VERSION_V2 => {
+                let bundle = store.read_v2_checkpointed()?;
+                let revision = bundle.session_state.revision;
+                let lifecycle = bundle.session_state.lifecycle;
+                let report_snapshot = report_snapshot(&bundle);
+                (bundle.into_current(), revision, lifecycle, report_snapshot)
+            }
+            SCHEMA_VERSION_V3 => {
+                let bundle = store.read_v3_checkpointed()?;
+                let revision = bundle.session_state.revision;
+                let lifecycle = bundle.session_state.lifecycle;
+                (
+                    bundle.into_current(),
+                    revision,
+                    lifecycle,
+                    ReportSnapshotContext::default(),
+                )
+            }
+            actual => {
+                return Err(OpenSessionError::Storage(
+                    BundleStoreError::UnsupportedSchemaVersion { actual },
+                ));
+            }
+        };
         let (inspected, validation) = store.inspect()?.into_current_parts();
         let inspected = inspected.ok_or_else(|| {
             OpenSessionError::Storage(BundleStoreError::Validation {

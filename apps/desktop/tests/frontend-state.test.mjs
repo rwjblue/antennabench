@@ -141,9 +141,11 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
     ["rounds", "2"],
   ]);
   const publicSpots = { checked: true };
+  const signalPlan = { checked: false };
   const form = {
     querySelector(selector) {
       if (selector.includes("wsprLiveAcquisitionEnabled")) return publicSpots;
+      if (selector.includes("signalPlanEnabled")) return signalPlan;
       const field = selector.match(/data-setup-field="([^"]+)"/)[1];
       return { value: values.get(field) };
     },
@@ -153,6 +155,46 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, true);
   publicSpots.checked = false;
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
+});
+
+test("setup serializes an explicit typed signal plan without WSPR.live", () => {
+  const values = new Map([
+    ["callsign", "N1RWJ"], ["grid", "FN42"], ["powerWatts", "5"],
+    ["operatorNotes", ""], ["mode", "tx_focused"], ["goal", "general_coverage"],
+    ["startsAt", ""], ["band", "20m"], ["durationSeconds", "120"],
+    ["guardSeconds", "10"], ["rounds", "2"], ["signalMode", "cw"],
+    ["signalCollectionProfile", "rbn_cw_v1"], ["signalPlannedPowerWatts", "5"],
+    ["signalTransmittedCallsign", "N1RWJ"], ["signalMessage", "CQ N1RWJ TEST"],
+    ["signalRepetitionCount", "2"], ["signalKeySpeedWpm", "20"],
+    ["signalTransmitSeconds", "20"], ["signalIntervalSeconds", "30"],
+    ["signalFrequenciesHz", "14050000, 14050300"],
+  ]);
+  const form = {
+    querySelector(selector) {
+      if (selector.includes("signalPlanEnabled")) return { checked: true };
+      if (selector.includes("signalDifferingIdentityValidated")) return { checked: false };
+      if (selector.includes("wsprLiveAcquisitionEnabled")) return { checked: false };
+      const field = selector.match(/data-setup-field="([^"]+)"/)[1];
+      return { value: values.get(field) };
+    },
+    querySelectorAll() { return []; },
+  };
+
+  const draft = readSetupDraft(form);
+  assert.equal(draft.wsprLiveAcquisitionEnabled, false);
+  assert.deepEqual(draft.signalPlan, {
+    mode: "cw",
+    collectionProfile: "rbn_cw_v1",
+    plannedPowerWatts: "5",
+    transmittedCallsign: "N1RWJ",
+    differingIdentityValidated: false,
+    message: "CQ N1RWJ TEST",
+    repetitionCount: "2",
+    keySpeedWpm: "20",
+    transmitSeconds: "20",
+    intervalSeconds: "30",
+    frequenciesHz: "14050000, 14050300",
+  });
 });
 
 test("setup creation cancellation, failure, and success preserve coherent state", () => {

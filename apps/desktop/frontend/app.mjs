@@ -662,7 +662,10 @@ function mount(root, browserWindow) {
       setupReviewAntennas.textContent = plan.antennas
         .map((antenna, index) => `${String.fromCharCode(65 + index)}: ${antenna.label}${antenna.context ? ` — ${antenna.context}` : ""}`)
         .join("\n");
-      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} slots · WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
+      const signalSummary = plan.signalPlan
+        ? `${humanizeIdentifier(plan.signalPlan.mode)} · ${humanizeIdentifier(plan.signalPlan.collectionProfile)} · ${plan.signalPlan.frequenciesHz.length} frequencies`
+        : `WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
+      setupReviewShape.textContent = `Schema v${plan.schemaVersion} · ${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} slots · ${signalSummary}`;
       setupReviewSlots.replaceChildren(
         ...plan.slots.map((slot) => {
           const row = root.createElement("tr");
@@ -670,6 +673,9 @@ function mount(root, browserWindow) {
             slot.sequenceNumber,
             slot.antennaLabel,
             slot.band,
+            slot.signal
+              ? `${slot.signal.frequencyHz} Hz · ${slot.signal.frequencyVariantId} · ${slot.signal.counterbalanceBlockId}/${slot.signal.counterbalancePosition}`
+              : "—",
             formatReviewTime(slot.startsAt),
             `${slot.durationSeconds}s + ${slot.guardSeconds}s guard`,
           ]) {
@@ -1104,6 +1110,7 @@ function mount(root, browserWindow) {
   });
 
   setupForm.addEventListener("input", () => {
+    syncSignalPlanFields(setupForm);
     if (!setupBusyState(state)) {
       state = editSessionSetup(state);
       render();
@@ -1268,6 +1275,7 @@ function mount(root, browserWindow) {
     render();
   });
 
+  syncSignalPlanFields(setupForm);
   render();
   browserWindow.setInterval?.(() => {
     if (
@@ -1593,6 +1601,7 @@ export function readSetupDraft(form) {
   const value = (field) => form.querySelector(`[data-setup-field="${field}"]`).value;
   const localStart = value("startsAt");
   const startsAt = localStart ? new Date(localStart).toISOString() : "";
+  const signalPlanEnabled = form.querySelector('[data-setup-field="signalPlanEnabled"]').checked;
   return {
     station: {
       callsign: value("callsign"),
@@ -1621,7 +1630,32 @@ export function readSetupDraft(form) {
       rounds: value("rounds"),
     },
     wsprLiveAcquisitionEnabled: form.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]').checked,
+    signalPlan: signalPlanEnabled ? {
+      mode: value("signalMode"),
+      collectionProfile: value("signalCollectionProfile"),
+      plannedPowerWatts: value("signalPlannedPowerWatts"),
+      transmittedCallsign: value("signalTransmittedCallsign"),
+      differingIdentityValidated: form.querySelector('[data-setup-field="signalDifferingIdentityValidated"]').checked,
+      message: value("signalMessage"),
+      repetitionCount: value("signalRepetitionCount"),
+      keySpeedWpm: value("signalKeySpeedWpm"),
+      transmitSeconds: value("signalTransmitSeconds"),
+      intervalSeconds: value("signalIntervalSeconds"),
+      frequenciesHz: value("signalFrequenciesHz"),
+    } : null,
   };
+}
+
+function syncSignalPlanFields(form) {
+  const enabled = form.querySelector('[data-setup-field="signalPlanEnabled"]').checked;
+  const fields = form.querySelector("[data-signal-plan-fields]");
+  fields.hidden = !enabled;
+  for (const control of fields.querySelectorAll("input, select, textarea")) {
+    control.disabled = !enabled;
+  }
+  const wsprLive = form.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]');
+  if (enabled) wsprLive.checked = false;
+  wsprLive.disabled = enabled;
 }
 
 function refreshAntennaRows(form) {
