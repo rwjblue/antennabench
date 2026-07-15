@@ -715,6 +715,30 @@ fn checkpointed_export_excludes_tails_and_copies_durable_recovery_artifacts() {
 }
 
 #[test]
+fn checkpointed_export_collision_preserves_the_existing_destination() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = ready_v2_store(temp.path());
+    let destination = temp
+        .path()
+        .join(format!("existing-export{V2_BUNDLE_SUFFIX}"));
+    let exported = store.export_v2_checkpointed_to(&destination).unwrap();
+    let expected = exported.read_v2_checkpointed().unwrap();
+    std::fs::write(destination.join("owner.txt"), b"keep existing export").unwrap();
+
+    assert!(store.export_v2_checkpointed_to(&destination).is_err());
+    assert_eq!(
+        std::fs::read(destination.join("owner.txt")).unwrap(),
+        b"keep existing export"
+    );
+    assert_eq!(
+        BundleStore::new(destination)
+            .read_v2_checkpointed()
+            .unwrap(),
+        expected
+    );
+}
+
+#[test]
 fn append_failpoint_matrix_never_exposes_a_mixed_revision() {
     let points = [
         LivePersistencePoint::BeforeStreamWrite(LiveStreamV2::Events),

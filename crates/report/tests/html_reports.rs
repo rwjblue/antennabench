@@ -1,8 +1,13 @@
 use std::path::PathBuf;
 
 use antennabench_analysis::{ComparisonAvailability, EvidenceQuality, ObservationCounts};
-use antennabench_core::{normalize_bundle, Band, ObservationKind, RecordSource};
-use antennabench_report::{build_report, render_standalone_html, ReportNotice, SessionReport};
+use antennabench_core::{
+    normalize_bundle, Band, ObservationKind, RecordSource, SessionLifecycleV2,
+};
+use antennabench_report::{
+    build_report, render_standalone_html, ReportAdapterEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportNotice, ReportSnapshotContext, SessionReport,
+};
 use antennabench_storage::BundleStore;
 use chrono::Duration;
 
@@ -54,6 +59,39 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     assert!(first.contains("<dt>Scheduled bands</dt><dd>40 m, 20 m</dd>"));
     assert!(first.contains("<dt>Scheduled slots</dt><dd>12</dd>"));
     assert!(first.contains("This report is descriptive and does not select an antenna winner."));
+}
+
+#[test]
+fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
+    let mut report = canonical_report();
+    report.snapshot = ReportSnapshotContext {
+        checkpoint_revision: Some(17),
+        lifecycle: Some(SessionLifecycleV2::Interrupted),
+        lifecycle_events: vec![ReportLifecycleEvent {
+            kind: ReportLifecycleEventKind::InterruptionDetected,
+            occurred_at: "2026-07-14T22:00:00Z".parse().unwrap(),
+            detail: Some("recovered <without inventing evidence>".into()),
+        }],
+        adapter_evidence: ReportAdapterEvidence {
+            record_count: 9,
+            accepted_count: 5,
+            malformed_count: 1,
+            unsupported_count: 0,
+            filtered_count: 1,
+            duplicate_count: 1,
+            partially_normalized_count: 1,
+            gap_count: 1,
+            evidence_complete: false,
+        },
+    };
+
+    let html = render_standalone_html(&report).unwrap();
+    assert!(html.contains("Committed session snapshot"));
+    assert!(html.contains("<dt>Checkpoint revision</dt><dd>17</dd>"));
+    assert!(html.contains("Interrupted / in progress"));
+    assert!(html.contains("Incomplete: 1 explicit acquisition gap(s)"));
+    assert!(html.contains("Lifecycle and interruption history"));
+    assert!(html.contains("recovered &lt;without inventing evidence&gt;"));
 }
 
 #[test]

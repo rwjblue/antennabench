@@ -13,9 +13,9 @@ use crate::{
     BandEvidenceCountRow, BandEvidenceSection, CountingWriter, EvidenceSections,
     ReportCancellationToken, ReportChartData, ReportComparisonData, ReportCompleteness,
     ReportDetailFamily, ReportError, ReportEvidenceSummary, ReportNotice, ReportResourceLimits,
-    ReportResourceStage, ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange,
-    SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection, StationContext,
-    UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
+    ReportResourceStage, ReportSnapshotContext, ScheduleOverview, ScheduledSlotContext,
+    ScheduledTimeRange, SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection,
+    StationContext, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
 pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportError> {
@@ -27,11 +27,20 @@ pub fn build_report_with_validation(
     bundle: &BundleContents,
     validation: &BundleValidationReport,
 ) -> Result<SessionReport, ReportError> {
-    build_report_with_resources(
+    build_report_with_snapshot(bundle, validation, ReportSnapshotContext::default())
+}
+
+pub fn build_report_with_snapshot(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+    snapshot: ReportSnapshotContext,
+) -> Result<SessionReport, ReportError> {
+    build_report_with_resources_and_snapshot(
         bundle,
         validation,
         REPORT_RESOURCE_LIMITS,
         &ReportCancellationToken::default(),
+        snapshot,
     )
 }
 
@@ -41,6 +50,22 @@ pub fn build_report_with_resources(
     limits: ReportResourceLimits,
     cancellation: &ReportCancellationToken,
 ) -> Result<SessionReport, ReportError> {
+    build_report_with_resources_and_snapshot(
+        bundle,
+        validation,
+        limits,
+        cancellation,
+        ReportSnapshotContext::default(),
+    )
+}
+
+fn build_report_with_resources_and_snapshot(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+    limits: ReportResourceLimits,
+    cancellation: &ReportCancellationToken,
+    snapshot: ReportSnapshotContext,
+) -> Result<SessionReport, ReportError> {
     check_cancelled(
         cancellation,
         ReportResourceStage::Projection,
@@ -48,7 +73,7 @@ pub fn build_report_with_resources(
     )?;
     let summary =
         summarize_bundle_with_resources(bundle, validation, limits.analysis, cancellation)?;
-    let detail_counts = DetailCounts::new(bundle, &summary);
+    let detail_counts = DetailCounts::new(bundle, &summary, &snapshot);
     if summary.eligibility.exclusions.len() as u64 > limits.rows {
         return Err(report_resource_error(
             "resource.report.rows",
@@ -110,6 +135,7 @@ pub fn build_report_with_resources(
         comparison: project_comparison(comparison, full_detail),
         chart_data,
         notices,
+        snapshot,
         eligibility_exclusions: eligibility.exclusions,
     };
     check_cancelled(cancellation, ReportResourceStage::Serialize, "report_model")?;
@@ -267,11 +293,19 @@ struct DetailCounts {
 }
 
 impl DetailCounts {
-    fn new(bundle: &BundleContents, summary: &AnalysisSummary) -> Self {
+    fn new(
+        bundle: &BundleContents,
+        summary: &AnalysisSummary,
+        snapshot: &ReportSnapshotContext,
+    ) -> Self {
         let comparison = &summary.comparison;
         let chart_rows = summary.antennas.len() + summary.bands.len() + summary.slots.len();
         Self {
             families: vec![
+                (
+                    ReportDetailFamily::LifecycleHistory,
+                    snapshot.lifecycle_events.len(),
+                ),
                 (ReportDetailFamily::Schedule, bundle.schedule.slots.len()),
                 (
                     ReportDetailFamily::AntennaContext,
@@ -338,6 +372,7 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     report.comparison.path_summaries.clear();
     report.comparison.strata.clear();
     report.chart_data = ReportChartData::default();
+    report.snapshot.lifecycle_events.clear();
     report
         .notices
         .retain(|notice| !matches!(notice, ReportNotice::DetailOmitted { .. }));

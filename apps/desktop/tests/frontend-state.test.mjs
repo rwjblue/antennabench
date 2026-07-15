@@ -7,6 +7,8 @@ import {
   beginConductorMutation,
   beginExportSession,
   beginOpenSession,
+  beginReportExport,
+  beginReportRefresh,
   beginSetupCreation,
   beginSetupReview,
   beginWsjtxAction,
@@ -21,7 +23,9 @@ import {
   invokeActiveSessionConductor,
   invokeCreateSessionFromReview,
   invokeExportSession,
+  invokeExportActiveSessionReport,
   invokeOpenSession,
+  invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
   invokeMutateSessionConductor,
   invokeActiveSessionWsjtxStatus,
@@ -30,6 +34,10 @@ import {
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
+  reportExportCancelled,
+  reportExportSucceeded,
+  reportRefreshFailed,
+  reportRefreshSucceeded,
   selectWorkflow,
   setupCreationCancelled,
   setupCreationFailed,
@@ -49,6 +57,11 @@ test("the shell starts in session setup", () => {
     openStatus: "idle",
     session: null,
     reportPresentationId: 0,
+    reportStatus: "idle",
+    reportError: null,
+    reportExportStatus: "idle",
+    reportExportError: null,
+    reportExportNotice: null,
     error: null,
     notice: null,
     exportStatus: "idle",
@@ -296,6 +309,50 @@ test("same-ID successful opens refresh only the new report presentation", () => 
   assert.equal(reportFrame.srcdoc, "<!doctype html><title>second</title>");
 });
 
+test("revision-keyed report refresh retains coherent prior output on failure and export state", () => {
+  const frame = { dataset: {}, srcdoc: "" };
+  const opened = openSessionSucceeded(initialState("report"), {
+    sessionId: "session-1",
+    bundleName: "session.antennabundle",
+  });
+  const first = reportRefreshSucceeded(beginReportRefresh(opened), {
+    presentationId: 11,
+    revision: 4,
+    lifecycle: "running",
+    completeness: "full_detail",
+    reportHtml: "<!doctype html><title>revision 4</title>",
+  });
+  assert.equal(updateReportFrame(frame, first), true);
+
+  const exporting = beginReportExport(first);
+  const cancelled = reportExportCancelled(exporting);
+  const exported = reportExportSucceeded(exporting, {
+    fileName: "snapshot.html",
+    revision: 4,
+  });
+  assert.equal(updateReportFrame(frame, exporting), false);
+  assert.equal(updateReportFrame(frame, cancelled), false);
+  assert.equal(updateReportFrame(frame, exported), false);
+
+  const failed = reportRefreshFailed(beginReportRefresh(first), {
+    kind: "stale_revision",
+    message: "The session kept changing.",
+    detail: "retry",
+  });
+  assert.equal(updateReportFrame(frame, failed), false);
+  assert.equal(failed.session.reportHtml, first.session.reportHtml);
+
+  const second = reportRefreshSucceeded(beginReportRefresh(failed), {
+    presentationId: 12,
+    revision: 5,
+    lifecycle: "ended",
+    completeness: "bounded_overview",
+    reportHtml: "<!doctype html><title>revision 5</title>",
+  });
+  assert.equal(updateReportFrame(frame, second), true);
+  assert.equal(frame.srcdoc, "<!doctype html><title>revision 5</title>");
+});
+
 test("cancelling the native picker is a normal non-error transition", () => {
   const cancelled = openSessionCancelled(beginOpenSession(initialState("transfer")));
 
@@ -372,15 +429,21 @@ test("the frontend invokes only the narrow session commands", async () => {
   const result = await invokeOpenSession(invoke);
   const report = await invokeActiveSessionReport(invoke);
   const exported = await invokeExportSession(invoke);
+  const refreshed = await invokeRefreshActiveSessionReport(invoke);
+  const reportExported = await invokeExportActiveSessionReport(invoke);
 
   assert.deepEqual(calls, [
     ["open_session_bundle"],
     ["active_session_report"],
     ["export_active_session"],
+    ["refresh_active_session_report"],
+    ["export_active_session_report"],
   ]);
   assert.equal(result.status, "opened");
   assert.equal(report, "<!doctype html>");
   assert.equal(exported.status, "exported");
+  assert.equal(refreshed.status, "exported");
+  assert.equal(reportExported.status, "exported");
 });
 
 test("each declared workflow can become active without mutating prior state", () => {

@@ -1,15 +1,22 @@
 use std::{
     error::Error as StdError,
+    fs::OpenOptions,
+    io::Write,
     path::{Path, PathBuf},
     sync::Mutex,
 };
 
 use antennabench_analysis::AnalysisError;
 use antennabench_core::{
-    BundleContents, BundleValidationReport, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+    normalize_bundle, AdapterDisposition, BundleContents, BundleValidationError,
+    BundleValidationReport, OperatorEventPayloadV2, SessionLifecycleV2, V1_BUNDLE_SUFFIX,
+    V2_BUNDLE_SUFFIX,
 };
-use antennabench_report::{build_report_with_validation, render_standalone_html, ReportError};
-use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError};
+use antennabench_report::{
+    build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence, ReportCompleteness,
+    ReportError, ReportLifecycleEvent, ReportLifecycleEventKind, ReportSnapshotContext,
+};
+use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -28,6 +35,7 @@ struct DesktopState {
     active: Option<ActiveSession>,
     export_source: Option<PathBuf>,
     foreground_busy: bool,
+    next_presentation_id: u64,
 }
 
 struct ForegroundGuard<'a>(&'a ActiveSessionState);
@@ -72,6 +80,17 @@ impl Drop for ForegroundGuard<'_> {
 struct ActiveSession {
     source: PathBuf,
     summary: OpenedSession,
+    presentation: Option<ReportPresentation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReportPresentation {
+    presentation_id: u64,
+    session_id: String,
+    revision: Option<u64>,
+    lifecycle: Option<SessionLifecycleV2>,
+    completeness: ReportCompleteness,
     report_html: String,
 }
 
@@ -85,6 +104,9 @@ pub(crate) struct OpenedSession {
     pub(crate) antenna_count: usize,
     pub(crate) slot_count: usize,
     pub(crate) observation_count: usize,
+    pub(crate) revision: Option<u64>,
+    pub(crate) lifecycle: Option<SessionLifecycleV2>,
+    pub(crate) report_available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -101,6 +123,18 @@ pub(crate) enum ExportSessionOutcome {
     Exported {
         #[serde(rename = "bundleName")]
         bundle_name: String,
+        revision: Option<u64>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub(crate) enum ExportReportOutcome {
+    Cancelled,
+    Exported {
+        #[serde(rename = "fileName")]
+        file_name: String,
+        revision: Option<u64>,
     },
 }
 
@@ -177,7 +211,9 @@ enum OpenSessionError {
     #[error(transparent)]
     Storage(#[from] BundleStoreError),
     #[error(transparent)]
-    Report(#[from] ReportError),
+    Live(#[from] LivePersistenceError),
+    #[error("the committed snapshot changed while its layered diagnostics were being read")]
+    SnapshotChanged,
 }
 
 #[derive(Debug, Error)]
@@ -188,6 +224,8 @@ enum ExportSessionError {
     InvalidDestination { name: String },
     #[error(transparent)]
     Copy(#[from] BundleCopyError),
+    #[error(transparent)]
+    Live(#[from] LivePersistenceError),
 }
 
 impl From<OpenSessionError> for SessionErrorPayload {
@@ -199,7 +237,12 @@ impl From<OpenSessionError> for SessionErrorPayload {
                 format!("Selected directory: {name}"),
             ),
             OpenSessionError::Storage(error) => storage_error_payload(error),
-            OpenSessionError::Report(error) => report_error_payload(error),
+            OpenSessionError::Live(error) => crate::conductor::live_error_payload(error),
+            OpenSessionError::SnapshotChanged => Self::new(
+                SessionErrorKind::StaleRevision,
+                "The session changed while its coherent snapshot was being prepared.",
+                "the prior presentation remains available; retry the refresh",
+            ),
         }
     }
 }
@@ -218,6 +261,7 @@ impl From<ExportSessionError> for SessionErrorPayload {
                 format!("Selected destination: {name}"),
             ),
             ExportSessionError::Copy(error) => copy_error_payload(error),
+            ExportSessionError::Live(error) => crate::conductor::live_error_payload(error),
         }
     }
 }
@@ -363,6 +407,14 @@ fn validation_error_detail(source: &antennabench_core::BundleValidationError) ->
     )
 }
 
+struct LoadedSnapshot {
+    bundle: BundleContents,
+    validation: BundleValidationReport,
+    report_snapshot: ReportSnapshotContext,
+    revision: Option<u64>,
+    lifecycle: Option<SessionLifecycleV2>,
+}
+
 fn open_bundle(path: &Path) -> Result<ActiveSession, OpenSessionError> {
     let bundle_name = path
         .file_name()
@@ -376,8 +428,109 @@ fn open_bundle(path: &Path) -> Result<ActiveSession, OpenSessionError> {
         })?
         .to_string();
 
-    let (bundle, validation) = BundleStore::new(path).read_for_analysis()?;
-    build_active_session(path.to_path_buf(), bundle_name, &bundle, &validation)
+    let snapshot = load_snapshot(path, &bundle_name)?;
+    Ok(build_active_session(
+        path.to_path_buf(),
+        bundle_name,
+        snapshot,
+    ))
+}
+
+fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenSessionError> {
+    let store = BundleStore::new(path);
+    if bundle_name.ends_with(V2_BUNDLE_SUFFIX) {
+        let bundle = store.read_v2_checkpointed()?;
+        let revision = bundle.session_state.revision;
+        let lifecycle = bundle.session_state.lifecycle;
+        let report_snapshot = report_snapshot(&bundle);
+        let current = bundle.into_current();
+        let (inspected, validation) = store.inspect()?.into_current_parts();
+        let inspected = inspected.ok_or_else(|| {
+            OpenSessionError::Storage(BundleStoreError::Validation {
+                source: BundleValidationError::from_report(validation.clone()),
+            })
+        })?;
+        if inspected != current {
+            return Err(OpenSessionError::SnapshotChanged);
+        }
+        let bundle = normalize_bundle(current.bundle);
+        Ok(LoadedSnapshot {
+            bundle,
+            validation,
+            report_snapshot,
+            revision: Some(revision),
+            lifecycle: Some(lifecycle),
+        })
+    } else {
+        let (bundle, validation) = store.read_for_analysis()?;
+        Ok(LoadedSnapshot {
+            bundle,
+            validation,
+            report_snapshot: ReportSnapshotContext::default(),
+            revision: None,
+            lifecycle: None,
+        })
+    }
+}
+
+fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapshotContext {
+    let mut adapter = ReportAdapterEvidence {
+        record_count: bundle.adapter_records.len(),
+        ..ReportAdapterEvidence::default()
+    };
+    for record in &bundle.adapter_records {
+        match record.disposition {
+            AdapterDisposition::Accepted => adapter.accepted_count += 1,
+            AdapterDisposition::Malformed => adapter.malformed_count += 1,
+            AdapterDisposition::Unsupported => adapter.unsupported_count += 1,
+            AdapterDisposition::Filtered => adapter.filtered_count += 1,
+            AdapterDisposition::Duplicate => adapter.duplicate_count += 1,
+            AdapterDisposition::PartiallyNormalized => adapter.partially_normalized_count += 1,
+        }
+        if record.record_type == "acquisition_gap" {
+            adapter.gap_count += 1;
+        }
+    }
+    adapter.evidence_complete = adapter.gap_count == 0;
+    let lifecycle_events = bundle
+        .events
+        .iter()
+        .filter_map(|event| {
+            let (kind, detail) = match &event.payload {
+                OperatorEventPayloadV2::SessionStarted { note } => {
+                    (ReportLifecycleEventKind::Started, note.clone())
+                }
+                OperatorEventPayloadV2::SessionInterrupted { reason } => {
+                    (ReportLifecycleEventKind::Interrupted, reason.clone())
+                }
+                OperatorEventPayloadV2::InterruptionDetected { reason } => (
+                    ReportLifecycleEventKind::InterruptionDetected,
+                    reason.clone(),
+                ),
+                OperatorEventPayloadV2::SessionResumed { note } => {
+                    (ReportLifecycleEventKind::Resumed, note.clone())
+                }
+                OperatorEventPayloadV2::SessionEnded { reason } => {
+                    (ReportLifecycleEventKind::Ended, reason.clone())
+                }
+                OperatorEventPayloadV2::SessionAbandoned { reason } => {
+                    (ReportLifecycleEventKind::Abandoned, reason.clone())
+                }
+                _ => return None,
+            };
+            Some(ReportLifecycleEvent {
+                kind,
+                occurred_at: event.occurred_at,
+                detail,
+            })
+        })
+        .collect();
+    ReportSnapshotContext {
+        checkpoint_revision: Some(bundle.session_state.revision),
+        lifecycle: Some(bundle.session_state.lifecycle),
+        lifecycle_events,
+        adapter_evidence: adapter,
+    }
 }
 
 fn suggested_export_name(source: &Path) -> String {
@@ -394,7 +547,21 @@ fn suggested_export_name(source: &Path) -> String {
         )
 }
 
-fn export_bundle(source: &Path, destination: &Path) -> Result<String, ExportSessionError> {
+fn suggested_report_name(source: &Path) -> String {
+    source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| bundle_suffix(name).map(|suffix| name.trim_end_matches(suffix)))
+        .map_or_else(
+            || "antennabench-report.html".into(),
+            |stem| format!("{stem}-report.html"),
+        )
+}
+
+fn export_bundle(
+    source: &Path,
+    destination: &Path,
+) -> Result<(String, Option<u64>), ExportSessionError> {
     let bundle_name = destination
         .file_name()
         .and_then(|name| name.to_str())
@@ -413,8 +580,18 @@ fn export_bundle(source: &Path, destination: &Path) -> Result<String, ExportSess
         })?
         .to_string();
 
-    BundleStore::new(source).copy_losslessly_to(destination)?;
-    Ok(bundle_name)
+    let source_name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let revision = if source_name.ends_with(V2_BUNDLE_SUFFIX) {
+        let exported = BundleStore::new(source).export_v2_checkpointed_to(destination)?;
+        Some(exported.read_v2_checkpointed()?.session_state.revision)
+    } else {
+        BundleStore::new(source).copy_losslessly_to(destination)?;
+        None
+    };
+    Ok((bundle_name, revision))
 }
 
 fn bundle_suffix(name: &str) -> Option<&'static str> {
@@ -426,23 +603,40 @@ fn bundle_suffix(name: &str) -> Option<&'static str> {
 fn build_active_session(
     source: PathBuf,
     bundle_name: String,
-    bundle: &BundleContents,
-    validation: &BundleValidationReport,
-) -> Result<ActiveSession, OpenSessionError> {
-    let report = build_report_with_validation(bundle, validation)?;
-    let report_html = render_standalone_html(&report)?;
-
-    Ok(ActiveSession {
+    snapshot: LoadedSnapshot,
+) -> ActiveSession {
+    let presentation = prepare_presentation(&snapshot).ok();
+    ActiveSession {
         source,
         summary: OpenedSession {
             bundle_name,
-            session_id: bundle.manifest.session_id.clone(),
-            callsign: bundle.station.callsign.clone(),
-            grid: bundle.station.grid.clone(),
-            antenna_count: bundle.antennas.antennas.len(),
-            slot_count: bundle.schedule.slots.len(),
-            observation_count: bundle.observations.len(),
+            session_id: snapshot.bundle.manifest.session_id.clone(),
+            callsign: snapshot.bundle.station.callsign.clone(),
+            grid: snapshot.bundle.station.grid.clone(),
+            antenna_count: snapshot.bundle.antennas.antennas.len(),
+            slot_count: snapshot.bundle.schedule.slots.len(),
+            observation_count: snapshot.bundle.observations.len(),
+            revision: snapshot.revision,
+            lifecycle: snapshot.lifecycle,
+            report_available: presentation.is_some(),
         },
+        presentation,
+    }
+}
+
+fn prepare_presentation(snapshot: &LoadedSnapshot) -> Result<ReportPresentation, ReportError> {
+    let report = build_report_with_snapshot(
+        &snapshot.bundle,
+        &snapshot.validation,
+        snapshot.report_snapshot.clone(),
+    )?;
+    let report_html = render_standalone_html(&report)?;
+    Ok(ReportPresentation {
+        presentation_id: 0,
+        session_id: snapshot.bundle.manifest.session_id.clone(),
+        revision: snapshot.revision,
+        lifecycle: snapshot.lifecycle,
+        completeness: report.completeness,
         report_html,
     })
 }
@@ -451,7 +645,7 @@ pub(crate) fn activate_created_bundle(
     state: &ActiveSessionState,
     path: PathBuf,
 ) -> Result<OpenedSession, SessionErrorPayload> {
-    let session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
+    let mut session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
     let summary = session.summary.clone();
     check_ipc_payload(
         &OpenSessionOutcome::Opened {
@@ -464,6 +658,7 @@ pub(crate) fn activate_created_bundle(
         .0
         .lock()
         .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    assign_presentation_id(&mut active, &mut session);
     active.active = Some(session);
     active.export_source = Some(path);
     Ok(summary)
@@ -511,7 +706,7 @@ where
             })?
             .export_source = Some(path.clone());
     }
-    let session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
+    let mut session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
     let summary = session.summary.clone();
     check_ipc_payload(
         &OpenSessionOutcome::Opened {
@@ -525,10 +720,18 @@ where
         .0
         .lock()
         .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    assign_presentation_id(&mut active, &mut session);
     active.active = Some(session);
     active.export_source = Some(path);
 
     Ok(OpenSessionOutcome::Opened { session: summary })
+}
+
+fn assign_presentation_id(state: &mut DesktopState, session: &mut ActiveSession) {
+    if let Some(presentation) = &mut session.presentation {
+        state.next_presentation_id = state.next_presentation_id.saturating_add(1);
+        presentation.presentation_id = state.next_presentation_id;
+    }
 }
 
 fn export_active_session_with_selection<F>(
@@ -555,12 +758,90 @@ where
     let Some(destination) = select(&source)? else {
         return Ok(ExportSessionOutcome::Cancelled);
     };
-    let bundle_name = export_bundle(&source, &destination).map_err(SessionErrorPayload::from)?;
+    let (bundle_name, revision) =
+        export_bundle(&source, &destination).map_err(SessionErrorPayload::from)?;
 
-    Ok(ExportSessionOutcome::Exported { bundle_name })
+    Ok(ExportSessionOutcome::Exported {
+        bundle_name,
+        revision,
+    })
 }
 
-fn active_session_report_for(state: &ActiveSessionState) -> Result<String, SessionErrorPayload> {
+fn export_active_report_with_selection<F>(
+    state: &ActiveSessionState,
+    select: F,
+) -> Result<ExportReportOutcome, SessionErrorPayload>
+where
+    F: FnOnce(&Path) -> Result<Option<PathBuf>, SessionErrorPayload>,
+{
+    let _foreground = state.begin_foreground()?;
+    let (source, presentation) = {
+        let active = state.0.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+        let session = active.active.as_ref().ok_or_else(|| {
+            SessionErrorPayload::report_pipeline("no active session report is available")
+        })?;
+        let presentation = session.presentation.clone().ok_or_else(|| {
+            SessionErrorPayload::report_pipeline("no coherent report snapshot is available")
+        })?;
+        (session.source.clone(), presentation)
+    };
+    let Some(destination) = select(&source)? else {
+        return Ok(ExportReportOutcome::Cancelled);
+    };
+    let file_name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| name.ends_with(".html"))
+        .ok_or_else(|| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Destination,
+                "Choose an .html destination for the standalone report.",
+                destination.display().to_string(),
+            )
+        })?
+        .to_string();
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&destination)
+        .map_err(|error| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Destination,
+                "The report destination could not be created without overwriting a file.",
+                format!("{}: {error}", destination.display()),
+            )
+        })?;
+    if let Err(error) = file
+        .write_all(presentation.report_html.as_bytes())
+        .and_then(|()| file.sync_all())
+    {
+        drop(file);
+        let cleanup = std::fs::remove_file(&destination);
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "The standalone report could not be written completely.",
+            cleanup.map_or_else(
+                |cleanup| {
+                    format!(
+                        "{}: {error}; incomplete destination cleanup failed: {cleanup}",
+                        destination.display()
+                    )
+                },
+                |()| format!("{}: {error}", destination.display()),
+            ),
+        ));
+    }
+    Ok(ExportReportOutcome::Exported {
+        file_name,
+        revision: presentation.revision,
+    })
+}
+
+fn active_session_report_for(
+    state: &ActiveSessionState,
+) -> Result<ReportPresentation, SessionErrorPayload> {
     let _foreground = state.begin_foreground()?;
     let active = state
         .0
@@ -583,18 +864,103 @@ fn active_session_report_for(state: &ActiveSessionState) -> Result<String, Sessi
         ));
     }
 
-    if session.report_html.len() as u64 > REPORT_DOCUMENT_IPC_BYTES {
+    let presentation = session.presentation.as_ref().ok_or_else(|| {
+        SessionErrorPayload::report_pipeline(
+            "the active snapshot is available for lossless export, but report rendering is unavailable",
+        )
+    })?;
+    if presentation.report_html.len() as u64 > REPORT_DOCUMENT_IPC_BYTES {
         return Err(SessionErrorPayload::resource(
             SessionErrorKind::Resource,
             "resource.desktop.ipc_bytes",
             "report_document",
             REPORT_DOCUMENT_IPC_BYTES,
-            Some(session.report_html.len() as u64),
+            Some(presentation.report_html.len() as u64),
             "bytes",
         ));
     }
 
-    Ok(session.report_html.clone())
+    Ok(presentation.clone())
+}
+
+fn refresh_active_session_report_for(
+    state: &ActiveSessionState,
+) -> Result<ReportPresentation, SessionErrorPayload> {
+    const MAX_REFRESH_ATTEMPTS: usize = 3;
+    let _foreground = state.begin_foreground()?;
+    let (source, bundle_name) = {
+        let active = state.0.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+        let session = active.active.as_ref().ok_or_else(|| {
+            SessionErrorPayload::report_pipeline("no active session report is available")
+        })?;
+        (session.source.clone(), session.summary.bundle_name.clone())
+    };
+
+    for _ in 0..MAX_REFRESH_ATTEMPTS {
+        let snapshot = load_snapshot(&source, &bundle_name).map_err(SessionErrorPayload::from)?;
+        if let Some(existing) = state
+            .0
+            .lock()
+            .map_err(|_| {
+                SessionErrorPayload::report_pipeline("active session state is unavailable")
+            })?
+            .active
+            .as_ref()
+            .filter(|session| session.source == source)
+            .and_then(|session| session.presentation.as_ref())
+            .filter(|presentation| {
+                presentation.revision == snapshot.revision
+                    && presentation.session_id == snapshot.bundle.manifest.session_id
+            })
+            .cloned()
+        {
+            return Ok(existing);
+        }
+        let mut presentation = prepare_presentation(&snapshot).map_err(report_error_payload)?;
+        let verified = load_snapshot(&source, &bundle_name).map_err(SessionErrorPayload::from)?;
+        if snapshot.revision != verified.revision {
+            continue;
+        }
+        let summary = OpenedSession {
+            bundle_name: bundle_name.clone(),
+            session_id: snapshot.bundle.manifest.session_id.clone(),
+            callsign: snapshot.bundle.station.callsign.clone(),
+            grid: snapshot.bundle.station.grid.clone(),
+            antenna_count: snapshot.bundle.antennas.antennas.len(),
+            slot_count: snapshot.bundle.schedule.slots.len(),
+            observation_count: snapshot.bundle.observations.len(),
+            revision: snapshot.revision,
+            lifecycle: snapshot.lifecycle,
+            report_available: true,
+        };
+        let mut active = state.0.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+        let next_id = active.next_presentation_id.saturating_add(1);
+        let session = active.active.as_mut().ok_or_else(|| {
+            SessionErrorPayload::report_pipeline("no active session report is available")
+        })?;
+        if session.source != source {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Conflict,
+                "The active session changed while its report was refreshing.",
+                "the prior coherent presentation remains visible",
+            ));
+        }
+        presentation.presentation_id = next_id;
+        session.summary = summary;
+        session.presentation = Some(presentation.clone());
+        active.next_presentation_id = next_id;
+        return Ok(presentation);
+    }
+
+    Err(SessionErrorPayload::new(
+        SessionErrorKind::StaleRevision,
+        "The session kept changing while its report was refreshing.",
+        "no stale presentation was published; retry after the current intake burst",
+    ))
 }
 
 pub(crate) fn check_ipc_payload(
@@ -684,10 +1050,46 @@ pub(crate) async fn export_active_session(
 }
 
 #[tauri::command]
+pub(crate) async fn export_active_session_report(
+    app: AppHandle,
+    state: State<'_, ActiveSessionState>,
+) -> Result<ExportReportOutcome, SessionErrorPayload> {
+    export_active_report_with_selection(state.inner(), |source| {
+        let mut dialog = app
+            .dialog()
+            .file()
+            .set_title("Export the coherent AntennaBench report snapshot")
+            .set_file_name(suggested_report_name(source))
+            .set_can_create_directories(true)
+            .add_filter("Standalone HTML report", &["html"]);
+        if let Some(parent) = source.parent() {
+            dialog = dialog.set_directory(parent);
+        }
+        let Some(selection) = dialog.blocking_save_file() else {
+            return Ok(None);
+        };
+        selection.into_path().map(Some).map_err(|error| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Destination,
+                "The selected destination is not available as a local path.",
+                error.to_string(),
+            )
+        })
+    })
+}
+
+#[tauri::command]
 pub(crate) fn active_session_report(
     state: State<'_, ActiveSessionState>,
-) -> Result<String, SessionErrorPayload> {
+) -> Result<ReportPresentation, SessionErrorPayload> {
     active_session_report_for(state.inner())
+}
+
+#[tauri::command]
+pub(crate) fn refresh_active_session_report(
+    state: State<'_, ActiveSessionState>,
+) -> Result<ReportPresentation, SessionErrorPayload> {
+    refresh_active_session_report_for(state.inner())
 }
 
 #[cfg(test)]
@@ -696,15 +1098,15 @@ mod tests {
 
     use antennabench_analysis::AnalysisError;
     use antennabench_report::ReportError;
-    use antennabench_storage::{BundleCopyError, BundleStoreError};
+    use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError};
     use tempfile::TempDir;
 
     use super::{
         active_session_report_for, check_ipc_payload, copy_error_payload,
-        export_active_session_with_selection, export_bundle, open_bundle,
-        open_session_with_selection, report_error_payload, ActiveSessionState,
-        ExportSessionOutcome, OpenSessionOutcome, SessionErrorKind, SessionErrorPayload,
-        REPORT_DOCUMENT_IPC_BYTES,
+        export_active_report_with_selection, export_active_session_with_selection, export_bundle,
+        open_bundle, open_session_with_selection, refresh_active_session_report_for,
+        report_error_payload, ActiveSessionState, ExportReportOutcome, ExportSessionOutcome,
+        OpenSessionOutcome, SessionErrorKind, SessionErrorPayload, REPORT_DOCUMENT_IPC_BYTES,
     };
 
     fn canonical_fixture() -> std::path::PathBuf {
@@ -773,7 +1175,12 @@ mod tests {
             "session-canonical-sample-2026-03-14"
         );
         assert!(!opened.summary.callsign.is_empty());
-        assert!(opened.report_html.starts_with("<!doctype html>"));
+        assert!(opened
+            .presentation
+            .as_ref()
+            .unwrap()
+            .report_html
+            .starts_with("<!doctype html>"));
         let payload = serde_json::to_value(super::OpenSessionOutcome::Opened {
             session: opened.summary.clone(),
         })
@@ -864,8 +1271,17 @@ mod tests {
         check_ipc_payload(&payload, bytes + 1, "test_summary").unwrap();
 
         open_session_with_selection(&state, || Ok(Some(canonical_fixture()))).unwrap();
-        state.0.lock().unwrap().active.as_mut().unwrap().report_html =
-            "x".repeat(REPORT_DOCUMENT_IPC_BYTES as usize + 1);
+        state
+            .0
+            .lock()
+            .unwrap()
+            .active
+            .as_mut()
+            .unwrap()
+            .presentation
+            .as_mut()
+            .unwrap()
+            .report_html = "x".repeat(REPORT_DOCUMENT_IPC_BYTES as usize + 1);
         let oversized = active_session_report_for(&state).unwrap_err();
         assert_eq!(oversized.kind, SessionErrorKind::Resource);
         assert!(oversized.detail.contains("resource.desktop.ipc_bytes"));
@@ -879,13 +1295,91 @@ mod tests {
         let opened = open_bundle(&source).expect("open source bundle");
         let destination = temp.path().join("exported.session.wsprabundle");
 
-        let bundle_name = export_bundle(&source, &destination).expect("export source bundle");
+        let (bundle_name, revision) =
+            export_bundle(&source, &destination).expect("export source bundle");
         let reopened = open_bundle(&destination).expect("reopen exported bundle");
         let mut expected = opened.summary;
         expected.bundle_name = bundle_name.clone();
 
         assert_eq!(bundle_name, "exported.session.wsprabundle");
+        assert_eq!(revision, None);
         assert_eq!(reopened.summary, expected);
+    }
+
+    #[test]
+    fn v2_report_refresh_and_exports_share_one_committed_revision() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("live.session.antennabundle");
+        let upgraded = temp.path().join("upgraded.session.antennabundle");
+        let store = BundleStore::new(canonical_fixture())
+            .upgrade_v1_to_v2(&upgraded)
+            .unwrap();
+        let mut bundle = store.read_v2_checkpointed().unwrap();
+        let mut normalized = bundle.clone().into_current().bundle;
+        antennabench_core::annotate_bundle_observations(&mut normalized);
+        for observation in &mut bundle.observations {
+            let current = normalized
+                .observations
+                .iter()
+                .find(|current| current.observation_id == observation.observation_id)
+                .unwrap();
+            observation.slot_id.clone_from(&current.slot_id);
+            observation.slot_label.clone_from(&current.slot_label);
+            observation.slot_confidence = current.slot_confidence;
+        }
+        BundleStore::refresh_v2_checkpoint(&mut bundle).unwrap();
+        BundleStore::new(&source).write_v2(&bundle).unwrap();
+        let state = ActiveSessionState::default();
+        open_session_with_selection(&state, || Ok(Some(source.clone()))).unwrap();
+
+        let first = active_session_report_for(&state).unwrap();
+        assert!(first.revision.is_some());
+        assert!(first.report_html.contains("Committed session snapshot"));
+        assert!(first.report_html.contains("Checkpoint revision"));
+        let unchanged = refresh_active_session_report_for(&state).unwrap();
+        assert_eq!(unchanged.presentation_id, first.presentation_id);
+
+        let html_destination = temp.path().join("snapshot.html");
+        let exported =
+            export_active_report_with_selection(&state, |_| Ok(Some(html_destination.clone())))
+                .unwrap();
+        assert_eq!(
+            exported,
+            ExportReportOutcome::Exported {
+                file_name: "snapshot.html".into(),
+                revision: first.revision,
+            }
+        );
+        assert_eq!(
+            fs::read_to_string(&html_destination).unwrap(),
+            first.report_html
+        );
+        assert_eq!(
+            export_active_report_with_selection(&state, |_| Ok(Some(html_destination.clone())))
+                .unwrap_err()
+                .kind,
+            SessionErrorKind::Destination
+        );
+
+        let bundle_destination = temp.path().join("snapshot.session.antennabundle");
+        let outcome =
+            export_active_session_with_selection(&state, |_| Ok(Some(bundle_destination.clone())))
+                .unwrap();
+        assert_eq!(
+            outcome,
+            ExportSessionOutcome::Exported {
+                bundle_name: "snapshot.session.antennabundle".into(),
+                revision: first.revision,
+            }
+        );
+        assert_eq!(
+            BundleStore::new(bundle_destination)
+                .read_v2_checkpointed()
+                .unwrap()
+                .session_state
+                .revision,
+            first.revision.unwrap()
+        );
     }
 
     #[test]
@@ -921,7 +1415,8 @@ mod tests {
         assert_eq!(
             outcome,
             ExportSessionOutcome::Exported {
-                bundle_name: "resource-safe-copy.session.wsprabundle".into()
+                bundle_name: "resource-safe-copy.session.wsprabundle".into(),
+                revision: None,
             }
         );
         assert_eq!(
@@ -950,7 +1445,7 @@ mod tests {
         println!("desktop-e2e phase=report session_id={}", session.session_id);
         let source_report = active_session_report_for(&state)
             .expect("derive active report through desktop orchestration");
-        assert!(source_report.starts_with("<!doctype html>"));
+        assert!(source_report.report_html.starts_with("<!doctype html>"));
 
         println!(
             "desktop-e2e phase=export destination={}",
@@ -964,7 +1459,8 @@ mod tests {
         assert_eq!(
             exported,
             ExportSessionOutcome::Exported {
-                bundle_name: "exported.session.wsprabundle".into()
+                bundle_name: "exported.session.wsprabundle".into(),
+                revision: None,
             }
         );
         assert_eq!(
@@ -991,10 +1487,10 @@ mod tests {
             panic!("deterministic exported selection unexpectedly cancelled");
         };
         assert_eq!(reopened_session.session_id, session.session_id);
-        assert_eq!(
-            active_session_report_for(&state).expect("view report after exported bundle reopen"),
-            source_report
-        );
+        let reopened_report =
+            active_session_report_for(&state).expect("view report after exported bundle reopen");
+        assert_eq!(reopened_report.report_html, source_report.report_html);
+        assert_eq!(reopened_report.revision, source_report.revision);
         assert_eq!(
             snapshot_files(&source).expect("snapshot source after exported bundle reopen"),
             before,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-active-session-report"
+description = "Enables the export_active_session_report command without any pre-configured scope."
+commands.allow = ["export_active_session_report"]
+
+[[permission]]
+identifier = "deny-export-active-session-report"
+description = "Denies the export_active_session_report command without any pre-configured scope."
+commands.deny = ["export_active_session_report"]

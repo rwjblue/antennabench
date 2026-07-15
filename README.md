@@ -43,8 +43,9 @@ Implemented:
   concentration counts, restrictive content security policy, and hostile-text
   escaping.
 - A Tauri desktop shell that opens existing directory bundles, validates and
-  analyzes them without mutation, shows the local report in an isolated frame,
-  and exports verified lossless copies through narrow Rust commands.
+  analyzes them without mutation, refreshes revision-keyed live/final reports
+  in an isolated frame, exports the exact visible standalone HTML snapshot,
+  and exports verified checkpointed bundle copies through narrow Rust commands.
 - Validated schema-v2 session setup plus a complete manual/no-rig conductor
   with durable lifecycle, explicit actual-antenna evidence, corrections,
   restart recovery, and trusted schedule guidance.

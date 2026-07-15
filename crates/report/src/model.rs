@@ -4,7 +4,9 @@ use antennabench_analysis::{
     ExclusionCount, ObservationCounts, PairedObservationRow, PairedPathSummary,
     PairedStratumSummary, PathOverlapRow, SnrStatistics,
 };
-use antennabench_core::{AlignedSlotStatus, Antenna, Band, ExperimentMode, SessionGoal};
+use antennabench_core::{
+    AlignedSlotStatus, Antenna, Band, ExperimentMode, SessionGoal, SessionLifecycleV2,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -20,8 +22,74 @@ pub struct SessionReport {
     pub comparison: ReportComparisonData,
     pub chart_data: ReportChartData,
     pub notices: Vec<ReportNotice>,
+    #[serde(default, skip_serializing_if = "ReportSnapshotContext::is_empty")]
+    pub snapshot: ReportSnapshotContext,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub eligibility_exclusions: Vec<EligibilityExclusionCount>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportSnapshotContext {
+    pub checkpoint_revision: Option<u64>,
+    pub lifecycle: Option<SessionLifecycleV2>,
+    pub lifecycle_events: Vec<ReportLifecycleEvent>,
+    pub adapter_evidence: ReportAdapterEvidence,
+}
+
+impl ReportSnapshotContext {
+    fn is_empty(&self) -> bool {
+        self.checkpoint_revision.is_none()
+            && self.lifecycle.is_none()
+            && self.lifecycle_events.is_empty()
+            && self.adapter_evidence.record_count == 0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportLifecycleEvent {
+    pub kind: ReportLifecycleEventKind,
+    pub occurred_at: DateTime<Utc>,
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportLifecycleEventKind {
+    Started,
+    Interrupted,
+    InterruptionDetected,
+    Resumed,
+    Ended,
+    Abandoned,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportAdapterEvidence {
+    pub record_count: usize,
+    pub accepted_count: usize,
+    pub malformed_count: usize,
+    pub unsupported_count: usize,
+    pub filtered_count: usize,
+    pub duplicate_count: usize,
+    pub partially_normalized_count: usize,
+    pub gap_count: usize,
+    pub evidence_complete: bool,
+}
+
+impl Default for ReportAdapterEvidence {
+    fn default() -> Self {
+        Self {
+            record_count: 0,
+            accepted_count: 0,
+            malformed_count: 0,
+            unsupported_count: 0,
+            filtered_count: 0,
+            duplicate_count: 0,
+            partially_normalized_count: 0,
+            gap_count: 0,
+            evidence_complete: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,6 +259,7 @@ pub enum ReportNotice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReportDetailFamily {
+    LifecycleHistory,
     Schedule,
     AntennaContext,
     AntennaEvidence,

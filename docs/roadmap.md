@@ -63,9 +63,9 @@ The dependency-ordered implementation path is:
    implemented (#61 and #62).
 4. Bounded adapter ingress and live WSJT-X evidence orchestration are
    implemented (#56 and #63).
-5. Add granular evidence eligibility, bounded report/IPC behavior, and coherent
-   live/final report refresh and export (#52, #57, and #64). The same-session
-   presentation fix is tracked by #41.
+5. Granular evidence eligibility, bounded report/IPC behavior, and coherent
+   live/final report refresh and export are implemented (#52, #57, and #64),
+   including the same-session presentation fix from #41.
 6. Prove the workflow with deterministic unattended end-to-end coverage (#65).
 
 Optional rig control, public spots, hosted sharing, and stronger comparative

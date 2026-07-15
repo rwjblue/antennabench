@@ -268,7 +268,16 @@
             <div class="report-viewer" data-report-viewer hidden>
               <div class="report-context">
                 <div><span>Active source</span><strong data-report-bundle></strong></div>
+                <div><span>Committed snapshot</span><strong data-report-revision></strong></div>
                 <p data-report-summary></p>
+              </div>
+              <div class="conductor-actions report-actions">
+                <button type="button" data-report-refresh>Refresh committed snapshot</button>
+                <button type="button" data-report-export>Export this HTML snapshot</button>
+              </div>
+              <div class="open-feedback" data-report-feedback hidden role="status" aria-live="polite">
+                <span class="feedback-mark" aria-hidden="true"></span>
+                <div><strong data-report-feedback-message></strong><p data-report-feedback-detail></p></div>
               </div>
               <iframe
                 data-report-frame

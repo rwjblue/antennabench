@@ -219,7 +219,10 @@ full-detail versus bounded-overview projection, complete omission-family
 counts, model serialization, and checked HTML escape expansion. Desktop unit
 tests independently pin the 64 KiB summary and 16 MiB document IPC boundaries,
 the typed foreground-busy result, prior-presentation retention, and lossless
-export without a derived report. Production entry points always select the
+export without a derived report. Desktop tests also pin revision-stable frame
+identity, retained presentation after refresh/export failure, exact HTML bytes,
+create-new destination behavior, and checkpoint revision agreement across the
+visible report and both export paths. Production entry points always select the
 fixed `local-standard-v1` values; injection exists only in explicit test-facing
 APIs.
 
@@ -338,10 +341,10 @@ reopen semantics, error behavior, preservation assertions, and diagnostics; do
 not repeat those checks with coordinate-driven automation. Stop the development
 process with Control-C and use `jj status` to confirm the fixture was unchanged.
 
-The main webview capability allows only `open_session_bundle`,
-`export_active_session`, and the read-only `active_session_report`. The first
-two commands own native selection and all filesystem/domain work; the report
-command returns only the already-derived document. No dialog-plugin or
+The main webview capability allowlists focused setup, conductor, receiver,
+session-open, checkpoint-export, report-read/refresh, and report-export
+commands. Native selection and all filesystem/domain work remain in Rust; the
+report commands return only a bounded revision-keyed presentation. No dialog-plugin or
 filesystem-plugin permission is granted to JavaScript; this is intentional
 even though the native dialog plugin is registered. The local report is loaded
 into a sandboxed frame and neither the shell nor report is given network

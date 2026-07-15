@@ -226,6 +226,8 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .report-context span { color: #77857f; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; }
 .report-context strong { color: #315d57; font-size: 0.82rem; overflow-wrap: anywhere; }
 .report-context p { margin: 0; color: #62736f; font-size: 0.72rem; text-align: right; }
+.report-actions { padding: 14px 19px; border-bottom: 1px solid #d8ddd6; }
+.report-viewer > .open-feedback { margin: 16px 19px; }
 .report-viewer iframe { display: block; width: 100%; min-height: 680px; border: 0; background: #fff; }
 
 [hidden] { display: none !important; }

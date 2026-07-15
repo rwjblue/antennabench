@@ -11,14 +11,15 @@ use antennabench_analysis::{
 };
 use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
+    SessionLifecycleV2,
 };
 use chrono::{SecondsFormat, Utc};
 
 use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, BandEvidenceSection,
-    ReportCancellationToken, ReportDetailFamily, ReportError, ReportEvidenceSummary, ReportNotice,
-    ReportResourceLimits, ReportResourceStage, SessionReport, SlotEvidenceSection,
-    UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
+    ReportCancellationToken, ReportDetailFamily, ReportError, ReportEvidenceSummary,
+    ReportLifecycleEventKind, ReportNotice, ReportResourceLimits, ReportResourceStage,
+    SessionReport, SlotEvidenceSection, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
@@ -67,6 +68,7 @@ pub fn render_standalone_html_with_resources(
 <h1>Session evidence report</h1><p class=\"muted\">Session <code>{}</code></p></header>",
         escape_html(&report.context.session_id)
     );
+    render_snapshot(&mut out, report);
     render_notices(&mut out, &report.notices);
     render_eligibility(&mut out, report);
     render_context(&mut out, report);
@@ -78,6 +80,101 @@ pub fn render_standalone_html_with_resources(
 
     out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
     out.finish().map_err(ReportError::from)
+}
+
+fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let snapshot = &report.snapshot;
+    if snapshot.checkpoint_revision.is_none()
+        && snapshot.lifecycle.is_none()
+        && snapshot.adapter_evidence.record_count == 0
+    {
+        return;
+    }
+    out.push_str("<section class=\"panel\" aria-labelledby=\"snapshot-title\"><h2 id=\"snapshot-title\">Committed session snapshot</h2><dl class=\"facts\">");
+    fact(
+        out,
+        "Checkpoint revision",
+        &snapshot.checkpoint_revision.map_or_else(
+            || "Legacy static bundle".into(),
+            |revision| revision.to_string(),
+        ),
+    );
+    fact(
+        out,
+        "Lifecycle",
+        snapshot.lifecycle.map_or("Not recorded", lifecycle),
+    );
+    fact(
+        out,
+        "Report detail",
+        match report.completeness {
+            crate::ReportCompleteness::FullDetail => "Full detail",
+            crate::ReportCompleteness::BoundedOverview => "Bounded overview",
+        },
+    );
+    fact(
+        out,
+        "Adapter evidence",
+        &format!(
+            "{} records; {} accepted; {} malformed; {} unsupported; {} filtered; {} duplicate; {} partial",
+            snapshot.adapter_evidence.record_count,
+            snapshot.adapter_evidence.accepted_count,
+            snapshot.adapter_evidence.malformed_count,
+            snapshot.adapter_evidence.unsupported_count,
+            snapshot.adapter_evidence.filtered_count,
+            snapshot.adapter_evidence.duplicate_count,
+            snapshot.adapter_evidence.partially_normalized_count,
+        ),
+    );
+    fact(
+        out,
+        "Acquisition completeness",
+        &if snapshot.adapter_evidence.evidence_complete {
+            "Complete within recorded adapter scope".into()
+        } else {
+            format!(
+                "Incomplete: {} explicit acquisition gap(s)",
+                snapshot.adapter_evidence.gap_count
+            )
+        },
+    );
+    out.push_str("</dl>");
+    if !snapshot.lifecycle_events.is_empty() {
+        out.push_str("<div class=\"table-wrap\"><table><caption>Lifecycle and interruption history</caption><thead><tr><th scope=\"col\">Event</th><th scope=\"col\">Time</th><th scope=\"col\">Detail</th></tr></thead><tbody>");
+        for event in &snapshot.lifecycle_events {
+            write_html!(
+                out,
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                lifecycle_event(event.kind),
+                timestamp(event.occurred_at),
+                escape_html(event.detail.as_deref().unwrap_or("Not recorded")),
+            );
+        }
+        out.push_str("</tbody></table></div>");
+    }
+    out.push_str("</section>");
+}
+
+fn lifecycle(value: SessionLifecycleV2) -> &'static str {
+    match value {
+        SessionLifecycleV2::Draft => "Draft",
+        SessionLifecycleV2::Ready => "Ready",
+        SessionLifecycleV2::Running => "Running / in progress",
+        SessionLifecycleV2::Interrupted => "Interrupted / in progress",
+        SessionLifecycleV2::Ended => "Ended / final",
+        SessionLifecycleV2::Abandoned => "Abandoned / final",
+    }
+}
+
+fn lifecycle_event(value: ReportLifecycleEventKind) -> &'static str {
+    match value {
+        ReportLifecycleEventKind::Started => "Started",
+        ReportLifecycleEventKind::Interrupted => "Interrupted",
+        ReportLifecycleEventKind::InterruptionDetected => "Interruption detected",
+        ReportLifecycleEventKind::Resumed => "Resumed",
+        ReportLifecycleEventKind::Ended => "Ended",
+        ReportLifecycleEventKind::Abandoned => "Abandoned",
+    }
 }
 
 struct CheckedHtmlWriter<'a> {
@@ -1244,6 +1341,7 @@ fn notice_text(value: &ReportNotice) -> String {
 
 fn detail_family(value: ReportDetailFamily) -> &'static str {
     match value {
+        ReportDetailFamily::LifecycleHistory => "lifecycle history",
         ReportDetailFamily::Schedule => "schedule",
         ReportDetailFamily::AntennaContext => "antenna context",
         ReportDetailFamily::AntennaEvidence => "antenna evidence",

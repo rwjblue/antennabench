@@ -109,10 +109,10 @@ lossless export remains available.
 
 The local conductor is tracked by
 [#45](https://github.com/rwjblue/antennabench/issues/45). Validated local setup,
-bundle creation, the complete manual/no-rig conductor, and bounded live WSJT-X
-evidence are implemented. Coherent live-report behavior remains split into
-focused follow-up slices so the UI cannot outrun the durable, validation, and
-resource boundaries:
+bundle creation, the complete manual/no-rig conductor, bounded live WSJT-X
+evidence, and coherent live/final reports and exports are implemented. The
+remaining focused end-to-end proof stays separate so the UI cannot outrun the
+durable, validation, and resource boundaries:
 
 1. Schema-v2, layered validation, strict write preflight, and bounded storage
    establish what can be created and mutated (#46, #50, #51, and #55).
@@ -134,7 +134,11 @@ resource boundaries:
    remain explicit; resource/persistence gaps stop intake without stopping the
    manual conductor.
 5. Granular evidence eligibility and bounded report/IPC behavior feed coherent
-   live and final reports and exports (#52, #57, and #64).
+   live and final reports and exports (#52, #57, and #64). One verified
+   checkpoint revision supplies the summary, renderer-neutral model, isolated
+   frame, and exact standalone HTML export. Revision changes replace the frame;
+   navigation, cancellation, failed refresh, and export status do not. Lossless
+   checkpoint export remains available when report generation is ineligible.
 6. A deterministic unattended scenario proves creation through interruption,
    recovery, completion, reporting, export, and reopen (#65).
 

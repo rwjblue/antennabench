@@ -7,6 +7,11 @@ export function initialState(workflow = "setup") {
       openStatus: "idle",
       session: null,
       reportPresentationId: 0,
+      reportStatus: "idle",
+      reportError: null,
+      reportExportStatus: "idle",
+      reportExportError: null,
+      reportExportNotice: null,
       error: null,
       notice: null,
       exportStatus: "idle",
@@ -124,7 +129,13 @@ export function setupCreationSucceeded(state, session) {
     setupNotice: "created",
     openStatus: "ready",
     session,
-    reportPresentationId: state.reportPresentationId + 1,
+    reportPresentationId: session.presentationId
+      ?? (session.reportHtml ? state.reportPresentationId + 1 : state.reportPresentationId),
+    reportStatus: session.reportHtml ? "ready" : "unavailable",
+    reportError: null,
+    reportExportStatus: "idle",
+    reportExportError: null,
+    reportExportNotice: null,
     error: null,
     notice: null,
     exportStatus: "idle",
@@ -155,7 +166,13 @@ export function openSessionSucceeded(state, session) {
     activeWorkflow: "report",
     openStatus: "ready",
     session,
-    reportPresentationId: state.reportPresentationId + 1,
+    reportPresentationId: session.presentationId
+      ?? (session.reportHtml ? state.reportPresentationId + 1 : state.reportPresentationId),
+    reportStatus: session.reportHtml ? "ready" : "unavailable",
+    reportError: null,
+    reportExportStatus: "idle",
+    reportExportError: null,
+    reportExportNotice: null,
     error: null,
     notice: null,
     exportStatus: "idle",
@@ -306,6 +323,14 @@ export function invokeActiveSessionReport(invoke) {
   return invoke("active_session_report");
 }
 
+export function invokeRefreshActiveSessionReport(invoke) {
+  return invoke("refresh_active_session_report");
+}
+
+export function invokeExportActiveSessionReport(invoke) {
+  return invoke("export_active_session_report");
+}
+
 export function invokeExportSession(invoke) {
   return invoke("export_active_session");
 }
@@ -331,7 +356,7 @@ export function invokeStopSessionWsjtx(invoke) {
 }
 
 export function updateReportFrame(reportFrame, state) {
-  if (state.session === null) return false;
+  if (state.session === null || typeof state.session.reportHtml !== "string") return false;
 
   const presentationId = String(state.reportPresentationId);
   if (reportFrame.dataset.presentationId === presentationId) return false;
@@ -339,6 +364,72 @@ export function updateReportFrame(reportFrame, state) {
   reportFrame.srcdoc = state.session.reportHtml;
   reportFrame.dataset.presentationId = presentationId;
   return true;
+}
+
+export function beginReportRefresh(state) {
+  return { ...state, reportStatus: "refreshing", reportError: null };
+}
+
+export function reportRefreshSucceeded(state, presentation) {
+  return {
+    ...state,
+    reportStatus: "ready",
+    reportError: null,
+    reportPresentationId: presentation.presentationId,
+    session: state.session ? {
+      ...state.session,
+      reportHtml: presentation.reportHtml,
+      revision: presentation.revision,
+      lifecycle: presentation.lifecycle,
+      completeness: presentation.completeness,
+      presentationId: presentation.presentationId,
+      reportAvailable: true,
+    } : state.session,
+  };
+}
+
+export function reportRefreshFailed(state, error) {
+  return {
+    ...state,
+    reportStatus: state.session?.reportHtml ? "ready" : "unavailable",
+    reportError: normalizeOpenError(error),
+  };
+}
+
+export function beginReportExport(state) {
+  return {
+    ...state,
+    reportExportStatus: "loading",
+    reportExportError: null,
+    reportExportNotice: null,
+  };
+}
+
+export function reportExportSucceeded(state, outcome) {
+  return {
+    ...state,
+    reportExportStatus: "ready",
+    reportExportError: null,
+    reportExportNotice: `${outcome.fileName} · revision ${outcome.revision ?? "legacy"}`,
+  };
+}
+
+export function reportExportCancelled(state) {
+  return {
+    ...state,
+    reportExportStatus: "idle",
+    reportExportError: null,
+    reportExportNotice: "cancelled",
+  };
+}
+
+export function reportExportFailed(state, error) {
+  return {
+    ...state,
+    reportExportStatus: "error",
+    reportExportError: normalizeOpenError(error),
+    reportExportNotice: null,
+  };
 }
 
 function mount(root, browserWindow) {
@@ -406,7 +497,13 @@ function mount(root, browserWindow) {
   const reportViewer = root.querySelector("[data-report-viewer]");
   const reportFrame = root.querySelector("[data-report-frame]");
   const reportBundleName = root.querySelector("[data-report-bundle]");
+  const reportRevision = root.querySelector("[data-report-revision]");
   const reportSummary = root.querySelector("[data-report-summary]");
+  const reportRefreshButton = root.querySelector("[data-report-refresh]");
+  const reportExportButton = root.querySelector("[data-report-export]");
+  const reportFeedback = root.querySelector("[data-report-feedback]");
+  const reportFeedbackMessage = root.querySelector("[data-report-feedback-message]");
+  const reportFeedbackDetail = root.querySelector("[data-report-feedback-detail]");
 
   const render = () => {
     for (const item of viewModel(state)) {
@@ -614,14 +711,38 @@ function mount(root, browserWindow) {
     }
 
     const hasSession = state.session !== null;
-    reportStatus.textContent = hasSession ? "Ready offline" : "Unavailable";
-    reportStatus.classList.toggle("muted", !hasSession);
+    const hasReport = typeof state.session?.reportHtml === "string";
+    const reportBusy = state.reportStatus === "refreshing" || state.reportExportStatus === "loading";
+    reportStatus.textContent = state.reportStatus === "refreshing"
+      ? "Refreshing"
+      : hasReport
+        ? `${humanizeIdentifier(state.session.completeness ?? "full_detail")} · revision ${state.session.revision ?? "legacy"}`
+        : "Unavailable";
+    reportStatus.classList.toggle("muted", !hasReport);
     reportPlaceholder.hidden = hasSession;
     reportViewer.hidden = !hasSession;
+    reportFrame.hidden = !hasReport;
+    reportRefreshButton.disabled = reportBusy;
+    reportExportButton.disabled = reportBusy || !hasReport;
+    reportRefreshButton.textContent = state.reportStatus === "refreshing"
+      ? "Refreshing…"
+      : "Refresh committed snapshot";
+    reportExportButton.textContent = state.reportExportStatus === "loading"
+      ? "Exporting…"
+      : "Export this HTML snapshot";
+    const reportFeedbackState = reportFeedbackModel(state);
+    reportFeedback.hidden = reportFeedbackState === null;
+    if (reportFeedbackState) {
+      reportFeedback.dataset.kind = reportFeedbackState.kind;
+      reportFeedbackMessage.textContent = reportFeedbackState.message;
+      reportFeedbackDetail.textContent = reportFeedbackState.detail;
+      reportFeedbackDetail.hidden = reportFeedbackState.detail.length === 0;
+    }
     if (hasSession) {
       reportBundleName.textContent = state.session.bundleName;
+      reportRevision.textContent = `Revision ${state.session.revision ?? "legacy"} · ${humanizeIdentifier(state.session.lifecycle ?? "static")}`;
       reportSummary.textContent = `${state.session.callsign} · ${state.session.grid} · ${state.session.antennaCount} antennas · ${state.session.slotCount} slots · ${state.session.observationCount} observations`;
-      updateReportFrame(reportFrame, state);
+      if (hasReport) updateReportFrame(reportFrame, state);
     }
   };
 
@@ -659,6 +780,27 @@ function mount(root, browserWindow) {
     render();
   };
 
+  const refreshReport = async () => {
+    if (
+      !state.session
+      || state.reportStatus === "refreshing"
+      || state.reportExportStatus === "loading"
+    ) return;
+    state = beginReportRefresh(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      state = reportRefreshSucceeded(
+        state,
+        await invokeRefreshActiveSessionReport(invoke),
+      );
+    } catch (error) {
+      state = reportRefreshFailed(state, error);
+    }
+    render();
+  };
+
   const submitConductorAction = async (action) => {
     if (!state.conductor || state.conductorStatus === "mutating") return;
     const request = {
@@ -681,7 +823,10 @@ function mount(root, browserWindow) {
       state = conductorMutationFailed(state, error);
     }
     render();
-    if (state.conductorStatus === "ready") await refreshWsjtxStatus();
+    if (state.conductorStatus === "ready") {
+      await refreshWsjtxStatus();
+      await refreshReport();
+    }
   };
 
   for (const button of navigation) {
@@ -691,6 +836,7 @@ function mount(root, browserWindow) {
       render();
       root.querySelector("main").focus({ preventScroll: true });
       if (state.activeWorkflow === "run" && state.session) await refreshConductor();
+      if (state.activeWorkflow === "report" && state.session) await refreshReport();
     });
   }
 
@@ -701,6 +847,7 @@ function mount(root, browserWindow) {
     );
     render();
     if (state.activeWorkflow === "run" && state.session) await refreshConductor();
+    if (state.activeWorkflow === "report" && state.session) await refreshReport();
   });
 
   conductorRefreshButtons.forEach((button) => {
@@ -828,8 +975,7 @@ function mount(root, browserWindow) {
       if (outcome.status === "cancelled") {
         state = setupCreationCancelled(state);
       } else if (outcome.status === "created" && outcome.session) {
-        const reportHtml = await invokeActiveSessionReport(invoke);
-        state = setupCreationSucceeded(state, { ...outcome.session, reportHtml });
+        state = setupCreationSucceeded(state, outcome.session);
       } else {
         throw new Error("The desktop command returned an unexpected response.");
       }
@@ -839,6 +985,7 @@ function mount(root, browserWindow) {
     render();
     if (state.setupStatus === "created") {
       browserWindow.history.replaceState(null, "", "#run");
+      await refreshReport();
       await refreshConductor();
     }
   });
@@ -876,8 +1023,7 @@ function mount(root, browserWindow) {
       if (outcome.status === "cancelled") {
         state = openSessionCancelled(state);
       } else if (outcome.status === "opened" && outcome.session) {
-        const reportHtml = await invokeActiveSessionReport(invoke);
-        state = openSessionSucceeded(state, { ...outcome.session, reportHtml });
+        state = openSessionSucceeded(state, outcome.session);
         browserWindow.history.replaceState(null, "", "#report");
       } else {
         throw new Error("The desktop command returned an unexpected response.");
@@ -887,6 +1033,7 @@ function mount(root, browserWindow) {
     }
 
     render();
+    if (state.openStatus === "ready") await refreshReport();
   });
 
   exportButton.addEventListener("click", async () => {
@@ -914,6 +1061,24 @@ function mount(root, browserWindow) {
     render();
   });
 
+  reportRefreshButton.addEventListener("click", refreshReport);
+  reportExportButton.addEventListener("click", async () => {
+    if (!state.session?.reportHtml || state.reportExportStatus === "loading") return;
+    state = beginReportExport(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      const outcome = await invokeExportActiveSessionReport(invoke);
+      state = outcome.status === "cancelled"
+        ? reportExportCancelled(state)
+        : reportExportSucceeded(state, outcome);
+    } catch (error) {
+      state = reportExportFailed(state, error);
+    }
+    render();
+  });
+
   render();
   browserWindow.setInterval?.(() => {
     if (
@@ -923,6 +1088,7 @@ function mount(root, browserWindow) {
     ) {
       void refreshConductor();
     }
+    if (state.activeWorkflow === "report" && state.session) void refreshReport();
   }, 5000);
 }
 
@@ -1241,6 +1407,40 @@ function exportFeedbackModel(state) {
       kind: "ready",
       message: `${state.exportedBundleName} was exported and verified.`,
       detail: "The original bundle remains the active session.",
+    };
+  }
+  return null;
+}
+
+function reportFeedbackModel(state) {
+  if (state.reportStatus === "refreshing") {
+    return {
+      kind: "loading",
+      message: "Building one verified committed snapshot…",
+      detail: "The prior coherent report remains visible until the new revision is verified.",
+    };
+  }
+  if (state.reportExportStatus === "loading") {
+    return {
+      kind: "loading",
+      message: "Exporting the visible standalone HTML snapshot…",
+      detail: "The destination is created without overwriting an existing file.",
+    };
+  }
+  if (state.reportExportError) return { kind: "error", ...state.reportExportError };
+  if (state.reportError) return { kind: "error", ...state.reportError };
+  if (state.reportExportNotice === "cancelled") {
+    return {
+      kind: "cancelled",
+      message: "Report export cancelled.",
+      detail: "The visible coherent report was retained.",
+    };
+  }
+  if (state.reportExportNotice) {
+    return {
+      kind: "ready",
+      message: "The standalone report snapshot was exported.",
+      detail: state.reportExportNotice,
     };
   }
   return null;

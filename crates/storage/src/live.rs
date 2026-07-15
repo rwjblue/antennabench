@@ -364,12 +364,14 @@ impl BundleStore {
                 reference,
             });
         }
+        let mut destination_created = false;
         let result = (|| {
             if referenced_attachments.is_empty() {
                 destination_store.write_v2(&bundle)?;
             } else {
                 destination_store.write_v2_with_attachments(&bundle, &referenced_attachments)?;
             }
+            destination_created = true;
             copy_checkpointed_attachments(
                 self,
                 &source_paths.attachments_dir,
@@ -381,7 +383,9 @@ impl BundleStore {
             Ok(())
         })();
         if let Err(error) = result {
-            let _ = fs::remove_dir_all(destination_store.root());
+            if destination_created {
+                let _ = fs::remove_dir_all(destination_store.root());
+            }
             return Err(error);
         }
         Ok(destination_store)

@@ -252,9 +252,9 @@ schema v2 + validation + bounded storage
 ```
 
 Schema and safety prerequisites are #46 and #50 through #57. The #61 validated
-setup/bundle-creation slice, #62 manual/no-rig conductor, and #63 bounded live
-WSJT-X orchestration are implemented. Remaining product slices are #64 for
-coherent live/final report and export and #65 for deterministic end-to-end coverage.
+setup/bundle-creation slice, #62 manual/no-rig conductor, #63 bounded live
+WSJT-X orchestration, and #64 coherent live/final report and export are
+implemented. The remaining product slice is #65 for deterministic end-to-end coverage.
 The slices consume the checkpoint and event contracts; they do not define
 competing persistence, lifecycle, correction, or resource semantics.
 
@@ -278,9 +278,14 @@ optional bounded producer: admitted raw evidence and normalized observations
 commit together, and a resource or acquisition gap is explicit before affected
 intake stops. Reports, report export, and lossless bundle export select one
 verified checkpoint revision so derived views cannot mix live generations.
-Setup creation, manual/no-rig conduction, and optional bounded WSJT-X
-orchestration are shipped behavior. Live/final report refresh remains deferred
-to its focused issue.
+Setup creation, manual/no-rig conduction, optional bounded WSJT-X orchestration,
+and live/final report refresh and export are shipped behavior. A report publish
+re-reads the checkpoint identity after rendering and retries boundedly if live
+intake advanced. Only a verified candidate replaces the retained presentation;
+the same revision keeps the same presentation identity. The renderer-neutral
+model and HTML disclose checkpoint revision, lifecycle/interruption history,
+adapter dispositions and acquisition gaps, planned versus actual slot state,
+eligibility exclusions, and full-detail versus bounded-overview completeness.
 
 ## Desktop Shell Boundary
 
@@ -317,16 +322,18 @@ intake, and lifecycle interruption/termination or active-session replacement
 cannot leave an orphan receiver.
 
 The allowlisted `open_session_bundle` application command owns the native
-directory picker and composes storage, normalization, validation, report
-construction, and standalone HTML rendering in Rust. It returns only a small
-session summary. The read-only `active_session_report` command supplies the
-already-derived document to the report surface. `export_active_session` owns a
-native save dialog and asks storage to create and verify a lossless copy of the
-active source. It returns only the destination bundle name and does not replace
-the active session.
+directory picker and selects a coherent committed snapshot in Rust. It returns
+only a small session summary. `active_session_report` reads the retained
+presentation, while `refresh_active_session_report` builds and verifies a
+revision-keyed replacement without discarding the prior presentation on error.
+`export_active_session_report` writes exactly that retained standalone HTML with
+create-new semantics. `export_active_session` owns a native save dialog and asks
+storage to create and verify a checkpointed lossless copy independently of
+report eligibility. Neither export replaces the active session.
 
-Lossless export copies the original durable root-file bytes and complete nested
-attachments tree rather than serializing normalized in-memory state. Existing
+Lossless schema-v2 export copies one committed stream prefix, active plan, and
+complete nested attachments tree rather than serializing normalized in-memory
+state; schema-v1 export preserves its static source bytes. Existing
 destinations, symbolic links, and unsupported filesystem entries are rejected;
 an incomplete new destination is rolled back safely after copy or verification
 failure. The frontend receives no paths and has no general filesystem or dialog

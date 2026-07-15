@@ -5,7 +5,8 @@ mod wsjtx_session;
 
 use conductor::{active_session_conductor, mutate_active_session_conductor, ConductorSessionState};
 use open_session::{
-    active_session_report, export_active_session, open_session_bundle, ActiveSessionState,
+    active_session_report, export_active_session, export_active_session_report,
+    open_session_bundle, refresh_active_session_report, ActiveSessionState,
 };
 use setup::{create_session_from_review, review_session_setup, SetupSessionState};
 use wsjtx_session::{
@@ -26,7 +27,9 @@ pub fn run() {
             create_session_from_review,
             open_session_bundle,
             export_active_session,
+            export_active_session_report,
             active_session_report,
+            refresh_active_session_report,
             active_session_conductor,
             mutate_active_session_conductor,
             active_session_wsjtx_status,

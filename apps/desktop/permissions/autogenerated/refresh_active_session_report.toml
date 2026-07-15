@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-refresh-active-session-report"
+description = "Enables the refresh_active_session_report command without any pre-configured scope."
+commands.allow = ["refresh_active_session_report"]
+
+[[permission]]
+identifier = "deny-refresh-active-session-report"
+description = "Denies the refresh_active_session_report command without any pre-configured scope."
+commands.deny = ["refresh_active_session_report"]
