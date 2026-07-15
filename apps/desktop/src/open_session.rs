@@ -15,6 +15,8 @@ use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use thiserror::Error;
 
+use crate::wsjtx_session::WsjtxSessionState;
+
 const SESSION_SUMMARY_IPC_BYTES: u64 = 64 * 1024;
 const REPORT_DOCUMENT_IPC_BYTES: u64 = 16 * 1024 * 1024;
 
@@ -621,8 +623,9 @@ pub(crate) fn check_ipc_payload(
 pub(crate) async fn open_session_bundle(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    wsjtx_state: State<'_, WsjtxSessionState>,
 ) -> Result<OpenSessionOutcome, SessionErrorPayload> {
-    open_session_with_selection(state.inner(), || {
+    let outcome = open_session_with_selection(state.inner(), || {
         let Some(selection) = app
             .dialog()
             .file()
@@ -640,7 +643,11 @@ pub(crate) async fn open_session_bundle(
                 error.to_string(),
             )
         })
-    })
+    })?;
+    if matches!(outcome, OpenSessionOutcome::Opened { .. }) {
+        wsjtx_state.stop_all("WSJT-X reception stopped because a different session was opened.");
+    }
+    Ok(outcome)
 }
 
 #[tauri::command]

@@ -22,6 +22,7 @@ use crate::open_session::{
     active_session_source, check_ipc_payload, storage_error_payload, with_foreground_operation,
     ActiveSessionState, SessionErrorKind, SessionErrorPayload,
 };
+use crate::wsjtx_session::WsjtxSessionState;
 
 const CONDUCTOR_VIEW_IPC_BYTES: u64 = 512 * 1024;
 const MAX_PENDING_ACTION_TOKENS: usize = 32;
@@ -259,7 +260,7 @@ fn ensure_v2_source(source: &Path) -> Result<(), SessionErrorPayload> {
     }
 }
 
-fn live_error_payload(error: LivePersistenceError) -> SessionErrorPayload {
+pub(crate) fn live_error_payload(error: LivePersistenceError) -> SessionErrorPayload {
     match error {
         LivePersistenceError::Store(error) => storage_error_payload(error),
         LivePersistenceError::WriterBusy => SessionErrorPayload::new(
@@ -920,13 +921,22 @@ pub(crate) fn mutate_active_session_conductor(
     request: ConductorMutationRequest,
     active_state: State<'_, ActiveSessionState>,
     conductor_state: State<'_, ConductorSessionState>,
+    wsjtx_state: State<'_, WsjtxSessionState>,
 ) -> Result<ConductorView, SessionErrorPayload> {
-    mutate_conductor_with_hooks(
+    let view = mutate_conductor_with_hooks(
         active_state.inner(),
         conductor_state.inner(),
         request,
         Arc::new(SystemLivePersistenceHooks),
-    )
+    )?;
+    if view.lifecycle != SessionLifecycleV2::Running {
+        let (source, _) = active_session_source(active_state.inner())?;
+        wsjtx_state.stop_for_source(
+            &source,
+            "WSJT-X reception stopped because the durable session is not running.",
+        );
+    }
+    Ok(view)
 }
 
 #[cfg(test)]

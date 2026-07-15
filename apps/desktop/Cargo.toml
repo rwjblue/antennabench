@@ -21,6 +21,7 @@ antennabench-analysis = { path = "../../crates/analysis" }
 antennabench-core = { path = "../../crates/core" }
 antennabench-report = { path = "../../crates/report" }
 antennabench-storage = { path = "../../crates/storage" }
+antennabench-wsjtx = { path = "../../crates/wsjtx" }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true

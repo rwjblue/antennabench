@@ -24,6 +24,7 @@ use crate::open_session::{
     activate_created_bundle, with_foreground_operation, ActiveSessionState, OpenedSession,
     SessionErrorKind, SessionErrorPayload,
 };
+use crate::wsjtx_session::WsjtxSessionState;
 
 const SETUP_REVIEW_IPC_BYTES: u64 = 512 * 1024;
 const SETUP_DRAFT_IPC_BYTES: u64 = 256 * 1024;
@@ -761,9 +762,10 @@ pub(crate) async fn create_session_from_review(
     app: AppHandle,
     setup_state: State<'_, SetupSessionState>,
     active_state: State<'_, ActiveSessionState>,
+    wsjtx_state: State<'_, WsjtxSessionState>,
     review_id: String,
 ) -> Result<CreateSessionOutcome, SessionErrorPayload> {
-    create_with_selection(
+    let outcome = create_with_selection(
         setup_state.inner(),
         active_state.inner(),
         &review_id,
@@ -787,7 +789,13 @@ pub(crate) async fn create_session_from_review(
                 )
             })
         },
-    )
+    )?;
+    if matches!(outcome, CreateSessionOutcome::Created { .. }) {
+        wsjtx_state.stop_all(
+            "WSJT-X reception stopped because a different session was created and activated.",
+        );
+    }
+    Ok(outcome)
 }
 
 #[cfg(test)]

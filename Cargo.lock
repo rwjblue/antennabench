@@ -73,6 +73,7 @@ dependencies = [
  "antennabench-core",
  "antennabench-report",
  "antennabench-storage",
+ "antennabench-wsjtx",
  "chrono",
  "serde",
  "serde_json",

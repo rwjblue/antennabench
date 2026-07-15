@@ -1,0 +1,1294 @@
+use std::{
+    io::ErrorKind,
+    net::{IpAddr, SocketAddr},
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
+    time::Duration as StdDuration,
+};
+
+use antennabench_core::{
+    annotate_bundle_observations, AdapterDisposition, AdapterInput, AdapterReasonId,
+    AdapterRecordV2, BundleV2Contents, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
+    ObservationRecord, ObservationRecordV2, Provenance, RecordMetaV2, RecordSource,
+    SessionLifecycleV2, SCHEMA_VERSION_V2,
+};
+use antennabench_storage::{
+    BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError, LivePersistenceHooks,
+    SystemLivePersistenceHooks,
+};
+use antennabench_wsjtx::{
+    parse_wsjtx_datagram, LiveIngestConfig, LiveIngestError, LiveIngestOutcome,
+    LiveMessageDisposition, LiveRecordedMessage, LiveWsjtxIngest, ReceivedUdpDatagram,
+    UdpReceiverError, WsjtxUdpReceiver, WsprDecodeDisposition,
+};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+use tauri::State;
+
+use crate::{
+    conductor::live_error_payload,
+    open_session::{
+        active_session_source, with_foreground_operation, ActiveSessionState, SessionErrorKind,
+        SessionErrorPayload,
+    },
+};
+
+const RECEIVER_READ_TIMEOUT: StdDuration = StdDuration::from_millis(250);
+const HEARTBEAT_STALE_AFTER_SECONDS: i64 = 45;
+const WSJTX_STATUS_IPC_BYTES: u64 = 64 * 1024;
+
+#[derive(Default)]
+pub(crate) struct WsjtxSessionState(Mutex<WsjtxRuntime>);
+
+#[derive(Default)]
+struct WsjtxRuntime {
+    active: Option<ReceiverHandle>,
+    last_status: Option<WsjtxReceiverStatus>,
+}
+
+struct ReceiverHandle {
+    source: PathBuf,
+    stop: Arc<AtomicBool>,
+    status: Arc<Mutex<WsjtxReceiverStatus>>,
+    worker: JoinHandle<()>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WsjtxReceiverPhase {
+    Idle,
+    Running,
+    Stale,
+    Stopped,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WsjtxDiagnostic {
+    code: String,
+    message: String,
+    evidence_complete: bool,
+    stops_intake: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WsjtxReceiverStatus {
+    phase: WsjtxReceiverPhase,
+    receiver_id: Option<String>,
+    bind_address: Option<String>,
+    expected_client_id: Option<String>,
+    started_at: Option<DateTime<Utc>>,
+    last_seen_at: Option<DateTime<Utc>>,
+    received_datagrams: u64,
+    committed_mutations: u64,
+    ignored_datagrams: u64,
+    diagnostic: Option<WsjtxDiagnostic>,
+}
+
+impl Default for WsjtxReceiverStatus {
+    fn default() -> Self {
+        Self {
+            phase: WsjtxReceiverPhase::Idle,
+            receiver_id: None,
+            bind_address: None,
+            expected_client_id: None,
+            started_at: None,
+            last_seen_at: None,
+            received_datagrams: 0,
+            committed_mutations: 0,
+            ignored_datagrams: 0,
+            diagnostic: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StartWsjtxRequest {
+    bind_address: String,
+    port: u16,
+    expected_client_id: String,
+}
+
+struct WsjtxOrchestrator {
+    store: BundleStore,
+    ingest: LiveWsjtxIngest,
+    session_id: String,
+    receiver_id: String,
+    expected_client_id: String,
+    hooks: Arc<dyn LivePersistenceHooks>,
+}
+
+enum IntakeDecision {
+    Continue,
+    Stop,
+}
+
+impl WsjtxSessionState {
+    pub(crate) fn stop_all(&self, reason: &str) {
+        let handle = self
+            .0
+            .lock()
+            .ok()
+            .and_then(|mut runtime| runtime.active.take());
+        if let Some(handle) = handle {
+            self.finish_stop(handle, reason);
+        }
+    }
+
+    pub(crate) fn stop_for_source(&self, source: &Path, reason: &str) {
+        let handle = self.0.lock().ok().and_then(|mut runtime| {
+            runtime
+                .active
+                .as_ref()
+                .is_some_and(|handle| handle.source == source)
+                .then(|| runtime.active.take())
+                .flatten()
+        });
+        if let Some(handle) = handle {
+            self.finish_stop(handle, reason);
+        }
+    }
+
+    fn finish_stop(&self, handle: ReceiverHandle, reason: &str) -> WsjtxReceiverStatus {
+        handle.stop.store(true, Ordering::Release);
+        let status = handle.status.clone();
+        let _ = handle.worker.join();
+        let mut snapshot = status
+            .lock()
+            .map(|status| status.clone())
+            .unwrap_or_default();
+        if !matches!(snapshot.phase, WsjtxReceiverPhase::Failed) {
+            snapshot.phase = WsjtxReceiverPhase::Stopped;
+            snapshot.diagnostic = Some(WsjtxDiagnostic {
+                code: "wsjtx.receiver.stopped".into(),
+                message: reason.into(),
+                evidence_complete: true,
+                stops_intake: true,
+            });
+        }
+        if let Ok(mut runtime) = self.0.lock() {
+            runtime.last_status = Some(snapshot.clone());
+        }
+        snapshot
+    }
+
+    fn status_for_source(&self, source: &Path, now: DateTime<Utc>) -> WsjtxReceiverStatus {
+        let mut status = self
+            .0
+            .lock()
+            .ok()
+            .and_then(|runtime| {
+                runtime
+                    .active
+                    .as_ref()
+                    .filter(|handle| handle.source == source)
+                    .and_then(|handle| handle.status.lock().ok().map(|status| status.clone()))
+                    .or_else(|| runtime.last_status.clone())
+            })
+            .unwrap_or_default();
+        if status.phase == WsjtxReceiverPhase::Running {
+            let reference = status.last_seen_at.or(status.started_at);
+            if reference.is_some_and(|seen| {
+                now.signed_duration_since(seen) > Duration::seconds(HEARTBEAT_STALE_AFTER_SECONDS)
+            }) {
+                status.phase = WsjtxReceiverPhase::Stale;
+                status.diagnostic = Some(WsjtxDiagnostic {
+                    code: "wsjtx.client.stale_heartbeat".into(),
+                    message:
+                        "No datagram from the expected WSJT-X client has arrived within 45 seconds."
+                            .into(),
+                    evidence_complete: true,
+                    stops_intake: false,
+                });
+            }
+        }
+        status
+    }
+}
+
+impl Drop for WsjtxSessionState {
+    fn drop(&mut self) {
+        if let Ok(runtime) = self.0.get_mut() {
+            if let Some(handle) = runtime.active.take() {
+                handle.stop.store(true, Ordering::Release);
+                let _ = handle.worker.join();
+            }
+        }
+    }
+}
+
+fn validate_start_request(
+    request: StartWsjtxRequest,
+) -> Result<(SocketAddr, String), SessionErrorPayload> {
+    let ip = request.bind_address.trim().parse::<IpAddr>().map_err(|_| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "Enter a numeric loopback address for WSJT-X reception.",
+            "bindAddress must be 127.0.0.1 or ::1",
+        )
+    })?;
+    if !ip.is_loopback() || request.port == 0 {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "Use a loopback address and a non-zero UDP port.",
+            "the desktop receiver never exposes arbitrary network binding",
+        ));
+    }
+    let expected = request.expected_client_id.trim();
+    if expected.is_empty() || expected.len() > 128 || !expected.is_ascii() {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "Enter the expected WSJT-X client identity.",
+            "expectedClientId must contain 1 to 128 ASCII bytes",
+        ));
+    }
+    Ok((SocketAddr::new(ip, request.port), expected.to_string()))
+}
+
+fn start_receiver(
+    state: &WsjtxSessionState,
+    source: PathBuf,
+    request: StartWsjtxRequest,
+    hooks: Arc<dyn LivePersistenceHooks>,
+) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
+    let (bind, expected_client_id) = validate_start_request(request)?;
+    let store = BundleStore::new(&source);
+    let bundle = store.read_v2_checkpointed().map_err(live_error_payload)?;
+    if bundle.session_state.lifecycle != SessionLifecycleV2::Running {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "Start the durable session before starting WSJT-X reception.",
+            format!("current lifecycle is {:?}", bundle.session_state.lifecycle),
+        ));
+    }
+    if state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("WSJT-X receiver state is unavailable"))?
+        .active
+        .is_some()
+    {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "Stop the active WSJT-X receiver before starting another one.",
+            "one desktop process owns at most one receiver",
+        ));
+    }
+
+    let mut receiver = WsjtxUdpReceiver::bind(bind).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Resource,
+            "The WSJT-X UDP receiver could not bind to that local address.",
+            format!("code=wsjtx.receiver.bind_failed address={bind} error={error}"),
+        )
+    })?;
+    receiver
+        .set_read_timeout(Some(RECEIVER_READ_TIMEOUT))
+        .map_err(|error| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Resource,
+                "The WSJT-X UDP receiver could not configure bounded polling.",
+                format!("code=wsjtx.receiver.timeout_failed error={error}"),
+            )
+        })?;
+    let local_address = receiver.local_addr().map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Resource,
+            "The WSJT-X UDP receiver address could not be inspected.",
+            error.to_string(),
+        )
+    })?;
+    let receiver_id = hooks.new_id("wsjtx-receiver");
+    let session_started_at = bundle
+        .schedule
+        .slots
+        .iter()
+        .map(|slot| slot.starts_at)
+        .min()
+        .unwrap_or_else(|| hooks.now());
+    let ingest = LiveWsjtxIngest::new(LiveIngestConfig {
+        session_id: bundle.manifest.session_id.clone(),
+        receiver_id: receiver_id.clone(),
+        station_callsign: bundle.station.callsign.clone(),
+        station_grid: bundle.station.grid.clone(),
+        session_started_at,
+    })
+    .map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "The active station cannot configure WSJT-X ingestion.",
+            error.to_string(),
+        )
+    })?;
+    let started_at = hooks.now();
+    let status = Arc::new(Mutex::new(WsjtxReceiverStatus {
+        phase: WsjtxReceiverPhase::Running,
+        receiver_id: Some(receiver_id.clone()),
+        bind_address: Some(local_address.to_string()),
+        expected_client_id: Some(expected_client_id.clone()),
+        started_at: Some(started_at),
+        ..WsjtxReceiverStatus::default()
+    }));
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker_status = status.clone();
+    let worker_stop = stop.clone();
+    let worker = thread::Builder::new()
+        .name("antennabench-wsjtx".into())
+        .spawn(move || {
+            let mut orchestrator = WsjtxOrchestrator {
+                store,
+                ingest,
+                session_id: bundle.manifest.session_id,
+                receiver_id,
+                expected_client_id,
+                hooks,
+            };
+            receiver_loop(
+                &mut receiver,
+                &mut orchestrator,
+                &worker_stop,
+                &worker_status,
+            );
+        })
+        .map_err(|error| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Resource,
+                "The WSJT-X receiver task could not start.",
+                error.to_string(),
+            )
+        })?;
+    let snapshot = status
+        .lock()
+        .map(|status| status.clone())
+        .unwrap_or_default();
+    state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("WSJT-X receiver state is unavailable"))?
+        .active = Some(ReceiverHandle {
+        source,
+        stop,
+        status,
+        worker,
+    });
+    Ok(snapshot)
+}
+
+fn receiver_loop(
+    receiver: &mut WsjtxUdpReceiver,
+    orchestrator: &mut WsjtxOrchestrator,
+    stop: &AtomicBool,
+    status: &Mutex<WsjtxReceiverStatus>,
+) {
+    while !stop.load(Ordering::Acquire) {
+        match receiver.receive() {
+            Ok(datagram) => {
+                let decision = orchestrator.process(datagram, status);
+                if matches!(decision, IntakeDecision::Stop) {
+                    break;
+                }
+            }
+            Err(UdpReceiverError::Receive(error))
+                if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
+            Err(UdpReceiverError::Receive(error)) => {
+                orchestrator.record_receiver_gap(
+                    "wsjtx.receiver.receive_failed",
+                    error.to_string(),
+                    status,
+                );
+                break;
+            }
+            Err(UdpReceiverError::Shutdown) => break,
+        }
+    }
+}
+
+impl WsjtxOrchestrator {
+    fn process(
+        &mut self,
+        datagram: ReceivedUdpDatagram,
+        status: &Mutex<WsjtxReceiverStatus>,
+    ) -> IntakeDecision {
+        update_status(status, |status| status.received_datagrams += 1);
+        let snapshot = match self.store.read_v2_checkpointed() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                set_failed(
+                    status,
+                    "wsjtx.persistence.read_failed",
+                    error.to_string(),
+                    false,
+                );
+                return IntakeDecision::Stop;
+            }
+        };
+        if snapshot.manifest.session_id != self.session_id
+            || snapshot.session_state.lifecycle != SessionLifecycleV2::Running
+        {
+            set_failed(
+                status,
+                "wsjtx.receiver.lifecycle_stopped",
+                format!(
+                    "intake stopped at lifecycle {:?}",
+                    snapshot.session_state.lifecycle
+                ),
+                true,
+            );
+            return IntakeDecision::Stop;
+        }
+
+        let parsed = match parse_wsjtx_datagram(&datagram.bytes) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                let mutation = self.adapter_only_mutation(
+                    &snapshot,
+                    &datagram,
+                    "udp_malformed",
+                    AdapterDisposition::Malformed,
+                    "wsjtx.malformed",
+                    None,
+                );
+                return self.commit_or_stop(
+                    mutation,
+                    status,
+                    Some(("wsjtx.protocol.malformed", error.to_string(), true)),
+                );
+            }
+        };
+        if parsed.message.client_id() != self.expected_client_id {
+            let mutation = self.adapter_only_mutation(
+                &snapshot,
+                &datagram,
+                "udp_client_mismatch",
+                AdapterDisposition::Filtered,
+                "wsjtx.client-mismatch",
+                None,
+            );
+            return self.commit_or_stop(
+                mutation,
+                status,
+                Some((
+                    "wsjtx.client.mismatch",
+                    format!(
+                        "ignored client {:?}; expected {:?}",
+                        parsed.message.client_id(),
+                        self.expected_client_id
+                    ),
+                    true,
+                )),
+            );
+        }
+
+        update_status(status, |status| {
+            status.last_seen_at = Some(datagram.received_at);
+            status.phase = WsjtxReceiverPhase::Running;
+            status.diagnostic = None;
+        });
+        match self
+            .ingest
+            .ingest_datagram(&datagram.bytes, datagram.received_at)
+        {
+            Ok(LiveIngestOutcome::IgnoredUnsupported { .. }) => {
+                let mutation = self.adapter_only_mutation(
+                    &snapshot,
+                    &datagram,
+                    "udp_unsupported",
+                    AdapterDisposition::Unsupported,
+                    "wsjtx.unsupported",
+                    None,
+                );
+                self.commit_or_stop(mutation, status, None)
+            }
+            Ok(LiveIngestOutcome::Recorded(message)) => {
+                let mutation = self.recorded_mutation(&snapshot, &datagram, *message);
+                self.commit_or_stop(mutation, status, None)
+            }
+            Err(LiveIngestError::Parse(error)) => {
+                let mutation = self.adapter_only_mutation(
+                    &snapshot,
+                    &datagram,
+                    "udp_malformed",
+                    AdapterDisposition::Malformed,
+                    "wsjtx.malformed",
+                    None,
+                );
+                self.commit_or_stop(
+                    mutation,
+                    status,
+                    Some(("wsjtx.protocol.malformed", error.to_string(), true)),
+                )
+            }
+            Err(LiveIngestError::Resource(error)) => {
+                let diagnostic = error.diagnostic;
+                let mutation = self.adapter_only_mutation(
+                    &snapshot,
+                    &datagram,
+                    "acquisition_gap",
+                    AdapterDisposition::PartiallyNormalized,
+                    "wsjtx.acquisition-gap",
+                    None,
+                );
+                let decision = self.commit_or_stop(
+                    mutation,
+                    status,
+                    Some((diagnostic.code, format!("{:?}", diagnostic), true)),
+                );
+                set_failed(status, diagnostic.code, format!("{:?}", diagnostic), true);
+                if matches!(decision, IntakeDecision::Continue) {
+                    IntakeDecision::Stop
+                } else {
+                    decision
+                }
+            }
+        }
+    }
+
+    fn recorded_mutation(
+        &self,
+        snapshot: &BundleV2Contents,
+        datagram: &ReceivedUdpDatagram,
+        recorded: LiveRecordedMessage,
+    ) -> LiveMutationV2 {
+        let mutation_id = self.hooks.new_id("wsjtx-mutation");
+        let adapter_id = recorded.wsjtx_record.record_id;
+        let disposition = disposition(&recorded.disposition);
+        let reason = reason(&recorded.disposition);
+        let has_observation = recorded.observation.is_some();
+        let observation = recorded.observation.map(|observation| {
+            let mut current = snapshot.clone().into_current().bundle;
+            current.observations.push(observation);
+            annotate_bundle_observations(&mut current);
+            let observation = current
+                .observations
+                .pop()
+                .expect("the just-appended observation remains present");
+            observation_v2(
+                observation,
+                &adapter_id,
+                &mutation_id,
+                if has_observation { 1 } else { 0 },
+                if has_observation { 2 } else { 1 },
+            )
+        });
+        let normalized_records = observation
+            .as_ref()
+            .map(|observation| {
+                vec![NormalizedRecordLink {
+                    record_kind: NormalizedRecordKind::Observation,
+                    record_id: observation.observation_id.clone(),
+                }]
+            })
+            .unwrap_or_default();
+        let member_count = if observation.is_some() { 2 } else { 1 };
+        let adapter = adapter_record(
+            &self.session_id,
+            &self.receiver_id,
+            &mutation_id,
+            0,
+            member_count,
+            adapter_id,
+            datagram,
+            recorded.wsjtx_record.meta.timestamp,
+            recorded.wsjtx_record.message_type,
+            disposition,
+            reason,
+            normalized_records,
+        );
+        let mut members = vec![LiveMutationMemberV2::AdapterRecord(adapter)];
+        if let Some(observation) = observation {
+            members.push(LiveMutationMemberV2::Observation(observation));
+        }
+        LiveMutationV2 {
+            expected_revision: snapshot.session_state.revision,
+            mutation_id,
+            members,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn adapter_only_mutation(
+        &self,
+        snapshot: &BundleV2Contents,
+        datagram: &ReceivedUdpDatagram,
+        record_type: &str,
+        disposition: AdapterDisposition,
+        reason_value: &str,
+        source_time: Option<DateTime<Utc>>,
+    ) -> LiveMutationV2 {
+        let mutation_id = self.hooks.new_id("wsjtx-mutation");
+        let record_id = self.hooks.new_id("wsjtx-record");
+        LiveMutationV2 {
+            expected_revision: snapshot.session_state.revision,
+            mutation_id: mutation_id.clone(),
+            members: vec![LiveMutationMemberV2::AdapterRecord(adapter_record(
+                &self.session_id,
+                &self.receiver_id,
+                &mutation_id,
+                0,
+                1,
+                record_id,
+                datagram,
+                source_time.unwrap_or(datagram.received_at),
+                record_type.into(),
+                disposition,
+                reason_value.into(),
+                vec![],
+            ))],
+        }
+    }
+
+    fn commit_or_stop(
+        &self,
+        mut mutation: LiveMutationV2,
+        status: &Mutex<WsjtxReceiverStatus>,
+        diagnostic: Option<(&str, String, bool)>,
+    ) -> IntakeDecision {
+        for _ in 0..3 {
+            let result = self
+                .store
+                .open_v2_writer_with_hooks(self.hooks.clone())
+                .and_then(|mut writer| writer.append(mutation.clone()));
+            match result {
+                Ok(_) => {
+                    update_status(status, |status| {
+                        status.committed_mutations += 1;
+                        if let Some((code, message, _)) = &diagnostic {
+                            status.ignored_datagrams += 1;
+                            status.diagnostic = Some(WsjtxDiagnostic {
+                                code: (*code).into(),
+                                message: message.clone(),
+                                evidence_complete: true,
+                                stops_intake: false,
+                            });
+                        }
+                    });
+                    return IntakeDecision::Continue;
+                }
+                Err(LivePersistenceError::StaleRevision { actual, .. }) => {
+                    mutation.expected_revision = actual;
+                }
+                Err(error) => {
+                    let committed = self
+                        .store
+                        .read_v2_checkpointed()
+                        .ok()
+                        .is_some_and(|bundle| {
+                            bundle.session_state.last_committed_mutation_id.as_deref()
+                                == Some(mutation.mutation_id.as_str())
+                        });
+                    if committed {
+                        update_status(status, |status| status.committed_mutations += 1);
+                        return IntakeDecision::Continue;
+                    }
+                    set_failed(
+                        status,
+                        "wsjtx.persistence.commit_failed",
+                        error.to_string(),
+                        false,
+                    );
+                    return IntakeDecision::Stop;
+                }
+            }
+        }
+        set_failed(
+            status,
+            "wsjtx.persistence.stale_revision",
+            "the checkpoint kept advancing during three bounded retries".into(),
+            false,
+        );
+        IntakeDecision::Stop
+    }
+
+    fn record_receiver_gap(
+        &self,
+        code: &str,
+        message: String,
+        status: &Mutex<WsjtxReceiverStatus>,
+    ) {
+        let snapshot = self.store.read_v2_checkpointed();
+        if let Ok(snapshot) = snapshot {
+            if snapshot.session_state.lifecycle == SessionLifecycleV2::Running {
+                let at = self.hooks.now();
+                let datagram = ReceivedUdpDatagram {
+                    bytes: Vec::new(),
+                    source: "127.0.0.1:0".parse().expect("static socket address"),
+                    received_at: at,
+                };
+                let mutation = self.adapter_only_mutation(
+                    &snapshot,
+                    &datagram,
+                    "acquisition_gap",
+                    AdapterDisposition::PartiallyNormalized,
+                    "wsjtx.acquisition-gap",
+                    Some(at),
+                );
+                if matches!(
+                    self.commit_or_stop(mutation, status, None),
+                    IntakeDecision::Continue
+                ) {
+                    set_failed(status, code, message, true);
+                    return;
+                }
+            }
+        }
+        set_failed(status, code, message, false);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn adapter_record(
+    session_id: &str,
+    receiver_id: &str,
+    mutation_id: &str,
+    member_index: u32,
+    member_count: u32,
+    record_id: String,
+    datagram: &ReceivedUdpDatagram,
+    source_time: DateTime<Utc>,
+    record_type: String,
+    disposition: AdapterDisposition,
+    reason_value: String,
+    normalized_records: Vec<NormalizedRecordLink>,
+) -> AdapterRecordV2 {
+    AdapterRecordV2 {
+        meta: record_meta(
+            session_id,
+            mutation_id,
+            member_index,
+            member_count,
+            source_time,
+        ),
+        record_id,
+        source_time: Some(source_time),
+        record_type,
+        disposition,
+        reason: AdapterReasonId::new(reason_value).expect("static WSJT-X reason identity"),
+        normalized_records,
+        input: AdapterInput::Inline {
+            data: encode_hex(&datagram.bytes),
+            media_type: "application/vnd.wsjt-x.udp".into(),
+            encoding: Some("hex".into()),
+            source_locator: Some(format!("udp://{}?receiver={receiver_id}", datagram.source)),
+        },
+    }
+}
+
+fn observation_v2(
+    observation: ObservationRecord,
+    adapter_id: &str,
+    mutation_id: &str,
+    member_index: u32,
+    member_count: u32,
+) -> ObservationRecordV2 {
+    ObservationRecordV2 {
+        meta: record_meta(
+            &observation.meta.session_id,
+            mutation_id,
+            member_index,
+            member_count,
+            observation.meta.timestamp,
+        ),
+        observation_id: observation.observation_id,
+        adapter_record_ids: vec![adapter_id.into()],
+        observation_kind: observation.observation_kind,
+        band: observation.band,
+        frequency_hz: observation.frequency_hz,
+        mode: observation.mode,
+        reporter_call: observation.reporter_call,
+        heard_call: observation.heard_call,
+        reporter_grid: observation.reporter_grid,
+        heard_grid: observation.heard_grid,
+        distance_km: observation.distance_km,
+        azimuth_degrees: observation.azimuth_degrees,
+        snr_db: observation.snr_db,
+        drift_hz_per_minute: observation.drift_hz_per_minute,
+        power_watts: observation.power_watts,
+        slot_id: observation.slot_id,
+        slot_label: observation.slot_label,
+        slot_confidence: observation.slot_confidence,
+        raw: observation.raw,
+    }
+}
+
+fn record_meta(
+    session_id: &str,
+    mutation_id: &str,
+    member_index: u32,
+    member_count: u32,
+    recorded_at: DateTime<Utc>,
+) -> RecordMetaV2 {
+    RecordMetaV2 {
+        schema_version: SCHEMA_VERSION_V2,
+        session_id: session_id.into(),
+        recorded_at,
+        provenance: Provenance::from_legacy(RecordSource::WsjtxUdp, env!("CARGO_PKG_VERSION")),
+        mutation: MutationMember {
+            mutation_id: mutation_id.into(),
+            member_index,
+            member_count,
+        },
+    }
+}
+
+fn disposition(disposition: &LiveMessageDisposition) -> AdapterDisposition {
+    match disposition {
+        LiveMessageDisposition::Heartbeat
+        | LiveMessageDisposition::Status
+        | LiveMessageDisposition::Close
+        | LiveMessageDisposition::WsprDecode(WsprDecodeDisposition::ObservationProduced) => {
+            AdapterDisposition::Accepted
+        }
+        LiveMessageDisposition::WsprDecode(WsprDecodeDisposition::Duplicate) => {
+            AdapterDisposition::Duplicate
+        }
+        LiveMessageDisposition::WsprDecode(
+            WsprDecodeDisposition::Replay | WsprDecodeDisposition::OffAir,
+        ) => AdapterDisposition::Filtered,
+        LiveMessageDisposition::WsprDecode(_) => AdapterDisposition::PartiallyNormalized,
+    }
+}
+
+fn reason(disposition: &LiveMessageDisposition) -> String {
+    match disposition {
+        LiveMessageDisposition::Heartbeat => "wsjtx.heartbeat".into(),
+        LiveMessageDisposition::Status => "wsjtx.status".into(),
+        LiveMessageDisposition::Close => "wsjtx.close".into(),
+        LiveMessageDisposition::WsprDecode(disposition) => {
+            format!("wsjtx.{}", disposition.as_str().replace('_', "-"))
+        }
+    }
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
+fn update_status(
+    status: &Mutex<WsjtxReceiverStatus>,
+    update: impl FnOnce(&mut WsjtxReceiverStatus),
+) {
+    if let Ok(mut status) = status.lock() {
+        update(&mut status);
+    }
+}
+
+fn set_failed(
+    status: &Mutex<WsjtxReceiverStatus>,
+    code: &str,
+    message: String,
+    evidence_complete: bool,
+) {
+    update_status(status, |status| {
+        status.phase = WsjtxReceiverPhase::Failed;
+        status.diagnostic = Some(WsjtxDiagnostic {
+            code: code.into(),
+            message,
+            evidence_complete,
+            stops_intake: true,
+        });
+    });
+}
+
+fn check_status_ipc(status: &WsjtxReceiverStatus) -> Result<(), SessionErrorPayload> {
+    let size = serde_json::to_vec(status)
+        .map_err(|error| SessionErrorPayload::report_pipeline(error.to_string()))?
+        .len() as u64;
+    if size > WSJTX_STATUS_IPC_BYTES {
+        return Err(SessionErrorPayload::resource(
+            SessionErrorKind::Resource,
+            "resource.desktop.ipc_bytes",
+            "wsjtx_status",
+            WSJTX_STATUS_IPC_BYTES,
+            Some(size),
+            "bytes",
+        ));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn active_session_wsjtx_status(
+    active_state: State<'_, ActiveSessionState>,
+    wsjtx_state: State<'_, WsjtxSessionState>,
+) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
+    let (source, _) = active_session_source(active_state.inner())?;
+    let status = wsjtx_state.status_for_source(&source, Utc::now());
+    check_status_ipc(&status)?;
+    Ok(status)
+}
+
+#[tauri::command]
+pub(crate) fn start_active_session_wsjtx(
+    request: StartWsjtxRequest,
+    active_state: State<'_, ActiveSessionState>,
+    wsjtx_state: State<'_, WsjtxSessionState>,
+) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
+    with_foreground_operation(active_state.inner(), || {
+        let (source, _) = active_session_source(active_state.inner())?;
+        let status = start_receiver(
+            wsjtx_state.inner(),
+            source,
+            request,
+            Arc::new(SystemLivePersistenceHooks),
+        )?;
+        check_status_ipc(&status)?;
+        Ok(status)
+    })
+}
+
+#[tauri::command]
+pub(crate) fn stop_active_session_wsjtx(
+    active_state: State<'_, ActiveSessionState>,
+    wsjtx_state: State<'_, WsjtxSessionState>,
+) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
+    let (source, _) = active_session_source(active_state.inner())?;
+    wsjtx_state.stop_for_source(&source, "The operator stopped WSJT-X reception.");
+    let status = wsjtx_state.status_for_source(&source, Utc::now());
+    check_status_ipc(&status)?;
+    Ok(status)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        io,
+        path::{Path, PathBuf},
+        sync::{Arc, Mutex},
+    };
+
+    use antennabench_core::{
+        EventTimeBasisV2, OperatorEventPayloadV2, OperatorEventV2, SessionLifecycleV2,
+        V2_BUNDLE_SUFFIX,
+    };
+    use antennabench_storage::{
+        BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
+        LivePersistencePoint,
+    };
+    use antennabench_wsjtx::{LiveIngestConfig, LiveWsjtxIngest, WsjtxAdapterLimits};
+    use chrono::{DateTime, TimeZone, Utc};
+    use tempfile::TempDir;
+
+    use super::{
+        IntakeDecision, ReceivedUdpDatagram, WsjtxOrchestrator, WsjtxReceiverPhase,
+        WsjtxReceiverStatus, WsjtxSessionState,
+    };
+
+    #[derive(Debug)]
+    struct TestHooks {
+        now: DateTime<Utc>,
+        next_id: Mutex<u64>,
+        fail_once: Mutex<Option<LivePersistencePoint>>,
+    }
+
+    impl TestHooks {
+        fn new(now: DateTime<Utc>) -> Self {
+            Self {
+                now,
+                next_id: Mutex::new(1),
+                fail_once: Mutex::new(None),
+            }
+        }
+
+        fn fail_once_at(&self, point: LivePersistencePoint) {
+            *self.fail_once.lock().unwrap() = Some(point);
+        }
+    }
+
+    impl LivePersistenceHooks for TestHooks {
+        fn now(&self) -> DateTime<Utc> {
+            self.now
+        }
+
+        fn new_id(&self, kind: &str) -> String {
+            let mut next = self.next_id.lock().unwrap();
+            let id = format!("{kind}-{next:04}");
+            *next += 1;
+            id
+        }
+
+        fn check(&self, point: LivePersistencePoint) -> io::Result<()> {
+            let mut fail = self.fail_once.lock().unwrap();
+            if fail.as_ref() == Some(&point) {
+                *fail = None;
+                Err(io::Error::other("injected lost acknowledgement"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    fn fixture_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle")
+    }
+
+    fn running_store(temp: &TempDir) -> BundleStore {
+        let upgraded = BundleStore::new(fixture_root())
+            .upgrade_v1_to_v2(temp.path().join(format!("upgraded{V2_BUNDLE_SUFFIX}")))
+            .unwrap();
+        let mut bundle = upgraded.read_v2().unwrap();
+        bundle.events.clear();
+        bundle.adapter_records.clear();
+        bundle.observations.clear();
+        bundle.rig.clear();
+        bundle.propagation.clear();
+        let started_at = bundle.schedule.slots[0].starts_at;
+        bundle.events.push(OperatorEventV2 {
+            meta: super::record_meta(
+                &bundle.manifest.session_id,
+                "mutation-start",
+                0,
+                1,
+                started_at,
+            ),
+            event_id: "event-start".into(),
+            occurred_at: started_at,
+            time_basis: EventTimeBasisV2::ObservedNow,
+            uncertainty_seconds: None,
+            slot_id: None,
+            payload: OperatorEventPayloadV2::SessionStarted { note: None },
+        });
+        bundle.session_state.lifecycle = SessionLifecycleV2::Running;
+        bundle.session_state.revision = 1;
+        bundle.session_state.last_committed_mutation_id = Some("mutation-start".into());
+        BundleStore::refresh_v2_checkpoint(&mut bundle).unwrap();
+        let store = BundleStore::new(temp.path().join(format!("live{V2_BUNDLE_SUFFIX}")));
+        store.write_v2(&bundle).unwrap();
+        store
+    }
+
+    fn fixture_datagrams() -> Vec<Vec<u8>> {
+        let fixture = include_str!("../../../fixtures/wsjtx/udp/schema3-live-sequence.hex");
+        fixture
+            .lines()
+            .map(|line| decode_hex(line.split_once('=').unwrap().1))
+            .collect()
+    }
+
+    fn decode_hex(value: &str) -> Vec<u8> {
+        value
+            .as_bytes()
+            .chunks_exact(2)
+            .map(|chunk| u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap())
+            .collect()
+    }
+
+    fn orchestrator(
+        store: BundleStore,
+        hooks: Arc<TestHooks>,
+        limits: Option<WsjtxAdapterLimits>,
+    ) -> WsjtxOrchestrator {
+        let bundle = store.read_v2_checkpointed().unwrap();
+        let config = LiveIngestConfig {
+            session_id: bundle.manifest.session_id.clone(),
+            receiver_id: "fixture-receiver".into(),
+            station_callsign: bundle.station.callsign,
+            station_grid: bundle.station.grid,
+            session_started_at: hooks.now(),
+        };
+        let ingest = match limits {
+            Some(limits) => LiveWsjtxIngest::new_with_limits(config, limits).unwrap(),
+            None => LiveWsjtxIngest::new(config).unwrap(),
+        };
+        WsjtxOrchestrator {
+            store,
+            ingest,
+            session_id: bundle.manifest.session_id,
+            receiver_id: "fixture-receiver".into(),
+            expected_client_id: "WSJT-X".into(),
+            hooks,
+        }
+    }
+
+    fn received(bytes: Vec<u8>, at: DateTime<Utc>) -> ReceivedUdpDatagram {
+        ReceivedUdpDatagram {
+            bytes,
+            source: "127.0.0.1:2237".parse().unwrap(),
+            received_at: at,
+        }
+    }
+
+    #[test]
+    fn desktop_e2e_captured_sequence_commits_raw_evidence_and_observation_atomically() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 15, 3, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = running_store(&temp);
+        let hooks = Arc::new(TestHooks::new(at));
+        let mut orchestrator = orchestrator(store.clone(), hooks, None);
+        let status = Mutex::new(WsjtxReceiverStatus::default());
+
+        for (offset, bytes) in fixture_datagrams().into_iter().enumerate() {
+            let decision = orchestrator.process(
+                received(bytes, at + chrono::Duration::seconds(offset as i64)),
+                &status,
+            );
+            assert!(
+                matches!(decision, IntakeDecision::Continue),
+                "offset {offset}: {:?}",
+                status.lock().unwrap()
+            );
+        }
+
+        let bundle = store.read_v2_checkpointed().unwrap();
+        assert_eq!(bundle.adapter_records.len(), 3);
+        assert_eq!(bundle.observations.len(), 1);
+        assert_eq!(bundle.session_state.revision, 4);
+        let observation = &bundle.observations[0];
+        assert_eq!(observation.adapter_record_ids.len(), 1);
+        let evidence = bundle
+            .adapter_records
+            .iter()
+            .find(|record| record.record_id == observation.adapter_record_ids[0])
+            .unwrap();
+        assert_eq!(
+            evidence.normalized_records[0].record_id,
+            observation.observation_id
+        );
+        assert_eq!(
+            evidence.meta.mutation.mutation_id,
+            observation.meta.mutation.mutation_id
+        );
+        assert_eq!(evidence.meta.mutation.member_count, 2);
+        eprintln!(
+            "desktop-e2e result=wsjtx-ingest revision={} adapter_records={} observations={}",
+            bundle.session_state.revision,
+            bundle.adapter_records.len(),
+            bundle.observations.len()
+        );
+    }
+
+    #[test]
+    fn malformed_mismatch_duplicate_and_lost_ack_remain_explicit_and_idempotent() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 15, 3, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = running_store(&temp);
+        let hooks = Arc::new(TestHooks::new(at));
+        let mut orchestrator = orchestrator(store.clone(), hooks.clone(), None);
+        let status = Mutex::new(WsjtxReceiverStatus::default());
+        let fixtures = fixture_datagrams();
+
+        orchestrator.process(received(vec![1, 2, 3], at), &status);
+        let mut mismatch = fixtures[0].clone();
+        mismatch[16..22].copy_from_slice(b"OTHER!");
+        orchestrator.process(received(mismatch, at), &status);
+        orchestrator.process(received(fixtures[1].clone(), at), &status);
+        hooks.fail_once_at(LivePersistencePoint::BeforeAcknowledge);
+        orchestrator.process(received(fixtures[2].clone(), at), &status);
+        orchestrator.process(received(fixtures[2].clone(), at), &status);
+
+        let bundle = store.read_v2_checkpointed().unwrap();
+        assert_eq!(bundle.adapter_records.len(), 5);
+        assert_eq!(bundle.observations.len(), 1);
+        assert_eq!(bundle.session_state.revision, 6);
+        assert_eq!(
+            bundle.adapter_records[0].disposition,
+            antennabench_core::AdapterDisposition::Malformed
+        );
+        assert_eq!(
+            bundle.adapter_records[1].disposition,
+            antennabench_core::AdapterDisposition::Filtered
+        );
+        assert_eq!(
+            bundle.adapter_records[4].disposition,
+            antennabench_core::AdapterDisposition::Duplicate
+        );
+    }
+
+    #[test]
+    fn resource_gap_is_durable_and_stops_intake_without_hiding_incompleteness() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 15, 3, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = running_store(&temp);
+        let hooks = Arc::new(TestHooks::new(at));
+        let mut limits = WsjtxAdapterLimits::testing(512);
+        limits.udp_rate_burst = 1;
+        limits.udp_rate_per_second = 1;
+        let mut orchestrator = orchestrator(store.clone(), hooks, Some(limits));
+        let status = Mutex::new(WsjtxReceiverStatus::default());
+        let fixtures = fixture_datagrams();
+
+        assert!(matches!(
+            orchestrator.process(received(fixtures[0].clone(), at), &status),
+            IntakeDecision::Continue
+        ));
+        assert!(matches!(
+            orchestrator.process(received(fixtures[1].clone(), at), &status),
+            IntakeDecision::Stop
+        ));
+
+        let bundle = store.read_v2_checkpointed().unwrap();
+        assert_eq!(bundle.adapter_records.len(), 2);
+        assert_eq!(bundle.adapter_records[1].record_type, "acquisition_gap");
+        let status = status.lock().unwrap();
+        assert_eq!(status.phase, WsjtxReceiverPhase::Failed);
+        assert!(status.diagnostic.as_ref().unwrap().stops_intake);
+        assert!(status.diagnostic.as_ref().unwrap().evidence_complete);
+    }
+
+    #[test]
+    fn terminal_lifecycle_and_stale_heartbeat_are_typed_without_network_access() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 15, 3, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = running_store(&temp);
+        let hooks = Arc::new(TestHooks::new(at));
+        let mut orchestrator = orchestrator(store.clone(), hooks, None);
+        let snapshot = store.read_v2_checkpointed().unwrap();
+        let ended_at = at + chrono::Duration::seconds(1);
+        store
+            .open_v2_writer()
+            .unwrap()
+            .append(LiveMutationV2 {
+                expected_revision: snapshot.session_state.revision,
+                mutation_id: "mutation-end".into(),
+                members: vec![LiveMutationMemberV2::Event(OperatorEventV2 {
+                    meta: super::record_meta(
+                        &snapshot.manifest.session_id,
+                        "mutation-end",
+                        0,
+                        1,
+                        ended_at,
+                    ),
+                    event_id: "event-end".into(),
+                    occurred_at: ended_at,
+                    time_basis: EventTimeBasisV2::ObservedNow,
+                    uncertainty_seconds: None,
+                    slot_id: None,
+                    payload: OperatorEventPayloadV2::SessionEnded { reason: None },
+                })],
+            })
+            .unwrap();
+        let status = Mutex::new(WsjtxReceiverStatus::default());
+        assert!(matches!(
+            orchestrator.process(received(fixture_datagrams()[0].clone(), at), &status),
+            IntakeDecision::Stop
+        ));
+        assert_eq!(status.lock().unwrap().phase, WsjtxReceiverPhase::Failed);
+
+        let state = WsjtxSessionState::default();
+        state.0.lock().unwrap().last_status = Some(WsjtxReceiverStatus {
+            phase: WsjtxReceiverPhase::Running,
+            started_at: Some(at),
+            expected_client_id: Some("WSJT-X".into()),
+            ..WsjtxReceiverStatus::default()
+        });
+        let stale = state.status_for_source(store.root(), at + chrono::Duration::seconds(46));
+        assert_eq!(stale.phase, WsjtxReceiverPhase::Stale);
+        assert_eq!(
+            stale.diagnostic.unwrap().code,
+            "wsjtx.client.stale_heartbeat"
+        );
+    }
+}

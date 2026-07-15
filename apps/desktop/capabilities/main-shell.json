@@ -10,6 +10,9 @@
     "allow-export-active-session",
     "allow-active-session-report",
     "allow-active-session-conductor",
-    "allow-mutate-active-session-conductor"
+    "allow-mutate-active-session-conductor",
+    "allow-active-session-wsjtx-status",
+    "allow-start-active-session-wsjtx",
+    "allow-stop-active-session-wsjtx"
   ]
 }
