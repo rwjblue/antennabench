@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mutate-active-session-conductor"
+description = "Enables the mutate_active_session_conductor command without any pre-configured scope."
+commands.allow = ["mutate_active_session_conductor"]
+
+[[permission]]
+identifier = "deny-mutate-active-session-conductor"
+description = "Denies the mutate_active_session_conductor command without any pre-configured scope."
+commands.deny = ["mutate_active_session_conductor"]

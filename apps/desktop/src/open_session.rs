@@ -115,14 +115,17 @@ pub(crate) enum SessionErrorKind {
     Verification,
     Resource,
     Busy,
+    StaleRevision,
+    Conflict,
+    Unsupported,
     Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SessionErrorPayload {
-    kind: SessionErrorKind,
-    message: String,
-    detail: String,
+    pub(crate) kind: SessionErrorKind,
+    pub(crate) message: String,
+    pub(crate) detail: String,
 }
 
 impl SessionErrorPayload {
@@ -266,7 +269,7 @@ fn copy_error_payload(error: BundleCopyError) -> SessionErrorPayload {
     }
 }
 
-fn storage_error_payload(error: BundleStoreError) -> SessionErrorPayload {
+pub(crate) fn storage_error_payload(error: BundleStoreError) -> SessionErrorPayload {
     match error {
         BundleStoreError::ParseJson { path, source } => SessionErrorPayload::new(
             SessionErrorKind::JsonParse,
@@ -464,6 +467,23 @@ pub(crate) fn activate_created_bundle(
     Ok(summary)
 }
 
+pub(crate) fn active_session_source(
+    state: &ActiveSessionState,
+) -> Result<(PathBuf, String), SessionErrorPayload> {
+    let active = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    let session = active.active.as_ref().ok_or_else(|| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Unsupported,
+            "Create or open a schema-v2 session before using the conductor.",
+            "no active session is available",
+        )
+    })?;
+    Ok((session.source.clone(), session.summary.bundle_name.clone()))
+}
+
 fn open_session_with_selection<F>(
     state: &ActiveSessionState,
     select: F,
@@ -575,7 +595,7 @@ fn active_session_report_for(state: &ActiveSessionState) -> Result<String, Sessi
     Ok(session.report_html.clone())
 }
 
-fn check_ipc_payload(
+pub(crate) fn check_ipc_payload(
     payload: &impl Serialize,
     limit: u64,
     role: &'static str,

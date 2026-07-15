@@ -5,6 +5,8 @@ fn main() {
         "open_session_bundle",
         "export_active_session",
         "active_session_report",
+        "active_session_conductor",
+        "mutate_active_session_conductor",
     ]);
 
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))
