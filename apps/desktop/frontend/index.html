@@ -170,6 +170,11 @@
               <button type="button" data-conductor-refresh>Load active session</button>
             </div>
 
+            <div class="open-feedback" data-conductor-feedback hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div><strong data-conductor-feedback-message></strong><p data-conductor-feedback-detail></p></div>
+            </div>
+
             <div class="conductor" data-conductor hidden>
               <div class="conductor-context">
                 <div><span>Checkpoint</span><strong data-conductor-revision></strong></div>
@@ -207,10 +212,6 @@
                 <div class="setup-actions"><button class="primary-action" type="submit">Commit operator evidence</button></div>
               </form>
 
-              <div class="open-feedback" data-conductor-feedback hidden role="status" aria-live="polite">
-                <span class="feedback-mark" aria-hidden="true"></span>
-                <div><strong data-conductor-feedback-message></strong><p data-conductor-feedback-detail></p></div>
-              </div>
               <ul class="setup-diagnostics" data-conductor-diagnostics hidden></ul>
 
               <section class="event-history" aria-labelledby="event-history-title">
