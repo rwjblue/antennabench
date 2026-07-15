@@ -53,6 +53,7 @@ pub(crate) struct WsprLiveAcquisitionRequest {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum WsprLiveAcquisitionOutcome {
+    Disabled,
     Dormant {
         #[serde(rename = "capturedThrough")]
         captured_through: Option<DateTime<Utc>>,
@@ -172,6 +173,9 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             return Ok(WsprLiveAcquisitionOutcome::Dormant {
                 captured_through: captured_through(&snapshot),
             });
+        }
+        if !snapshot.session_state.wspr_live_acquisition_enabled {
+            return Ok(WsprLiveAcquisitionOutcome::Disabled);
         }
 
         let plans = authorized_plans(&snapshot).map_err(|error| {
@@ -494,7 +498,7 @@ fn captured_through(bundle: &BundleV2Contents) -> Option<DateTime<Utc>> {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, path::Path};
+    use std::{cell::Cell, fs, path::Path};
 
     use antennabench_core::{
         EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventV2, Provenance,
@@ -550,10 +554,18 @@ mod tests {
 
     fn running_confirmed_session(
         root: &Path,
+        wspr_live_acquisition_enabled: bool,
     ) -> (ActiveSessionState, std::path::PathBuf, DateTime<Utc>) {
         let active = ActiveSessionState::default();
         let created = create_e2e_session(root, &active);
         let store = BundleStore::new(&created.path);
+        let mut bundle = store.read_v2().unwrap();
+        bundle.session_state.wspr_live_acquisition_enabled = wspr_live_acquisition_enabled;
+        fs::write(
+            store.root().join("session-state.json"),
+            serde_json::to_vec_pretty(&bundle.session_state).unwrap(),
+        )
+        .unwrap();
         let mut writer = store.open_v2_writer().unwrap();
         let snapshot = writer.snapshot().clone();
         let final_end = snapshot
@@ -623,7 +635,7 @@ mod tests {
     #[test]
     fn due_confirmations_fetch_once_and_atomically_commit_through_the_importer() {
         let temp = TempDir::new().unwrap();
-        let (active, path, now) = running_confirmed_session(temp.path());
+        let (active, path, now) = running_confirmed_session(temp.path(), true);
         let before = BundleStore::new(&path).read_v2_checkpointed().unwrap();
         let transport = FakeTransport {
             calls: Cell::new(0),
@@ -670,9 +682,38 @@ mod tests {
     }
 
     #[test]
+    fn explicit_opt_out_never_contacts_the_transport() {
+        let temp = TempDir::new().unwrap();
+        let (active, path, now) = running_confirmed_session(temp.path(), false);
+        let before = BundleStore::new(&path).read_v2_checkpointed().unwrap();
+        let transport = FakeTransport {
+            calls: Cell::new(0),
+            response: Err(WsprLiveAcquisitionError::Transport(
+                "transport must remain unused".into(),
+            )),
+        };
+
+        let outcome = advance_with_transport(
+            &active,
+            &WsprLiveAcquisitionState::default(),
+            WsprLiveAcquisitionRequest::default(),
+            now,
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(outcome, WsprLiveAcquisitionOutcome::Disabled);
+        assert_eq!(transport.calls.get(), 0);
+        assert_eq!(
+            BundleStore::new(&path).read_v2_checkpointed().unwrap(),
+            before
+        );
+    }
+
+    #[test]
     fn failures_do_not_mutate_or_automatically_retry_but_restart_may_resume() {
         let temp = TempDir::new().unwrap();
-        let (active, path, now) = running_confirmed_session(temp.path());
+        let (active, path, now) = running_confirmed_session(temp.path(), true);
         let before = BundleStore::new(&path).read_v2_checkpointed().unwrap();
         let runtime = WsprLiveAcquisitionState::default();
         let offline = FakeTransport {

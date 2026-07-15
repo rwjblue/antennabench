@@ -539,9 +539,15 @@ pub struct SessionStateV2 {
     pub session_id: String,
     pub revision: u64,
     pub lifecycle: SessionLifecycleV2,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub wspr_live_acquisition_enabled: bool,
     pub active_plan: PlanGenerationV2,
     pub streams: BTreeMap<String, StreamCheckpointV2>,
     pub last_committed_mutation_id: Option<String>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

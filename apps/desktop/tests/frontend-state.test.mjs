@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -42,6 +43,7 @@ import {
   reportExportSucceeded,
   reportRefreshFailed,
   reportRefreshSucceeded,
+  readSetupDraft,
   selectWorkflow,
   setupCreationCancelled,
   setupCreationFailed,
@@ -116,6 +118,41 @@ test("setup review gates creation on a valid normalized Rust plan", () => {
   assert.equal(reviewed.setupStatus, "reviewed");
   assert.equal(reviewed.setupReview.reviewId, "review-1");
   assert.equal(editSessionSetup(reviewed).setupReview, null);
+});
+
+test("setup serializes the default-on WSPR.live choice and explicit opt-out", () => {
+  const setupHtml = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  assert.match(
+    setupHtml,
+    /data-setup-field="wsprLiveAcquisitionEnabled" checked/,
+  );
+
+  const values = new Map([
+    ["callsign", "N1RWJ"],
+    ["grid", "FN42"],
+    ["powerWatts", "5"],
+    ["operatorNotes", ""],
+    ["mode", "whole_station_ab"],
+    ["goal", "general_coverage"],
+    ["startsAt", ""],
+    ["band", "20m"],
+    ["durationSeconds", "120"],
+    ["guardSeconds", "10"],
+    ["rounds", "2"],
+  ]);
+  const publicSpots = { checked: true };
+  const form = {
+    querySelector(selector) {
+      if (selector.includes("wsprLiveAcquisitionEnabled")) return publicSpots;
+      const field = selector.match(/data-setup-field="([^"]+)"/)[1];
+      return { value: values.get(field) };
+    },
+    querySelectorAll() { return []; },
+  };
+
+  assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, true);
+  publicSpots.checked = false;
+  assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
 });
 
 test("setup creation cancellation, failure, and success preserve coherent state", () => {

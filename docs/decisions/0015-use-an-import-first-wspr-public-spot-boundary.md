@@ -1,4 +1,4 @@
-# 0015: Use WSPR.live With Import-First Evidence And Opt-In Acquisition
+# 0015: Use WSPR.live With Import-First Evidence And Default-On Acquisition
 
 Date: 2026-07-14
 
@@ -37,12 +37,14 @@ bounded client, confirm that its traffic pattern is welcome, and invite any
 preferred attribution or operational guidance. That outreach is not a release
 gate.
 
-Automatic acquisition is opt-in. A session does not query WSPR.live until the
-operator enables public-spot acquisition after seeing the source attribution,
-usage terms, requested callsign/time/band data, and unknown-completeness
-warning. Once enabled, ordinary antenna confirmations authorize and trigger
-the bounded acquisitions; the operator does not repeat consent or click a
-separate fetch action for each segment.
+Automatic acquisition is a disclosed session choice that is enabled by default
+for new sessions. Setup presents a checked public-spot choice alongside source
+attribution, usage terms, requested callsign/time/band data, and an
+unknown-completeness warning. The operator can uncheck it for a fully local
+session. Existing bundles without the persisted choice remain disabled for
+compatibility. In enabled sessions, ordinary antenna confirmations authorize
+and trigger the bounded acquisitions; the operator does not repeat consent or
+click a separate fetch action for each segment.
 
 WSPR.live documents that its scraper checks WSPRnet every few minutes, while
 its exporter describes real-time rows as delayed by a few minutes. It also
@@ -262,16 +264,17 @@ set is complete.
 ## Offline And Privacy Behavior
 
 Public-spot acquisition is optional. Setup, conduction, local WSJT-X ingestion,
-analysis, reports, and export work without it. Automatic acquisition is off
-until the operator opts in for the session. The desktop never uploads the
-session bundle, local observations, operator notes, antenna labels, or grid.
+analysis, reports, and export work without it. New sessions enable automatic
+acquisition by default and the operator can opt out during setup. The desktop
+never uploads the session bundle, local observations, operator notes, antenna
+labels, or grid.
 The request contains only the public transmitter callsign, bounded UTC window,
 selected bands, and fixed WSPR-2 mode needed to find public reports.
 
 The source callsigns, grids, signal reports, and times are already publicly
 reported data, but their inclusion in a session still receives source
 attribution and remains under the operator's control. AntennaBench does not
-republish acquired rows automatically. The opt-in UI identifies WSPR.live as a
+republish acquired rows automatically. The setup UI identifies WSPR.live as a
 volunteer WSPRnet mirror, links its current usage terms, explains the bounded
 request and attribution, and states that completeness is unknown. Manual file
 import remains available without enabling automatic network access.
@@ -293,7 +296,8 @@ Contract coverage includes:
 - resource limits and cancellation;
 - exact attachment digest/round-trip and lossless bundle export;
 - stable partial/completeness and attribution presentation;
-- no request before session opt-in and no per-segment consent prompt afterward;
+- no request for an explicitly opted-out or legacy-disabled session and no
+  per-segment consent prompt for an enabled session;
 - typed SQL/URL construction, every band mapping, and injection rejection;
 - grace, cumulative overlap, coalescing, restart, and finalizing transitions;
 - HTTP status, timeout, cancellation, and response-size failures without
@@ -309,8 +313,8 @@ success is not a release or CI prerequisite.
 
 - AntennaBench gains a useful TX public-report boundary without making network
   availability part of a session.
-- The landed parser and normalization contract is reused by the opt-in
-  WSPR.live HTTPS adapter.
+- The landed parser and normalization contract is reused by the default-on,
+  operator-configurable WSPR.live HTTPS adapter.
 - Normal connected operation acquires public reports automatically after the
   documented ingestion grace period; manual import remains the offline and
   recovery path.

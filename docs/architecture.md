@@ -404,7 +404,7 @@ The durable boundaries are:
   they do not replace it as the evidence source of truth.
 
 These seams describe responsibilities. The selected WSPR.live import and
-opt-in automatic-acquisition boundary is recorded by
+default-on, operator-configurable automatic-acquisition boundary is recorded by
 [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
 and the first optional rig-control milestone is tracked by
 [#14](https://github.com/rwjblue/antennabench/issues/14).

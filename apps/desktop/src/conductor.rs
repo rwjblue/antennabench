@@ -573,8 +573,12 @@ fn build_view(
         })
         .collect::<Vec<_>>();
 
-    let (phase, guidance, seconds_to_transition, current_index, next_index) =
-        timing_projection(bundle.session_state.lifecycle, &slots, now);
+    let (phase, guidance, seconds_to_transition, current_index, next_index) = timing_projection(
+        bundle.session_state.lifecycle,
+        bundle.session_state.wspr_live_acquisition_enabled,
+        &slots,
+        now,
+    );
     ConductorView {
         bundle_name,
         session_id: bundle.manifest.session_id.clone(),
@@ -657,6 +661,7 @@ fn slot_evidence(
 
 fn timing_projection(
     lifecycle: SessionLifecycleV2,
+    wspr_live_acquisition_enabled: bool,
     slots: &[ConductorSlotView],
     now: DateTime<Utc>,
 ) -> (
@@ -765,8 +770,9 @@ fn timing_projection(
         );
     }
 
-    if let Some(final_slot) = slots
-        .last()
+    if let Some(final_slot) = wspr_live_acquisition_enabled
+        .then(|| slots.last())
+        .flatten()
         .filter(|slot| slot.evidence_status == SlotEvidenceStatus::Confirmed)
     {
         let acquisition_at =
@@ -1187,6 +1193,13 @@ mod tests {
         let start = Utc.with_ymd_and_hms(2026, 7, 15, 2, 0, 0).unwrap();
         let temp = TempDir::new().unwrap();
         let store = ready_store(&temp, start);
+        let mut bundle = store.read_v2().unwrap();
+        bundle.session_state.wspr_live_acquisition_enabled = true;
+        fs::write(
+            store.root().join("session-state.json"),
+            serde_json::to_vec_pretty(&bundle.session_state).unwrap(),
+        )
+        .unwrap();
         let active = activate(&store);
         let state = ConductorSessionState::default();
         let hooks = Arc::new(TestHooks::new(start - chrono::Duration::seconds(30)));

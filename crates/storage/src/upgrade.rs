@@ -521,6 +521,7 @@ fn migrate_bundle(
             session_id: v1.manifest.session_id.clone(),
             revision: 1,
             lifecycle,
+            wspr_live_acquisition_enabled: false,
             active_plan,
             streams,
             last_committed_mutation_id,

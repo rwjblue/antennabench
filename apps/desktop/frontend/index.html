@@ -135,6 +135,12 @@
                 </div>
               </fieldset>
 
+              <fieldset class="setup-section">
+                <legend><span>04</span> Optional public spots</legend>
+                <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Use WSPR.live public spots for this session</label>
+                <p class="field-help"><a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> is a volunteer WSPRnet mirror for personal research and freely accessible projects. If enabled, AntennaBench sends only the transmitter callsign, bounded UTC window, selected bands, and fixed WSPR-2 filter after durable antenna confirmations. It does not send the bundle, grid, antenna labels, observations, or notes. Source completeness is unknown. Automatic acquisition is enabled for new sessions; uncheck this box for a fully local session.</p>
+              </fieldset>
+
               <div class="setup-actions">
                 <button class="primary-action" type="submit" data-review-setup>Review normalized plan</button>
                 <button class="secondary-action" type="button" data-create-session disabled>Choose destination and create</button>

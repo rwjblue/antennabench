@@ -57,7 +57,8 @@ Version 2 implements the static wire foundation selected by
 [Decision 0008](decisions/0008-use-provider-neutral-adapter-evidence-in-bundle-v2.md).
 Its `session-state.json` reserves the checkpoint selected by
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md):
-revision, lifecycle, active-plan/root digests, committed byte
+revision, lifecycle, a persisted WSPR.live automatic-acquisition choice,
+active-plan/root digests, committed byte
 length/count/last-ID/digest for every stream, and the last mutation ID. Every
 v2 stream record carries mutation ID and member index/count. The live writer,
 atomic promotion, locking, checkpoint snapshots/export, and recovery contract
@@ -71,7 +72,10 @@ synchronized under a uniquely named sibling staging directory, reopened
 through the live-writer capability boundary, compared with its reviewed model,
 and only then published at the absent `.session.antennabundle` destination.
 The initial checkpoint is lifecycle `ready`, revision zero, and contains exact
-root and empty-stream digests. Failed validation or preparation removes the
+root and empty-stream digests. A missing
+`wspr_live_acquisition_enabled` field is false for compatibility with existing
+bundles. New desktop setup presents the disclosed choice checked and persists
+true unless the operator opts out. Failed validation or preparation removes the
 staging directory; an existing destination is never an overwrite target.
 
 Version 1 is never silently rewritten to gain these semantics. It remains

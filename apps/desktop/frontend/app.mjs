@@ -662,7 +662,7 @@ function mount(root, browserWindow) {
       setupReviewAntennas.textContent = plan.antennas
         .map((antenna, index) => `${String.fromCharCode(65 + index)}: ${antenna.label}${antenna.context ? ` — ${antenna.context}` : ""}`)
         .join("\n");
-      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} slots`;
+      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} slots · WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
       setupReviewSlots.replaceChildren(
         ...plan.slots.map((slot) => {
           const row = root.createElement("tr");
@@ -1343,6 +1343,14 @@ function wsprLiveAcquisitionModel(state) {
     };
   }
   const outcome = state.wsprLiveAcquisition;
+  if (outcome?.status === "disabled") {
+    return {
+      phase: "Automatic public spots are off",
+      detail: "This session remains fully local. Manual WSPR.live JSON import is still available as a recovery or offline path.",
+      diagnostic: "",
+      retry: false,
+    };
+  }
   if (!outcome || outcome.status === "dormant") {
     return {
       phase: "Waiting for antenna confirmation",
@@ -1581,7 +1589,7 @@ function optionalField(row, field) {
   return row.querySelector(`[data-antenna-field="${field}"]`)?.value ?? "";
 }
 
-function readSetupDraft(form) {
+export function readSetupDraft(form) {
   const value = (field) => form.querySelector(`[data-setup-field="${field}"]`).value;
   const localStart = value("startsAt");
   const startsAt = localStart ? new Date(localStart).toISOString() : "";
@@ -1612,6 +1620,7 @@ function readSetupDraft(form) {
       guardSeconds: value("guardSeconds"),
       rounds: value("rounds"),
     },
+    wsprLiveAcquisitionEnabled: form.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]').checked,
   };
 }
 

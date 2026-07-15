@@ -47,6 +47,8 @@ pub(crate) struct SetupDraft {
     station: SetupStationDraft,
     antennas: Vec<SetupAntennaDraft>,
     schedule: SetupScheduleDraft,
+    #[serde(default)]
+    wspr_live_acquisition_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -111,6 +113,7 @@ struct SetupPlanReview {
     antennas: Vec<SetupAntennaReview>,
     mode: ExperimentMode,
     goal: SessionGoal,
+    wspr_live_acquisition_enabled: bool,
     slots: Vec<SetupSlotReview>,
 }
 
@@ -432,6 +435,7 @@ fn build_review(
             session_id: session_id.clone(),
             revision: 0,
             lifecycle: SessionLifecycleV2::Ready,
+            wspr_live_acquisition_enabled: draft.wspr_live_acquisition_enabled,
             active_plan: PlanGenerationV2 {
                 generation_id,
                 station_sha256: String::new(),
@@ -586,6 +590,7 @@ fn setup_plan_review(bundle: &BundleV2Contents) -> SetupPlanReview {
             .collect(),
         mode: bundle.schedule.mode,
         goal: bundle.schedule.goal,
+        wspr_live_acquisition_enabled: bundle.session_state.wspr_live_acquisition_enabled,
         slots: bundle
             .schedule
             .slots
@@ -869,6 +874,7 @@ pub(crate) fn create_e2e_session(
             guard_seconds: "10".into(),
             rounds: "2".into(),
         },
+        wspr_live_acquisition_enabled: false,
     };
     let review = build_review(&setup_state, draft, &DeterministicHooks(Mutex::new(1)))
         .expect("deterministic setup review");
@@ -967,6 +973,7 @@ mod tests {
                 guard_seconds: "10".into(),
                 rounds: "2".into(),
             },
+            wspr_live_acquisition_enabled: false,
         }
     }
 
@@ -982,6 +989,7 @@ mod tests {
         assert_eq!(plan.session_id, "session-0001");
         assert_eq!(plan.station.callsign, "N1RWJ");
         assert_eq!(plan.station.grid, "FN42");
+        assert!(!plan.wspr_live_acquisition_enabled);
         assert_eq!(plan.slots.len(), 4);
         assert_eq!(plan.slots[0].slot_id, "slot-0004");
         assert_eq!(plan.slots[0].antenna_label, "Vertical");
@@ -989,6 +997,29 @@ mod tests {
         assert_eq!(
             plan.slots[2].starts_at,
             plan.slots[0].starts_at + Duration::seconds(240)
+        );
+    }
+
+    #[test]
+    fn wspr_live_automatic_acquisition_choice_survives_review_and_creation() {
+        let state = SetupSessionState::default();
+        let mut draft = valid_draft();
+        draft.wspr_live_acquisition_enabled = true;
+
+        let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
+
+        assert!(review.valid);
+        assert!(review.plan.unwrap().wspr_live_acquisition_enabled);
+        assert!(
+            state
+                .0
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .bundle
+                .session_state
+                .wspr_live_acquisition_enabled
         );
     }
 
@@ -1050,6 +1081,7 @@ mod tests {
             .unwrap();
         assert_eq!(persisted.manifest.session_id, session.session_id);
         assert_eq!(persisted.session_state.lifecycle, SessionLifecycleV2::Ready);
+        assert!(!persisted.session_state.wspr_live_acquisition_enabled);
         assert_eq!(persisted.schedule.slots[0].slot_id, "slot-0004");
         println!(
             "desktop-e2e result=setup-created revision={} slots={}",
