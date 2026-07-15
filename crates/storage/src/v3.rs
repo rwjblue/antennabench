@@ -167,10 +167,26 @@ impl BundleStore {
     }
 
     pub fn write_v3(&self, bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
+        self.write_v3_files(bundle, false)
+    }
+
+    pub(super) fn write_v3_for_upgrade(
+        &self,
+        bundle: &BundleV3Contents,
+    ) -> Result<(), BundleStoreError> {
+        self.write_v3_files(bundle, true)
+    }
+
+    fn write_v3_files(
+        &self,
+        bundle: &BundleV3Contents,
+        allow_attachment_references: bool,
+    ) -> Result<(), BundleStoreError> {
         if bundle
             .adapter_records
             .iter()
             .any(|record| matches!(&record.input, AdapterInput::Attachment { .. }))
+            && !allow_attachment_references
         {
             return Err(invalid_v3(
                 "v3 attachment-backed evidence requires a focused attachment writer",
@@ -234,9 +250,11 @@ impl BundleStore {
                 })?;
             }
             create_directory(&paths.attachments_dir)?;
-            let reopened = self.read_v3()?;
-            if &reopened != bundle {
-                return Err(invalid_v3("written bundle did not round-trip exactly"));
+            if !allow_attachment_references {
+                let reopened = self.read_v3()?;
+                if &reopened != bundle {
+                    return Err(invalid_v3("written bundle did not round-trip exactly"));
+                }
             }
             Ok(())
         })();

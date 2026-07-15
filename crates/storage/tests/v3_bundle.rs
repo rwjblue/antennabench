@@ -1,16 +1,16 @@
-use std::{collections::BTreeMap, fs};
+use std::{collections::BTreeMap, fs, path::Path};
 
 use antennabench_core::{
-    AcquisitionChannelId, AdapterId, AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band,
-    BundleFilesV3, BundleManifestV3, BundleV3Contents, CounterbalanceBlockIdV3, EventTimeBasisV2,
-    ExperimentMode, MutationMember, OperatorEventPayloadV3, OperatorEventV3, PlanGenerationV2,
-    PlannedSlotV3, Provenance, ProviderId, RecordMetaV3, ScheduleV3, SessionGoal,
+    AcquisitionChannelId, AdapterId, AdapterInput, AnalysisFile, AnalysisStatus, Antenna,
+    AntennasFile, Band, BundleFilesV3, BundleManifestV3, BundleV3Contents, CounterbalanceBlockIdV3,
+    EventTimeBasisV2, ExperimentMode, MutationMember, OperatorEventPayloadV3, OperatorEventV3,
+    PlanGenerationV2, PlannedSlotV3, Provenance, ProviderId, RecordMetaV3, ScheduleV3, SessionGoal,
     SessionLifecycleV2, SessionStateV3, SignalAllocationV3, SignalCadenceV3,
     SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3, SignalPlanV3,
     SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station, SCHEMA_VERSION_V3,
     V2_BUNDLE_SUFFIX,
 };
-use antennabench_storage::{BundleStore, BundleStoreError};
+use antennabench_storage::{BundleAttachment, BundleStore, BundleStoreError};
 use chrono::{TimeZone, Utc};
 
 fn bundle() -> BundleV3Contents {
@@ -191,4 +191,106 @@ fn v3_read_fails_closed_on_checkpoint_corruption() {
         store.read_v3(),
         Err(BundleStoreError::InvalidV3Bundle { .. })
     ));
+}
+
+#[test]
+fn v2_upgrade_preserves_evidence_without_inventing_signal_facts() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
+    let v2_path = temp.path().join(format!("source{V2_BUNDLE_SUFFIX}"));
+    let v3_path = temp.path().join(format!("destination{V2_BUNDLE_SUFFIX}"));
+    let v2_store = BundleStore::new(&fixture)
+        .upgrade_v1_to_v2(&v2_path)
+        .unwrap();
+    let before = v2_store.read_v2().unwrap();
+
+    let v3_store = v2_store.upgrade_v2_to_v3(&v3_path).unwrap();
+    let after = v3_store.read_v3().unwrap();
+
+    assert_eq!(v2_store.read_v2().unwrap(), before);
+    assert_eq!(after.manifest.schema_version, SCHEMA_VERSION_V3);
+    assert_eq!(after.session_state.schema_version, SCHEMA_VERSION_V3);
+    assert_eq!(after.station.schema_version, SCHEMA_VERSION_V3);
+    assert_eq!(after.antennas.schema_version, SCHEMA_VERSION_V3);
+    assert_eq!(after.schedule.schema_version, SCHEMA_VERSION_V3);
+    assert_eq!(after.analysis.schema_version, SCHEMA_VERSION_V3);
+    assert_eq!(after.schedule.slots.len(), before.schedule.slots.len());
+    assert_eq!(after.events.len(), before.events.len());
+    assert_eq!(after.observations.len(), before.observations.len());
+    assert_eq!(after.adapter_records.len(), before.adapter_records.len());
+    assert_eq!(after.rig.len(), before.rig.len());
+    assert_eq!(after.propagation.len(), before.propagation.len());
+    assert!(after.schedule.signal_plans.is_empty());
+    assert!(after
+        .schedule
+        .slots
+        .iter()
+        .all(|slot| slot.signal.is_none()));
+    assert!(after.rig.iter().all(|record| record.power_watts.is_none()));
+    assert!(after.events.iter().all(|event| !matches!(
+        event.payload,
+        OperatorEventPayloadV3::SignalStateConfirmed { .. }
+    )));
+    assert!(after
+        .events
+        .iter()
+        .all(|record| record.meta.schema_version == SCHEMA_VERSION_V3));
+    assert!(after
+        .observations
+        .iter()
+        .all(|record| record.meta.schema_version == SCHEMA_VERSION_V3));
+    assert!(after
+        .adapter_records
+        .iter()
+        .all(|record| record.meta.schema_version == SCHEMA_VERSION_V3));
+    assert!(after
+        .rig
+        .iter()
+        .all(|record| record.meta.schema_version == SCHEMA_VERSION_V3));
+    assert!(after
+        .propagation
+        .iter()
+        .all(|record| record.meta.schema_version == SCHEMA_VERSION_V3));
+}
+
+#[test]
+fn v2_upgrade_copies_and_verifies_referenced_attachments() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
+    let baseline_path = temp.path().join(format!("baseline{V2_BUNDLE_SUFFIX}"));
+    let baseline = BundleStore::new(&fixture)
+        .upgrade_v1_to_v2(&baseline_path)
+        .unwrap();
+    let mut bundle = baseline.read_v2().unwrap();
+    let attachment = BundleAttachment::new(
+        b"exact attachment evidence".to_vec(),
+        "application/octet-stream",
+        None,
+        Some("opaque".into()),
+        Some("capture.bin".into()),
+    );
+    bundle.adapter_records[0].input = AdapterInput::Attachment {
+        attachment: attachment.reference.clone(),
+    };
+    BundleStore::refresh_v2_checkpoint(&mut bundle).unwrap();
+    let source_path = temp.path().join(format!("source{V2_BUNDLE_SUFFIX}"));
+    let source = BundleStore::new(&source_path);
+    source
+        .write_v2_with_attachments(&bundle, std::slice::from_ref(&attachment))
+        .unwrap();
+
+    let destination_path = temp.path().join(format!("destination{V2_BUNDLE_SUFFIX}"));
+    let destination = source.upgrade_v2_to_v3(&destination_path).unwrap();
+    let upgraded = destination.read_v3().unwrap();
+
+    assert!(matches!(
+        upgraded.adapter_records[0].input,
+        AdapterInput::Attachment { .. }
+    ));
+    assert_eq!(
+        destination.read_attachment(&attachment.reference).unwrap(),
+        attachment.bytes
+    );
 }
