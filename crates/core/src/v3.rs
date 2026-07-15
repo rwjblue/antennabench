@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AdapterRecordV2, AnalysisFile, AntennasFile, Band, BundleFilesV2, BundleManifestV2,
-    BundleV2Contents, EventCorrectionActionV2, EventTimeBasisV2, ExperimentMode, MutationMember,
-    ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2, PropagationRecordV2, Provenance,
-    RecordMetaV2, RigRecordV2, SessionGoal, SessionStateV2, Station, IDENTITY_MAX_BYTES,
+    BundleV2Contents, CorrectableOperatorEventPayloadV2, CurrentBundleContents, CurrentRecordKind,
+    CurrentRecordProvenance, EventCorrectionActionV2, EventTimeBasisV2, ExperimentMode,
+    MutationMember, ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2,
+    PropagationRecordV2, Provenance, RecordMetaV2, ReplacementOperatorEventV2, RigRecordV2,
+    Schedule, SessionGoal, SessionStateV2, Station, IDENTITY_MAX_BYTES, SCHEMA_VERSION_V2,
     SCHEMA_VERSION_V3,
 };
 
@@ -347,6 +349,205 @@ pub struct BundleV3Contents {
     pub rig: Vec<RigRecordV3>,
     pub propagation: Vec<PropagationRecordV3>,
     pub analysis: AnalysisFile,
+}
+
+impl BundleV3Contents {
+    /// Projects the v3 bundle into the established analysis/report model.
+    ///
+    /// Signal-specific planned and actual facts have no representation in that
+    /// model and are intentionally omitted. Their provenance remains visible.
+    pub fn into_current(mut self) -> CurrentBundleContents {
+        let all_event_provenance = self
+            .events
+            .iter()
+            .map(|event| CurrentRecordProvenance {
+                record_kind: CurrentRecordKind::Event,
+                record_id: event.event_id.clone(),
+                provenance: event.meta.provenance.clone(),
+            })
+            .collect::<Vec<_>>();
+        self.manifest.schema_version = SCHEMA_VERSION_V2;
+        self.session_state.schema_version = SCHEMA_VERSION_V2;
+        self.station.schema_version = SCHEMA_VERSION_V2;
+        self.antennas.schema_version = SCHEMA_VERSION_V2;
+        self.analysis.schema_version = SCHEMA_VERSION_V2;
+        let schedule = Schedule {
+            schema_version: SCHEMA_VERSION_V2,
+            session_id: self.schedule.session_id,
+            mode: self.schedule.mode,
+            goal: self.schedule.goal,
+            slots: self
+                .schedule
+                .slots
+                .into_iter()
+                .map(|slot| crate::PlannedSlot {
+                    slot_id: slot.slot_id,
+                    sequence_number: slot.sequence_number,
+                    starts_at: slot.starts_at,
+                    duration_seconds: slot.duration_seconds,
+                    guard_seconds: slot.guard_seconds,
+                    band: slot.band,
+                    antenna_label: slot.antenna_label,
+                })
+                .collect(),
+        };
+        let events = self
+            .events
+            .into_iter()
+            .filter_map(project_v3_event_to_v2)
+            .collect();
+        for record in &mut self.observations {
+            record.meta.schema_version = SCHEMA_VERSION_V2;
+        }
+        for record in &mut self.adapter_records {
+            record.meta.schema_version = SCHEMA_VERSION_V2;
+        }
+        for record in &mut self.propagation {
+            record.meta.schema_version = SCHEMA_VERSION_V2;
+        }
+        let rig = self
+            .rig
+            .into_iter()
+            .map(|record| RigRecordV2 {
+                meta: project_v3_meta_to_v2(record.meta),
+                record_id: record.record_id,
+                adapter_record_ids: record.adapter_record_ids,
+                status: record.status,
+                frequency_hz: record.frequency_hz,
+                mode: record.mode,
+                raw: record.raw,
+            })
+            .collect();
+        let mut current = BundleV2Contents {
+            manifest: self.manifest,
+            session_state: self.session_state,
+            station: self.station,
+            antennas: self.antennas,
+            schedule,
+            events,
+            observations: self.observations,
+            adapter_records: self.adapter_records,
+            rig,
+            propagation: self.propagation,
+            analysis: self.analysis,
+        }
+        .into_current();
+        let projected_event_ids = current
+            .record_provenance
+            .iter()
+            .filter(|record| record.record_kind == CurrentRecordKind::Event)
+            .map(|record| record.record_id.clone())
+            .collect::<BTreeSet<_>>();
+        current.record_provenance.extend(
+            all_event_provenance
+                .into_iter()
+                .filter(|record| !projected_event_ids.contains(&record.record_id)),
+        );
+        current
+    }
+}
+
+fn project_v3_meta_to_v2(meta: RecordMetaV3) -> RecordMetaV2 {
+    RecordMetaV2 {
+        schema_version: SCHEMA_VERSION_V2,
+        session_id: meta.session_id,
+        recorded_at: meta.recorded_at,
+        provenance: meta.provenance,
+        mutation: meta.mutation,
+    }
+}
+
+fn project_v3_event_to_v2(event: OperatorEventV3) -> Option<OperatorEventV2> {
+    let payload = match event.payload {
+        OperatorEventPayloadV3::SessionStarted { note } => {
+            OperatorEventPayloadV2::SessionStarted { note }
+        }
+        OperatorEventPayloadV3::SessionInterrupted { reason } => {
+            OperatorEventPayloadV2::SessionInterrupted { reason }
+        }
+        OperatorEventPayloadV3::InterruptionDetected { reason } => {
+            OperatorEventPayloadV2::InterruptionDetected { reason }
+        }
+        OperatorEventPayloadV3::SessionResumed { note } => {
+            OperatorEventPayloadV2::SessionResumed { note }
+        }
+        OperatorEventPayloadV3::SessionEnded { reason } => {
+            OperatorEventPayloadV2::SessionEnded { reason }
+        }
+        OperatorEventPayloadV3::SessionAbandoned { reason } => {
+            OperatorEventPayloadV2::SessionAbandoned { reason }
+        }
+        OperatorEventPayloadV3::AntennaStateConfirmed {
+            antenna_label,
+            note,
+        } => OperatorEventPayloadV2::AntennaStateConfirmed {
+            antenna_label,
+            note,
+        },
+        OperatorEventPayloadV3::SignalStateConfirmed { .. } => return None,
+        OperatorEventPayloadV3::SlotMissed { reason } => {
+            OperatorEventPayloadV2::SlotMissed { reason }
+        }
+        OperatorEventPayloadV3::SlotBad { reason } => OperatorEventPayloadV2::SlotBad { reason },
+        OperatorEventPayloadV3::NoteAdded { note } => OperatorEventPayloadV2::NoteAdded { note },
+        OperatorEventPayloadV3::EventCorrected {
+            target_event_id,
+            correction,
+            reason,
+        } => OperatorEventPayloadV2::EventCorrected {
+            target_event_id,
+            correction: project_v3_correction_to_v2(correction)?,
+            reason,
+        },
+    };
+    Some(OperatorEventV2 {
+        meta: project_v3_meta_to_v2(event.meta),
+        event_id: event.event_id,
+        occurred_at: event.occurred_at,
+        time_basis: event.time_basis,
+        uncertainty_seconds: event.uncertainty_seconds,
+        slot_id: event.slot_id,
+        payload,
+    })
+}
+
+fn project_v3_correction_to_v2(
+    correction: EventCorrectionActionV3,
+) -> Option<EventCorrectionActionV2> {
+    match correction {
+        EventCorrectionActionV3::Retract => Some(EventCorrectionActionV2::Retract),
+        EventCorrectionActionV3::Replace { replacement } => {
+            Some(EventCorrectionActionV2::Replace {
+                replacement: ReplacementOperatorEventV2 {
+                    occurred_at: replacement.occurred_at,
+                    time_basis: replacement.time_basis,
+                    uncertainty_seconds: replacement.uncertainty_seconds,
+                    slot_id: replacement.slot_id,
+                    payload: match replacement.payload {
+                        CorrectableOperatorEventPayloadV3::AntennaStateConfirmed {
+                            antenna_label,
+                            note,
+                        } => CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
+                            antenna_label,
+                            note,
+                        },
+                        CorrectableOperatorEventPayloadV3::SignalStateConfirmed { .. } => {
+                            return None;
+                        }
+                        CorrectableOperatorEventPayloadV3::SlotMissed { reason } => {
+                            CorrectableOperatorEventPayloadV2::SlotMissed { reason }
+                        }
+                        CorrectableOperatorEventPayloadV3::SlotBad { reason } => {
+                            CorrectableOperatorEventPayloadV2::SlotBad { reason }
+                        }
+                        CorrectableOperatorEventPayloadV3::NoteAdded { note } => {
+                            CorrectableOperatorEventPayloadV2::NoteAdded { note }
+                        }
+                    },
+                },
+            })
+        }
+    }
 }
 
 /// Deterministically upgrades the modeled contents of a schema-v2 bundle.

@@ -714,7 +714,11 @@ fn validate_v2_bundle(
     verify_attachments: bool,
 ) -> Vec<BundleDiagnostic> {
     let mut diagnostics = Vec::new();
-    diagnostics.extend(duplicate_member_diagnostics(store, paths));
+    diagnostics.extend(modeled_duplicate_member_diagnostics(
+        store,
+        paths,
+        SCHEMA_VERSION_V2,
+    ));
     diagnostics.extend(validate_v2_event_model(bundle));
     let session_id = bundle.manifest.session_id.as_str();
     for (file, schema, actual_session) in [
@@ -951,9 +955,10 @@ fn validate_v2_bundle(
     diagnostics
 }
 
-fn duplicate_member_diagnostics(
+pub(super) fn modeled_duplicate_member_diagnostics(
     store: &BundleStore,
     paths: &ResolvedBundlePathsV2,
+    schema_version: u16,
 ) -> Vec<BundleDiagnostic> {
     let mut diagnostics = Vec::new();
     for (file, path) in [
@@ -980,7 +985,9 @@ fn duplicate_member_diagnostics(
                         codes::DUPLICATE_MEMBER,
                         file,
                         None,
-                        "duplicate member makes schema-v2 modeled JSON ambiguous".into(),
+                        format!(
+                            "duplicate member makes schema-v{schema_version} modeled JSON ambiguous"
+                        ),
                     );
                     diagnostic.location.field_path = Some(field_path);
                     diagnostic
@@ -1018,7 +1025,9 @@ fn duplicate_member_diagnostics(
                             codes::DUPLICATE_MEMBER,
                             file,
                             None,
-                            "duplicate member makes schema-v2 modeled JSON ambiguous".into(),
+                            format!(
+                                "duplicate member makes schema-v{schema_version} modeled JSON ambiguous"
+                            ),
                         );
                         diagnostic.location.physical_line = Some(line_index + 1);
                         diagnostic.location.field_path = Some(field_path);

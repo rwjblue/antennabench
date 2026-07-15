@@ -167,6 +167,12 @@ fn v3_static_bundle_round_trips_with_signal_plan_and_confirmation() {
         store.read_v3().unwrap().schedule.signal_plans[0].signal_plan_id,
         SignalPlanIdV3::new("manual-cw").unwrap()
     );
+    let current = store.read_current().unwrap();
+    assert!(current.bundle.events.is_empty());
+    assert!(current
+        .record_provenance
+        .iter()
+        .any(|record| record.record_id == "signal-confirmation-1"));
 
     let copy_path = temp.path().join(format!("copy{V2_BUNDLE_SUFFIX}"));
     let copied = store.copy_losslessly_to(&copy_path).unwrap();

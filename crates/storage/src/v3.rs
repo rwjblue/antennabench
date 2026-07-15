@@ -1,21 +1,42 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    validate_signal_plan_schedule_v3, validate_signal_state_event_v3, AdapterInput,
-    BundleManifestV3, BundleV3Contents, SessionStateV3, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+    validate_bundle_report, validate_signal_plan_schedule_v3, validate_signal_state_event_v3,
+    AdapterInput, BundleManifestV3, BundleV3Contents, BundleValidationProfile,
+    BundleValidationReport, SessionStateV3, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
 };
 
 use super::{
     create_directory,
+    inspection::BundleInspection,
     resource::{
         inventory_attachment_tree, read_bounded, serialize_jsonl_bounded, serialize_root_bounded,
         ModeledBudget, ResourceOperation,
     },
-    v2::{checkpoint_for_bytes, sha256_hex},
+    v2::{checkpoint_for_bytes, modeled_duplicate_member_diagnostics, sha256_hex},
     BundleStore, BundleStoreError,
 };
 
 impl BundleStore {
+    pub(super) fn inspect_v3(
+        &self,
+        mut report: BundleValidationReport,
+    ) -> Result<BundleInspection, BundleStoreError> {
+        let bundle = self.read_v3()?;
+        let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+        report.extend(modeled_duplicate_member_diagnostics(
+            self,
+            &paths,
+            SCHEMA_VERSION_V3,
+        ));
+        let current = bundle.into_current();
+        report.extend(validate_bundle_report(&current.bundle).into_diagnostics());
+        let current = report
+            .allows(BundleValidationProfile::CompatibilityRead)
+            .then_some(current);
+        Ok(BundleInspection { current, report })
+    }
+
     pub fn refresh_v3_checkpoint(bundle: &mut BundleV3Contents) -> Result<(), BundleStoreError> {
         let store = BundleStore::new(".");
         let mut budget = ModeledBudget::default();
@@ -163,6 +184,11 @@ impl BundleStore {
         };
         validate_v3_model(&bundle)?;
         validate_v3_checkpoint(self, &bundle, &paths)?;
+        for record in &bundle.adapter_records {
+            if let AdapterInput::Attachment { attachment } = &record.input {
+                self.read_attachment(attachment)?;
+            }
+        }
         Ok(bundle)
     }
 
