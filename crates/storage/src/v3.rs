@@ -293,7 +293,7 @@ impl BundleStore {
     }
 }
 
-fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
+pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
     let session_id = bundle.manifest.session_id.as_str();
     for (schema, actual_session, name) in [
         (

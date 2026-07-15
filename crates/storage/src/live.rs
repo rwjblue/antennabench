@@ -7,12 +7,14 @@ use std::{
 };
 
 use antennabench_core::{
-    validate_bundle_report, validate_lifecycle_transition_v2, validate_operator_event_append_v2,
-    AdapterRecordV2, AnalysisFile, AntennasFile, AttachmentReference, BundleManifestV2,
-    BundleV2Contents, BundleValidationProfile, EventTimeBasisV2, MutationMember,
-    ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2, PlanGenerationV2,
+    reduce_operator_events_v3, validate_bundle_report, validate_lifecycle_transition_v2,
+    validate_machine_identity, validate_operator_event_append_v2, AdapterRecordV2, AnalysisFile,
+    AntennasFile, AttachmentReference, BundleManifestV2, BundleV2Contents, BundleV3Contents,
+    BundleValidationProfile, EventTimeBasisV2, MutationMember, ObservationRecordV2,
+    OperatorEventPayloadV2, OperatorEventV2, OperatorEventV3, PlanGenerationV2,
     PropagationRecordV2, Provenance, RecordMetaV2, RecordSource, RigRecordV2, Schedule,
     SessionLifecycleV2, SessionStateV2, Station, StreamCheckpointV2, SCHEMA_VERSION_V2,
+    SCHEMA_VERSION_V3,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -287,6 +289,34 @@ pub struct LiveSessionV2 {
     frozen: bool,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct LiveEventMutationV3 {
+    pub expected_revision: u64,
+    pub mutation_id: String,
+    pub event: OperatorEventV3,
+}
+
+pub struct LiveSessionV3 {
+    store: BundleStore,
+    _lock: File,
+    hooks: Arc<dyn LivePersistenceHooks>,
+    bundle: BundleV3Contents,
+    paths: ResolvedBundlePathsV2,
+    frozen: bool,
+}
+
+impl std::fmt::Debug for LiveSessionV3 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LiveSessionV3")
+            .field("root", &self.store.root())
+            .field("revision", &self.bundle.session_state.revision)
+            .field("lifecycle", &self.bundle.session_state.lifecycle)
+            .field("frozen", &self.frozen)
+            .finish_non_exhaustive()
+    }
+}
+
 impl std::fmt::Debug for LiveSessionV2 {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -473,6 +503,147 @@ impl BundleStore {
                 .map_err(|source| live_io("synchronize failed creation cleanup", parent, source))?;
         }
         result
+    }
+
+    /// Creates and durably publishes a new checkpointed schema-v3 bundle.
+    pub fn create_v3_checkpointed(
+        &self,
+        bundle: &BundleV3Contents,
+    ) -> Result<(), LivePersistenceError> {
+        if fs::symlink_metadata(self.root()).is_ok() {
+            return Err(BundleStoreError::DestinationExists {
+                path: self.root().to_path_buf(),
+            }
+            .into());
+        }
+        let parent = self
+            .root()
+            .parent()
+            .ok_or_else(|| LivePersistenceError::Capability {
+                message: "a new live bundle requires a parent directory".into(),
+            })?;
+        if !fs::metadata(parent)
+            .map_err(|source| live_io("inspect creation parent", parent, source))?
+            .is_dir()
+        {
+            return Err(LivePersistenceError::Capability {
+                message: format!("creation parent {} is not a directory", parent.display()),
+            });
+        }
+        let staging = parent.join(format!(
+            ".antennabench-creating-{}.session.antennabundle",
+            Uuid::new_v4().simple()
+        ));
+        let staging_store = BundleStore::new(&staging);
+        let result = (|| {
+            staging_store.write_v3(bundle)?;
+            let paths = staging_store.v2_paths(&bundle.manifest.files)?;
+            for path in paths.root_files() {
+                sync_regular_file(path)
+                    .map_err(|source| live_io("synchronize new bundle file", path, source))?;
+            }
+            sync_directory(&staging)
+                .map_err(|source| live_io("synchronize new bundle directory", &staging, source))?;
+            drop(staging_store.open_v3_writer()?);
+            if staging_store.read_v3_checkpointed()? != *bundle {
+                return Err(LivePersistenceError::CheckpointVerification {
+                    message: "new schema-v3 bundle differs after checkpointed reopen".into(),
+                });
+            }
+            let lock_path = staging.join(LOCK_FILE);
+            remove_file_if_present(&lock_path)
+                .map_err(|source| live_io("remove creation lock", &lock_path, source))?;
+            sync_directory(&staging)
+                .map_err(|source| live_io("synchronize creation lock cleanup", &staging, source))?;
+            if fs::symlink_metadata(self.root()).is_ok() {
+                return Err(BundleStoreError::DestinationExists {
+                    path: self.root().to_path_buf(),
+                }
+                .into());
+            }
+            publish_new_bundle(&staging, self.root())
+                .map_err(|source| live_io("publish new bundle", self.root(), source))?;
+            sync_directory(parent)
+                .map_err(|source| live_io("synchronize creation parent", parent, source))?;
+            Ok(())
+        })();
+        if result.is_err() && staging.exists() {
+            fs::remove_dir_all(&staging)
+                .map_err(|source| live_io("clean up failed bundle creation", &staging, source))?;
+            sync_directory(parent)
+                .map_err(|source| live_io("synchronize failed creation cleanup", parent, source))?;
+        }
+        result
+    }
+
+    pub fn read_v3_checkpointed(&self) -> Result<BundleV3Contents, LivePersistenceError> {
+        let lock_path = self.root().join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|source| live_io("open snapshot lock", &lock_path, source))?;
+        match lock.try_lock_shared() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
+            Err(fs::TryLockError::Error(source)) => {
+                return Err(LivePersistenceError::Capability {
+                    message: format!("shared OS file locking failed: {source}"),
+                });
+            }
+        }
+        let bundle = self.read_v3()?;
+        let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+        verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
+        Ok(bundle)
+    }
+
+    pub fn open_v3_writer(&self) -> Result<LiveSessionV3, LivePersistenceError> {
+        self.open_v3_writer_with_hooks(Arc::new(SystemLivePersistenceHooks))
+    }
+
+    pub fn open_v3_writer_with_hooks(
+        &self,
+        hooks: Arc<dyn LivePersistenceHooks>,
+    ) -> Result<LiveSessionV3, LivePersistenceError> {
+        if !self.root().is_dir() {
+            return Err(LivePersistenceError::Capability {
+                message: "bundle root is not a regular local directory".into(),
+            });
+        }
+        let lock_path = self.root().join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|source| live_io("open writer lock", &lock_path, source))?;
+        match lock.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
+            Err(fs::TryLockError::Error(source)) => {
+                return Err(LivePersistenceError::Capability {
+                    message: format!("OS file locking failed: {source}"),
+                });
+            }
+        }
+        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
+            message: format!("live persistence durability probe failed: {source}"),
+        })?;
+        let bundle = self.read_v3()?;
+        let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+        verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
+        Ok(LiveSessionV3 {
+            store: self.clone(),
+            _lock: lock,
+            hooks,
+            bundle,
+            paths,
+            frozen: false,
+        })
     }
 
     pub fn open_v2_writer(&self) -> Result<LiveSessionV2, LivePersistenceError> {
@@ -1102,6 +1273,213 @@ impl LiveSessionV2 {
         }
         Ok(())
     }
+}
+
+impl LiveSessionV3 {
+    pub fn checkpoint(&self) -> &SessionStateV2 {
+        &self.bundle.session_state
+    }
+
+    pub fn snapshot(&self) -> &BundleV3Contents {
+        &self.bundle
+    }
+
+    pub fn allocate_id(&self, kind: &str) -> String {
+        self.hooks.new_id(kind)
+    }
+
+    pub fn is_frozen(&self) -> bool {
+        self.frozen
+    }
+
+    pub fn append_event(
+        &mut self,
+        mut mutation: LiveEventMutationV3,
+    ) -> Result<CommitReceiptV2, LivePersistenceError> {
+        if self.frozen {
+            return Err(LivePersistenceError::ExternalModification {
+                message: "this handle is read-only after a persistence failure".into(),
+            });
+        }
+        let actual_state = read_state(&self.paths.session_state)?;
+        if actual_state != self.bundle.session_state {
+            self.frozen = true;
+            return Err(LivePersistenceError::ExternalModification {
+                message: "session-state.json changed since the writer snapshot".into(),
+            });
+        }
+        verify_exact_checkpoint(&self.store, &actual_state, &self.paths).inspect_err(|_| {
+            self.frozen = true;
+        })?;
+
+        if let Some(existing) = self
+            .bundle
+            .events
+            .iter()
+            .find(|event| event.meta.mutation.mutation_id == mutation.mutation_id)
+        {
+            if same_v3_event_business_value(existing, &mutation.event) {
+                return Ok(CommitReceiptV2 {
+                    revision: self.bundle.session_state.revision,
+                    mutation_id: mutation.mutation_id,
+                    idempotent: true,
+                });
+            }
+            return Err(LivePersistenceError::MutationConflict {
+                mutation_id: mutation.mutation_id,
+            });
+        }
+        if v3_other_stream_has_mutation(&self.bundle, &mutation.mutation_id) {
+            return Err(LivePersistenceError::MutationConflict {
+                mutation_id: mutation.mutation_id,
+            });
+        }
+        if mutation.expected_revision != self.bundle.session_state.revision {
+            return Err(LivePersistenceError::StaleRevision {
+                expected: mutation.expected_revision,
+                actual: self.bundle.session_state.revision,
+            });
+        }
+        if validate_machine_identity(&mutation.mutation_id).is_err() {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: "mutation identity must be bounded nonempty ASCII".into(),
+            });
+        }
+        if validate_machine_identity(&mutation.event.event_id).is_err() {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: "event identity must be bounded nonempty ASCII".into(),
+            });
+        }
+        mutation.event.meta.schema_version = SCHEMA_VERSION_V3;
+        mutation.event.meta.session_id = self.bundle.manifest.session_id.clone();
+        mutation.event.meta.recorded_at = self.hooks.now();
+        mutation.event.meta.mutation = MutationMember {
+            mutation_id: mutation.mutation_id.clone(),
+            member_index: 0,
+            member_count: 1,
+        };
+
+        let mut candidate = self.bundle.clone();
+        candidate.events.push(mutation.event.clone());
+        let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &candidate.events);
+        if let Some(diagnostic) = reduction.diagnostics.first() {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: diagnostic.message.clone(),
+            });
+        }
+        candidate.session_state.lifecycle = reduction.lifecycle;
+        BundleStore::refresh_v3_checkpoint(&mut candidate)?;
+        candidate.session_state.revision = self
+            .bundle
+            .session_state
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| LivePersistenceError::InvalidMutation {
+                message: "checkpoint revision overflowed".into(),
+            })?;
+        candidate.session_state.last_committed_mutation_id = Some(mutation.mutation_id.clone());
+        crate::v3::validate_v3_model(&candidate)?;
+
+        let mut line = serde_json::to_vec(&mutation.event).map_err(|source| {
+            LivePersistenceError::InvalidMutation {
+                message: format!("event serialization failed: {source}"),
+            }
+        })?;
+        line.push(b'\n');
+        preflight_live_budget(
+            &self.store,
+            &self.bundle.session_state,
+            &[(LiveStreamV2::Events, line.clone())],
+        )?;
+
+        let baseline = self.bundle.session_state.clone();
+        let operation = (|| {
+            append_line(
+                &self.paths.events,
+                LiveStreamV2::Events,
+                &line,
+                self.hooks.as_ref(),
+            )?;
+            commit_checkpoint(
+                self.store.root(),
+                &self.paths.session_state,
+                &candidate.session_state,
+                self.hooks.as_ref(),
+            )
+        })();
+        if let Err(error) = operation {
+            let committed = read_state(&self.paths.session_state)
+                .is_ok_and(|state| state.revision > baseline.revision);
+            if committed {
+                self.bundle = self.store.read_v3()?;
+            } else {
+                let file = OpenOptions::new()
+                    .write(true)
+                    .open(&self.paths.events)
+                    .map_err(|source| {
+                        live_io("open schema-v3 event rollback", &self.paths.events, source)
+                    })?;
+                file.set_len(
+                    baseline
+                        .streams
+                        .get(LiveStreamV2::Events.checkpoint_name())
+                        .ok_or_else(|| LivePersistenceError::CheckpointVerification {
+                            message: "baseline checkpoint is missing events".into(),
+                        })?
+                        .committed_bytes,
+                )
+                .map_err(|source| {
+                    live_io(
+                        "truncate schema-v3 event rollback",
+                        &self.paths.events,
+                        source,
+                    )
+                })?;
+                file.sync_all().map_err(|source| {
+                    live_io(
+                        "synchronize schema-v3 event rollback",
+                        &self.paths.events,
+                        source,
+                    )
+                })?;
+            }
+            return Err(error);
+        }
+        self.bundle = candidate;
+        self.hooks
+            .check(LivePersistencePoint::BeforeAcknowledge)
+            .map_err(|source| live_io("acknowledge checkpoint", self.store.root(), source))?;
+        Ok(CommitReceiptV2 {
+            revision: self.bundle.session_state.revision,
+            mutation_id: mutation.mutation_id,
+            idempotent: false,
+        })
+    }
+}
+
+fn same_v3_event_business_value(existing: &OperatorEventV3, proposed: &OperatorEventV3) -> bool {
+    let mut proposed = proposed.clone();
+    proposed.meta = existing.meta.clone();
+    existing == &proposed
+}
+
+fn v3_other_stream_has_mutation(bundle: &BundleV3Contents, mutation_id: &str) -> bool {
+    bundle
+        .adapter_records
+        .iter()
+        .any(|record| record.meta.mutation.mutation_id == mutation_id)
+        || bundle
+            .observations
+            .iter()
+            .any(|record| record.meta.mutation.mutation_id == mutation_id)
+        || bundle
+            .rig
+            .iter()
+            .any(|record| record.meta.mutation.mutation_id == mutation_id)
+        || bundle
+            .propagation
+            .iter()
+            .any(|record| record.meta.mutation.mutation_id == mutation_id)
 }
 
 #[derive(Debug)]
