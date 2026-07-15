@@ -349,3 +349,35 @@ fn v3_checkpoint_failure_rolls_back_the_uncommitted_event() {
         assert_eq!(store.read_v3_checkpointed().unwrap(), initial);
     }
 }
+
+#[test]
+fn checkpointed_v3_export_reopens_as_the_exact_revision() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = BundleStore::new(temp.path().join(format!("source{V2_BUNDLE_SUFFIX}")));
+    let mut initial = bundle();
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    source.create_v3_checkpointed(&initial).unwrap();
+    {
+        let mut writer = source.open_v3_writer().unwrap();
+        writer
+            .append_event(mutation(
+                0,
+                "mutation-start",
+                event(
+                    initial.manifest.created_at,
+                    "event-start",
+                    None,
+                    OperatorEventPayloadV3::SessionStarted { note: None },
+                ),
+            ))
+            .unwrap();
+    }
+
+    let destination = temp.path().join(format!("export{V2_BUNDLE_SUFFIX}"));
+    let exported = source.export_v3_checkpointed_to(&destination).unwrap();
+
+    assert_eq!(
+        exported.read_v3_checkpointed().unwrap(),
+        source.read_v3_checkpointed().unwrap()
+    );
+}

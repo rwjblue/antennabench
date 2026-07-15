@@ -44,6 +44,8 @@ import {
   reportRefreshFailed,
   reportRefreshSucceeded,
   readSetupDraft,
+  readEvidenceAction,
+  readEvidenceReplacement,
   selectWorkflow,
   setupCreationCancelled,
   setupCreationFailed,
@@ -282,6 +284,34 @@ test("the conductor bridge exposes only bounded read and focused mutation comman
   ]);
   assert.equal(view.revision, 4);
   assert.equal(updated.revision, 5);
+});
+
+test("signal confirmations preserve explicit actual facts for append and correction", () => {
+  const signal = {
+    frequencyHz: 14050000,
+    mode: "cw",
+    powerWatts: 5,
+    transmittedCallsign: "K1ABC/B",
+    cadenceFollowed: false,
+  };
+
+  assert.deepEqual(
+    readEvidenceAction("confirm_signal", "slot-3", "", "slower than planned", signal),
+    {
+      kind: "confirm_signal",
+      slotId: "slot-3",
+      ...signal,
+      note: "slower than planned",
+    },
+  );
+  assert.deepEqual(
+    readEvidenceReplacement("confirm_signal", "", "corrected", signal),
+    {
+      kind: "confirm_signal",
+      ...signal,
+      note: "corrected",
+    },
+  );
 });
 
 test("WSJT-X state and bridge stay focused on status plus start/stop intent", async () => {

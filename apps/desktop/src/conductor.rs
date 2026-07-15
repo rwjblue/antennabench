@@ -5,14 +5,17 @@ use std::{
 };
 
 use antennabench_core::{
-    reduce_operator_events_v2, BundleV2Contents, CorrectableOperatorEventPayloadV2,
-    EventCorrectionActionV2, EventTimeBasisV2, MutationMember, OperatorEventPayloadV2,
-    OperatorEventV2, Provenance, RecordMetaV2, RecordSource, ReplacementOperatorEventV2,
-    SessionLifecycleV2, SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
+    reduce_operator_events_v2, reduce_operator_events_v3, validate_signal_state_confirmation_v3,
+    BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2,
+    CorrectableOperatorEventPayloadV3, EventCorrectionActionV2, EventCorrectionActionV3,
+    EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
+    OperatorEventV2, OperatorEventV3, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
+    ReplacementOperatorEventV2, ReplacementOperatorEventV3, SessionLifecycleV2, SignalModeV3,
+    SignalStateConfirmationV3, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
-    BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError, LivePersistenceHooks,
-    RecoveryDispositionV2, RecoveryReportV2, SystemLivePersistenceHooks,
+    BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
+    LivePersistenceHooks, RecoveryDispositionV2, RecoveryReportV2, SystemLivePersistenceHooks,
 };
 use antennabench_wsjtx::WSPR_LIVE_INGESTION_GRACE_SECONDS;
 use chrono::{DateTime, Duration, Utc};
@@ -93,6 +96,33 @@ struct ConductorSlotView {
     planned_antenna: String,
     actual_antenna: Option<String>,
     evidence_status: SlotEvidenceStatus,
+    planned_signal: Option<ConductorPlannedSignalView>,
+    actual_signal: Option<SignalStateConfirmationV3>,
+    signal_status: SignalEvidenceStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConductorPlannedSignalView {
+    mode: SignalModeV3,
+    frequency_hz: u64,
+    planned_power_watts: Option<f32>,
+    transmitted_callsign: String,
+    message: String,
+    repetition_count: u16,
+    key_speed_wpm: Option<u16>,
+    transmit_seconds: u32,
+    interval_seconds: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum SignalEvidenceStatus {
+    NotPlanned,
+    Missing,
+    Confirmed,
+    Deviated,
+    Conflicting,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -170,6 +200,15 @@ enum ConductorAction {
         antenna_label: String,
         note: Option<String>,
     },
+    ConfirmSignal {
+        slot_id: String,
+        frequency_hz: Option<u64>,
+        mode: Option<SignalModeV3>,
+        power_watts: Option<f32>,
+        transmitted_callsign: Option<String>,
+        cadence_followed: Option<bool>,
+        note: Option<String>,
+    },
     MarkMissed {
         slot_id: String,
         reason: Option<String>,
@@ -203,6 +242,14 @@ enum ConductorAction {
 enum CorrectableAction {
     ConfirmAntenna {
         antenna_label: String,
+        note: Option<String>,
+    },
+    ConfirmSignal {
+        frequency_hz: Option<u64>,
+        mode: Option<SignalModeV3>,
+        power_watts: Option<f32>,
+        transmitted_callsign: Option<String>,
+        cadence_followed: Option<bool>,
         note: Option<String>,
     },
     MarkMissed {
@@ -246,7 +293,7 @@ impl ConductorRuntime {
     }
 }
 
-fn ensure_v2_source(source: &Path) -> Result<(), SessionErrorPayload> {
+fn ensure_live_source(source: &Path) -> Result<(), SessionErrorPayload> {
     let valid = source
         .file_name()
         .and_then(|name| name.to_str())
@@ -256,7 +303,7 @@ fn ensure_v2_source(source: &Path) -> Result<(), SessionErrorPayload> {
     } else {
         Err(SessionErrorPayload::new(
             SessionErrorKind::Unsupported,
-            "The live conductor requires a schema-v2 session bundle.",
+            "The live conductor requires a checkpointed session bundle.",
             "schema-v1 bundles remain read-only and must be explicitly upgraded",
         ))
     }
@@ -345,6 +392,13 @@ fn correction_payload(
             antenna_label: required_text(antenna_label, "antennaLabel")?,
             note: optional_text(note),
         },
+        CorrectableAction::ConfirmSignal { .. } => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Validation,
+                "Signal-state confirmation requires a schema-v3 session.",
+                "schema-v2 events cannot represent actual signal state",
+            ));
+        }
         CorrectableAction::MarkMissed { reason } => CorrectableOperatorEventPayloadV2::SlotMissed {
             reason: optional_text(reason),
         },
@@ -403,6 +457,13 @@ fn action_payload(
                 note: optional_text(note),
             },
         ),
+        ConductorAction::ConfirmSignal { .. } => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Validation,
+                "Signal-state confirmation requires a schema-v3 session.",
+                "schema-v2 events cannot represent actual signal state",
+            ));
+        }
         ConductorAction::MarkMissed { slot_id, reason } => (
             Some(required_text(slot_id, "slotId")?),
             OperatorEventPayloadV2::SlotMissed {
@@ -468,6 +529,214 @@ fn event_for_action(
     Ok(OperatorEventV2 {
         meta: RecordMetaV2 {
             schema_version: SCHEMA_VERSION_V2,
+            session_id: session_id.to_string(),
+            recorded_at: occurred_at,
+            provenance: Provenance::from_legacy(RecordSource::Operator, env!("CARGO_PKG_VERSION")),
+            mutation: MutationMember {
+                mutation_id: pending.token.clone(),
+                member_index: 0,
+                member_count: 1,
+            },
+        },
+        event_id: format!("event-for-{}", pending.token),
+        occurred_at,
+        time_basis: EventTimeBasisV2::ObservedNow,
+        uncertainty_seconds: None,
+        slot_id,
+        payload,
+    })
+}
+
+fn signal_confirmation(
+    frequency_hz: Option<u64>,
+    mode: Option<SignalModeV3>,
+    power_watts: Option<f32>,
+    transmitted_callsign: Option<String>,
+    cadence_followed: Option<bool>,
+    note: Option<String>,
+) -> SignalStateConfirmationV3 {
+    SignalStateConfirmationV3 {
+        frequency_hz,
+        mode,
+        power_watts,
+        transmitted_callsign: optional_text(transmitted_callsign),
+        cadence_followed,
+        note: optional_text(note),
+    }
+}
+
+fn correction_payload_v3(
+    action: CorrectableAction,
+) -> Result<CorrectableOperatorEventPayloadV3, SessionErrorPayload> {
+    Ok(match action {
+        CorrectableAction::ConfirmAntenna {
+            antenna_label,
+            note,
+        } => CorrectableOperatorEventPayloadV3::AntennaStateConfirmed {
+            antenna_label: required_text(antenna_label, "antennaLabel")?,
+            note: optional_text(note),
+        },
+        CorrectableAction::ConfirmSignal {
+            frequency_hz,
+            mode,
+            power_watts,
+            transmitted_callsign,
+            cadence_followed,
+            note,
+        } => CorrectableOperatorEventPayloadV3::SignalStateConfirmed {
+            confirmation: signal_confirmation(
+                frequency_hz,
+                mode,
+                power_watts,
+                transmitted_callsign,
+                cadence_followed,
+                note,
+            ),
+        },
+        CorrectableAction::MarkMissed { reason } => CorrectableOperatorEventPayloadV3::SlotMissed {
+            reason: optional_text(reason),
+        },
+        CorrectableAction::MarkBad { reason } => CorrectableOperatorEventPayloadV3::SlotBad {
+            reason: required_text(reason, "reason")?,
+        },
+        CorrectableAction::AddNote { note } => CorrectableOperatorEventPayloadV3::NoteAdded {
+            note: required_text(note, "note")?,
+        },
+    })
+}
+
+fn action_payload_v3(
+    action: ConductorAction,
+    occurred_at: DateTime<Utc>,
+) -> Result<(Option<String>, OperatorEventPayloadV3), SessionErrorPayload> {
+    Ok(match action {
+        ConductorAction::Start { note } => (
+            None,
+            OperatorEventPayloadV3::SessionStarted {
+                note: optional_text(note),
+            },
+        ),
+        ConductorAction::Interrupt { reason } => (
+            None,
+            OperatorEventPayloadV3::SessionInterrupted {
+                reason: optional_text(reason),
+            },
+        ),
+        ConductorAction::Resume { note } => (
+            None,
+            OperatorEventPayloadV3::SessionResumed {
+                note: optional_text(note),
+            },
+        ),
+        ConductorAction::End { reason } => (
+            None,
+            OperatorEventPayloadV3::SessionEnded {
+                reason: optional_text(reason),
+            },
+        ),
+        ConductorAction::Abandon { reason } => (
+            None,
+            OperatorEventPayloadV3::SessionAbandoned {
+                reason: optional_text(reason),
+            },
+        ),
+        ConductorAction::ConfirmAntenna {
+            slot_id,
+            antenna_label,
+            note,
+        } => (
+            Some(required_text(slot_id, "slotId")?),
+            OperatorEventPayloadV3::AntennaStateConfirmed {
+                antenna_label: required_text(antenna_label, "antennaLabel")?,
+                note: optional_text(note),
+            },
+        ),
+        ConductorAction::ConfirmSignal {
+            slot_id,
+            frequency_hz,
+            mode,
+            power_watts,
+            transmitted_callsign,
+            cadence_followed,
+            note,
+        } => (
+            Some(required_text(slot_id, "slotId")?),
+            OperatorEventPayloadV3::SignalStateConfirmed {
+                confirmation: signal_confirmation(
+                    frequency_hz,
+                    mode,
+                    power_watts,
+                    transmitted_callsign,
+                    cadence_followed,
+                    note,
+                ),
+            },
+        ),
+        ConductorAction::MarkMissed { slot_id, reason } => (
+            Some(required_text(slot_id, "slotId")?),
+            OperatorEventPayloadV3::SlotMissed {
+                reason: optional_text(reason),
+            },
+        ),
+        ConductorAction::MarkBad { slot_id, reason } => (
+            Some(required_text(slot_id, "slotId")?),
+            OperatorEventPayloadV3::SlotBad {
+                reason: required_text(reason, "reason")?,
+            },
+        ),
+        ConductorAction::AddNote { slot_id, note } => (
+            optional_text(slot_id),
+            OperatorEventPayloadV3::NoteAdded {
+                note: required_text(note, "note")?,
+            },
+        ),
+        ConductorAction::RetractEvent {
+            target_event_id,
+            reason,
+        } => (
+            None,
+            OperatorEventPayloadV3::EventCorrected {
+                target_event_id: required_text(target_event_id, "targetEventId")?,
+                correction: EventCorrectionActionV3::Retract,
+                reason: required_text(reason, "reason")?,
+            },
+        ),
+        ConductorAction::ReplaceEvent {
+            target_event_id,
+            slot_id,
+            replacement,
+            reason,
+        } => (
+            None,
+            OperatorEventPayloadV3::EventCorrected {
+                target_event_id: required_text(target_event_id, "targetEventId")?,
+                correction: EventCorrectionActionV3::Replace {
+                    replacement: ReplacementOperatorEventV3 {
+                        occurred_at,
+                        time_basis: EventTimeBasisV2::ObservedNow,
+                        uncertainty_seconds: None,
+                        slot_id: optional_text(slot_id),
+                        payload: correction_payload_v3(replacement)?,
+                    },
+                },
+                reason: required_text(reason, "reason")?,
+            },
+        ),
+    })
+}
+
+fn event_for_action_v3(
+    session_id: &str,
+    pending: &PendingAction,
+    action: ConductorAction,
+) -> Result<OperatorEventV3, SessionErrorPayload> {
+    let occurred_at = pending.occurred_at.ok_or_else(|| {
+        SessionErrorPayload::report_pipeline("conductor action time was not initialized")
+    })?;
+    let (slot_id, payload) = action_payload_v3(action, occurred_at)?;
+    Ok(OperatorEventV3 {
+        meta: RecordMetaV3 {
+            schema_version: SCHEMA_VERSION_V3,
             session_id: session_id.to_string(),
             recorded_at: occurred_at,
             provenance: Provenance::from_legacy(RecordSource::Operator, env!("CARGO_PKG_VERSION")),
@@ -569,6 +838,9 @@ fn build_view(
                 planned_antenna: slot.antenna_label.clone(),
                 actual_antenna,
                 evidence_status,
+                planned_signal: None,
+                actual_signal: None,
+                signal_status: SignalEvidenceStatus::NotPlanned,
             }
         })
         .collect::<Vec<_>>();
@@ -604,6 +876,171 @@ fn build_view(
     }
 }
 
+fn build_view_v3(
+    bundle_name: String,
+    bundle: &BundleV3Contents,
+    now: DateTime<Utc>,
+    action_token: String,
+) -> ConductorView {
+    let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &bundle.events);
+    let mut evidence = BTreeMap::<String, Vec<&CorrectableOperatorEventPayloadV3>>::new();
+    let mut effective_events = Vec::new();
+    for event in &reduction.effective_events {
+        if let Some(slot_id) = &event.slot_id {
+            evidence
+                .entry(slot_id.clone())
+                .or_default()
+                .push(&event.payload);
+        }
+        let (kind, summary) = event_summary_v3(&event.payload);
+        effective_events.push(ConductorEventView {
+            source_event_id: event.source_event_id.clone(),
+            effective_through_event_id: event.effective_through_event_id.clone(),
+            occurred_at: event.occurred_at,
+            slot_id: event.slot_id.clone(),
+            kind,
+            summary,
+        });
+    }
+
+    let mut diagnostics = reduction
+        .diagnostics
+        .into_iter()
+        .map(|diagnostic| ConductorDiagnostic {
+            code: format!("operator_event.{:?}", diagnostic.code).to_lowercase(),
+            message: diagnostic.message,
+            slot_id: None,
+            event_id: Some(diagnostic.event_id),
+        })
+        .collect::<Vec<_>>();
+
+    let slots = bundle
+        .schedule
+        .slots
+        .iter()
+        .map(|slot| {
+            let facts = evidence.get(&slot.slot_id).map(Vec::as_slice).unwrap_or(&[]);
+            let (evidence_status, actual_antenna) = slot_evidence_v3(facts);
+            if evidence_status == SlotEvidenceStatus::Conflicting {
+                diagnostics.push(ConductorDiagnostic {
+                    code: "conductor.slot.conflicting_evidence".into(),
+                    message: "Competing effective operator facts keep this slot conservatively unresolved."
+                        .into(),
+                    slot_id: Some(slot.slot_id.clone()),
+                    event_id: None,
+                });
+            }
+
+            let confirmations = facts
+                .iter()
+                .filter_map(|fact| match fact {
+                    CorrectableOperatorEventPayloadV3::SignalStateConfirmed { confirmation } => {
+                        Some(confirmation)
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let (actual_signal, signal_status) = match confirmations.as_slice() {
+                [] if slot.signal.is_some() => (None, SignalEvidenceStatus::Missing),
+                [] => (None, SignalEvidenceStatus::NotPlanned),
+                [confirmation] => {
+                    let signal_diagnostics = validate_signal_state_confirmation_v3(
+                        &bundle.schedule,
+                        Some(&slot.slot_id),
+                        confirmation,
+                    );
+                    let status = if signal_diagnostics.is_empty() {
+                        SignalEvidenceStatus::Confirmed
+                    } else {
+                        SignalEvidenceStatus::Deviated
+                    };
+                    diagnostics.extend(signal_diagnostics.into_iter().map(|diagnostic| {
+                        ConductorDiagnostic {
+                            code: diagnostic.code.into(),
+                            message: diagnostic.message,
+                            slot_id: Some(slot.slot_id.clone()),
+                            event_id: None,
+                        }
+                    }));
+                    (Some((*confirmation).clone()), status)
+                }
+                _ => {
+                    diagnostics.push(ConductorDiagnostic {
+                        code: "conductor.signal.conflicting_evidence".into(),
+                        message: "Competing signal confirmations keep the actual transmitted state unresolved."
+                            .into(),
+                        slot_id: Some(slot.slot_id.clone()),
+                        event_id: None,
+                    });
+                    (None, SignalEvidenceStatus::Conflicting)
+                }
+            };
+            let planned_signal = slot.signal.as_ref().and_then(|allocation| {
+                bundle
+                    .schedule
+                    .signal_plans
+                    .iter()
+                    .find(|plan| plan.signal_plan_id == allocation.signal_plan_id)
+                    .map(|plan| ConductorPlannedSignalView {
+                        mode: plan.mode,
+                        frequency_hz: allocation.frequency_hz,
+                        planned_power_watts: plan.planned_power_watts,
+                        transmitted_callsign: plan.transmitted_callsign.clone(),
+                        message: plan.cadence.message.clone(),
+                        repetition_count: plan.cadence.repetition_count,
+                        key_speed_wpm: plan.cadence.key_speed_wpm,
+                        transmit_seconds: plan.cadence.transmit_seconds,
+                        interval_seconds: plan.cadence.interval_seconds,
+                    })
+            });
+
+            ConductorSlotView {
+                slot_id: slot.slot_id.clone(),
+                sequence_number: slot.sequence_number,
+                starts_at: slot.starts_at,
+                usable_at: slot.starts_at + Duration::seconds(i64::from(slot.guard_seconds)),
+                ends_at: slot.starts_at + Duration::seconds(i64::from(slot.duration_seconds)),
+                band: serde_json::to_value(slot.band)
+                    .ok()
+                    .and_then(|value| value.as_str().map(str::to_string))
+                    .unwrap_or_else(|| format!("{:?}", slot.band)),
+                planned_antenna: slot.antenna_label.clone(),
+                actual_antenna,
+                evidence_status,
+                planned_signal,
+                actual_signal,
+                signal_status,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let (phase, guidance, seconds_to_transition, current_index, next_index) =
+        timing_projection(reduction.lifecycle, false, &slots, now);
+    ConductorView {
+        bundle_name,
+        session_id: bundle.manifest.session_id.clone(),
+        revision: bundle.session_state.revision,
+        lifecycle: reduction.lifecycle,
+        now,
+        action_token,
+        phase,
+        guidance,
+        seconds_to_transition,
+        antennas: bundle
+            .antennas
+            .antennas
+            .iter()
+            .map(|antenna| antenna.label.clone())
+            .collect(),
+        current_slot: current_index.map(|index| slots[index].clone()),
+        next_slot: next_index.map(|index| slots[index].clone()),
+        slots,
+        effective_events,
+        diagnostics,
+        recovery: None,
+    }
+}
+
 fn event_summary(payload: &CorrectableOperatorEventPayloadV2) -> (&'static str, String) {
     match payload {
         CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
@@ -627,6 +1064,35 @@ fn event_summary(payload: &CorrectableOperatorEventPayloadV2) -> (&'static str, 
     }
 }
 
+fn event_summary_v3(payload: &CorrectableOperatorEventPayloadV3) -> (&'static str, String) {
+    match payload {
+        CorrectableOperatorEventPayloadV3::AntennaStateConfirmed {
+            antenna_label,
+            note,
+        } => (
+            "antenna_state_confirmed",
+            note.as_ref().map_or_else(
+                || format!("Actual antenna confirmed as {antenna_label}."),
+                |note| format!("Actual antenna confirmed as {antenna_label}: {note}"),
+            ),
+        ),
+        CorrectableOperatorEventPayloadV3::SignalStateConfirmed { confirmation } => (
+            "signal_state_confirmed",
+            confirmation.note.clone().unwrap_or_else(|| {
+                "Actual transmitted signal state confirmed by the operator.".into()
+            }),
+        ),
+        CorrectableOperatorEventPayloadV3::SlotMissed { reason } => (
+            "slot_missed",
+            reason
+                .as_ref()
+                .map_or_else(|| "Slot marked missed.".into(), Clone::clone),
+        ),
+        CorrectableOperatorEventPayloadV3::SlotBad { reason } => ("slot_bad", reason.clone()),
+        CorrectableOperatorEventPayloadV3::NoteAdded { note } => ("note_added", note.clone()),
+    }
+}
+
 fn slot_evidence(
     facts: &[&CorrectableOperatorEventPayloadV2],
 ) -> (SlotEvidenceStatus, Option<String>) {
@@ -641,6 +1107,39 @@ fn slot_evidence(
             CorrectableOperatorEventPayloadV2::SlotMissed { .. } => missed = true,
             CorrectableOperatorEventPayloadV2::SlotBad { .. } => bad = true,
             CorrectableOperatorEventPayloadV2::NoteAdded { .. } => {}
+        }
+    }
+    confirmed.sort_unstable();
+    confirmed.dedup();
+    let fact_kinds = usize::from(!confirmed.is_empty()) + usize::from(missed) + usize::from(bad);
+    if confirmed.len() > 1 || fact_kinds > 1 {
+        (SlotEvidenceStatus::Conflicting, None)
+    } else if let Some(label) = confirmed.first() {
+        (SlotEvidenceStatus::Confirmed, Some((*label).to_string()))
+    } else if missed {
+        (SlotEvidenceStatus::Missed, None)
+    } else if bad {
+        (SlotEvidenceStatus::Bad, None)
+    } else {
+        (SlotEvidenceStatus::Unknown, None)
+    }
+}
+
+fn slot_evidence_v3(
+    facts: &[&CorrectableOperatorEventPayloadV3],
+) -> (SlotEvidenceStatus, Option<String>) {
+    let mut confirmed = Vec::<&str>::new();
+    let mut missed = false;
+    let mut bad = false;
+    for fact in facts {
+        match fact {
+            CorrectableOperatorEventPayloadV3::AntennaStateConfirmed { antenna_label, .. } => {
+                confirmed.push(antenna_label)
+            }
+            CorrectableOperatorEventPayloadV3::SlotMissed { .. } => missed = true,
+            CorrectableOperatorEventPayloadV3::SlotBad { .. } => bad = true,
+            CorrectableOperatorEventPayloadV3::SignalStateConfirmed { .. }
+            | CorrectableOperatorEventPayloadV3::NoteAdded { .. } => {}
         }
     }
     confirmed.sort_unstable();
@@ -828,16 +1327,15 @@ fn read_conductor_with_hooks(
 ) -> Result<ConductorView, SessionErrorPayload> {
     with_foreground_operation(active_state, || {
         let (source, bundle_name) = active_session_source(active_state)?;
-        ensure_v2_source(&source)?;
+        ensure_live_source(&source)?;
         let store = BundleStore::new(&source);
+        let schema_version = store.schema_version().map_err(storage_error_payload)?;
         let initialized = conductor_state
             .0
             .lock()
             .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?
             .is_initialized(&source);
-        let recovery = if initialized {
-            None
-        } else {
+        let recovery = if !initialized && schema_version == SCHEMA_VERSION_V2 {
             let report = store
                 .recover_v2_with_hooks(hooks.clone())
                 .map_err(live_error_payload)?;
@@ -849,17 +1347,49 @@ fn read_conductor_with_hooks(
                 })?
                 .mark_initialized(source.clone());
             Some(recovery_view(&report))
+        } else {
+            if !initialized {
+                conductor_state
+                    .0
+                    .lock()
+                    .map_err(|_| {
+                        SessionErrorPayload::report_pipeline("conductor state is unavailable")
+                    })?
+                    .mark_initialized(source.clone());
+            }
+            None
         };
-        let bundle = store.read_v2_checkpointed().map_err(live_error_payload)?;
         let now = hooks.now();
         let action_token = hooks.new_id("mutation");
-        register_view_action(
-            conductor_state,
-            &bundle.manifest.session_id,
-            bundle.session_state.revision,
-            action_token.clone(),
-        )?;
-        let view = build_view(bundle_name, &bundle, now, action_token, recovery);
+        let view = match schema_version {
+            SCHEMA_VERSION_V2 => {
+                let bundle = store.read_v2_checkpointed().map_err(live_error_payload)?;
+                register_view_action(
+                    conductor_state,
+                    &bundle.manifest.session_id,
+                    bundle.session_state.revision,
+                    action_token.clone(),
+                )?;
+                build_view(bundle_name, &bundle, now, action_token, recovery)
+            }
+            SCHEMA_VERSION_V3 => {
+                let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
+                register_view_action(
+                    conductor_state,
+                    &bundle.manifest.session_id,
+                    bundle.session_state.revision,
+                    action_token.clone(),
+                )?;
+                build_view_v3(bundle_name, &bundle, now, action_token)
+            }
+            actual => {
+                return Err(SessionErrorPayload::new(
+                    SessionErrorKind::Unsupported,
+                    "This session schema cannot be conducted by this AntennaBench version.",
+                    format!("unsupported schema version {actual}"),
+                ));
+            }
+        };
         check_ipc_payload(&view, CONDUCTOR_VIEW_IPC_BYTES, "conductor_view")?;
         Ok(view)
     })
@@ -873,64 +1403,151 @@ fn mutate_conductor_with_hooks(
 ) -> Result<ConductorView, SessionErrorPayload> {
     with_foreground_operation(active_state, || {
         let (source, bundle_name) = active_session_source(active_state)?;
-        ensure_v2_source(&source)?;
+        ensure_live_source(&source)?;
         let store = BundleStore::new(&source);
-        let snapshot = store.read_v2_checkpointed().map_err(live_error_payload)?;
-        let pending = conductor_state
-            .0
-            .lock()
-            .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?
-            .resolve_action(&request.action_token, hooks.now())
-            .ok_or_else(|| {
-                SessionErrorPayload::new(
-                    SessionErrorKind::StaleRevision,
-                    "Refresh the conductor before submitting this action.",
-                    "the Rust-issued action token is missing or expired",
-                )
-            })?;
-        if pending.session_id != snapshot.manifest.session_id
-            || pending.expected_revision != request.expected_revision
-        {
-            return Err(SessionErrorPayload::new(
+        let schema_version = store.schema_version().map_err(storage_error_payload)?;
+        match schema_version {
+            SCHEMA_VERSION_V2 => {
+                mutate_conductor_v2(&store, bundle_name, conductor_state, request, hooks)
+            }
+            SCHEMA_VERSION_V3 => {
+                mutate_conductor_v3(&store, bundle_name, conductor_state, request, hooks)
+            }
+            actual => Err(SessionErrorPayload::new(
+                SessionErrorKind::Unsupported,
+                "This session schema cannot be conducted by this AntennaBench version.",
+                format!("unsupported schema version {actual}"),
+            )),
+        }
+    })
+}
+
+fn mutate_conductor_v2(
+    store: &BundleStore,
+    bundle_name: String,
+    conductor_state: &ConductorSessionState,
+    request: ConductorMutationRequest,
+    hooks: Arc<dyn LivePersistenceHooks>,
+) -> Result<ConductorView, SessionErrorPayload> {
+    let snapshot = store.read_v2_checkpointed().map_err(live_error_payload)?;
+    let pending = conductor_state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?
+        .resolve_action(&request.action_token, hooks.now())
+        .ok_or_else(|| {
+            SessionErrorPayload::new(
                 SessionErrorKind::StaleRevision,
                 "Refresh the conductor before submitting this action.",
-                "the action token does not match this session revision",
-            ));
+                "the Rust-issued action token is missing or expired",
+            )
+        })?;
+    if pending.session_id != snapshot.manifest.session_id
+        || pending.expected_revision != request.expected_revision
+    {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::StaleRevision,
+            "Refresh the conductor before submitting this action.",
+            "the action token does not match this session revision",
+        ));
+    }
+    let event = event_for_action(&snapshot.manifest.session_id, &pending, request.action)?;
+    let mutation = LiveMutationV2 {
+        expected_revision: request.expected_revision,
+        mutation_id: pending.token.clone(),
+        members: vec![LiveMutationMemberV2::Event(event)],
+    };
+    let append_result = {
+        let mut writer = store
+            .open_v2_writer_with_hooks(hooks.clone())
+            .map_err(live_error_payload)?;
+        writer.append(mutation)
+    };
+    if let Err(error) = append_result {
+        let committed = store.read_v2_checkpointed().ok().is_some_and(|bundle| {
+            bundle.session_state.last_committed_mutation_id.as_deref()
+                == Some(pending.token.as_str())
+        });
+        if !committed {
+            return Err(live_error_payload(error));
         }
-        let event = event_for_action(&snapshot.manifest.session_id, &pending, request.action)?;
-        let mutation = LiveMutationV2 {
-            expected_revision: request.expected_revision,
-            mutation_id: pending.token.clone(),
-            members: vec![LiveMutationMemberV2::Event(event)],
-        };
-        let append_result = {
-            let mut writer = store
-                .open_v2_writer_with_hooks(hooks.clone())
-                .map_err(live_error_payload)?;
-            writer.append(mutation)
-        };
-        if let Err(error) = append_result {
-            let committed = store.read_v2_checkpointed().ok().is_some_and(|bundle| {
-                bundle.session_state.last_committed_mutation_id.as_deref()
-                    == Some(pending.token.as_str())
-            });
-            if !committed {
-                return Err(live_error_payload(error));
-            }
+    }
+    let bundle = store.read_v2_checkpointed().map_err(live_error_payload)?;
+    let now = hooks.now();
+    let action_token = hooks.new_id("mutation");
+    register_view_action(
+        conductor_state,
+        &bundle.manifest.session_id,
+        bundle.session_state.revision,
+        action_token.clone(),
+    )?;
+    let view = build_view(bundle_name, &bundle, now, action_token, None);
+    check_ipc_payload(&view, CONDUCTOR_VIEW_IPC_BYTES, "conductor_view")?;
+    Ok(view)
+}
+
+fn mutate_conductor_v3(
+    store: &BundleStore,
+    bundle_name: String,
+    conductor_state: &ConductorSessionState,
+    request: ConductorMutationRequest,
+    hooks: Arc<dyn LivePersistenceHooks>,
+) -> Result<ConductorView, SessionErrorPayload> {
+    let snapshot = store.read_v3_checkpointed().map_err(live_error_payload)?;
+    let pending = conductor_state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?
+        .resolve_action(&request.action_token, hooks.now())
+        .ok_or_else(|| {
+            SessionErrorPayload::new(
+                SessionErrorKind::StaleRevision,
+                "Refresh the conductor before submitting this action.",
+                "the Rust-issued action token is missing or expired",
+            )
+        })?;
+    if pending.session_id != snapshot.manifest.session_id
+        || pending.expected_revision != request.expected_revision
+    {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::StaleRevision,
+            "Refresh the conductor before submitting this action.",
+            "the action token does not match this session revision",
+        ));
+    }
+    let event = event_for_action_v3(&snapshot.manifest.session_id, &pending, request.action)?;
+    let mutation = LiveEventMutationV3 {
+        expected_revision: request.expected_revision,
+        mutation_id: pending.token.clone(),
+        event,
+    };
+    let append_result = {
+        let mut writer = store
+            .open_v3_writer_with_hooks(hooks.clone())
+            .map_err(live_error_payload)?;
+        writer.append_event(mutation)
+    };
+    if let Err(error) = append_result {
+        let committed = store.read_v3_checkpointed().ok().is_some_and(|bundle| {
+            bundle.session_state.last_committed_mutation_id.as_deref()
+                == Some(pending.token.as_str())
+        });
+        if !committed {
+            return Err(live_error_payload(error));
         }
-        let bundle = store.read_v2_checkpointed().map_err(live_error_payload)?;
-        let now = hooks.now();
-        let action_token = hooks.new_id("mutation");
-        register_view_action(
-            conductor_state,
-            &bundle.manifest.session_id,
-            bundle.session_state.revision,
-            action_token.clone(),
-        )?;
-        let view = build_view(bundle_name, &bundle, now, action_token, None);
-        check_ipc_payload(&view, CONDUCTOR_VIEW_IPC_BYTES, "conductor_view")?;
-        Ok(view)
-    })
+    }
+    let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
+    let now = hooks.now();
+    let action_token = hooks.new_id("mutation");
+    register_view_action(
+        conductor_state,
+        &bundle.manifest.session_id,
+        bundle.session_state.revision,
+        action_token.clone(),
+    )?;
+    let view = build_view_v3(bundle_name, &bundle, now, action_token);
+    check_ipc_payload(&view, CONDUCTOR_VIEW_IPC_BYTES, "conductor_view")?;
+    Ok(view)
 }
 
 #[tauri::command]
@@ -978,7 +1595,7 @@ mod tests {
 
     use antennabench_core::{
         reduce_operator_events_v2, AdapterInput, Band, CorrectableOperatorEventPayloadV2,
-        PlannedSlot, SessionLifecycleV2, V2_BUNDLE_SUFFIX,
+        PlannedSlot, SessionLifecycleV2, SignalModeV3, V2_BUNDLE_SUFFIX,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -990,14 +1607,14 @@ mod tests {
     use super::{
         mutate_conductor_with_hooks, read_conductor_with_hooks, ConductorAction,
         ConductorMutationRequest, ConductorPhase, ConductorSessionState, CorrectableAction,
-        SlotEvidenceStatus,
+        SignalEvidenceStatus, SlotEvidenceStatus,
     };
     use crate::{
         open_session::{
             activate_created_bundle, e2e_report_snapshot, export_e2e_snapshots, ActiveSessionState,
             SessionErrorKind,
         },
-        setup::create_e2e_session,
+        setup::{create_e2e_session, create_e2e_signal_session},
         wsjtx_session::inject_e2e_wsjtx_sequence,
     };
 
@@ -1112,6 +1729,81 @@ mod tests {
             expected_revision: view.revision,
             action,
         }
+    }
+
+    #[test]
+    fn schema_v3_conductor_records_and_projects_actual_signal_state() {
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let created = create_e2e_signal_session(temp.path(), &active);
+        let store = BundleStore::new(&created.path);
+        let hooks = Arc::new(TestHooks::new(
+            Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 20).unwrap(),
+        ));
+        let conductor = ConductorSessionState::default();
+
+        let ready = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+        assert_eq!(ready.slots[0].signal_status, SignalEvidenceStatus::Missing);
+        assert_eq!(
+            ready.slots[0].planned_signal.as_ref().unwrap().mode,
+            SignalModeV3::Cw
+        );
+        let started = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(&ready, ConductorAction::Start { note: None }),
+            hooks.clone(),
+        )
+        .unwrap();
+        let antenna = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &started,
+                ConductorAction::ConfirmAntenna {
+                    slot_id: created.slot_ids[0].clone(),
+                    antenna_label: created.antenna_labels[0].clone(),
+                    note: None,
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let confirmed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &antenna,
+                ConductorAction::ConfirmSignal {
+                    slot_id: created.slot_ids[0].clone(),
+                    frequency_hz: Some(14_050_000),
+                    mode: Some(SignalModeV3::Cw),
+                    power_watts: Some(5.0),
+                    transmitted_callsign: Some("N1RWJ".into()),
+                    cadence_followed: Some(true),
+                    note: Some("operator confirmed actual transmission".into()),
+                },
+            ),
+            hooks,
+        )
+        .unwrap();
+
+        assert_eq!(confirmed.revision, 3);
+        assert_eq!(
+            confirmed.slots[0].signal_status,
+            SignalEvidenceStatus::Confirmed
+        );
+        assert_eq!(
+            confirmed.slots[0]
+                .actual_signal
+                .as_ref()
+                .unwrap()
+                .frequency_hz,
+            Some(14_050_000)
+        );
+        let persisted = store.read_v3_checkpointed().unwrap();
+        assert_eq!(persisted.events.len(), 3);
+        assert_eq!(persisted.session_state.revision, 3);
     }
 
     struct FailureArtifacts {

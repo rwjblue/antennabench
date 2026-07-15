@@ -421,6 +421,56 @@ impl BundleStore {
         Ok(destination_store)
     }
 
+    pub fn export_v3_checkpointed_to(
+        &self,
+        destination: impl AsRef<Path>,
+    ) -> Result<BundleStore, LivePersistenceError> {
+        let lock_path = self.root().join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|source| live_io("open checkpointed export lock", &lock_path, source))?;
+        match lock.try_lock_shared() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
+            Err(fs::TryLockError::Error(source)) => {
+                return Err(LivePersistenceError::Capability {
+                    message: format!("shared export locking failed: {source}"),
+                });
+            }
+        }
+
+        let bundle = self.read_v3()?;
+        let source_paths =
+            self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
+        verify_exact_checkpoint(self, &bundle.session_state, &source_paths)?;
+        let destination_store = BundleStore::new(destination);
+        let mut destination_created = false;
+        let result = (|| {
+            destination_store.write_v3_for_upgrade(&bundle)?;
+            destination_created = true;
+            copy_checkpointed_attachments(
+                self,
+                &source_paths.attachments_dir,
+                &destination_store
+                    .v2_paths(&bundle.manifest.files)?
+                    .attachments_dir,
+            )?;
+            destination_store.read_v3()?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            if destination_created {
+                let _ = fs::remove_dir_all(destination_store.root());
+            }
+            return Err(error);
+        }
+        Ok(destination_store)
+    }
+
     /// Creates a new checkpointed schema-v2 bundle without exposing partial
     /// durable state at the selected destination.
     ///

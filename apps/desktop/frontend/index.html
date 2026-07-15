@@ -248,9 +248,14 @@
               <form class="evidence-form" data-evidence-form>
                 <div><p class="eyebrow">Explicit operator evidence</p><h2>Record what actually happened</h2></div>
                 <div class="field-grid">
-                  <label>Evidence type<select data-evidence-kind><option value="confirm_antenna">Confirm actual antenna</option><option value="mark_missed">Mark slot missed</option><option value="mark_bad">Mark slot bad</option><option value="add_note">Add note</option></select></label>
+                  <label>Evidence type<select data-evidence-kind><option value="confirm_antenna">Confirm actual antenna</option><option value="confirm_signal">Confirm actual signal</option><option value="mark_missed">Mark slot missed</option><option value="mark_bad">Mark slot bad</option><option value="add_note">Add note</option></select></label>
                   <label>Planned slot<select data-evidence-slot></select></label>
                   <label>Actual antenna<select data-evidence-antenna></select></label>
+                  <label>Actual frequency (Hz)<input type="number" min="1" step="1" data-evidence-frequency></label>
+                  <label>Actual mode<select data-evidence-mode><option value="">Not confirmed</option><option value="cw">CW</option><option value="rtty">RTTY</option></select></label>
+                  <label>Actual power (W)<input type="number" min="0.001" step="any" data-evidence-power></label>
+                  <label>Transmitted callsign<input type="text" maxlength="32" data-evidence-callsign></label>
+                  <label>Cadence followed<select data-evidence-cadence><option value="">Not confirmed</option><option value="true">Yes</option><option value="false">No</option></select></label>
                   <label class="field-wide">Note or reason<textarea rows="2" data-evidence-detail placeholder="Optional for confirmations/missed slots; required for bad slots and notes"></textarea></label>
                 </div>
                 <div class="setup-actions"><button class="primary-action" type="submit">Commit operator evidence</button></div>

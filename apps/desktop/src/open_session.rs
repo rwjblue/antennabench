@@ -690,8 +690,23 @@ fn export_bundle(
         .and_then(|name| name.to_str())
         .unwrap_or_default();
     let revision = if source_name.ends_with(V2_BUNDLE_SUFFIX) {
-        let exported = BundleStore::new(source).export_v2_checkpointed_to(destination)?;
-        Some(exported.read_v2_checkpointed()?.session_state.revision)
+        let store = BundleStore::new(source);
+        match store.schema_version().map_err(LivePersistenceError::from)? {
+            SCHEMA_VERSION_V2 => {
+                let exported = store.export_v2_checkpointed_to(destination)?;
+                Some(exported.read_v2_checkpointed()?.session_state.revision)
+            }
+            SCHEMA_VERSION_V3 => {
+                let exported = store.export_v3_checkpointed_to(destination)?;
+                Some(exported.read_v3_checkpointed()?.session_state.revision)
+            }
+            actual => {
+                return Err(LivePersistenceError::from(
+                    BundleStoreError::UnsupportedSchemaVersion { actual },
+                )
+                .into());
+            }
+        }
     } else {
         BundleStore::new(source).copy_losslessly_to(destination)?;
         None

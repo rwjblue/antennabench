@@ -1295,6 +1295,23 @@ pub(crate) fn create_e2e_session(
     root: &Path,
     active_state: &ActiveSessionState,
 ) -> E2eCreatedSession {
+    create_e2e_session_with_signal(root, active_state, false)
+}
+
+#[cfg(test)]
+pub(crate) fn create_e2e_signal_session(
+    root: &Path,
+    active_state: &ActiveSessionState,
+) -> E2eCreatedSession {
+    create_e2e_session_with_signal(root, active_state, true)
+}
+
+#[cfg(test)]
+fn create_e2e_session_with_signal(
+    root: &Path,
+    active_state: &ActiveSessionState,
+    with_signal: bool,
+) -> E2eCreatedSession {
     #[derive(Debug)]
     struct DeterministicHooks(Mutex<u64>);
 
@@ -1353,14 +1370,31 @@ pub(crate) fn create_e2e_session(
             rounds: "2".into(),
         },
         wspr_live_acquisition_enabled: false,
-        signal_plan: None,
+        signal_plan: with_signal.then(|| SetupSignalPlanDraft {
+            mode: SignalModeV3::Cw,
+            collection_profile: SignalCollectionProfileV3::ManualObservation,
+            planned_power_watts: "5".into(),
+            transmitted_callsign: "N1RWJ".into(),
+            differing_identity_validated: false,
+            message: "CQ CQ N1RWJ N1RWJ TEST".into(),
+            repetition_count: "2".into(),
+            key_speed_wpm: "20".into(),
+            transmit_seconds: "20".into(),
+            interval_seconds: "30".into(),
+            frequencies_hz: "14050000".into(),
+        }),
     };
     let review = build_review(&setup_state, draft, &DeterministicHooks(Mutex::new(1)))
         .expect("deterministic setup review");
     assert!(review.valid, "setup diagnostics: {:?}", review.diagnostics);
     let review_id = review.review_id.expect("valid review ID");
     let plan = review.plan.expect("valid reviewed plan");
-    let path = root.join(format!("complete-workflow{V2_BUNDLE_SUFFIX}"));
+    let stem = if with_signal {
+        "signal-workflow"
+    } else {
+        "complete-workflow"
+    };
+    let path = root.join(format!("{stem}{V2_BUNDLE_SUFFIX}"));
     let outcome = create_with_selection(&setup_state, active_state, &review_id, |_| {
         Ok(Some(path.clone()))
     })

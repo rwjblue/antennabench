@@ -555,6 +555,11 @@ function mount(root, browserWindow) {
   const evidenceKind = root.querySelector("[data-evidence-kind]");
   const evidenceSlot = root.querySelector("[data-evidence-slot]");
   const evidenceAntenna = root.querySelector("[data-evidence-antenna]");
+  const evidenceFrequency = root.querySelector("[data-evidence-frequency]");
+  const evidenceMode = root.querySelector("[data-evidence-mode]");
+  const evidencePower = root.querySelector("[data-evidence-power]");
+  const evidenceCallsign = root.querySelector("[data-evidence-callsign]");
+  const evidenceCadence = root.querySelector("[data-evidence-cadence]");
   const evidenceDetail = root.querySelector("[data-evidence-detail]");
   const conductorFeedback = root.querySelector("[data-conductor-feedback]");
   const conductorFeedbackMessage = root.querySelector("[data-conductor-feedback-message]");
@@ -1048,6 +1053,13 @@ function mount(root, browserWindow) {
       evidenceSlot.value,
       evidenceAntenna.value,
       evidenceDetail.value,
+      readSignalEvidenceFields(
+        evidenceFrequency,
+        evidenceMode,
+        evidencePower,
+        evidenceCallsign,
+        evidenceCadence,
+      ),
     ));
   });
 
@@ -1069,6 +1081,13 @@ function mount(root, browserWindow) {
       evidenceKind.value,
       evidenceAntenna.value,
       evidenceDetail.value,
+      readSignalEvidenceFields(
+        evidenceFrequency,
+        evidenceMode,
+        evidencePower,
+        evidenceCallsign,
+        evidenceCadence,
+      ),
     );
     await submitConductorAction({
       kind: "replace_event",
@@ -1442,6 +1461,15 @@ function renderSlot(container, slot, root) {
     ? `Actual: ${slot.actualAntenna}`
     : `Actual: not confirmed · ${humanizeIdentifier(slot.evidenceStatus)}`;
   container.append(title, timing, actual);
+  if (slot.plannedSignal) {
+    const plannedSignal = root.createElement("p");
+    plannedSignal.textContent = `Planned signal: ${slot.plannedSignal.mode.toUpperCase()} · ${slot.plannedSignal.frequencyHz} Hz · ${slot.plannedSignal.transmittedCallsign}`;
+    const actualSignal = root.createElement("p");
+    actualSignal.textContent = slot.actualSignal
+      ? `Actual signal: ${slot.actualSignal.mode?.toUpperCase() ?? "mode unconfirmed"} · ${slot.actualSignal.frequencyHz ?? "frequency unconfirmed"} Hz · ${slot.actualSignal.transmittedCallsign ?? "callsign unconfirmed"} · ${humanizeIdentifier(slot.signalStatus)}`
+      : `Actual signal: not confirmed · ${humanizeIdentifier(slot.signalStatus)}`;
+    container.append(plannedSignal, actualSignal);
+  }
 }
 
 function replaceSelectOptions(select, options) {
@@ -1484,12 +1512,37 @@ function conductorEventElement(root, event, disabled) {
   return article;
 }
 
-function readEvidenceAction(kind, slotId, antennaLabel, detail) {
+function optionalNumber(value) {
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : Number(trimmed);
+}
+
+function readSignalEvidenceFields(frequency, mode, power, callsign, cadence) {
+  return {
+    frequencyHz: optionalNumber(frequency.value),
+    mode: mode.value || null,
+    powerWatts: optionalNumber(power.value),
+    transmittedCallsign: callsign.value,
+    cadenceFollowed: cadence.value === "" ? null : cadence.value === "true",
+  };
+}
+
+export function readEvidenceAction(kind, slotId, antennaLabel, detail, signal = {}) {
   switch (kind) {
     case "confirm_antenna": return {
       kind,
       slotId,
       antennaLabel,
+      note: detail,
+    };
+    case "confirm_signal": return {
+      kind,
+      slotId,
+      frequencyHz: signal.frequencyHz ?? null,
+      mode: signal.mode ?? null,
+      powerWatts: signal.powerWatts ?? null,
+      transmittedCallsign: signal.transmittedCallsign ?? "",
+      cadenceFollowed: signal.cadenceFollowed ?? null,
       note: detail,
     };
     case "mark_missed": return { kind, slotId, reason: detail };
@@ -1499,9 +1552,18 @@ function readEvidenceAction(kind, slotId, antennaLabel, detail) {
   }
 }
 
-function readEvidenceReplacement(kind, antennaLabel, detail) {
+export function readEvidenceReplacement(kind, antennaLabel, detail, signal = {}) {
   switch (kind) {
     case "confirm_antenna": return { kind, antennaLabel, note: detail };
+    case "confirm_signal": return {
+      kind,
+      frequencyHz: signal.frequencyHz ?? null,
+      mode: signal.mode ?? null,
+      powerWatts: signal.powerWatts ?? null,
+      transmittedCallsign: signal.transmittedCallsign ?? "",
+      cadenceFollowed: signal.cadenceFollowed ?? null,
+      note: detail,
+    };
     case "mark_missed": return { kind, reason: detail };
     case "mark_bad": return { kind, reason: detail };
     case "add_note": return { kind, note: detail };
