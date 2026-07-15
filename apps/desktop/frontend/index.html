@@ -244,6 +244,7 @@
             <p class="lede">Bundle operations will stay behind narrow Rust services. The webview receives no general filesystem authority.</p>
             <div class="action-list">
               <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report without changing the source.</p></div><button class="primary-action" type="button" data-open-session>Choose bundle</button></article>
+              <article><div><span>Import evidence</span><h2>Add a WSPR.live JSON response</h2><p><a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> is a volunteer WSPRnet mirror. AntennaBench repeats the active session’s callsign, half-open schedule window, bands, and WSPR-2 filter locally; it makes no network request.</p><label class="authority-confirmation"><input type="checkbox" data-import-authority> I confirm I may use the supplied response for this session.</label></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Confirm source authority first</button></article>
               <article><div><span>Export</span><h2>Copy the active bundle</h2><p>Preserve the original durable files and attachments losslessly.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
             </div>
             <div class="open-feedback" data-open-feedback hidden role="status" aria-live="polite">
@@ -253,6 +254,10 @@
             <div class="open-feedback" data-export-feedback hidden role="status" aria-live="polite">
               <span class="feedback-mark" aria-hidden="true"></span>
               <div><strong data-export-feedback-message></strong><p data-export-feedback-detail></p></div>
+            </div>
+            <div class="open-feedback" data-import-feedback hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div><strong data-import-feedback-message></strong><p data-import-feedback-detail></p></div>
             </div>
           </section>
 

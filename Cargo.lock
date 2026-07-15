@@ -134,6 +134,7 @@ dependencies = [
  "antennabench-storage",
  "chrono",
  "insta",
+ "reqwest 0.12.24",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",

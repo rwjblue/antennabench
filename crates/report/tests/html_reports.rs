@@ -5,8 +5,9 @@ use antennabench_core::{
     normalize_bundle, Band, ObservationKind, RecordSource, SessionLifecycleV2,
 };
 use antennabench_report::{
-    build_report, render_standalone_html, ReportAdapterEvidence, ReportLifecycleEvent,
-    ReportLifecycleEventKind, ReportNotice, ReportSnapshotContext, SessionReport,
+    build_report, render_standalone_html, ReportAdapterEvidence, ReportImportedEvidence,
+    ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice, ReportSnapshotContext,
+    SessionReport,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -79,9 +80,27 @@ fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
             unsupported_count: 0,
             filtered_count: 1,
             duplicate_count: 1,
+            conflict_count: 1,
             partially_normalized_count: 1,
             gap_count: 1,
             evidence_complete: false,
+            imports: vec![ReportImportedEvidence {
+                provider_id: "wspr-live".into(),
+                source_id: "wsprnet-spots-mirror".into(),
+                captured_at: "2026-07-14T22:05:00Z".parse().unwrap(),
+                window_start: "2026-07-14T21:00:00Z".parse().unwrap(),
+                window_end: "2026-07-14T22:00:00Z".parse().unwrap(),
+                selected_bands: vec![Band::M20],
+                total_count: 6,
+                accepted_count: 2,
+                malformed_count: 1,
+                filtered_count: 1,
+                unsupported_count: 0,
+                duplicate_count: 1,
+                conflict_count: 1,
+                observations_created: 2,
+                completeness_known: false,
+            }],
         },
     };
 
@@ -89,7 +108,9 @@ fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
     assert!(html.contains("Committed session snapshot"));
     assert!(html.contains("<dt>Checkpoint revision</dt><dd>17</dd>"));
     assert!(html.contains("Interrupted / in progress"));
-    assert!(html.contains("Incomplete: 1 explicit acquisition gap(s)"));
+    assert!(html.contains("1 import(s) with unknown source completeness"));
+    assert!(html.contains("wspr-live / wsprnet-spots-mirror"));
+    assert!(html.contains("half-open window"));
     assert!(html.contains("Lifecycle and interruption history"));
     assert!(html.contains("recovered &lt;without inventing evidence&gt;"));
 }

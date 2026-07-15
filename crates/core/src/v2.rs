@@ -238,6 +238,7 @@ pub enum AdapterDisposition {
     Malformed,
     Filtered,
     Duplicate,
+    Conflict,
     Unsupported,
     PartiallyNormalized,
 }

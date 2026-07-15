@@ -52,6 +52,11 @@ Implemented:
 - Optional bounded loopback WSJT-X reception with expected-client admission,
   raw generic adapter evidence, atomically linked local-decode observations,
   typed status, and fail-closed acquisition gaps.
+- Offline WSPR.live ClickHouse `FORMAT JSON` import through a narrow native
+  picker, with explicit source-authority confirmation, repeated session
+  filters, exact-response attachments, provider-ID duplicate/conflict replay,
+  atomically linked imported-spot observations, and unknown-completeness report
+  disclosure. AntennaBench does not query WSPR.live directly.
 - An unattended desktop integration path that verifies canonical open, report,
   lossless export, cancellation, typed failure, and reopen behavior without
   launching a window or taking foreground input.

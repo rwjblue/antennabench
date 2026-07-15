@@ -2,6 +2,8 @@
 
 Date: 2026-07-14
 
+Amended: 2026-07-15
+
 ## Decision
 
 AntennaBench will introduce transmit-path WSPR public reports through a
@@ -18,6 +20,52 @@ private local reports, or every downstream use that the license permits. A live
 WSPR.live transport therefore requires written clarification from its operator
 covering installed applications, retained local evidence, private reports,
 attribution, and commercial-capable distribution.
+
+## 2026-07-15 Usage Determination And Automatic Follow-Up
+
+The project owner has determined that AntennaBench's intended WSPR.live use is
+within the service's published terms: it is an explicitly initiated,
+noncommercial amateur-radio research workflow; AntennaBench and its research
+functionality are freely available; neither the query service nor derived
+results are sold; and the product identifies and attributes WSPR.live. This is
+the project's usage determination, not a representation that the WSPR.live
+operator granted terms beyond those currently published. It must be revisited
+before any commercial or profit-oriented use, paid result access, materially
+different redistribution, or change to the published source terms.
+
+That determination resolves the product-owner authorization gate for the
+bounded read-only transport tracked by
+[#85](https://github.com/rwjblue/antennabench/issues/85). The original
+import-first sequencing remains useful and complete: exact response handling,
+normalization, replay, atomic persistence, reporting, and manual recovery are
+established before network orchestration is added.
+For this narrowly defined workflow, the amendment supersedes the earlier
+requirement for separate written clarification from the service operator.
+
+WSPR.live documents that its scraper checks WSPRnet every few minutes, while
+its exporter describes real-time rows as delayed by a few minutes. It also
+runs a daily reconciliation for missed or late reports. There is no published
+maximum ingestion latency or completeness watermark. Automatic acquisition
+therefore uses the operator's existing antenna confirmation as its authority
+and trigger, without a second fetch/import action:
+
+- confirming the antenna after a completed segment enqueues one acquisition;
+- the acquisition waits a fixed five-minute ingestion grace period;
+- each query overlaps cumulatively from the schedule start through the latest
+  confirmed completed segment, so later fetches can recover late prior rows;
+- due acquisitions are coalesced to the latest eligible segment and provider
+  IDs make repeated rows deterministic duplicates;
+- only one request may be in flight, with at least ten seconds between
+  requests and no automatic transport retry; and
+- completing the final segment enters a finalizing presentation state, runs
+  the final delayed cumulative acquisition, then ends normally without a
+  separate spot-fetch click. A transport failure remains visible and offers
+  explicit retry or end-without-spots recovery.
+
+Five minutes is a conservative product grace period, not a source guarantee.
+Reports continue to label WSPR.live completeness unknown. Manual JSON import
+remains available as an offline and recovery escape hatch rather than the
+normal workflow.
 
 AntennaBench will not scrape WSPRnet's HTML database pages. WSPRnet is the
 authoritative upload destination used by WSJT-X, but its anonymous public

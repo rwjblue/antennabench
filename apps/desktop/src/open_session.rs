@@ -8,16 +8,17 @@ use std::{
 
 use antennabench_analysis::AnalysisError;
 use antennabench_core::{
-    normalize_bundle, AdapterDisposition, BundleContents, BundleValidationError,
-    BundleValidationReport, OperatorEventPayloadV2, SessionLifecycleV2, V1_BUNDLE_SUFFIX,
-    V2_BUNDLE_SUFFIX,
+    normalize_bundle, AdapterDisposition, AdapterInput, Band, BundleContents,
+    BundleValidationError, BundleValidationReport, OperatorEventPayloadV2, SessionLifecycleV2,
+    V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence, ReportCompleteness,
-    ReportError, ReportLifecycleEvent, ReportLifecycleEventKind, ReportSnapshotContext,
+    ReportError, ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind,
+    ReportSnapshotContext,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use thiserror::Error;
@@ -66,6 +67,31 @@ pub(crate) fn with_foreground_operation<T>(
 ) -> Result<T, SessionErrorPayload> {
     let _foreground = state.begin_foreground()?;
     operation()
+}
+
+pub(crate) fn reload_active_session(
+    state: &ActiveSessionState,
+    source: &Path,
+) -> Result<OpenedSession, SessionErrorPayload> {
+    let refreshed = open_bundle(source).map_err(SessionErrorPayload::from)?;
+    let summary = refreshed.summary.clone();
+    let mut desktop = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    if desktop
+        .active
+        .as_ref()
+        .is_some_and(|session| session.source != source)
+    {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The active session changed while WSPR.live evidence was importing.",
+            "the import remains committed to the originally selected session",
+        ));
+    }
+    desktop.active = Some(refreshed);
+    Ok(summary)
 }
 
 impl Drop for ForegroundGuard<'_> {
@@ -485,13 +511,25 @@ fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapsh
             AdapterDisposition::Unsupported => adapter.unsupported_count += 1,
             AdapterDisposition::Filtered => adapter.filtered_count += 1,
             AdapterDisposition::Duplicate => adapter.duplicate_count += 1,
+            AdapterDisposition::Conflict => adapter.conflict_count += 1,
             AdapterDisposition::PartiallyNormalized => adapter.partially_normalized_count += 1,
         }
         if record.record_type == "acquisition_gap" {
             adapter.gap_count += 1;
         }
+        if record.record_type == "wspr_live_import_summary" {
+            if let AdapterInput::Inline { data, .. } = &record.input {
+                if let Ok(import) = serde_json::from_str::<WsprLiveReportImport>(data) {
+                    adapter.imports.push(import.into_report());
+                }
+            }
+        }
     }
-    adapter.evidence_complete = adapter.gap_count == 0;
+    adapter.evidence_complete = adapter.gap_count == 0
+        && adapter
+            .imports
+            .iter()
+            .all(|import| import.completeness_known);
     let lifecycle_events = bundle
         .events
         .iter()
@@ -530,6 +568,52 @@ fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapsh
         lifecycle: Some(bundle.session_state.lifecycle),
         lifecycle_events,
         adapter_evidence: adapter,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WsprLiveReportImport {
+    provider_id: String,
+    source_id: String,
+    captured_at: chrono::DateTime<chrono::Utc>,
+    window_start: chrono::DateTime<chrono::Utc>,
+    window_end: chrono::DateTime<chrono::Utc>,
+    selected_bands: Vec<Band>,
+    completeness: String,
+    counts: WsprLiveReportCounts,
+}
+
+#[derive(Debug, Deserialize)]
+struct WsprLiveReportCounts {
+    total: usize,
+    accepted: usize,
+    malformed: usize,
+    filtered: usize,
+    unsupported: usize,
+    duplicate: usize,
+    conflict: usize,
+    observations_created: usize,
+}
+
+impl WsprLiveReportImport {
+    fn into_report(self) -> ReportImportedEvidence {
+        ReportImportedEvidence {
+            provider_id: self.provider_id,
+            source_id: self.source_id,
+            captured_at: self.captured_at,
+            window_start: self.window_start,
+            window_end: self.window_end,
+            selected_bands: self.selected_bands,
+            total_count: self.counts.total,
+            accepted_count: self.counts.accepted,
+            malformed_count: self.counts.malformed,
+            filtered_count: self.counts.filtered,
+            unsupported_count: self.counts.unsupported,
+            duplicate_count: self.counts.duplicate,
+            conflict_count: self.counts.conflict,
+            observations_created: self.counts.observations_created,
+            completeness_known: self.completeness == "known",
+        }
     }
 }
 

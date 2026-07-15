@@ -71,9 +71,32 @@ pub struct ReportAdapterEvidence {
     pub unsupported_count: usize,
     pub filtered_count: usize,
     pub duplicate_count: usize,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub conflict_count: usize,
     pub partially_normalized_count: usize,
     pub gap_count: usize,
     pub evidence_complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub imports: Vec<ReportImportedEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportImportedEvidence {
+    pub provider_id: String,
+    pub source_id: String,
+    pub captured_at: DateTime<Utc>,
+    pub window_start: DateTime<Utc>,
+    pub window_end: DateTime<Utc>,
+    pub selected_bands: Vec<Band>,
+    pub total_count: usize,
+    pub accepted_count: usize,
+    pub malformed_count: usize,
+    pub filtered_count: usize,
+    pub unsupported_count: usize,
+    pub duplicate_count: usize,
+    pub conflict_count: usize,
+    pub observations_created: usize,
+    pub completeness_known: bool,
 }
 
 impl Default for ReportAdapterEvidence {
@@ -85,11 +108,17 @@ impl Default for ReportAdapterEvidence {
             unsupported_count: 0,
             filtered_count: 0,
             duplicate_count: 0,
+            conflict_count: 0,
             partially_normalized_count: 0,
             gap_count: 0,
             evidence_complete: true,
+            imports: Vec::new(),
         }
     }
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -709,6 +709,10 @@ impl LiveSessionV2 {
         &self.bundle.session_state
     }
 
+    pub fn snapshot(&self) -> &BundleV2Contents {
+        &self.bundle
+    }
+
     pub fn allocate_id(&self, kind: &str) -> String {
         self.hooks.new_id(kind)
     }
@@ -808,6 +812,56 @@ impl LiveSessionV2 {
             mutation_id: mutation.mutation_id,
             idempotent: false,
         })
+    }
+
+    pub fn append_with_attachment(
+        &mut self,
+        bytes: &[u8],
+        media_type: &str,
+        encoding: Option<String>,
+        container: Option<String>,
+        source_locator: Option<String>,
+        build_mutation: impl FnOnce(AttachmentReference) -> LiveMutationV2,
+    ) -> Result<(AttachmentReference, CommitReceiptV2), LivePersistenceError> {
+        self.ensure_mutable()?;
+        let digest = sha256_hex(bytes);
+        let attachment_path = self.paths.attachments_dir.join("sha256").join(&digest);
+        let existed = fs::symlink_metadata(&attachment_path).is_ok();
+        let mut attachment =
+            durable_attachment(&self.store, &self.paths, bytes, media_type, source_locator)?;
+        attachment.encoding = encoding;
+        attachment.container = container;
+        let mutation = build_mutation(attachment.clone());
+        let mutation_id = mutation.mutation_id.clone();
+        match self.append(mutation) {
+            Ok(receipt) => Ok((attachment, receipt)),
+            Err(error) => {
+                let committed = self
+                    .bundle
+                    .session_state
+                    .last_committed_mutation_id
+                    .as_deref()
+                    == Some(mutation_id.as_str());
+                if !existed && !committed {
+                    remove_file_if_present(&attachment_path).map_err(|source| {
+                        live_io("remove uncommitted attachment", &attachment_path, source)
+                    })?;
+                    if let Some(parent) = attachment_path.parent() {
+                        sync_directory(parent).map_err(|source| {
+                            live_io("synchronize attachment rollback", parent, source)
+                        })?;
+                    }
+                    sync_directory(&self.paths.attachments_dir).map_err(|source| {
+                        live_io(
+                            "synchronize attachments rollback",
+                            &self.paths.attachments_dir,
+                            source,
+                        )
+                    })?;
+                }
+                Err(error)
+            }
+        }
     }
 
     pub fn commit_plan(

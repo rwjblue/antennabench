@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-import-active-session-wspr-live"
+description = "Enables the import_active_session_wspr_live command without any pre-configured scope."
+commands.allow = ["import_active_session_wspr_live"]
+
+[[permission]]
+identifier = "deny-import-active-session-wspr-live"
+description = "Denies the import_active_session_wspr_live command without any pre-configured scope."
+commands.deny = ["import_active_session_wspr_live"]

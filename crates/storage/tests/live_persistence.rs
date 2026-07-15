@@ -7,7 +7,7 @@ use std::{
 };
 
 use antennabench_core::{
-    EventTimeBasisV2, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
+    AdapterInput, EventTimeBasisV2, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
     OperatorEventPayloadV2, OperatorEventV2, Provenance, RecordMetaV2, RecordSource,
     SessionLifecycleV2, SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
 };
@@ -318,6 +318,53 @@ fn failure_between_raw_and_normalized_members_rolls_back_the_whole_batch() {
         .iter()
         .any(|record| record.observation_id == "observation-rolled-back"));
     assert!(store.read_v2().is_ok());
+}
+
+#[test]
+fn failed_attachment_mutation_removes_uncommitted_exact_response() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = ready_v2_store(temp.path());
+    let hooks = Arc::new(DeterministicHooks::new());
+    let mut writer = store.open_v2_writer_with_hooks(hooks.clone()).unwrap();
+    start_session(&mut writer);
+    let baseline = writer.checkpoint().revision;
+    let template = BundleStore::new(temp.path().join(format!("upgraded{V2_BUNDLE_SUFFIX}")))
+        .read_v2()
+        .unwrap();
+    let mut adapter = template.adapter_records[0].clone();
+    adapter.record_id = "adapter-attachment-rolled-back".into();
+    adapter.meta.mutation.member_index = 0;
+    adapter.normalized_records.clear();
+    let mut digest = None;
+
+    hooks.fail_once_at(LivePersistencePoint::BeforeStreamWrite(
+        LiveStreamV2::AdapterRecords,
+    ));
+    let error = writer
+        .append_with_attachment(
+            br#"{"rows":[]}"#,
+            "application/json",
+            None,
+            Some("clickhouse-format-json".into()),
+            Some("selected.json".into()),
+            |attachment| {
+                digest = Some(attachment.sha256.clone());
+                adapter.input = AdapterInput::Attachment { attachment };
+                LiveMutationV2 {
+                    expected_revision: baseline,
+                    mutation_id: "mutation-attachment-rollback".into(),
+                    members: vec![LiveMutationMemberV2::AdapterRecord(adapter)],
+                }
+            },
+        )
+        .unwrap_err();
+    assert!(matches!(error, LivePersistenceError::Io { .. }));
+    assert_eq!(writer.checkpoint().revision, baseline);
+    let attachment = store
+        .root()
+        .join("attachments/sha256")
+        .join(digest.unwrap());
+    assert!(!attachment.exists());
 }
 
 #[test]

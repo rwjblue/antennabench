@@ -88,7 +88,7 @@ not closed provider enums, so an unknown valid provider remains readable.
 
 `adapter-records.jsonl` replaces v1's provider-specific `wsjtx.jsonl`. Records
 contain capture/source times, provider record type, typed accepted, malformed,
-filtered, duplicate, unsupported, or partially-normalized disposition, stable
+filtered, duplicate, conflict, unsupported, or partially-normalized disposition, stable
 reason identity, normalized-record links, and attributed input. Input is
 exact/near-raw inline text or an attachment reference containing lowercase
 SHA-256, byte size, media type, encoding/container, and source locator.

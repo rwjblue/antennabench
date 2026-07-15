@@ -12,6 +12,7 @@ import {
   beginSetupCreation,
   beginSetupReview,
   beginWsjtxAction,
+  beginWsprLiveImport,
   conductorLoadSucceeded,
   conductorMutationFailed,
   editSessionSetup,
@@ -24,6 +25,7 @@ import {
   invokeCreateSessionFromReview,
   invokeExportSession,
   invokeExportActiveSessionReport,
+  invokeImportActiveSessionWsprLive,
   invokeOpenSession,
   invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
@@ -49,6 +51,9 @@ import {
   workflowFromHash,
   wsjtxActionFailed,
   wsjtxActionSucceeded,
+  wsprLiveImportCancelled,
+  wsprLiveImportFailed,
+  wsprLiveImportSucceeded,
 } from "../frontend/app.mjs";
 
 test("the shell starts in session setup", () => {
@@ -68,6 +73,9 @@ test("the shell starts in session setup", () => {
     exportError: null,
     exportNotice: null,
     exportedBundleName: null,
+    importStatus: "idle",
+    importError: null,
+    importNotice: null,
     setupStatus: "editing",
     setupReview: null,
     setupError: null,
@@ -415,6 +423,42 @@ test("export cancellation and typed errors do not replace the active session", (
   assert.equal(failed.session, active.session);
 });
 
+test("WSPR.live import preserves focused state and refreshes the active summary", () => {
+  const active = openSessionSucceeded(initialState("transfer"), {
+    sessionId: "session-1",
+    lifecycle: "running",
+    observationCount: 2,
+    reportHtml: "old",
+  });
+  const loading = beginWsprLiveImport(active);
+  const imported = wsprLiveImportSucceeded(loading, {
+    status: "imported",
+    revision: 8,
+    observationsCreated: 3,
+    session: {
+      sessionId: "session-1",
+      lifecycle: "running",
+      revision: 8,
+      observationCount: 5,
+    },
+  });
+  const cancelled = wsprLiveImportCancelled(beginWsprLiveImport(active));
+  const failed = wsprLiveImportFailed(beginWsprLiveImport(active), {
+    kind: "validation",
+    message: "Invalid response.",
+    detail: "wrong projection",
+  });
+
+  assert.equal(loading.importStatus, "loading");
+  assert.equal(imported.importStatus, "ready");
+  assert.equal(imported.session.observationCount, 5);
+  assert.equal(imported.session.reportHtml, null);
+  assert.equal(imported.reportStatus, "unavailable");
+  assert.equal(cancelled.importNotice, "cancelled");
+  assert.equal(failed.importError.kind, "validation");
+  assert.equal(failed.session, active.session);
+});
+
 test("the frontend invokes only the narrow session commands", async () => {
   const calls = [];
   const invoke = async (...args) => {
@@ -431,6 +475,7 @@ test("the frontend invokes only the narrow session commands", async () => {
   const exported = await invokeExportSession(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
   const reportExported = await invokeExportActiveSessionReport(invoke);
+  const imported = await invokeImportActiveSessionWsprLive(invoke);
 
   assert.deepEqual(calls, [
     ["open_session_bundle"],
@@ -438,12 +483,14 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["export_active_session"],
     ["refresh_active_session_report"],
     ["export_active_session_report"],
+    ["import_active_session_wspr_live", { request: { authorityConfirmed: true } }],
   ]);
   assert.equal(result.status, "opened");
   assert.equal(report, "<!doctype html>");
   assert.equal(exported.status, "exported");
   assert.equal(refreshed.status, "exported");
   assert.equal(reportExported.status, "exported");
+  assert.equal(imported.status, "exported");
 });
 
 test("each declared workflow can become active without mutating prior state", () => {

@@ -2,6 +2,7 @@ mod conductor;
 mod open_session;
 mod setup;
 mod wsjtx_session;
+mod wspr_live_import;
 
 use conductor::{active_session_conductor, mutate_active_session_conductor, ConductorSessionState};
 use open_session::{
@@ -13,6 +14,7 @@ use wsjtx_session::{
     active_session_wsjtx_status, start_active_session_wsjtx, stop_active_session_wsjtx,
     WsjtxSessionState,
 };
+use wspr_live_import::import_active_session_wspr_live;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -34,7 +36,8 @@ pub fn run() {
             mutate_active_session_conductor,
             active_session_wsjtx_status,
             start_active_session_wsjtx,
-            stop_active_session_wsjtx
+            stop_active_session_wsjtx,
+            import_active_session_wspr_live
         ])
         .run(tauri::generate_context!())
         .expect("error while running the AntennaBench desktop shell");

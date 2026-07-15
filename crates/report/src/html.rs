@@ -116,13 +116,14 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         out,
         "Adapter evidence",
         &format!(
-            "{} records; {} accepted; {} malformed; {} unsupported; {} filtered; {} duplicate; {} partial",
+            "{} records; {} accepted; {} malformed; {} unsupported; {} filtered; {} duplicate; {} conflict; {} partial",
             snapshot.adapter_evidence.record_count,
             snapshot.adapter_evidence.accepted_count,
             snapshot.adapter_evidence.malformed_count,
             snapshot.adapter_evidence.unsupported_count,
             snapshot.adapter_evidence.filtered_count,
             snapshot.adapter_evidence.duplicate_count,
+            snapshot.adapter_evidence.conflict_count,
             snapshot.adapter_evidence.partially_normalized_count,
         ),
     );
@@ -132,12 +133,48 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         &if snapshot.adapter_evidence.evidence_complete {
             "Complete within recorded adapter scope".into()
         } else {
+            let unknown = snapshot
+                .adapter_evidence
+                .imports
+                .iter()
+                .filter(|import| !import.completeness_known)
+                .count();
             format!(
-                "Incomplete: {} explicit acquisition gap(s)",
-                snapshot.adapter_evidence.gap_count
+                "Incomplete or unknown: {} explicit acquisition gap(s); {} import(s) with unknown source completeness",
+                snapshot.adapter_evidence.gap_count, unknown
             )
         },
     );
+    for (index, import) in snapshot.adapter_evidence.imports.iter().enumerate() {
+        let bands = import
+            .selected_bands
+            .iter()
+            .map(|value| band(*value))
+            .collect::<Vec<_>>()
+            .join(", ");
+        fact(
+            out,
+            &format!("Imported evidence {}", index + 1),
+            &format!(
+                "{} / {}; captured {}; half-open window {} to {}; bands {}; {} rows: {} accepted, {} malformed, {} unsupported, {} filtered, {} duplicate, {} conflict; {} observations created; source completeness {}",
+                import.provider_id,
+                import.source_id,
+                timestamp(import.captured_at),
+                timestamp(import.window_start),
+                timestamp(import.window_end),
+                bands,
+                import.total_count,
+                import.accepted_count,
+                import.malformed_count,
+                import.unsupported_count,
+                import.filtered_count,
+                import.duplicate_count,
+                import.conflict_count,
+                import.observations_created,
+                if import.completeness_known { "known" } else { "unknown" },
+            ),
+        );
+    }
     out.push_str("</dl>");
     if !snapshot.lifecycle_events.is_empty() {
         out.push_str("<div class=\"table-wrap\"><table><caption>Lifecycle and interruption history</caption><thead><tr><th scope=\"col\">Event</th><th scope=\"col\">Time</th><th scope=\"col\">Detail</th></tr></thead><tbody>");

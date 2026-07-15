@@ -12,6 +12,7 @@ fn main() {
         "active_session_wsjtx_status",
         "start_active_session_wsjtx",
         "stop_active_session_wsjtx",
+        "import_active_session_wspr_live",
     ]);
 
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))

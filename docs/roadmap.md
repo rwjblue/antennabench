@@ -1,6 +1,6 @@
 # Roadmap
 
-Last reviewed: 2026-07-14
+Last reviewed: 2026-07-15
 
 ## Current
 
@@ -28,6 +28,9 @@ The current implementation focus is the bundle-first Rust foundation:
 - optional loopback WSJT-X orchestration with expected-client admission,
   atomic raw-evidence/observation checkpoint mutations, explicit non-observation
   dispositions, stale-heartbeat status, and fail-closed acquisition gaps
+- bounded offline WSPR.live ClickHouse JSON import with exact attachments,
+  provider-neutral provenance, replay/conflict evidence, and no production
+  network transport
 - one deterministic unattended setup-to-final-export scenario covering manual
   and synthetic evidence, retry/crash recovery, gap disclosure, report identity,
   collision safety, and checkpoint reopen without external processes or UI
@@ -93,7 +96,8 @@ Later tracks:
 - Import-first WSPR public reports, followed by live polling only after source
   access and usage terms are authorized
   ([Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
-  [#84](https://github.com/rwjblue/antennabench/issues/84)).
+  [#84](https://github.com/rwjblue/antennabench/issues/84),
+  [#85](https://github.com/rwjblue/antennabench/issues/85)).
 - Import-first RBN transmit evidence and its provider-specific experiment
   workflow ([#31](https://github.com/rwjblue/antennabench/issues/31)).
 - Safe hosted report viewing, upload validation, identity, and publishing

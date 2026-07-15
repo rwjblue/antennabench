@@ -18,6 +18,9 @@ export function initialState(workflow = "setup") {
       exportError: null,
       exportNotice: null,
       exportedBundleName: null,
+      importStatus: "idle",
+      importError: null,
+      importNotice: null,
       setupStatus: "editing",
       setupReview: null,
       setupError: null,
@@ -142,6 +145,9 @@ export function setupCreationSucceeded(state, session) {
     exportError: null,
     exportNotice: null,
     exportedBundleName: null,
+    importStatus: "idle",
+    importError: null,
+    importNotice: null,
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
@@ -179,6 +185,9 @@ export function openSessionSucceeded(state, session) {
     exportError: null,
     exportNotice: null,
     exportedBundleName: null,
+    importStatus: "idle",
+    importError: null,
+    importNotice: null,
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
@@ -238,6 +247,39 @@ export function exportSessionFailed(state, error) {
     exportError: normalizeOpenError(error),
     exportNotice: null,
     exportedBundleName: null,
+  };
+}
+
+export function beginWsprLiveImport(state) {
+  return { ...state, importStatus: "loading", importError: null, importNotice: null };
+}
+
+export function wsprLiveImportSucceeded(state, outcome) {
+  return {
+    ...state,
+    importStatus: "ready",
+    importError: null,
+    importNotice: outcome,
+    session: {
+      ...state.session,
+      ...outcome.session,
+      reportHtml: null,
+    },
+    reportStatus: "unavailable",
+    reportError: null,
+  };
+}
+
+export function wsprLiveImportCancelled(state) {
+  return { ...state, importStatus: "idle", importError: null, importNotice: "cancelled" };
+}
+
+export function wsprLiveImportFailed(state, error) {
+  return {
+    ...state,
+    importStatus: "error",
+    importError: normalizeOpenError(error),
+    importNotice: null,
   };
 }
 
@@ -333,6 +375,10 @@ export function invokeExportActiveSessionReport(invoke) {
 
 export function invokeExportSession(invoke) {
   return invoke("export_active_session");
+}
+
+export function invokeImportActiveSessionWsprLive(invoke, authorityConfirmed = true) {
+  return invoke("import_active_session_wspr_live", { request: { authorityConfirmed } });
 }
 
 export function invokeActiveSessionConductor(invoke) {
@@ -485,6 +531,8 @@ function mount(root, browserWindow) {
   const wsjtxDiagnostic = root.querySelector("[data-wsjtx-diagnostic]");
   const openButton = root.querySelector("[data-open-session]");
   const exportButton = root.querySelector("[data-export-session]");
+  const importWsprLiveButton = root.querySelector("[data-import-wspr-live]");
+  const importAuthority = root.querySelector("[data-import-authority]");
   const transferStatus = root.querySelector("[data-transfer-status]");
   const openFeedback = root.querySelector("[data-open-feedback]");
   const feedbackMessage = root.querySelector("[data-feedback-message]");
@@ -492,6 +540,9 @@ function mount(root, browserWindow) {
   const exportFeedback = root.querySelector("[data-export-feedback]");
   const exportFeedbackMessage = root.querySelector("[data-export-feedback-message]");
   const exportFeedbackDetail = root.querySelector("[data-export-feedback-detail]");
+  const importFeedback = root.querySelector("[data-import-feedback]");
+  const importFeedbackMessage = root.querySelector("[data-import-feedback-message]");
+  const importFeedbackDetail = root.querySelector("[data-import-feedback-detail]");
   const reportStatus = root.querySelector("[data-report-status]");
   const reportPlaceholder = root.querySelector("[data-report-placeholder]");
   const reportViewer = root.querySelector("[data-report-viewer]");
@@ -683,12 +734,23 @@ function mount(root, browserWindow) {
     openButton.disabled = state.openStatus === "loading";
     openButton.textContent = state.openStatus === "loading" ? "Opening…" : "Choose bundle";
     const exportLoading = state.exportStatus === "loading";
+    const importLoading = state.importStatus === "loading";
     exportButton.disabled = state.session === null || state.openStatus === "loading" || exportLoading;
     exportButton.textContent = state.session === null
       ? "Open a bundle first"
       : exportLoading
         ? "Exporting…"
         : "Export copy";
+    importWsprLiveButton.disabled = state.session?.lifecycle !== "running"
+      || !importAuthority.checked
+      || importLoading;
+    importWsprLiveButton.textContent = state.session?.lifecycle !== "running"
+      ? "Open a running session first"
+      : !importAuthority.checked
+        ? "Confirm source authority first"
+      : importLoading
+        ? "Importing…"
+        : "Choose WSPR.live JSON";
     transferStatus.textContent = transferStatusText(state);
     transferStatus.classList.toggle("muted", state.openStatus !== "ready");
 
@@ -708,6 +770,15 @@ function mount(root, browserWindow) {
       exportFeedbackMessage.textContent = exportFeedbackState.message;
       exportFeedbackDetail.textContent = exportFeedbackState.detail;
       exportFeedbackDetail.hidden = exportFeedbackState.detail.length === 0;
+    }
+
+    const importFeedbackState = importFeedbackModel(state);
+    importFeedback.hidden = importFeedbackState === null;
+    if (importFeedbackState) {
+      importFeedback.dataset.kind = importFeedbackState.kind;
+      importFeedbackMessage.textContent = importFeedbackState.message;
+      importFeedbackDetail.textContent = importFeedbackState.detail;
+      importFeedbackDetail.hidden = importFeedbackState.detail.length === 0;
     }
 
     const hasSession = state.session !== null;
@@ -1061,6 +1132,29 @@ function mount(root, browserWindow) {
     render();
   });
 
+  importWsprLiveButton.addEventListener("click", async () => {
+    if (state.session?.lifecycle !== "running" || state.importStatus === "loading") return;
+    state = beginWsprLiveImport(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      const outcome = await invokeImportActiveSessionWsprLive(invoke, importAuthority.checked);
+      if (outcome.status === "cancelled") {
+        state = wsprLiveImportCancelled(state);
+      } else if (outcome.status === "imported" && outcome.session) {
+        state = wsprLiveImportSucceeded(state, outcome);
+      } else {
+        throw new Error("The desktop command returned an unexpected response.");
+      }
+    } catch (error) {
+      state = wsprLiveImportFailed(state, error);
+    }
+    render();
+    if (state.importStatus === "ready") await refreshReport();
+  });
+  importAuthority.addEventListener("change", render);
+
   reportRefreshButton.addEventListener("click", refreshReport);
   reportExportButton.addEventListener("click", async () => {
     if (!state.session?.reportHtml || state.reportExportStatus === "loading") return;
@@ -1237,6 +1331,8 @@ function readEvidenceReplacement(kind, antennaLabel, detail) {
 }
 
 function transferStatusText(state) {
+  if (state.importStatus === "loading") return "Importing evidence";
+  if (state.importStatus === "error") return "Import failed";
   if (state.openStatus === "loading") return "Opening bundle";
   if (state.openStatus === "ready") return "Bundle open";
   if (state.openStatus === "error") return "Open failed";
@@ -1407,6 +1503,33 @@ function exportFeedbackModel(state) {
       kind: "ready",
       message: `${state.exportedBundleName} was exported and verified.`,
       detail: "The original bundle remains the active session.",
+    };
+  }
+  return null;
+}
+
+function importFeedbackModel(state) {
+  if (state.importStatus === "loading") {
+    return {
+      kind: "loading",
+      message: "Validating and committing WSPR.live evidence…",
+      detail: "The exact response and its bounded row dispositions commit under one checkpoint.",
+    };
+  }
+  if (state.importError) return { kind: "error", ...state.importError };
+  if (state.importNotice === "cancelled") {
+    return {
+      kind: "cancelled",
+      message: "WSPR.live import cancelled.",
+      detail: "The active session was not changed.",
+    };
+  }
+  if (state.importNotice) {
+    const result = state.importNotice;
+    return {
+      kind: "ready",
+      message: `${result.observationsCreated} imported spot observation(s) committed at revision ${result.revision}.`,
+      detail: `${result.total} rows: ${result.accepted} accepted, ${result.filtered} filtered, ${result.malformed} malformed, ${result.unsupported} unsupported, ${result.duplicate} duplicate, ${result.conflict} conflict. Source completeness is unknown.`,
     };
   }
   return null;
