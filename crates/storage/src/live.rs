@@ -387,6 +387,90 @@ impl BundleStore {
         Ok(destination_store)
     }
 
+    /// Creates a new checkpointed schema-v2 bundle without exposing partial
+    /// durable state at the selected destination.
+    ///
+    /// The complete bundle is written, synchronized, reopened, and checked
+    /// through the live-writer capability boundary in a sibling directory.
+    /// Only then is that directory published at the requested path.
+    pub fn create_v2_checkpointed(
+        &self,
+        bundle: &BundleV2Contents,
+    ) -> Result<(), LivePersistenceError> {
+        if fs::symlink_metadata(self.root()).is_ok() {
+            return Err(BundleStoreError::DestinationExists {
+                path: self.root().to_path_buf(),
+            }
+            .into());
+        }
+
+        let parent = self
+            .root()
+            .parent()
+            .ok_or_else(|| LivePersistenceError::Capability {
+                message: "a new live bundle requires a parent directory".into(),
+            })?;
+        let parent_metadata = fs::metadata(parent)
+            .map_err(|source| live_io("inspect creation parent", parent, source))?;
+        if !parent_metadata.is_dir() {
+            return Err(LivePersistenceError::Capability {
+                message: format!("creation parent {} is not a directory", parent.display()),
+            });
+        }
+
+        let staging = parent.join(format!(
+            ".antennabench-creating-{}.session.antennabundle",
+            Uuid::new_v4().simple()
+        ));
+        let staging_store = BundleStore::new(&staging);
+        let result = (|| {
+            staging_store.write_v2(bundle)?;
+            let paths = staging_store.v2_paths(&bundle.manifest.files)?;
+            for path in paths.root_files() {
+                sync_regular_file(path)
+                    .map_err(|source| live_io("synchronize new bundle file", path, source))?;
+            }
+            sync_directory(&staging)
+                .map_err(|source| live_io("synchronize new bundle directory", &staging, source))?;
+
+            // Opening the writer exercises the exact lock, replacement, and
+            // synchronization capability required by later mutations.
+            drop(staging_store.open_v2_writer()?);
+            let reopened = staging_store.read_v2_checkpointed()?;
+            if reopened != *bundle {
+                return Err(LivePersistenceError::CheckpointVerification {
+                    message: "newly created checkpointed bundle differs after reopen".into(),
+                });
+            }
+
+            let lock_path = staging.join(LOCK_FILE);
+            remove_file_if_present(&lock_path)
+                .map_err(|source| live_io("remove creation lock", &lock_path, source))?;
+            sync_directory(&staging)
+                .map_err(|source| live_io("synchronize creation lock cleanup", &staging, source))?;
+
+            if fs::symlink_metadata(self.root()).is_ok() {
+                return Err(BundleStoreError::DestinationExists {
+                    path: self.root().to_path_buf(),
+                }
+                .into());
+            }
+            publish_new_bundle(&staging, self.root())
+                .map_err(|source| live_io("publish new bundle", self.root(), source))?;
+            sync_directory(parent)
+                .map_err(|source| live_io("synchronize creation parent", parent, source))?;
+            Ok(())
+        })();
+
+        if result.is_err() && staging.exists() {
+            fs::remove_dir_all(&staging)
+                .map_err(|source| live_io("clean up failed bundle creation", &staging, source))?;
+            sync_directory(parent)
+                .map_err(|source| live_io("synchronize failed creation cleanup", parent, source))?;
+        }
+        result
+    }
+
     pub fn open_v2_writer(&self) -> Result<LiveSessionV2, LivePersistenceError> {
         self.open_v2_writer_with_hooks(Arc::new(SystemLivePersistenceHooks))
     }
@@ -2693,6 +2777,13 @@ fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Resul
     fs::rename(temp, current)
 }
 
+#[cfg(unix)]
+fn publish_new_bundle(staging: &Path, destination: &Path) -> io::Result<()> {
+    // The caller checks for an existing destination immediately before this
+    // same-volume rename. Existing paths are never intentionally replaced.
+    fs::rename(staging, destination)
+}
+
 #[cfg(windows)]
 fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Result<()> {
     let previous_temp = previous.with_extension("json.next");
@@ -2701,6 +2792,11 @@ fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Resul
     sync_regular_file(&previous_temp)?;
     move_file_write_through(&previous_temp, previous)?;
     move_file_write_through(temp, current)
+}
+
+#[cfg(windows)]
+fn publish_new_bundle(staging: &Path, destination: &Path) -> io::Result<()> {
+    move_file_write_through_without_replacement(staging, destination)
 }
 
 #[cfg(unix)]
@@ -2751,6 +2847,23 @@ fn write_synced_probe(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 #[cfg(windows)]
 fn move_file_write_through(source: &Path, destination: &Path) -> io::Result<()> {
+    move_file_write_through_with_flags(source, destination, true)
+}
+
+#[cfg(windows)]
+fn move_file_write_through_without_replacement(
+    source: &Path,
+    destination: &Path,
+) -> io::Result<()> {
+    move_file_write_through_with_flags(source, destination, false)
+}
+
+#[cfg(windows)]
+fn move_file_write_through_with_flags(
+    source: &Path,
+    destination: &Path,
+    replace_existing: bool,
+) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
     const MOVEFILE_REPLACE_EXISTING: u32 = 0x0000_0001;
@@ -2774,13 +2887,13 @@ fn move_file_write_through(source: &Path, destination: &Path) -> io::Result<()> 
         .encode_wide()
         .chain(Some(0))
         .collect::<Vec<_>>();
-    let result = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            destination.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
+    let flags = MOVEFILE_WRITE_THROUGH
+        | if replace_existing {
+            MOVEFILE_REPLACE_EXISTING
+        } else {
+            0
+        };
+    let result = unsafe { MoveFileExW(source.as_ptr(), destination.as_ptr(), flags) };
     if result == 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -2788,7 +2901,6 @@ fn move_file_write_through(source: &Path, destination: &Path) -> io::Result<()> 
     }
 }
 
-#[cfg(windows)]
 fn remove_file_if_present(path: &Path) -> io::Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),

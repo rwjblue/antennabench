@@ -70,6 +70,65 @@ impl LivePersistenceHooks for DeterministicHooks {
 }
 
 #[test]
+fn checkpointed_creation_publishes_only_a_verified_complete_bundle() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = ready_v2_store(temp.path());
+    let bundle = source.read_v2().unwrap();
+    let destination = temp.path().join(format!("created{V2_BUNDLE_SUFFIX}"));
+    let created = BundleStore::new(&destination);
+
+    created.create_v2_checkpointed(&bundle).unwrap();
+
+    assert_eq!(created.read_v2_checkpointed().unwrap(), bundle);
+    assert!(temp.path().read_dir().unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".antennabench-creating-")
+    }));
+}
+
+#[test]
+fn checkpointed_creation_preserves_existing_destinations_and_cleans_failures() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = ready_v2_store(temp.path());
+    let bundle = source.read_v2().unwrap();
+    let destination = temp.path().join(format!("existing{V2_BUNDLE_SUFFIX}"));
+    std::fs::create_dir(&destination).unwrap();
+    std::fs::write(destination.join("owner.txt"), b"keep me").unwrap();
+
+    let error = BundleStore::new(&destination)
+        .create_v2_checkpointed(&bundle)
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        LivePersistenceError::Store(
+            antennabench_storage::BundleStoreError::DestinationExists { .. }
+        )
+    ));
+    assert_eq!(
+        std::fs::read(destination.join("owner.txt")).unwrap(),
+        b"keep me"
+    );
+
+    let mut invalid = bundle;
+    invalid.station.callsign.clear();
+    let invalid_destination = temp.path().join(format!("invalid{V2_BUNDLE_SUFFIX}"));
+    assert!(BundleStore::new(&invalid_destination)
+        .create_v2_checkpointed(&invalid)
+        .is_err());
+    assert!(!invalid_destination.exists());
+    assert!(temp.path().read_dir().unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".antennabench-creating-")
+    }));
+}
+
+#[test]
 fn writer_lock_append_idempotency_and_plan_freeze_are_coherent() {
     let temp = tempfile::tempdir().unwrap();
     let store = ready_v2_store(temp.path());
