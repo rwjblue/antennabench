@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Verify and stage an existing native macOS application for release assembly"
+#USAGE arg "<app>" help="Path to AntennaBench.app"
+#USAGE arg "<target>" help="Native Rust target" {
+#USAGE   choices "aarch64-apple-darwin" "x86_64-apple-darwin"
+#USAGE }
+#USAGE flag "--trust-mode <mode>" default="local" help="local or release"
+#USAGE flag "--tag <tag>" help="Optional exact vMAJOR.MINOR.PATCH release tag"
+#USAGE flag "--runner-label <runner>" default="local" help="Expected native runner label"
+
+set -euo pipefail
+
+args=(stage --app "$usage_app" --target "$usage_target" --trust-mode "$usage_trust_mode" --runner-label "$usage_runner_label")
+if [[ -n "${usage_tag:-}" ]]; then
+  args+=(--tag "$usage_tag")
+fi
+node scripts/desktop-release.mjs "${args[@]}"

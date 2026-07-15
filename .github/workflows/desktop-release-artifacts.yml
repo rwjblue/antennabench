@@ -1,0 +1,96 @@
+name: Desktop release artifact probe
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "apps/desktop/**"
+      - "rust-toolchain.toml"
+      - "deny.toml"
+      - "scripts/desktop-release.mjs"
+      - "scripts/desktop-release.test.mjs"
+      - "scripts/validate-dependency-exceptions*"
+      - "scripts/validate-supply-chain*"
+      - ".github/dependency-exceptions.json"
+      - ".github/dependency-policy.json"
+      - ".mise/config.toml"
+      - ".mise/tasks/advisory-fresh"
+      - ".mise/tasks/dependency-policy"
+      - ".mise/tasks/desktop/release-*"
+      - ".mise/tasks/release-preflight"
+      - ".mise/tasks/supply-chain"
+      - ".mise/tasks/toolchain"
+      - ".github/workflows/desktop-release-artifacts.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "apps/desktop/**"
+      - "rust-toolchain.toml"
+      - "deny.toml"
+      - "scripts/desktop-release.mjs"
+      - "scripts/desktop-release.test.mjs"
+      - "scripts/validate-dependency-exceptions*"
+      - "scripts/validate-supply-chain*"
+      - ".github/dependency-exceptions.json"
+      - ".github/dependency-policy.json"
+      - ".mise/config.toml"
+      - ".mise/tasks/advisory-fresh"
+      - ".mise/tasks/dependency-policy"
+      - ".mise/tasks/desktop/release-*"
+      - ".mise/tasks/release-preflight"
+      - ".mise/tasks/supply-chain"
+      - ".mise/tasks/toolchain"
+      - ".github/workflows/desktop-release-artifacts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-artifacts-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Native artifact (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Run portable and unattended desktop verification
+        run: |
+          mise run test
+          mise run desktop:frontend-test
+          mise run desktop:e2e
+
+      - name: Build and verify native non-publishable artifact
+        run: mise run desktop:release-bundle -- "${{ matrix.target }}" --runner-label "${{ matrix.runner }}"
+
+      - name: Upload verified internal artifact input
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-release-input-${{ matrix.target }}
+          path: target/desktop-release/non-publishable/${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Assemble two verified native artifacts into a complete release set"
+#USAGE arg "<arm64>" help="Directory containing the arm64 artifact manifest"
+#USAGE arg "<intel>" help="Directory containing the Intel artifact manifest"
+#USAGE flag "--require-publishable" help="Reject unsigned or ad-hoc target artifacts"
+
+set -euo pipefail
+
+args=(assemble --input "$usage_arm64" --input "$usage_intel")
+if [[ "${usage_require_publishable:-false}" == "true" ]]; then
+  args+=(--require-publishable)
+fi
+node scripts/desktop-release.mjs "${args[@]}"

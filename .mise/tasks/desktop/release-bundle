@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Build and verify one native non-publishable macOS release artifact"
+#USAGE arg "<target>" help="Native Rust target to build" {
+#USAGE   choices "aarch64-apple-darwin" "x86_64-apple-darwin"
+#USAGE }
+#USAGE flag "--tag <tag>" help="Optional exact vMAJOR.MINOR.PATCH release tag"
+#USAGE flag "--runner-label <runner>" default="local" help="Expected native runner label"
+
+set -euo pipefail
+
+args=(build --target "$usage_target" --runner-label "$usage_runner_label")
+if [[ -n "${usage_tag:-}" ]]; then
+  args+=(--tag "$usage_tag")
+fi
+node scripts/desktop-release.mjs "${args[@]}"

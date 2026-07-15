@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Test desktop release parsing, naming, manifests, checksums, and cleanup"
+
+set -euo pipefail
+
+node --test scripts/desktop-release.test.mjs

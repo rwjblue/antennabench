@@ -310,8 +310,13 @@ The workflow uses dated GA labels: `ubuntu-24.04`, `macos-15`, and
 `windows-2025`. GitHub still updates those managed images in place. Green CI
 proves that the portable contract compiled and passed on the exact image
 recorded in the workflow log; it does not claim bit-for-bit reproducibility or
-declare a supported release platform or architecture. Release support,
-artifacts, signing, and publication remain separate decisions.
+declare a supported release platform or architecture.
+
+The separate read-only desktop release artifact probe runs only when its
+inputs change, on demand, and after matching changes reach `main`. It uses the
+selected native `macos-15` arm64 and `macos-15-intel` runners, runs the portable
+and unattended checks, and retains each verified non-publishable artifact input
+for seven days. It cannot read release credentials or mutate tags and releases.
 
 ## Desktop Development
 
@@ -370,6 +375,104 @@ deterministically.
 `desktop:test` retains the focused Rust and pure JavaScript tests.
 `desktop:build` builds a debug application without producing installer bundles,
 and `desktop:dev` launches the static shell with Tauri's development server.
+
+## Desktop Release Artifact Construction
+
+The initial release contract supports macOS 15 and later with separate native
+Apple-silicon and Intel application archives. Xcode Command Line Tools and the
+Mise-managed tools listed above are the only local prerequisites for the
+non-secret build. Each architecture must be built on its matching native host:
+
+```bash
+# Apple silicon on macos-15 or a local arm64 Mac
+mise run desktop:release-bundle -- aarch64-apple-darwin
+
+# Intel on macos-15-intel or a local x86_64 Mac
+mise run desktop:release-bundle -- x86_64-apple-darwin
+```
+
+The optional `--tag vMAJOR.MINOR.PATCH` argument fails unless it exactly matches
+the Cargo workspace version. CI also passes `--runner-label macos-15` or
+`--runner-label macos-15-intel`; a mismatched native machine, runner, target,
+version, or tag fails before staging.
+
+The command first runs the single-toolchain check and the fresh non-secret
+`release-preflight`. It installs the explicit Rust target, then invokes Tauri
+in release mode with only `--bundles app`, `--ci`, and `--no-sign`. The build
+has a 30-minute timeout and never invokes the DMG bundler or Finder/AppleScript.
+Tauri inherits its version from the Cargo workspace, while its configuration
+pins the only bundle target to `app` and the minimum system version to macOS
+15.0.
+
+Before staging, the task verifies all of the following against the built app
+and again after a `ditto` ZIP extraction:
+
+- the product name, bundle identifier, short version, build version, and
+  minimum-system metadata;
+- the single Mach-O architecture and deployment target;
+- the exact target-derived archive name and archive structure;
+- the signature, hardened-runtime, timestamp, notarization, and Gatekeeper
+  classification appropriate to the selected trust mode; and
+- the archive byte size and SHA-256 digest.
+
+The normal build deliberately skips Developer ID signing. On Apple silicon the
+Mach-O may retain an ad-hoc linker signature, but the target manifest records
+`publishable: false`, the directory contains `NON_PUBLISHABLE.txt`, and output
+is isolated under:
+
+```text
+target/desktop-release/non-publishable/<target>/
+├── AntennaBench-<version>-<target>.zip
+├── artifact-manifest.json
+└── NON_PUBLISHABLE.txt
+```
+
+Staging uses a temporary sibling directory. The stable directory appears only
+after build, archive extraction, metadata verification, digest verification,
+and exact asset-set validation all pass. A failed or interrupted attempt
+removes both stale final output and partial staging output. Everything remains
+under ignored `target/`; credentials, application bundles, archives, and
+notarization material must never be committed.
+
+After both native jobs have produced target directories, combine them with:
+
+```bash
+mise run desktop:release-assemble -- \
+  target/desktop-release/non-publishable/aarch64-apple-darwin \
+  target/desktop-release/non-publishable/x86_64-apple-darwin
+```
+
+That command requires exactly one artifact for each selected target, identical
+versions, tags, and source commits, and matching manifest sizes and digests. It
+atomically creates the two ZIPs,
+`AntennaBench-<version>-release-manifest.json`, and the bytewise-sorted
+`AntennaBench-<version>-SHA256SUMS`. The checksum file covers both archives and
+the release manifest, but not itself. The assembled local set remains under
+`target/desktop-release/non-publishable/complete` and cannot pass
+`--require-publishable`.
+
+Issue #36 owns the credentialed layer. Its protected tag workflow will sign,
+notarize, and staple each `.app`, then call `desktop:release-stage` with
+`--trust-mode release` and assemble with `--require-publishable`. Release mode
+fails unless Developer ID authority, hardened runtime, secure timestamp,
+stapled notarization, strict code-signature validation, and Gatekeeper
+assessment all pass. Only that complete output may be attached to a draft
+GitHub Release.
+
+Run the platform-independent parsing, naming, manifest, checksum, unexpected
+asset, and failure-cleanup regressions with:
+
+```bash
+mise run desktop:release-test
+```
+
+For troubleshooting, inspect the command's first failing invariant. A host or
+runner mismatch requires the selected native machine; an embedded metadata or
+Mach-O deployment mismatch must be fixed at the Tauri/build boundary rather
+than renamed after the fact. A missing app indicates a Tauri build failure.
+Archive verification failures leave no stable target directory. Policy or
+advisory failures must be resolved through the maintained supply-chain process;
+they are not bypassed by the release task.
 
 The remaining native-picker smoke is optional release/platform verification,
 not routine regression testing. Run `mise run desktop:dev`, confirm the window
