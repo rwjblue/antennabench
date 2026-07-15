@@ -10,10 +10,10 @@ use antennabench_core::{
     reduce_operator_events_v3, validate_bundle_report, validate_lifecycle_transition_v2,
     validate_machine_identity, validate_operator_event_append_v2, AdapterRecordV2, AnalysisFile,
     AntennasFile, AttachmentReference, BundleManifestV2, BundleV2Contents, BundleV3Contents,
-    BundleValidationProfile, EventTimeBasisV2, MutationMember, ObservationRecordV2,
-    OperatorEventPayloadV2, OperatorEventV2, OperatorEventV3, PlanGenerationV2,
-    PropagationRecordV2, Provenance, RecordMetaV2, RecordSource, RigRecordV2, Schedule,
-    SessionLifecycleV2, SessionStateV2, Station, StreamCheckpointV2, SCHEMA_VERSION_V2,
+    BundleValidationProfile, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
+    ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2, OperatorEventV3,
+    PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RecordSource, RigRecordV2,
+    Schedule, SessionLifecycleV2, SessionStateV2, Station, StreamCheckpointV2, SCHEMA_VERSION_V2,
     SCHEMA_VERSION_V3,
 };
 use chrono::{DateTime, Utc};
@@ -294,6 +294,14 @@ pub struct LiveEventMutationV3 {
     pub expected_revision: u64,
     pub mutation_id: String,
     pub event: OperatorEventV3,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LiveEvidenceMutationV3 {
+    pub expected_revision: u64,
+    pub mutation_id: String,
+    pub adapter_records: Vec<AdapterRecordV2>,
+    pub observations: Vec<ObservationRecordV2>,
 }
 
 pub struct LiveSessionV3 {
@@ -1342,6 +1350,202 @@ impl LiveSessionV3 {
         self.frozen
     }
 
+    pub fn append_evidence(
+        &mut self,
+        mut mutation: LiveEvidenceMutationV3,
+    ) -> Result<CommitReceiptV2, LivePersistenceError> {
+        if self.frozen {
+            return Err(LivePersistenceError::ExternalModification {
+                message: "this handle is read-only after a persistence failure".into(),
+            });
+        }
+        let actual_state = read_state(&self.paths.session_state)?;
+        if actual_state != self.bundle.session_state {
+            self.frozen = true;
+            return Err(LivePersistenceError::ExternalModification {
+                message: "session-state.json changed since the writer snapshot".into(),
+            });
+        }
+        verify_exact_checkpoint(&self.store, &actual_state, &self.paths).inspect_err(|_| {
+            self.frozen = true;
+        })?;
+
+        if let Some(existing) = v3_committed_evidence(&self.bundle, &mutation.mutation_id) {
+            if same_v3_evidence_business_value(&existing, &mutation) {
+                return Ok(CommitReceiptV2 {
+                    revision: self.bundle.session_state.revision,
+                    mutation_id: mutation.mutation_id,
+                    idempotent: true,
+                });
+            }
+            return Err(LivePersistenceError::MutationConflict {
+                mutation_id: mutation.mutation_id,
+            });
+        }
+        if self
+            .bundle
+            .events
+            .iter()
+            .any(|event| event.meta.mutation.mutation_id == mutation.mutation_id)
+            || self
+                .bundle
+                .rig
+                .iter()
+                .any(|record| record.meta.mutation.mutation_id == mutation.mutation_id)
+            || self
+                .bundle
+                .propagation
+                .iter()
+                .any(|record| record.meta.mutation.mutation_id == mutation.mutation_id)
+        {
+            return Err(LivePersistenceError::MutationConflict {
+                mutation_id: mutation.mutation_id,
+            });
+        }
+        if mutation.expected_revision != self.bundle.session_state.revision {
+            return Err(LivePersistenceError::StaleRevision {
+                expected: mutation.expected_revision,
+                actual: self.bundle.session_state.revision,
+            });
+        }
+        prepare_v3_evidence(
+            &mut mutation,
+            &self.bundle.manifest.session_id,
+            self.hooks.now(),
+        )?;
+        validate_v3_evidence(&self.bundle, &mutation)?;
+        for record in &mutation.adapter_records {
+            if let antennabench_core::AdapterInput::Attachment { attachment } = &record.input {
+                self.store.read_attachment(attachment)?;
+            }
+        }
+
+        let mut candidate = self.bundle.clone();
+        candidate
+            .adapter_records
+            .extend(mutation.adapter_records.iter().cloned());
+        candidate
+            .observations
+            .extend(mutation.observations.iter().cloned());
+        BundleStore::refresh_v3_checkpoint(&mut candidate)?;
+        candidate.session_state.revision = self
+            .bundle
+            .session_state
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| LivePersistenceError::InvalidMutation {
+                message: "checkpoint revision overflowed".into(),
+            })?;
+        candidate.session_state.last_committed_mutation_id = Some(mutation.mutation_id.clone());
+        crate::v3::validate_v3_model(&candidate)?;
+
+        let adapter_bytes = serialize_v3_lines(&mutation.adapter_records, "adapter record")?;
+        let observation_bytes = serialize_v3_lines(&mutation.observations, "observation")?;
+        let serialized = [
+            (LiveStreamV2::AdapterRecords, adapter_bytes),
+            (LiveStreamV2::Observations, observation_bytes),
+        ]
+        .into_iter()
+        .filter(|(_, bytes)| !bytes.is_empty())
+        .collect::<Vec<_>>();
+        preflight_live_budget(&self.store, &self.bundle.session_state, &serialized)?;
+
+        let baseline = self.bundle.session_state.clone();
+        let operation = (|| {
+            for (stream, bytes) in &serialized {
+                append_line(
+                    stream_path(&self.paths, *stream),
+                    *stream,
+                    bytes,
+                    self.hooks.as_ref(),
+                )?;
+            }
+            commit_checkpoint(
+                self.store.root(),
+                &self.paths.session_state,
+                &candidate.session_state,
+                self.hooks.as_ref(),
+            )
+        })();
+        if let Err(error) = operation {
+            let committed = read_state(&self.paths.session_state)
+                .is_ok_and(|state| state.revision > baseline.revision);
+            if committed {
+                self.bundle = self.store.read_v3()?;
+            } else {
+                rollback_v3_streams(
+                    &self.paths,
+                    &baseline,
+                    &[LiveStreamV2::AdapterRecords, LiveStreamV2::Observations],
+                )?;
+            }
+            return Err(error);
+        }
+        self.bundle = candidate;
+        self.hooks
+            .check(LivePersistencePoint::BeforeAcknowledge)
+            .map_err(|source| live_io("acknowledge checkpoint", self.store.root(), source))?;
+        Ok(CommitReceiptV2 {
+            revision: self.bundle.session_state.revision,
+            mutation_id: mutation.mutation_id,
+            idempotent: false,
+        })
+    }
+
+    pub fn append_evidence_with_attachment(
+        &mut self,
+        bytes: &[u8],
+        media_type: &str,
+        encoding: Option<String>,
+        container: Option<String>,
+        source_locator: Option<String>,
+        build_mutation: impl FnOnce(AttachmentReference) -> LiveEvidenceMutationV3,
+    ) -> Result<(AttachmentReference, CommitReceiptV2), LivePersistenceError> {
+        if self.frozen {
+            return Err(LivePersistenceError::ExternalModification {
+                message: "this handle is read-only after a persistence failure".into(),
+            });
+        }
+        let digest = sha256_hex(bytes);
+        let attachment_path = self.paths.attachments_dir.join("sha256").join(&digest);
+        let existed = fs::symlink_metadata(&attachment_path).is_ok();
+        let mut attachment =
+            durable_attachment(&self.store, &self.paths, bytes, media_type, source_locator)?;
+        attachment.encoding = encoding;
+        attachment.container = container;
+        let mutation = build_mutation(attachment.clone());
+        let mutation_id = mutation.mutation_id.clone();
+        match self.append_evidence(mutation) {
+            Ok(receipt) => Ok((attachment, receipt)),
+            Err(error) => {
+                let committed = self
+                    .bundle
+                    .session_state
+                    .last_committed_mutation_id
+                    .as_deref()
+                    == Some(mutation_id.as_str());
+                if !existed && !committed {
+                    remove_file_if_present(&attachment_path).map_err(|source| {
+                        live_io("remove uncommitted attachment", &attachment_path, source)
+                    })?;
+                    if let Some(parent) = attachment_path.parent() {
+                        sync_directory(parent).map_err(|source| {
+                            live_io("synchronize attachment rollback", parent, source)
+                        })?;
+                    }
+                    sync_directory(&self.paths.attachments_dir).map_err(|source| {
+                        live_io(
+                            "synchronize attachments rollback",
+                            &self.paths.attachments_dir,
+                            source,
+                        )
+                    })?;
+                }
+                Err(error)
+            }
+        }
+    }
+
     pub fn append_event(
         &mut self,
         mut mutation: LiveEventMutationV3,
@@ -1505,6 +1709,258 @@ impl LiveSessionV3 {
             idempotent: false,
         })
     }
+}
+
+fn prepare_v3_evidence(
+    mutation: &mut LiveEvidenceMutationV3,
+    session_id: &str,
+    recorded_at: DateTime<Utc>,
+) -> Result<(), LivePersistenceError> {
+    if validate_machine_identity(&mutation.mutation_id).is_err()
+        || mutation.adapter_records.is_empty()
+    {
+        return Err(LivePersistenceError::InvalidMutation {
+            message: "evidence mutation requires a bounded identity and adapter records".into(),
+        });
+    }
+    let member_count = u32::try_from(mutation.adapter_records.len() + mutation.observations.len())
+        .map_err(|_| LivePersistenceError::InvalidMutation {
+            message: "evidence mutation has too many members".into(),
+        })?;
+    for (index, record) in mutation.adapter_records.iter_mut().enumerate() {
+        prepare_v3_evidence_meta(
+            &mut record.meta,
+            &record.record_id,
+            session_id,
+            &mutation.mutation_id,
+            u32::try_from(index).expect("member count fits u32"),
+            member_count,
+            recorded_at,
+        )?;
+    }
+    for (offset, record) in mutation.observations.iter_mut().enumerate() {
+        prepare_v3_evidence_meta(
+            &mut record.meta,
+            &record.observation_id,
+            session_id,
+            &mutation.mutation_id,
+            u32::try_from(mutation.adapter_records.len() + offset).expect("member count fits u32"),
+            member_count,
+            recorded_at,
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_v3_evidence_meta(
+    meta: &mut RecordMetaV2,
+    record_id: &str,
+    session_id: &str,
+    mutation_id: &str,
+    member_index: u32,
+    member_count: u32,
+    recorded_at: DateTime<Utc>,
+) -> Result<(), LivePersistenceError> {
+    if validate_machine_identity(record_id).is_err() {
+        return Err(LivePersistenceError::InvalidMutation {
+            message: "evidence record identities must be bounded nonempty ASCII".into(),
+        });
+    }
+    meta.schema_version = SCHEMA_VERSION_V3;
+    meta.session_id = session_id.into();
+    meta.recorded_at = recorded_at;
+    meta.mutation = MutationMember {
+        mutation_id: mutation_id.into(),
+        member_index,
+        member_count,
+    };
+    Ok(())
+}
+
+fn validate_v3_evidence(
+    bundle: &BundleV3Contents,
+    mutation: &LiveEvidenceMutationV3,
+) -> Result<(), LivePersistenceError> {
+    if matches!(
+        bundle.session_state.lifecycle,
+        SessionLifecycleV2::Draft | SessionLifecycleV2::Ready
+    ) {
+        return Err(LivePersistenceError::InvalidMutation {
+            message: "adapter evidence may append only after the session has started".into(),
+        });
+    }
+    let mut ids = bundle
+        .events
+        .iter()
+        .map(|record| record.event_id.as_str())
+        .chain(
+            bundle
+                .adapter_records
+                .iter()
+                .map(|record| record.record_id.as_str()),
+        )
+        .chain(
+            bundle
+                .observations
+                .iter()
+                .map(|record| record.observation_id.as_str()),
+        )
+        .chain(bundle.rig.iter().map(|record| record.record_id.as_str()))
+        .chain(
+            bundle
+                .propagation
+                .iter()
+                .map(|record| record.record_id.as_str()),
+        )
+        .collect::<BTreeSet<_>>();
+    for record in &mutation.adapter_records {
+        if !ids.insert(&record.record_id) {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: format!("record identity {:?} is already present", record.record_id),
+            });
+        }
+        for link in &record.normalized_records {
+            if link.record_kind != NormalizedRecordKind::Observation
+                || !bundle
+                    .observations
+                    .iter()
+                    .chain(mutation.observations.iter())
+                    .any(|observation| observation.observation_id == link.record_id)
+            {
+                return Err(LivePersistenceError::InvalidMutation {
+                    message: format!(
+                        "adapter record {:?} has a missing normalized observation link",
+                        record.record_id
+                    ),
+                });
+            }
+        }
+    }
+    for record in &mutation.observations {
+        if !ids.insert(&record.observation_id) {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: format!(
+                    "record identity {:?} is already present",
+                    record.observation_id
+                ),
+            });
+        }
+        if record.adapter_record_ids.is_empty()
+            || !record.adapter_record_ids.iter().all(|adapter_id| {
+                bundle
+                    .adapter_records
+                    .iter()
+                    .chain(mutation.adapter_records.iter())
+                    .any(|adapter| adapter.record_id == *adapter_id)
+            })
+        {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: format!(
+                    "observation {:?} has missing adapter backlinks",
+                    record.observation_id
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn v3_committed_evidence(
+    bundle: &BundleV3Contents,
+    mutation_id: &str,
+) -> Option<LiveEvidenceMutationV3> {
+    let adapter_records = bundle
+        .adapter_records
+        .iter()
+        .filter(|record| record.meta.mutation.mutation_id == mutation_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    let observations = bundle
+        .observations
+        .iter()
+        .filter(|record| record.meta.mutation.mutation_id == mutation_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    (!adapter_records.is_empty() || !observations.is_empty()).then(|| LiveEvidenceMutationV3 {
+        expected_revision: bundle.session_state.revision,
+        mutation_id: mutation_id.into(),
+        adapter_records,
+        observations,
+    })
+}
+
+fn same_v3_evidence_business_value(
+    existing: &LiveEvidenceMutationV3,
+    proposed: &LiveEvidenceMutationV3,
+) -> bool {
+    if existing.adapter_records.len() != proposed.adapter_records.len()
+        || existing.observations.len() != proposed.observations.len()
+    {
+        return false;
+    }
+    existing
+        .adapter_records
+        .iter()
+        .zip(&proposed.adapter_records)
+        .all(|(existing, proposed)| {
+            let mut proposed = proposed.clone();
+            proposed.meta = existing.meta.clone();
+            existing == &proposed
+        })
+        && existing
+            .observations
+            .iter()
+            .zip(&proposed.observations)
+            .all(|(existing, proposed)| {
+                let mut proposed = proposed.clone();
+                proposed.meta = existing.meta.clone();
+                existing == &proposed
+            })
+}
+
+fn serialize_v3_lines<T: Serialize>(
+    records: &[T],
+    label: &str,
+) -> Result<Vec<u8>, LivePersistenceError> {
+    let mut bytes = Vec::new();
+    for record in records {
+        serde_json::to_writer(&mut bytes, record).map_err(|source| {
+            LivePersistenceError::InvalidMutation {
+                message: format!("{label} serialization failed: {source}"),
+            }
+        })?;
+        bytes.push(b'\n');
+    }
+    Ok(bytes)
+}
+
+fn rollback_v3_streams(
+    paths: &ResolvedBundlePathsV2,
+    baseline: &SessionStateV2,
+    streams: &[LiveStreamV2],
+) -> Result<(), LivePersistenceError> {
+    for stream in streams {
+        let checkpoint = baseline
+            .streams
+            .get(stream.checkpoint_name())
+            .ok_or_else(|| LivePersistenceError::CheckpointVerification {
+                message: format!(
+                    "baseline checkpoint is missing {}",
+                    stream.checkpoint_name()
+                ),
+            })?;
+        let path = stream_path(paths, *stream);
+        let file = OpenOptions::new()
+            .write(true)
+            .open(path)
+            .map_err(|source| live_io("open schema-v3 evidence rollback", path, source))?;
+        file.set_len(checkpoint.committed_bytes)
+            .map_err(|source| live_io("truncate schema-v3 evidence rollback", path, source))?;
+        file.sync_all()
+            .map_err(|source| live_io("synchronize schema-v3 evidence rollback", path, source))?;
+    }
+    Ok(())
 }
 
 fn same_v3_event_business_value(existing: &OperatorEventV3, proposed: &OperatorEventV3) -> bool {
