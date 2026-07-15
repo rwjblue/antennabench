@@ -25,6 +25,9 @@ The current implementation focus is the bundle-first Rust foundation:
 - validated schema-v2 setup/bundle creation plus a complete manual/no-rig
   conductor with durable lifecycle, explicit actual-antenna evidence,
   append-only corrections, trusted schedule guidance, and restart recovery
+- optional loopback WSJT-X orchestration with expected-client admission,
+  atomic raw-evidence/observation checkpoint mutations, explicit non-observation
+  dispositions, stale-heartbeat status, and fail-closed acquisition gaps
 - a realistic, purpose-built synthetic canonical sample-report session spanning
   two antennas, two bands, usable and excluded evidence, and missing data
 - golden fixture coverage
@@ -48,7 +51,7 @@ validation, mutation/recovery, and bounded-resource policies are settled by
 and
 [Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md),
 validated setup, checkpointed bundle creation, and the complete manual/no-rig
-conductor are now shipped. Optional live adapter orchestration remains planned.
+conductor and bounded live WSJT-X orchestration are now shipped.
 
 The dependency-ordered implementation path is:
 
@@ -58,7 +61,8 @@ The dependency-ordered implementation path is:
    implemented (#53 and #54).
 3. Validated setup/bundle creation and the complete manual/no-rig conductor are
    implemented (#61 and #62).
-4. Bound adapter ingress and orchestrate live WSJT-X evidence (#56 and #63).
+4. Bounded adapter ingress and live WSJT-X evidence orchestration are
+   implemented (#56 and #63).
 5. Add granular evidence eligibility, bounded report/IPC behavior, and coherent
    live/final report refresh and export (#52, #57, and #64). The same-session
    presentation fix is tracked by #41.

@@ -214,17 +214,26 @@ Offline WSJT-X WSPR log import preserves every nonblank imported line in
 `observations.jsonl` local decodes. Malformed rows are retained as adapter
 records with issue details and do not produce observations.
 
-Live WSJT-X ingestion preserves the complete UDP datagram as lowercase hex plus
-its parsed known fields. Supported heartbeat, status, WSPR decode, and close
-messages become `wsjtx.jsonl` records. Unknown message types are ignored, and
-compatible fields appended after the known message layout are left in the
-preserved datagram without changing bundle schema version 1.
+Live WSJT-X parsing preserves the complete UDP datagram as lowercase hex plus
+its parsed known fields. In schema v1, supported heartbeat, status, WSPR decode,
+and close messages become `wsjtx.jsonl` records and unknown message types are
+ignored. In the shipped schema-v2 desktop orchestrator, every admitted datagram
+becomes generic `adapter-records.jsonl` evidence: supported messages are
+accepted, unknown messages are unsupported, malformed inputs are malformed,
+wrong-client inputs are filtered, and duplicate/partial outcomes retain their
+declared dispositions. Compatible trailing fields remain in the preserved
+datagram without changing the bundle schema.
 
 Only new, on-air, nonduplicate WSPR decodes from a client whose latest status is
 in WSPR mode and matches the session station callsign and grid become local
 observations. Replayed, off-air, duplicate, semantically invalid, or
 insufficiently identified decodes remain auditable WSJT-X records without an
 observation.
+
+An accepted decode and its observation share one mutation envelope and carry
+bidirectional adapter/normalized-record links. Acquisition resource gaps are
+durable partial adapter records when persistence remains possible; affected
+intake stops rather than silently treating a prefix as complete.
 
 ## Observation Slot Annotations
 

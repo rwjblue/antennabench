@@ -252,10 +252,9 @@ schema v2 + validation + bounded storage
 ```
 
 Schema and safety prerequisites are #46 and #50 through #57. The #61 validated
-setup/bundle-creation slice and #62 manual/no-rig conductor are implemented.
-Remaining product slices are #63 for live WSJT-X orchestration, #64 for
-coherent live/final report and export, and #65 for deterministic end-to-end
-coverage.
+setup/bundle-creation slice, #62 manual/no-rig conductor, and #63 bounded live
+WSJT-X orchestration are implemented. Remaining product slices are #64 for
+coherent live/final report and export and #65 for deterministic end-to-end coverage.
 The slices consume the checkpoint and event contracts; they do not define
 competing persistence, lifecycle, correction, or resource semantics.
 
@@ -279,9 +278,9 @@ optional bounded producer: admitted raw evidence and normalized observations
 commit together, and a resource or acquisition gap is explicit before affected
 intake stops. Reports, report export, and lossless bundle export select one
 verified checkpoint revision so derived views cannot mix live generations.
-Setup creation and manual/no-rig conduction are shipped behavior. Optional
-WSJT-X orchestration and live/final report refresh remain deferred to their
-focused issues.
+Setup creation, manual/no-rig conduction, and optional bounded WSJT-X
+orchestration are shipped behavior. Live/final report refresh remains deferred
+to its focused issue.
 
 ## Desktop Shell Boundary
 
@@ -305,6 +304,17 @@ and #54 lifecycle/correction reducers. Planned antenna labels remain guidance;
 only effective explicit confirmations populate actual state. Competing
 confirmation/missed/bad facts stay visibly conflicting and conservatively
 unresolved.
+
+The allowlisted `active_session_wsjtx_status`,
+`start_active_session_wsjtx`, and `stop_active_session_wsjtx` commands expose
+only bounded status and loopback receiver intent. A Rust-owned task holds the
+UDP socket and expected-client filter. Each supported datagram becomes one
+checkpoint mutation containing its generic adapter record plus any linked
+observation; lost acknowledgement and stale-revision retries retain the same
+mutation. Malformed, unsupported, filtered, duplicate, and partial outcomes are
+also durable adapter records. Resource or persistence completeness gaps stop
+intake, and lifecycle interruption/termination or active-session replacement
+cannot leave an orphan receiver.
 
 The allowlisted `open_session_bundle` application command owns the native
 directory picker and composes storage, normalization, validation, report
@@ -439,8 +449,11 @@ The parser is pure. `LiveWsjtxIngest` owns the small per-client state machine
 for schema/version identity, current status, duplicate suppression, and client
 lifecycle. A close message or a gap longer than three heartbeat periods resets
 status and duplicate state. The synchronous UDP receiver only binds, receives,
-timestamps, and exposes explicit shutdown; orchestration remains the future
-desktop application's responsibility.
+timestamps, and exposes explicit shutdown. The desktop orchestrator now owns
+one loopback receiver task, admits one configured client identity, persists raw
+generic adapter evidence and linked observations through the schema-v2 writer,
+and exposes bounded status. Tests inject the documented datagrams directly
+below the socket, so routine orchestration verification opens no network socket.
 
 WSPRDecode carries a time-of-day rather than a date. The adapter reconstructs
 UTC by choosing the closest of the receipt date and its adjacent dates, using

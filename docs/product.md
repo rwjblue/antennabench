@@ -109,8 +109,8 @@ lossless export remains available.
 
 The local conductor is tracked by
 [#45](https://github.com/rwjblue/antennabench/issues/45). Validated local setup,
-bundle creation, and the complete manual/no-rig conductor are implemented.
-Optional live evidence and coherent live-report behavior remain split into
+bundle creation, the complete manual/no-rig conductor, and bounded live WSJT-X
+evidence are implemented. Coherent live-report behavior remains split into
 focused follow-up slices so the UI cannot outrun the durable, validation, and
 resource boundaries:
 
@@ -127,7 +127,12 @@ resource boundaries:
    actual-antenna confirmation, missed/bad/note facts, append-only correction,
    durable lifecycle transitions, and restart recovery (#62).
 4. Bounded WSJT-X ingress and desktop orchestration add live evidence without
-   making adapter health a lifecycle prerequisite (#56 and #63).
+   making adapter health a lifecycle prerequisite (#56 and #63). The optional
+   receiver binds only a numeric loopback address, admits one expected client,
+   and atomically commits raw datagram evidence with any normalized observation.
+   Malformed, unsupported, filtered, duplicate, and acquisition-gap outcomes
+   remain explicit; resource/persistence gaps stop intake without stopping the
+   manual conductor.
 5. Granular evidence eligibility and bounded report/IPC behavior feed coherent
    live and final reports and exports (#52, #57, and #64).
 6. A deterministic unattended scenario proves creation through interruption,
@@ -150,6 +155,14 @@ retrying a lost response cannot duplicate evidence, while a stale revision
 fails without overwrite. Opening a session left running records one durable
 recovery-system interruption before resume/end actions are offered. Ended and
 abandoned sessions are terminal, and schema-v1 sources remain read-only.
+
+The active-run surface can start or stop one optional WSJT-X receiver while the
+session is running. Rust owns the socket, expected-client filter, bounded
+adapter state, raw hex preservation, slot annotation, retry identity, and
+checkpoint append. Interruption, terminal lifecycle, active-session
+replacement, adapter resource exhaustion, or an unrecordable persistence error
+stops affected intake. Receiver absence or failure never blocks operator
+evidence, lifecycle actions, or lossless export.
 
 All mutation, adapter, clock/identity, filesystem, and network authority stays
 behind focused Rust-owned commands. JavaScript presents typed drafts, actions,

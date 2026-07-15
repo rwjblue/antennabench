@@ -148,6 +148,12 @@ under `fixtures/wsjtx/udp/`; no operator capture or third-party spot data is
 committed. Loopback UDP coverage verifies only the receiver boundary. It does
 not require WSJT-X or network access during the test suite.
 
+Desktop orchestration tests inject that same heartbeat/status/decode sequence
+below the socket and exercise atomic adapter/observation persistence,
+malformed/unsupported/client-mismatch/duplicate dispositions, lost
+acknowledgement, stale heartbeat, resource-stop, lifecycle-stop, and restart
+status without binding a port. A real WSJT-X installation is never required.
+
 The optional NOAA SWPC adapter tests use reduced captured response shapes under
 `fixtures/noaa-swpc/`. They cover pure F10.7 and provisional estimated-Kp
 parsing, source envelopes, malformed/partial/stale input, deterministic record
@@ -295,7 +301,9 @@ creates an exact checkpointed schema-v2 setup, exercises cancellation and
 active-session replacement, then runs the production manual conductor through
 start, explicit actual-antenna evidence, correction/retraction, interruption,
 resume, end, idempotent lost-response retry, stale revision, and restart
-recovery. It also runs the Rust open, normalized validation, analysis, report
+recovery. It injects the captured WSJT-X sequence below the socket and verifies
+one atomic raw-evidence/observation mutation. It also runs the Rust open,
+normalized validation, analysis, report
 rendering, lossless export verification, and reopen path. The task asserts
 source non-mutation, exported tree/byte equality, complete setup publication,
 and terminal lifecycle enforcement, and separately covers normal open/export

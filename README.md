@@ -45,6 +45,12 @@ Implemented:
 - A Tauri desktop shell that opens existing directory bundles, validates and
   analyzes them without mutation, shows the local report in an isolated frame,
   and exports verified lossless copies through narrow Rust commands.
+- Validated schema-v2 session setup plus a complete manual/no-rig conductor
+  with durable lifecycle, explicit actual-antenna evidence, corrections,
+  restart recovery, and trusted schedule guidance.
+- Optional bounded loopback WSJT-X reception with expected-client admission,
+  raw generic adapter evidence, atomically linked local-decode observations,
+  typed status, and fail-closed acquisition gaps.
 - An unattended desktop integration path that verifies canonical open, report,
   lossless export, cancellation, typed failure, and reopen behavior without
   launching a window or taking foreground input.
@@ -53,7 +59,6 @@ Implemented:
 
 Not implemented yet:
 
-- WSJT-X live UDP adapter.
 - Rig control.
 - Public spot fetching.
 - Winner selection and advanced statistical analysis.
