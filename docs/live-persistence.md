@@ -1,13 +1,21 @@
-# Schema-V2 Live Persistence And Recovery
+# Live Persistence And Recovery
 
-Schema-v2 live mutation is owned by `antennabench-storage`. `LiveSessionV2`
-holds one OS-backed exclusive lock for its lifetime. Callers provide typed
-records and an expected checkpoint revision; the writer assigns the trusted
-capture time and mutation envelope, validates the complete batch, appends in a
-fixed order, synchronizes every changed stream, and promotes one checkpoint.
+This technical reference defines how an active session becomes durable and how
+AntennaBench recovers after interruption. Schema v2 owns the complete live
+mutation and recovery protocol; schema v3 reuses its checkpoint, locking, and
+verified snapshot boundaries for signal-plan sessions. For the bundle mental
+model, start with [Session Bundles](bundle-format.md).
+
+Live mutation is owned by `antennabench-storage`. A `LiveSessionV2` or
+`LiveSessionV3` holds one OS-backed exclusive lock for its lifetime. Callers
+provide typed records and an expected checkpoint revision; the writer assigns
+the trusted capture time and mutation envelope, validates the complete batch,
+appends in a fixed order, synchronizes every changed stream, and promotes one
+checkpoint.
 
 Schema-v1 bundles remain immutable inputs. They must be explicitly upgraded to
-`.session.antennabundle` before this API will mutate them.
+schema v2 or v3 in a new `.session.antennabundle` before these APIs will mutate
+them.
 
 ## Durable Layout
 
@@ -84,6 +92,11 @@ Static `read_v2()` remains useful for already quiescent bundles. Active report
 and export code should use the checkpointed APIs so one derived result cannot
 mix revisions.
 
+Schema v3 provides corresponding `read_v3_checkpointed()` and
+`export_v3_checkpointed_to()` boundaries. Its writer appends correctable
+operator events and attachment-backed adapter evidence plus observations while
+preserving the same expected-revision, digest, lock, and checkpoint rules.
+
 ## Recovery
 
 `BundleStore::recover_v2()` acquires the exclusive lock. It selects the highest
@@ -142,3 +155,8 @@ ignores the advisory lock, stale revisions, idempotent retry behavior,
 raw-plus-normalized batches, complete/torn/incomplete/duplicate/conflicting
 tails, current/previous checkpoint selection, committed corruption, plan
 freeze, recovery attachments, interruption detection, and checkpointed export.
+
+`crates/storage/tests/v3_live_persistence.rs` separately verifies schema-v3
+creation, checkpointed reads and exports, event and evidence appends,
+attachment rollback, stale revisions, conflicting mutation reuse, and external
+modification detection.

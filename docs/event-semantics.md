@@ -1,10 +1,14 @@
 # Operator Event Semantics
 
-Schema-v2 operator events are append-only evidence. The schedule says what was
-planned; only explicit effective operator evidence says what actually happened.
-The pure reducer is implemented independently of storage, Tauri, sockets, and
-hardware. The checkpoint writer, shipped manual conductor, and every reader use
-the same rules.
+This technical reference defines how AntennaBench records session lifecycle,
+operator actions, corrections, and observation eligibility. For the user-facing
+workflow, start with the [Product Overview](product.md).
+
+Schema-v2 and schema-v3 operator events are append-only evidence. The schedule
+says what was planned; only explicit effective operator evidence says what
+actually happened. The pure reducers are implemented independently of storage,
+Tauri, sockets, and hardware. The checkpoint writer, shipped manual conductor,
+and every reader use the same rules.
 
 ## Time And Identity
 
@@ -57,6 +61,8 @@ verified lifecycle was running.
 The correctable payloads are:
 
 - `antenna_state_confirmed`, with an explicit actual antenna label;
+- schema-v3 `signal_state_confirmed`, with actual frequency, mode, transmitted
+  identity, optional power, and cadence adherence kept separate from the plan;
 - `slot_missed`, meaning no trustworthy slot action/actual state was confirmed;
 - `slot_bad`, with the reason evidence is intentionally ineligible; and
 - `note_added`, which does not affect eligibility by itself.
@@ -94,10 +100,15 @@ Observations in those slots are conservatively excluded as missing or
 contradictory evidence. The report retains the planned label, effective actual
 label when known, slot status, and eligibility diagnostic.
 
-## Version-1 Compatibility
+## Version Compatibility
 
 Version-1 files and fixtures are unchanged. Their wire type does not gain
 schema-v2 fields. Explicit v1-to-v2 upgrade converts legacy events to typed
 payloads, preserves their projected behavior, and records a recovery-system
 interruption when a legacy session was started but never ended. There is no
 v2-to-v1 downgrade and no live mutation of a v1 bundle.
+
+Schema v3 retains the same lifecycle, append-order, correction, retry, and
+actual-antenna rules while adding correctable signal-state confirmation. V1 or
+v2 upgrade to v3 never invents a signal confirmation, and no schema downgrade
+is supported.

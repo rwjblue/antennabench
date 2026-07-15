@@ -3,8 +3,9 @@
 GitHub Issues are AntennaBench's durable source of truth for unfinished work
 and open decisions. This guide explains how a human should read and maintain
 that work. [Decision 0003](decisions/0003-github-issues-are-the-durable-work-tracker.md)
-records the durable rationale, while [Development](development.md) defines the
-agent execution rules.
+records the durable rationale, while the
+[Development Technical Reference](development-reference.md) defines the agent
+execution rules.
 
 ## Tracking Layers
 

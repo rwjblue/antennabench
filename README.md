@@ -1,98 +1,66 @@
 # AntennaBench
 
-AntennaBench is a local-first antenna comparison and profiling app for WSPR
-experiments.
+Run repeatable antenna experiments without losing the story behind the data.
 
-The project is currently building the bundle-first Rust foundation and local
-report data model. The durable source of truth is a portable session bundle
-made from JSON and JSONL files. SQLite indexes, UI state, generated reports,
-charts, and hosted publishing artifacts are derived from that bundle.
+AntennaBench is a local-first desktop app for planning antenna comparisons,
+guiding the operator through each change, collecting WSPR observations, and
+turning the session into an evidence-focused report. It keeps planned settings,
+confirmed actions, missed slots, corrections, and source data distinct so a
+clean-looking chart cannot hide a messy experiment.
 
-## Current Status
+No account or hosted service is required. Your portable session bundle remains
+the source of truth.
 
-Implemented:
+## A Session In Four Steps
 
-- Rust workspace with core, storage, WSJT-X import, analysis, and report library
-  crates.
-- Canonical bundle model for station, antennas, schedules, operator events,
-  observations, adapter records, propagation snapshots, and analysis metadata.
-- Filesystem read/write support for schema-v1 `.session.wsprabundle` and
-  provider-neutral schema-v2/v3 `.session.antennabundle` directories.
-- Explicit non-destructive v1-to-v2 upgrade with structured provenance,
-  generic adapter evidence, mutation/checkpoint envelopes, verified SHA-256
-  attachments, semantic-equivalence checks, and lossless copy for both versions.
-- Typed schema-v3 CW/RTTY signal plans, per-slot frequency variants,
-  counterbalance validation, correctable manual signal-state evidence, static
-  checkpoint persistence, manifest dispatch, and deterministic v1/v2 upgrades
-  that invent no planned or actual signal facts.
-- Deterministic schedule slot alignment and observation annotation.
-- Strict bundle validation for schema/session drift, duplicate IDs, references,
-  slot windows, confidence ranges, and stale alignment annotations.
-- Bundle normalization that repairs missing or stale observation slot
-  annotations before validation.
-- Offline WSJT-X WSPR log import crate for `ALL_WSPR.TXT`-style rows, raw
-  `wsjtx.jsonl` preservation, and local decode observation conversion.
-- Conservative in-memory A/B evidence summaries with observation eligibility,
-  exclusion reasons, per-antenna/band/slot counts, SNR descriptive statistics,
-  and insufficient/weak/moderate evidence-coverage labels.
-- Deterministic paired descriptive data for adjacent A/B slots, with explicit
-  availability, strata, overlap, missingness, order, duplicate/conflict, raw
-  pair, per-path, and equal-path-weight summary facts.
-- Deterministic station and remote-endpoint solar elevation and daylight,
-  twilight, and gray-line context derived from UTC observation times and
-  explicit Maidenhead locator cell centers, with typed missing locations.
-- Deterministic, in-memory report data derived from one bundle, with session
-  context, conservative evidence sections, typed notices, and concrete
-  renderer-neutral rows for antenna SNR, band evidence, and slot evidence.
-- Standalone offline HTML report rendering with embedded styling, accessible
-  chart tables, paired availability/overlap/timeline/difference/SNR diagnostics,
-  stratified distance/azimuth path context with explicit missing location and
-  concentration counts, descriptive derived solar context, restrictive content
-  security policy, and hostile-text escaping.
-- A Tauri desktop shell that opens existing directory bundles, validates and
-  analyzes them without mutation, refreshes revision-keyed live/final reports
-  in an isolated frame, exports the exact visible standalone HTML snapshot,
-  and exports verified checkpointed bundle copies through narrow Rust commands.
-- A separately buildable, admission-disabled Cloudflare hosted foundation with
-  Static Assets, typed private/public R2, D1, Queue, and bounded scale-to-zero
-  Container bindings; local product behavior has no dependency on it.
-- Validated schema-v2 session setup plus a complete manual/no-rig conductor
-  with durable lifecycle, explicit actual-antenna evidence, corrections,
-  restart recovery, and trusted schedule guidance.
-- Optional bounded loopback WSJT-X reception with expected-client admission,
-  raw generic adapter evidence, atomically linked local-decode observations,
-  typed status, and fail-closed acquisition gaps.
-- Default-on, operator-configurable WSPR.live acquisition after confirmed
-  antenna segments, plus an offline `FORMAT JSON` import escape hatch. Both
-  paths repeat session filters, preserve exact-response attachments, handle
-  provider-ID duplicate/conflict replay, and atomically link imported spots.
-- Bounded offline Reverse Beacon Network daily ZIP import for schema-v3 signal
-  sessions, with exact content-addressed archive preservation, explicit row
-  dispositions, CW/RTTY-separated TX `PublicReport` observations, deterministic
-  replay/conflict handling, and a focused native desktop picker.
-- An unattended desktop integration path that verifies canonical open, report,
-  lossless export, cancellation, typed failure, and reopen behavior without
-  launching a window or taking foreground input.
-- Fixture coverage for minimal, WSJT-X import-hardening, and balanced
-  analysis-rich whole-station sessions.
+1. **Plan** — enter station details, describe the antennas, and build a
+   repeatable schedule.
+2. **Run** — follow the current/next-slot guidance and record the antenna
+   actually used, missed or bad slots, notes, and corrections.
+3. **Collect** — optionally receive local WSJT-X decodes and import public WSPR
+   or Reverse Beacon Network observations.
+4. **Review** — inspect a conservative local report, then export the report or
+   the complete session bundle.
 
-Not implemented yet:
+AntennaBench shows missing, imbalanced, or conflicting evidence instead of
+manufacturing an antenna winner. “Insufficient data” is a useful result when
+the session does not support a stronger claim.
 
-- Rig control.
-- Live RBN acquisition.
-- Winner selection and advanced statistical analysis.
-- Markdown, PDF, and image rendering.
-- Hosted report viewing or publishing.
+## Project Status
 
-## Documentation
+AntennaBench is an early preview under active development. There is not yet a
+signed end-user release; today it is run from source on macOS.
 
-Evergreen project docs live in [docs/](docs/README.md). Start there for the
-product shape, architecture, bundle format, development workflow, roadmap, and
-project decisions.
+The desktop workflow can create and reopen sessions, conduct manual/no-rig WSPR
+comparisons, collect optional WSJT-X and WSPR.live evidence, import bounded WSPR
+and RBN data, render local reports, and export both reports and verified bundle
+copies. Rig control, automated winner selection, and hosted report publishing
+are not available yet.
 
-Agent planning files under `docs/superpowers/` are intentionally ignored. They
-are useful working notes while agents execute tasks, but they are not maintained
-as project documentation.
+## Try The Desktop App
+
+Install Xcode Command Line Tools and [Mise](https://mise.jdx.dev/), then run:
+
+```bash
+xcode-select --install
+mise install
+mise run desktop:dev
+```
+
+The first build may take a while. `desktop:dev` launches a local Tauri app; stop
+it with Control-C. See [Development](docs/development.md) for tests, supported
+tool versions, and the rest of the contributor workflow.
+
+## Learn More
+
+- [Product overview](docs/product.md) explains the intended workflow and the
+  evidence standards behind it.
+- [Session bundles](docs/bundle-format.md) gives a short, user-facing tour of
+  the portable experiment record.
+- [Documentation index](docs/README.md) links to architecture, development,
+  operations, and technical references.
+- [Roadmap](docs/roadmap.md) describes the current direction; GitHub Issues
+  track individual unfinished work items.
 
 ## License
 

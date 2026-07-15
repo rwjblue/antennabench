@@ -1,51 +1,50 @@
-# AntennaBench Docs
+# AntennaBench Documentation
 
-These are the maintained project docs. They should describe current behavior,
-stable intent, and near-term direction without copying dated implementation
-plans.
+Start with the page that matches what you are trying to do.
 
-- [Product](product.md): what AntennaBench is for and what v1 is aiming at.
-- [Architecture](architecture.md): crates, data flow, and source-of-truth
-  boundaries.
-- [Bundle Format](bundle-format.md): session bundle files, records, and
-  validation rules.
-- [Operator Event Semantics](event-semantics.md): schema-v2 lifecycle,
-  correction, actual-state, and conservative alignment rules.
-- [Schema-V2 Live Persistence And Recovery](live-persistence.md): durable
-  append, locking, checkpoint promotion, snapshots, export, and recovery.
-- [Development](development.md): local workflow, tests, and repo conventions.
-- [Desktop Releases](releasing.md): protected signing, draft verification,
-  installation, promotion, recovery, and credential operations.
-- [Hosted Foundation Operations](hosted-operations.md): environment isolation,
-  verification, cost controls, drain, and teardown procedures.
-- [Attribution](attribution.md): external data/service attribution and fixture
-  redistribution policy.
-- [Supply-Chain Updates](supply-chain.md): dependency, Action, tool, and runner
-  review procedure.
-- [Work Tracking](work-tracking.md): how milestones, tracking issues, labels,
-  dependencies, human handoffs, and completion evidence fit together.
-- [Roadmap](roadmap.md): current, next, and later work.
-- [Decisions](decisions/): short records of project decisions that should remain
-  easy to find.
+## Understand The Product
 
-## Work Tracking
+- [Product overview](product.md) explains the experiment workflow, local-first
+  approach, and why reports stay conservative.
+- [Session bundles](bundle-format.md) gives a short tour of the portable record
+  AntennaBench keeps for every experiment.
+- [Roadmap](roadmap.md) summarizes what is available now and what comes next.
 
-The roadmap stays intentionally high-level. GitHub Issues are the durable source
-of truth for unfinished work and open implementation decisions. Templates for
-planned, agent-ready, tracking, decision, and human-validation work live under
-`.github/ISSUE_TEMPLATE/`.
-See [Work Tracking](work-tracking.md) for the human-facing issue lifecycle,
-milestone map, label meanings, and useful backlog queries.
+## Build Or Contribute
 
-Detailed agent plans under `docs/superpowers/` may elaborate on an approved
-issue while work is active, but they are ignored scratch artifacts and must not
-be the only record of intended work.
+- [Development](development.md) covers local setup, common commands, and
+  repository conventions.
+- [Architecture](architecture.md) explains the system shape, major components,
+  trust boundaries, and derived-state model.
+- [Desktop releases](releasing.md) covers protected signing, draft
+  verification, installation, promotion, recovery, and credentials.
+- [Work tracking](work-tracking.md) describes milestones, issues, labels,
+  dependencies, and completion evidence.
 
-## Source Of Truth
+## Technical References
 
-Code, tests, fixtures, and public APIs are authoritative for implemented
-behavior. These docs summarize that behavior and should be updated when project
-behavior changes.
+- [Product design reference](product-design-reference.md) records detailed
+  evidence rules, operational boundaries, and selected future direction.
+- [Architecture technical reference](architecture-reference.md) records
+  crate-level APIs, data flow, adapters, and trust boundaries.
+- [Development technical reference](development-reference.md) records coding
+  policy, verification coverage, CI, desktop internals, and release details.
+- [Bundle format technical reference](bundle-format-reference.md) specifies
+  layouts, records, upgrades, validation, limits, and storage APIs.
+- [Operator event semantics](event-semantics.md) defines lifecycle,
+  corrections, actual state, and conservative observation alignment.
+- [Live persistence and recovery](live-persistence.md) defines checkpointing,
+  locking, snapshots, export, and crash recovery.
+- [Hosted foundation operations](hosted-operations.md) covers environment
+  isolation, verification, cost controls, drain, and teardown.
+- [Attribution](attribution.md) records external data and service attribution
+  plus fixture redistribution policy.
+- [Supply-chain updates](supply-chain.md) documents dependency, Action, tool,
+  and runner review.
+- [Architecture decisions](decisions/) preserve the reasoning behind durable
+  product and engineering choices.
 
-Agent planning artifacts under `docs/superpowers/` are ignored and ephemeral.
-Do not treat them as current documentation or as the durable work tracker.
+Code, tests, fixtures, and public APIs are authoritative when documentation and
+implemented behavior disagree. GitHub Issues are the durable source of truth
+for unfinished work and open decisions; ignored `docs/superpowers/` files are
+temporary planning notes.

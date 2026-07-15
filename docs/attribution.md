@@ -22,7 +22,8 @@ review the source and its current terms directly.
 
 The existing WSPR.live and NOAA SWPC boundaries retain their provider/source
 identity in bundle provenance. Their checked-in test fixtures remain reduced or
-synthetic as documented in [Development](development.md); external service
+synthetic as documented in the
+[Development Technical Reference](development-reference.md); external service
 availability and third-party rights are never treated as bundle invariants.
 
 ## NOAA Solar Calculation References
