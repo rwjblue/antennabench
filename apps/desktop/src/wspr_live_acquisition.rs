@@ -2,9 +2,10 @@ use std::{collections::BTreeSet, path::PathBuf, sync::Mutex};
 
 use antennabench_core::{
     reduce_operator_events_v2, AdapterInput, BundleV2Contents, CorrectableOperatorEventPayloadV2,
-    SessionLifecycleV2,
+    EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventV2, Provenance,
+    RecordMetaV2, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2,
 };
-use antennabench_storage::BundleStore;
+use antennabench_storage::{BundleStore, LiveMutationMemberV2, LiveMutationV2};
 use antennabench_wsjtx::{
     latest_due_wspr_live_acquisition, plan_wspr_live_acquisitions_for_confirmed_slots,
     AdapterCancellationToken, ReqwestWsprLiveTransport, WsprLiveAcquirer,
@@ -20,6 +21,7 @@ use crate::{
         active_session_source, with_foreground_operation, ActiveSessionState, OpenedSession,
         SessionErrorKind, SessionErrorPayload,
     },
+    wsjtx_session::WsjtxSessionState,
     wspr_live_import::commit_wspr_live_response,
 };
 
@@ -64,6 +66,12 @@ pub(crate) enum WsprLiveAcquisitionOutcome {
         captured_through: Option<DateTime<Utc>>,
     },
     UpToDate {
+        #[serde(rename = "capturedThrough")]
+        captured_through: DateTime<Utc>,
+    },
+    Completed {
+        session: Box<OpenedSession>,
+        revision: u64,
         #[serde(rename = "capturedThrough")]
         captured_through: DateTime<Utc>,
     },
@@ -116,6 +124,7 @@ pub(crate) fn advance_active_session_wspr_live(
     request: WsprLiveAcquisitionRequest,
     active_state: State<'_, ActiveSessionState>,
     acquisition_state: State<'_, WsprLiveAcquisitionState>,
+    wsjtx_state: State<'_, WsjtxSessionState>,
 ) -> Result<WsprLiveAcquisitionOutcome, SessionErrorPayload> {
     let transport = ReqwestWsprLiveTransport::new().map_err(|error| {
         SessionErrorPayload::new(
@@ -124,13 +133,26 @@ pub(crate) fn advance_active_session_wspr_live(
             error.to_string(),
         )
     })?;
-    advance_with_transport(
+    let outcome = advance_with_transport(
         active_state.inner(),
         acquisition_state.inner(),
         request,
         Utc::now(),
         transport,
-    )
+    )?;
+    if matches!(
+        &outcome,
+        WsprLiveAcquisitionOutcome::Captured { session, .. }
+            | WsprLiveAcquisitionOutcome::Completed { session, .. }
+            if session.lifecycle == Some(SessionLifecycleV2::Ended)
+    ) {
+        let (source, _) = active_session_source(active_state.inner())?;
+        wsjtx_state.stop_for_source(
+            &source,
+            "WSJT-X reception stopped after final WSPR.live acquisition completed the session.",
+        );
+    }
+    Ok(outcome)
 }
 
 fn advance_with_transport<T: WsprLiveHttpTransport>(
@@ -161,10 +183,22 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
         })?;
         let captured_through = captured_through(&snapshot);
         let pending = plans
-            .into_iter()
+            .iter()
             .filter(|plan| captured_through.is_none_or(|end| plan.query.window_end > end))
+            .cloned()
             .collect::<Vec<_>>();
         if pending.is_empty() {
+            if let Some(captured_through) = captured_through {
+                if final_capture_is_complete(&snapshot, &plans, captured_through) {
+                    let (session, revision) =
+                        end_after_final_capture(active_state, &source, now, captured_through)?;
+                    return Ok(WsprLiveAcquisitionOutcome::Completed {
+                        session: Box::new(session),
+                        revision,
+                        captured_through,
+                    });
+                }
+            }
             return Ok(captured_through.map_or(
                 WsprLiveAcquisitionOutcome::Dormant {
                     captured_through: None,
@@ -287,9 +321,15 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                 SessionErrorPayload::report_pipeline("WSPR.live acquisition state is unavailable")
             })?
             .failure = None;
+        let (session, revision) =
+            if final_capture_is_complete(&snapshot, &plans, plan.query.window_end) {
+                end_after_final_capture(active_state, &source, now, plan.query.window_end)?
+            } else {
+                (committed.session, committed.revision)
+            };
         Ok(WsprLiveAcquisitionOutcome::Captured {
-            session: Box::new(committed.session),
-            revision: committed.revision,
+            session: Box::new(session),
+            revision,
             completed_slot_id: plan.completed_slot_id,
             captured_through: plan.query.window_end,
             total: committed.summary.total,
@@ -299,6 +339,89 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             observations_created: committed.summary.observations_created,
         })
     })
+}
+
+fn final_capture_is_complete(
+    bundle: &BundleV2Contents,
+    authorized_plans: &[WsprLiveAcquisitionPlan],
+    captured_through: DateTime<Utc>,
+) -> bool {
+    bundle.schedule.slots.last().is_some_and(|final_slot| {
+        authorized_plans
+            .iter()
+            .any(|plan| plan.completed_slot_id == final_slot.slot_id)
+            && final_slot
+                .starts_at
+                .checked_add_signed(Duration::seconds(i64::from(final_slot.duration_seconds)))
+                .is_some_and(|final_end| captured_through >= final_end)
+    })
+}
+
+fn end_after_final_capture(
+    active_state: &ActiveSessionState,
+    source: &PathBuf,
+    occurred_at: DateTime<Utc>,
+    captured_through: DateTime<Utc>,
+) -> Result<(OpenedSession, u64), SessionErrorPayload> {
+    let store = BundleStore::new(source);
+    let mut writer = store
+        .open_v2_writer()
+        .map_err(crate::conductor::live_error_payload)?;
+    if writer.snapshot().session_state.lifecycle == SessionLifecycleV2::Ended {
+        let revision = writer.checkpoint().revision;
+        drop(writer);
+        return Ok((
+            crate::open_session::reload_active_session(active_state, source)?,
+            revision,
+        ));
+    }
+    if writer.snapshot().session_state.lifecycle != SessionLifecycleV2::Running {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The session changed before automatic finalization could commit.",
+            format!(
+                "current lifecycle: {:?}",
+                writer.snapshot().session_state.lifecycle
+            ),
+        ));
+    }
+    let mutation_id = writer.allocate_id("mutation");
+    let event_id = writer.allocate_id("event");
+    let event = OperatorEventV2 {
+        meta: RecordMetaV2 {
+            schema_version: SCHEMA_VERSION_V2,
+            session_id: writer.snapshot().manifest.session_id.clone(),
+            recorded_at: occurred_at,
+            provenance: Provenance::from_legacy(RecordSource::Derived, env!("CARGO_PKG_VERSION")),
+            mutation: MutationMember {
+                mutation_id: mutation_id.clone(),
+                member_index: 0,
+                member_count: 1,
+            },
+        },
+        event_id,
+        occurred_at,
+        time_basis: EventTimeBasisV2::ObservedNow,
+        uncertainty_seconds: None,
+        slot_id: None,
+        payload: OperatorEventPayloadV2::SessionEnded {
+            reason: Some(format!(
+                "Automatically ended after cumulative WSPR.live capture through {captured_through}."
+            )),
+        },
+    };
+    let receipt = writer
+        .append(LiveMutationV2 {
+            expected_revision: writer.checkpoint().revision,
+            mutation_id,
+            members: vec![LiveMutationMemberV2::Event(event)],
+        })
+        .map_err(crate::conductor::live_error_payload)?;
+    drop(writer);
+    Ok((
+        crate::open_session::reload_active_session(active_state, source)?,
+        receipt.revision,
+    ))
 }
 
 fn failed_outcome(
@@ -375,7 +498,7 @@ mod tests {
 
     use antennabench_core::{
         EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventV2, Provenance,
-        RecordMetaV2, RecordSource, SCHEMA_VERSION_V2,
+        RecordMetaV2, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2,
     };
     use antennabench_storage::{BundleStore, LiveMutationMemberV2, LiveMutationV2};
     use antennabench_wsjtx::{
@@ -528,8 +651,9 @@ mod tests {
         };
         assert_eq!(captured_through, now - chrono::Duration::minutes(5));
         assert_eq!(total, 0);
-        assert_eq!(revision, before.session_state.revision + 1);
+        assert_eq!(revision, before.session_state.revision + 2);
         let after = BundleStore::new(&path).read_v2_checkpointed().unwrap();
+        assert_eq!(after.session_state.lifecycle, SessionLifecycleV2::Ended);
         let summary = after
             .adapter_records
             .iter()

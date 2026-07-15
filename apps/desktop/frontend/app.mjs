@@ -367,10 +367,11 @@ export function beginWsprLiveAcquisition(state) {
 }
 
 export function wsprLiveAcquisitionSucceeded(state, outcome) {
+  const sessionChanged = ["captured", "completed"].includes(outcome.status);
   return {
     ...state,
-    openStatus: outcome.status === "captured" ? "ready" : state.openStatus,
-    session: outcome.status === "captured" ? outcome.session : state.session,
+    openStatus: sessionChanged ? "ready" : state.openStatus,
+    session: sessionChanged ? outcome.session : state.session,
     wsprLiveAcquisitionStatus: "ready",
     wsprLiveAcquisition: outcome,
     wsprLiveAcquisitionError: null,
@@ -564,6 +565,7 @@ function mount(root, browserWindow) {
   const wsprLiveDetail = root.querySelector("[data-wspr-live-detail]");
   const wsprLiveDiagnostic = root.querySelector("[data-wspr-live-diagnostic]");
   const wsprLiveRetry = root.querySelector("[data-wspr-live-retry]");
+  const wsprLiveEndWithout = root.querySelector("[data-wspr-live-end-without]");
   const wsjtxForm = root.querySelector("[data-wsjtx-form]");
   const wsjtxBindAddress = root.querySelector("[data-wsjtx-bind-address]");
   const wsjtxPort = root.querySelector("[data-wsjtx-port]");
@@ -727,7 +729,9 @@ function mount(root, browserWindow) {
       const evidenceAllowed = ["running", "interrupted"].includes(view.lifecycle);
       evidenceForm.querySelector("button[type=submit]").disabled = conductorBusy || !evidenceAllowed;
       lifecycleButtons.forEach((button) => {
-        button.disabled = conductorBusy || !allowed.has(button.dataset.conductorAction);
+        button.disabled = conductorBusy
+          || !allowed.has(button.dataset.conductorAction)
+          || (view.phase === "finalizing" && button.dataset.conductorAction === "end");
       });
       conductorDiagnostics.replaceChildren(
         ...view.diagnostics.map((diagnostic) => {
@@ -774,6 +778,8 @@ function mount(root, browserWindow) {
       wsprLiveDiagnostic.textContent = wsprLiveModel.diagnostic;
       wsprLiveRetry.hidden = !wsprLiveModel.retry;
       wsprLiveRetry.disabled = conductorBusy || state.wsprLiveAcquisitionStatus === "fetching";
+      wsprLiveEndWithout.hidden = !wsprLiveModel.endWithout;
+      wsprLiveEndWithout.disabled = conductorBusy || state.wsprLiveAcquisitionStatus === "fetching";
     } else {
       lifecycleButtons.forEach((button) => { button.disabled = true; });
       conductorDiagnostics.replaceChildren();
@@ -881,7 +887,7 @@ function mount(root, browserWindow) {
       const outcome = await invokeAdvanceSessionWsprLive(invoke, retry);
       state = wsprLiveAcquisitionSucceeded(state, outcome);
       render();
-      if (outcome.status === "captured") {
+      if (["captured", "completed"].includes(outcome.status)) {
         await refreshConductor(false);
         await refreshReport();
       }
@@ -1006,6 +1012,13 @@ function mount(root, browserWindow) {
   });
 
   wsprLiveRetry.addEventListener("click", () => advanceWsprLive(true));
+  wsprLiveEndWithout.addEventListener("click", async () => {
+    if (!browserWindow.confirm("End this session without the final automatic WSPR.live capture? Existing evidence will remain.")) return;
+    await submitConductorAction({
+      kind: "end",
+      reason: "Operator ended finalization without automatic WSPR.live public spots.",
+    });
+  });
 
   lifecycleButtons.forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1326,6 +1339,7 @@ function wsprLiveAcquisitionModel(state) {
       detail: state.wsprLiveAcquisitionError.message,
       diagnostic: state.wsprLiveAcquisitionError.detail,
       retry: true,
+      endWithout: state.conductor?.phase === "finalizing",
     };
   }
   const outcome = state.wsprLiveAcquisition;
@@ -1361,11 +1375,20 @@ function wsprLiveAcquisitionModel(state) {
       retry: false,
     };
   }
+  if (outcome.status === "completed") {
+    return {
+      phase: "Final public spots captured",
+      detail: `WSPR.live evidence is committed through ${formatReviewTime(outcome.capturedThrough)} and the durable session ended automatically.`,
+      diagnostic: "",
+      retry: false,
+    };
+  }
   return {
     phase: "WSPR.live acquisition failed",
     detail: outcome.message,
     diagnostic: outcome.detail,
     retry: true,
+    endWithout: state.conductor?.phase === "finalizing",
   };
 }
 

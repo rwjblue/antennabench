@@ -14,6 +14,7 @@ use antennabench_storage::{
     BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError, LivePersistenceHooks,
     RecoveryDispositionV2, RecoveryReportV2, SystemLivePersistenceHooks,
 };
+use antennabench_wsjtx::WSPR_LIVE_INGESTION_GRACE_SECONDS;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -73,6 +74,7 @@ enum ConductorPhase {
     Guard,
     Active,
     BetweenSlots,
+    Finalizing,
     Complete,
     Interrupted,
     Ended,
@@ -763,9 +765,30 @@ fn timing_projection(
         );
     }
 
+    if let Some(final_slot) = slots
+        .last()
+        .filter(|slot| slot.evidence_status == SlotEvidenceStatus::Confirmed)
+    {
+        let acquisition_at =
+            final_slot.ends_at + Duration::seconds(WSPR_LIVE_INGESTION_GRACE_SECONDS);
+        return (
+            ConductorPhase::Finalizing,
+            if now < acquisition_at {
+                "The final antenna state is confirmed. Waiting for WSPR.live ingestion, then AntennaBench will capture cumulative public spots and end automatically."
+                    .into()
+            } else {
+                "Final WSPR.live acquisition is due. AntennaBench will finish automatically, or show recovery actions if the source fails."
+                    .into()
+            },
+            Some((acquisition_at - now).num_seconds().max(0)),
+            None,
+            None,
+        );
+    }
+
     (
         ConductorPhase::Complete,
-        "All planned slot windows have elapsed. End or interrupt the durable session explicitly."
+        "All planned slot windows have elapsed. Confirm the final actual antenna to authorize public-spot finalization, or end explicitly without it."
             .into(),
         None,
         None,
@@ -1157,6 +1180,57 @@ mod tests {
         let complete = read_conductor_with_hooks(&active, &state, hooks).unwrap();
         assert_eq!(complete.phase, ConductorPhase::Complete);
         assert_eq!(complete.revision, awaiting.revision);
+    }
+
+    #[test]
+    fn confirmed_final_slot_projects_the_ingestion_grace_as_finalizing() {
+        let start = Utc.with_ymd_and_hms(2026, 7, 15, 2, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = ready_store(&temp, start);
+        let active = activate(&store);
+        let state = ConductorSessionState::default();
+        let hooks = Arc::new(TestHooks::new(start - chrono::Duration::seconds(30)));
+        let ready = read_conductor_with_hooks(&active, &state, hooks.clone()).unwrap();
+        mutate_conductor_with_hooks(
+            &active,
+            &state,
+            request(&ready, ConductorAction::Start { note: None }),
+            hooks.clone(),
+        )
+        .unwrap();
+
+        hooks.set_now(start + chrono::Duration::seconds(120));
+        let second_slot = read_conductor_with_hooks(&active, &state, hooks.clone()).unwrap();
+        let antenna_label = second_slot
+            .current_slot
+            .as_ref()
+            .unwrap()
+            .planned_antenna
+            .clone();
+        mutate_conductor_with_hooks(
+            &active,
+            &state,
+            request(
+                &second_slot,
+                ConductorAction::ConfirmAntenna {
+                    slot_id: "slot-2".into(),
+                    antenna_label,
+                    note: None,
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+
+        hooks.set_now(start + chrono::Duration::seconds(240));
+        let waiting = read_conductor_with_hooks(&active, &state, hooks.clone()).unwrap();
+        assert_eq!(waiting.phase, ConductorPhase::Finalizing);
+        assert_eq!(waiting.seconds_to_transition, Some(300));
+
+        hooks.set_now(start + chrono::Duration::seconds(540));
+        let due = read_conductor_with_hooks(&active, &state, hooks).unwrap();
+        assert_eq!(due.phase, ConductorPhase::Finalizing);
+        assert_eq!(due.seconds_to_transition, Some(0));
     }
 
     #[test]

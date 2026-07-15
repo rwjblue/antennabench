@@ -258,6 +258,13 @@ test("automatic WSPR.live acquisition remains typed and accepts only retry inten
   const fetching = beginWsprLiveAcquisition(active);
   const outcome = await invokeAdvanceSessionWsprLive(invoke);
   const waiting = wsprLiveAcquisitionSucceeded(fetching, outcome);
+  const completedSession = { sessionId: "session-1", lifecycle: "ended" };
+  const completed = wsprLiveAcquisitionSucceeded(fetching, {
+    status: "completed",
+    session: completedSession,
+    revision: 9,
+    capturedThrough: "2026-07-15T20:12:00Z",
+  });
   const failed = wsprLiveAcquisitionFailed(fetching, {
     kind: "resource",
     message: "WSPR.live spots could not be fetched.",
@@ -267,6 +274,7 @@ test("automatic WSPR.live acquisition remains typed and accepts only retry inten
 
   assert.equal(fetching.wsprLiveAcquisitionStatus, "fetching");
   assert.equal(waiting.wsprLiveAcquisition.status, "waiting");
+  assert.equal(completed.session, completedSession);
   assert.equal(failed.wsprLiveAcquisitionError.detail, "offline");
   assert.deepEqual(calls, [
     ["advance_active_session_wspr_live", { request: { retry: false } }],
