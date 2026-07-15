@@ -98,7 +98,10 @@ Later tracks:
   ([Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
   [#85](https://github.com/rwjblue/antennabench/issues/85)).
 - Import-first RBN transmit evidence and its provider-specific experiment
-  workflow ([#31](https://github.com/rwjblue/antennabench/issues/31)).
+  workflow, beginning with the schema-v3 typed signal-plan foundation
+  ([Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md),
+  [#86](https://github.com/rwjblue/antennabench/issues/86),
+  [#31](https://github.com/rwjblue/antennabench/issues/31)).
 - Safe hosted report viewing, upload validation, identity, and publishing
   ([#10](https://github.com/rwjblue/antennabench/issues/10)).
 - Native WSPR or mobile-specific operation.

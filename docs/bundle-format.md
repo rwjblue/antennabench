@@ -82,6 +82,14 @@ Version 1 is never silently rewritten to gain these semantics. It remains
 readable and losslessly copyable; live mutation requires an explicit v2 upgrade
 to a new `.session.antennabundle` destination.
 
+[Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md)
+selects schema v3 for typed non-WSPR transmit signal plans. The version boundary
+is intentional: older v2 conductors must not silently ignore planned mode,
+identity, cadence, per-slot frequency, or counterbalancing and then run a
+materially different experiment. Implementation is tracked by
+[#86](https://github.com/rwjblue/antennabench/issues/86); current v1/v2 wire
+behavior remains unchanged until that focused migration lands.
+
 ## Provider-Neutral Evidence
 
 Every v2 provenance contains `provider_id`, `source_id`,

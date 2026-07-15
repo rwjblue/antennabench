@@ -406,6 +406,11 @@ The durable boundaries are:
 These seams describe responsibilities. The selected WSPR.live import and
 default-on, operator-configurable automatic-acquisition boundary is recorded by
 [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
+and the fail-closed schema-v3 boundary for reusable, counterbalanced non-WSPR
+transmit signal plans is recorded by
+[Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md).
+Implementation is tracked by
+[#86](https://github.com/rwjblue/antennabench/issues/86),
 and the first optional rig-control milestone is tracked by
 [#14](https://github.com/rwjblue/antennabench/issues/14).
 
