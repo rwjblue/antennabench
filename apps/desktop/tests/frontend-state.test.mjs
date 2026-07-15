@@ -3,20 +3,26 @@ import test from "node:test";
 
 import {
   WORKFLOWS,
+  beginConductorLoad,
+  beginConductorMutation,
   beginExportSession,
   beginOpenSession,
   beginSetupCreation,
   beginSetupReview,
+  conductorLoadSucceeded,
+  conductorMutationFailed,
   editSessionSetup,
   exportSessionCancelled,
   exportSessionFailed,
   exportSessionSucceeded,
   initialState,
   invokeActiveSessionReport,
+  invokeActiveSessionConductor,
   invokeCreateSessionFromReview,
   invokeExportSession,
   invokeOpenSession,
   invokeReviewSessionSetup,
+  invokeMutateSessionConductor,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
@@ -47,6 +53,9 @@ test("the shell starts in session setup", () => {
     setupReview: null,
     setupError: null,
     setupNotice: null,
+    conductorStatus: "idle",
+    conductor: null,
+    conductorError: null,
   });
 });
 
@@ -98,9 +107,65 @@ test("setup creation cancellation, failure, and success preserve coherent state"
   assert.equal(failed.setupStatus, "reviewed");
   assert.equal(failed.setupError.kind, "destination");
   assert.equal(created.setupStatus, "created");
+  assert.equal(created.activeWorkflow, "run");
   assert.equal(created.session, session);
   assert.equal(created.openStatus, "ready");
   assert.equal(created.reportPresentationId, 1);
+});
+
+test("the conductor retains its coherent view through refresh, mutation, and typed failure", () => {
+  const session = { sessionId: "session-1" };
+  const opened = openSessionSucceeded(initialState(), session);
+  const loading = beginConductorLoad(opened);
+  const conductor = {
+    sessionId: "session-1",
+    revision: 4,
+    lifecycle: "running",
+    actionToken: "mutation-4",
+  };
+  const ready = conductorLoadSucceeded(loading, conductor);
+  const mutating = beginConductorMutation(ready);
+  const failed = conductorMutationFailed(mutating, {
+    kind: "stale_revision",
+    message: "The session changed.",
+    detail: "expected 4, actual 5",
+  });
+
+  assert.equal(loading.conductorStatus, "loading");
+  assert.equal(ready.conductorStatus, "ready");
+  assert.equal(ready.conductor, conductor);
+  assert.equal(mutating.conductorStatus, "mutating");
+  assert.equal(failed.conductorStatus, "error");
+  assert.equal(failed.conductor, conductor);
+  assert.equal(failed.conductorError.kind, "stale_revision");
+});
+
+test("the conductor bridge exposes only bounded read and focused mutation commands", async () => {
+  const calls = [];
+  const invoke = async (...args) => {
+    calls.push(args);
+    return { revision: args.length === 1 ? 4 : 5 };
+  };
+  const request = {
+    actionToken: "mutation-4",
+    expectedRevision: 4,
+    action: {
+      kind: "confirm_antenna",
+      slotId: "slot-1",
+      antennaLabel: "Loop",
+      note: "operator confirmed",
+    },
+  };
+
+  const view = await invokeActiveSessionConductor(invoke);
+  const updated = await invokeMutateSessionConductor(invoke, request);
+
+  assert.deepEqual(calls, [
+    ["active_session_conductor"],
+    ["mutate_active_session_conductor", { request }],
+  ]);
+  assert.equal(view.revision, 4);
+  assert.equal(updated.revision, 5);
 });
 
 test("setup bridge exposes only review and reviewed-creation commands", async () => {

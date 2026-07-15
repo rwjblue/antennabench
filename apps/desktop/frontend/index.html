@@ -159,13 +159,67 @@
           <section class="workflow-panel" data-panel="run" aria-labelledby="run-title" hidden>
             <div class="panel-heading">
               <div><p class="eyebrow">Collect local evidence</p><h1 id="run-title">Active run</h1></div>
-              <span class="status-chip muted">Not started</span>
+              <span class="status-chip muted" data-conductor-status>No active session</span>
             </div>
-            <div class="empty-state">
+            <p class="lede">Conduct the complete experiment without a rig or network. Planned labels are guidance; actual antenna state is recorded only when you confirm it.</p>
+
+            <div class="empty-state" data-conductor-empty>
               <span class="empty-icon" aria-hidden="true">◌</span>
               <h2>No active session</h2>
-              <p>The session conductor, switch prompts, operator events, and live WSJT-X orchestration remain follow-up work.</p>
-              <button type="button" disabled>Start session unavailable</button>
+              <p>Create a validated schema-v2 session or open one from Import / export, then return here.</p>
+              <button type="button" data-conductor-refresh>Load active session</button>
+            </div>
+
+            <div class="conductor" data-conductor hidden>
+              <div class="conductor-context">
+                <div><span>Checkpoint</span><strong data-conductor-revision></strong></div>
+                <div><span>Durable lifecycle</span><strong data-conductor-lifecycle></strong></div>
+                <div><span>Trusted time</span><strong data-conductor-now></strong></div>
+              </div>
+
+              <section class="conductor-prompt" aria-live="polite">
+                <div><p class="eyebrow" data-conductor-phase></p><h2 data-conductor-guidance></h2></div>
+                <strong class="countdown" data-conductor-countdown></strong>
+              </section>
+
+              <div class="slot-focus">
+                <article><span>Current slot</span><div data-current-slot></div></article>
+                <article><span>Next slot</span><div data-next-slot></div></article>
+              </div>
+
+              <div class="conductor-actions" data-lifecycle-actions>
+                <button type="button" data-conductor-action="start">Start</button>
+                <button type="button" data-conductor-action="resume">Resume</button>
+                <button type="button" data-conductor-action="interrupt">Interrupt</button>
+                <button type="button" data-conductor-action="end">End</button>
+                <button type="button" class="danger-action" data-conductor-action="abandon">Abandon</button>
+                <button type="button" class="text-action" data-conductor-refresh>Refresh</button>
+              </div>
+
+              <form class="evidence-form" data-evidence-form>
+                <div><p class="eyebrow">Explicit operator evidence</p><h2>Record what actually happened</h2></div>
+                <div class="field-grid">
+                  <label>Evidence type<select data-evidence-kind><option value="confirm_antenna">Confirm actual antenna</option><option value="mark_missed">Mark slot missed</option><option value="mark_bad">Mark slot bad</option><option value="add_note">Add note</option></select></label>
+                  <label>Planned slot<select data-evidence-slot></select></label>
+                  <label>Actual antenna<select data-evidence-antenna></select></label>
+                  <label class="field-wide">Note or reason<textarea rows="2" data-evidence-detail placeholder="Optional for confirmations/missed slots; required for bad slots and notes"></textarea></label>
+                </div>
+                <div class="setup-actions"><button class="primary-action" type="submit">Commit operator evidence</button></div>
+              </form>
+
+              <div class="open-feedback" data-conductor-feedback hidden role="status" aria-live="polite">
+                <span class="feedback-mark" aria-hidden="true"></span>
+                <div><strong data-conductor-feedback-message></strong><p data-conductor-feedback-detail></p></div>
+              </div>
+              <ul class="setup-diagnostics" data-conductor-diagnostics hidden></ul>
+
+              <section class="event-history" aria-labelledby="event-history-title">
+                <div><p class="eyebrow">Append-only audit trail</p><h2 id="event-history-title">Effective operator evidence</h2></div>
+                <p class="field-help">Retract an entry, or replace it with the values currently selected in the evidence form. The original and correction remain durable.</p>
+                <div data-conductor-events></div>
+              </section>
+
+              <div class="boundary-note"><strong>Trusted boundary</strong><p>Rust owns checkpoint recovery, clocks, IDs, expected revisions, mutation idempotency, and lifecycle validation. The webview receives a bounded projection and submits only a Rust-issued action token plus focused operator intent.</p></div>
             </div>
           </section>
 

@@ -17,6 +17,9 @@ export function initialState(workflow = "setup") {
       setupReview: null,
       setupError: null,
       setupNotice: null,
+      conductorStatus: "idle",
+      conductor: null,
+      conductorError: null,
     },
     workflow,
   );
@@ -112,6 +115,7 @@ export function setupCreationCancelled(state) {
 export function setupCreationSucceeded(state, session) {
   return {
     ...state,
+    activeWorkflow: "run",
     setupStatus: "created",
     setupError: null,
     setupNotice: "created",
@@ -124,6 +128,9 @@ export function setupCreationSucceeded(state, session) {
     exportError: null,
     exportNotice: null,
     exportedBundleName: null,
+    conductorStatus: "idle",
+    conductor: null,
+    conductorError: null,
   };
 }
 
@@ -149,6 +156,9 @@ export function openSessionSucceeded(state, session) {
     exportError: null,
     exportNotice: null,
     exportedBundleName: null,
+    conductorStatus: "idle",
+    conductor: null,
+    conductorError: null,
   };
 }
 
@@ -226,6 +236,35 @@ export function normalizeOpenError(error) {
   };
 }
 
+export function beginConductorLoad(state) {
+  return {
+    ...state,
+    conductorStatus: state.conductor ? "refreshing" : "loading",
+    conductorError: null,
+  };
+}
+
+export function conductorLoadSucceeded(state, conductor) {
+  return {
+    ...state,
+    conductorStatus: "ready",
+    conductor,
+    conductorError: null,
+  };
+}
+
+export function beginConductorMutation(state) {
+  return { ...state, conductorStatus: "mutating", conductorError: null };
+}
+
+export function conductorMutationFailed(state, error) {
+  return {
+    ...state,
+    conductorStatus: "error",
+    conductorError: normalizeOpenError(error),
+  };
+}
+
 export function invokeOpenSession(invoke) {
   return invoke("open_session_bundle");
 }
@@ -244,6 +283,14 @@ export function invokeActiveSessionReport(invoke) {
 
 export function invokeExportSession(invoke) {
   return invoke("export_active_session");
+}
+
+export function invokeActiveSessionConductor(invoke) {
+  return invoke("active_session_conductor");
+}
+
+export function invokeMutateSessionConductor(invoke, request) {
+  return invoke("mutate_active_session_conductor", { request });
 }
 
 export function updateReportFrame(reportFrame, state) {
@@ -276,6 +323,29 @@ function mount(root, browserWindow) {
   const setupReviewAntennas = root.querySelector("[data-review-antennas]");
   const setupReviewShape = root.querySelector("[data-review-shape]");
   const setupReviewSlots = root.querySelector("[data-review-slots]");
+  const conductorPanel = root.querySelector("[data-conductor]");
+  const conductorEmpty = root.querySelector("[data-conductor-empty]");
+  const conductorStatus = root.querySelector("[data-conductor-status]");
+  const conductorRevision = root.querySelector("[data-conductor-revision]");
+  const conductorLifecycle = root.querySelector("[data-conductor-lifecycle]");
+  const conductorNow = root.querySelector("[data-conductor-now]");
+  const conductorPhase = root.querySelector("[data-conductor-phase]");
+  const conductorGuidance = root.querySelector("[data-conductor-guidance]");
+  const conductorCountdown = root.querySelector("[data-conductor-countdown]");
+  const currentSlot = root.querySelector("[data-current-slot]");
+  const nextSlot = root.querySelector("[data-next-slot]");
+  const conductorRefreshButtons = [...root.querySelectorAll("[data-conductor-refresh]")];
+  const lifecycleButtons = [...root.querySelectorAll("[data-conductor-action]")];
+  const evidenceForm = root.querySelector("[data-evidence-form]");
+  const evidenceKind = root.querySelector("[data-evidence-kind]");
+  const evidenceSlot = root.querySelector("[data-evidence-slot]");
+  const evidenceAntenna = root.querySelector("[data-evidence-antenna]");
+  const evidenceDetail = root.querySelector("[data-evidence-detail]");
+  const conductorFeedback = root.querySelector("[data-conductor-feedback]");
+  const conductorFeedbackMessage = root.querySelector("[data-conductor-feedback-message]");
+  const conductorFeedbackDetail = root.querySelector("[data-conductor-feedback-detail]");
+  const conductorDiagnostics = root.querySelector("[data-conductor-diagnostics]");
+  const conductorEvents = root.querySelector("[data-conductor-events]");
   const openButton = root.querySelector("[data-open-session]");
   const exportButton = root.querySelector("[data-export-session]");
   const transferStatus = root.querySelector("[data-transfer-status]");
@@ -372,6 +442,82 @@ function mount(root, browserWindow) {
       );
     }
 
+    const conductorBusy = ["loading", "refreshing", "mutating"].includes(state.conductorStatus);
+    const hasConductor = state.conductor !== null;
+    conductorPanel.hidden = !hasConductor;
+    conductorEmpty.hidden = hasConductor;
+    conductorStatus.textContent = conductorStatusText(state);
+    conductorStatus.classList.toggle("muted", !hasConductor || state.conductorStatus === "error");
+    conductorRefreshButtons.forEach((button) => { button.disabled = conductorBusy; });
+    evidenceForm.setAttribute("aria-busy", String(conductorBusy));
+    evidenceForm.querySelector("button[type=submit]").disabled = conductorBusy || !hasConductor;
+
+    const conductorFeedbackState = conductorFeedbackModel(state);
+    conductorFeedback.hidden = conductorFeedbackState === null;
+    if (conductorFeedbackState) {
+      conductorFeedback.dataset.kind = conductorFeedbackState.kind;
+      conductorFeedbackMessage.textContent = conductorFeedbackState.message;
+      conductorFeedbackDetail.textContent = conductorFeedbackState.detail;
+      conductorFeedbackDetail.hidden = conductorFeedbackState.detail.length === 0;
+    }
+
+    if (hasConductor) {
+      const view = state.conductor;
+      conductorRevision.textContent = `${view.bundleName} · revision ${view.revision}`;
+      conductorLifecycle.textContent = humanizeIdentifier(view.lifecycle);
+      conductorNow.textContent = formatReviewTime(view.now);
+      conductorPhase.textContent = humanizeIdentifier(view.phase);
+      conductorGuidance.textContent = view.guidance;
+      conductorCountdown.textContent = view.secondsToTransition === null
+        ? ""
+        : formatCountdown(view.secondsToTransition);
+      renderSlot(currentSlot, view.currentSlot, root);
+      renderSlot(nextSlot, view.nextSlot, root);
+      replaceSelectOptions(evidenceSlot, [
+        { value: "", label: "No slot / session note" },
+        ...view.slots.map((slot) => ({
+          value: slot.slotId,
+          label: `#${slot.sequenceNumber} · ${slot.plannedAntenna} · ${slot.band}`,
+        })),
+      ]);
+      replaceSelectOptions(
+        evidenceAntenna,
+        view.antennas.map((antenna) => ({ value: antenna, label: antenna })),
+      );
+
+      const allowed = lifecycleActionAvailability(view.lifecycle);
+      const evidenceAllowed = ["running", "interrupted"].includes(view.lifecycle);
+      evidenceForm.querySelector("button[type=submit]").disabled = conductorBusy || !evidenceAllowed;
+      lifecycleButtons.forEach((button) => {
+        button.disabled = conductorBusy || !allowed.has(button.dataset.conductorAction);
+      });
+      conductorDiagnostics.replaceChildren(
+        ...view.diagnostics.map((diagnostic) => {
+          const item = root.createElement("li");
+          const code = root.createElement("strong");
+          code.textContent = diagnostic.slotId
+            ? `${diagnostic.code} · ${diagnostic.slotId}`
+            : diagnostic.code;
+          const message = root.createElement("span");
+          message.textContent = diagnostic.message;
+          item.append(code, message);
+          return item;
+        }),
+      );
+      conductorDiagnostics.hidden = view.diagnostics.length === 0;
+      conductorEvents.replaceChildren(
+        ...view.effectiveEvents.map((event) => conductorEventElement(
+          root,
+          event,
+          conductorBusy || !evidenceAllowed,
+        )),
+      );
+    } else {
+      lifecycleButtons.forEach((button) => { button.disabled = true; });
+      conductorDiagnostics.replaceChildren();
+      conductorEvents.replaceChildren();
+    }
+
     openButton.disabled = state.openStatus === "loading";
     openButton.textContent = state.openStatus === "loading" ? "Opening…" : "Choose bundle";
     const exportLoading = state.exportStatus === "loading";
@@ -414,21 +560,123 @@ function mount(root, browserWindow) {
     }
   };
 
+  const refreshConductor = async () => {
+    if (["loading", "refreshing", "mutating"].includes(state.conductorStatus)) return;
+    state = beginConductorLoad(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") {
+        throw new Error("The native desktop bridge is unavailable.");
+      }
+      state = conductorLoadSucceeded(
+        state,
+        await invokeActiveSessionConductor(invoke),
+      );
+    } catch (error) {
+      state = conductorMutationFailed(state, error);
+    }
+    render();
+  };
+
+  const submitConductorAction = async (action) => {
+    if (!state.conductor || state.conductorStatus === "mutating") return;
+    const request = {
+      actionToken: state.conductor.actionToken,
+      expectedRevision: state.conductor.revision,
+      action,
+    };
+    state = beginConductorMutation(state);
+    render();
+    try {
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") {
+        throw new Error("The native desktop bridge is unavailable.");
+      }
+      state = conductorLoadSucceeded(
+        state,
+        await invokeMutateSessionConductor(invoke, request),
+      );
+    } catch (error) {
+      state = conductorMutationFailed(state, error);
+    }
+    render();
+  };
+
   for (const button of navigation) {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state = selectWorkflow(state, button.dataset.workflow);
       browserWindow.history.replaceState(null, "", `#${state.activeWorkflow}`);
       render();
       root.querySelector("main").focus({ preventScroll: true });
+      if (state.activeWorkflow === "run" && state.session) await refreshConductor();
     });
   }
 
-  browserWindow.addEventListener("hashchange", () => {
+  browserWindow.addEventListener("hashchange", async () => {
     state = selectWorkflow(
       state,
       workflowFromHash(browserWindow.location.hash),
     );
     render();
+    if (state.activeWorkflow === "run" && state.session) await refreshConductor();
+  });
+
+  conductorRefreshButtons.forEach((button) => {
+    button.addEventListener("click", refreshConductor);
+  });
+
+  lifecycleButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      const kind = button.dataset.conductorAction;
+      if (kind === "abandon" && !browserWindow.confirm("Abandon this session? Existing evidence will remain, but the lifecycle is terminal.")) return;
+      const detail = ["interrupt", "end", "abandon"].includes(kind)
+        ? browserWindow.prompt(`Optional ${kind} reason:`, "")
+        : browserWindow.prompt(`Optional ${kind} note:`, "");
+      if (detail === null) return;
+      const action = kind === "start" || kind === "resume"
+        ? { kind, note: detail }
+        : { kind, reason: detail };
+      await submitConductorAction(action);
+    });
+  });
+
+  evidenceForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitConductorAction(readEvidenceAction(
+      evidenceKind.value,
+      evidenceSlot.value,
+      evidenceAntenna.value,
+      evidenceDetail.value,
+    ));
+  });
+
+  conductorEvents.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-event-action]");
+    if (!button) return;
+    const targetEventId = button.dataset.eventId;
+    const reason = browserWindow.prompt("Correction reason (required):", "");
+    if (reason === null || reason.trim().length === 0) return;
+    if (button.dataset.eventAction === "retract") {
+      await submitConductorAction({
+        kind: "retract_event",
+        targetEventId,
+        reason,
+      });
+      return;
+    }
+    const replacement = readEvidenceReplacement(
+      evidenceKind.value,
+      evidenceAntenna.value,
+      evidenceDetail.value,
+    );
+    await submitConductorAction({
+      kind: "replace_event",
+      targetEventId,
+      slotId: evidenceSlot.value || null,
+      replacement,
+      reason,
+    });
   });
 
   setupForm.addEventListener("input", () => {
@@ -478,6 +726,10 @@ function mount(root, browserWindow) {
       state = setupCreationFailed(state, error);
     }
     render();
+    if (state.setupStatus === "created") {
+      browserWindow.history.replaceState(null, "", "#run");
+      await refreshConductor();
+    }
   });
 
   setupAddAntennaButton.addEventListener("click", () => {
@@ -552,6 +804,159 @@ function mount(root, browserWindow) {
   });
 
   render();
+  browserWindow.setInterval?.(() => {
+    if (
+      state.activeWorkflow === "run" &&
+      state.conductorStatus === "ready" &&
+      state.conductor?.lifecycle === "running"
+    ) {
+      void refreshConductor();
+    }
+  }, 5000);
+}
+
+function conductorStatusText(state) {
+  if (state.conductorStatus === "loading") return "Recovering session";
+  if (state.conductorStatus === "refreshing") return "Refreshing";
+  if (state.conductorStatus === "mutating") return "Committing";
+  if (state.conductorStatus === "error") return "Action failed";
+  if (state.conductor) return humanizeIdentifier(state.conductor.lifecycle);
+  return state.session ? "Ready to load" : "No active session";
+}
+
+function conductorFeedbackModel(state) {
+  if (["loading", "refreshing"].includes(state.conductorStatus)) {
+    return {
+      kind: "loading",
+      message: "Reading and recovering the coherent checkpoint…",
+      detail: "A session left running is durably marked interrupted before actions are shown.",
+    };
+  }
+  if (state.conductorStatus === "mutating") {
+    return {
+      kind: "loading",
+      message: "Committing operator evidence…",
+      detail: "The UI updates only after the checkpoint is synchronized and verified.",
+    };
+  }
+  if (state.conductorError) return { kind: "error", ...state.conductorError };
+  const recovery = state.conductor?.recovery;
+  if (recovery?.interruptionRecorded) {
+    return {
+      kind: "ready",
+      message: "A previously running session was recovered as interrupted.",
+      detail: `Recovery moved revision ${recovery.startingRevision} to ${recovery.finalRevision}; ${recovery.artifactCount} preserved recovery artifact(s).`,
+    };
+  }
+  if (recovery && recovery.disposition !== "clean") {
+    return {
+      kind: "ready",
+      message: `Recovery completed: ${humanizeIdentifier(recovery.disposition)}.`,
+      detail: `${recovery.artifactCount} recovery artifact(s) were preserved.`,
+    };
+  }
+  return null;
+}
+
+function lifecycleActionAvailability(lifecycle) {
+  switch (lifecycle) {
+    case "ready": return new Set(["start", "abandon"]);
+    case "running": return new Set(["interrupt", "end", "abandon"]);
+    case "interrupted": return new Set(["resume", "end", "abandon"]);
+    default: return new Set();
+  }
+}
+
+function formatCountdown(seconds) {
+  const safe = Math.max(0, Number(seconds));
+  const minutes = Math.floor(safe / 60);
+  const remainder = Math.floor(safe % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function renderSlot(container, slot, root) {
+  container.replaceChildren();
+  if (!slot) {
+    const empty = root.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = "None";
+    container.append(empty);
+    return;
+  }
+  const title = root.createElement("strong");
+  title.textContent = `#${slot.sequenceNumber} · ${slot.plannedAntenna}`;
+  const timing = root.createElement("p");
+  timing.textContent = `${slot.band} · ${formatReviewTime(slot.startsAt)}`;
+  const actual = root.createElement("p");
+  actual.textContent = slot.actualAntenna
+    ? `Actual: ${slot.actualAntenna}`
+    : `Actual: not confirmed · ${humanizeIdentifier(slot.evidenceStatus)}`;
+  container.append(title, timing, actual);
+}
+
+function replaceSelectOptions(select, options) {
+  const signature = JSON.stringify(options);
+  if (select.dataset.options === signature) return;
+  const selected = select.value;
+  select.replaceChildren(...options.map(({ value, label }) => {
+    const option = select.ownerDocument.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
+  select.dataset.options = signature;
+  if (options.some(({ value }) => value === selected)) select.value = selected;
+}
+
+function conductorEventElement(root, event, disabled) {
+  const article = root.createElement("article");
+  const context = root.createElement("div");
+  const kind = root.createElement("span");
+  kind.textContent = event.slotId
+    ? `${humanizeIdentifier(event.kind)} · ${event.slotId}`
+    : humanizeIdentifier(event.kind);
+  const summary = root.createElement("strong");
+  summary.textContent = event.summary;
+  const time = root.createElement("small");
+  time.textContent = formatReviewTime(event.occurredAt);
+  context.append(kind, summary, time);
+  const actions = root.createElement("div");
+  for (const [action, label] of [["replace", "Replace"], ["retract", "Retract"]]) {
+    const button = root.createElement("button");
+    button.type = "button";
+    button.dataset.eventAction = action;
+    button.dataset.eventId = event.sourceEventId;
+    button.textContent = label;
+    button.disabled = disabled;
+    actions.append(button);
+  }
+  article.append(context, actions);
+  return article;
+}
+
+function readEvidenceAction(kind, slotId, antennaLabel, detail) {
+  switch (kind) {
+    case "confirm_antenna": return {
+      kind,
+      slotId,
+      antennaLabel,
+      note: detail,
+    };
+    case "mark_missed": return { kind, slotId, reason: detail };
+    case "mark_bad": return { kind, slotId, reason: detail };
+    case "add_note": return { kind, slotId: slotId || null, note: detail };
+    default: throw new RangeError(`Unknown conductor evidence kind: ${kind}`);
+  }
+}
+
+function readEvidenceReplacement(kind, antennaLabel, detail) {
+  switch (kind) {
+    case "confirm_antenna": return { kind, antennaLabel, note: detail };
+    case "mark_missed": return { kind, reason: detail };
+    case "mark_bad": return { kind, reason: detail };
+    case "add_note": return { kind, note: detail };
+    default: throw new RangeError(`Unknown conductor evidence kind: ${kind}`);
+  }
 }
 
 function transferStatusText(state) {
