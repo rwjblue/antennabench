@@ -300,3 +300,23 @@ fn v2_upgrade_copies_and_verifies_referenced_attachments() {
         attachment.bytes
     );
 }
+
+#[test]
+fn direct_v1_upgrade_matches_the_deterministic_two_step_model() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
+    let direct_path = temp.path().join(format!("direct{V2_BUNDLE_SUFFIX}"));
+    let intermediate_path = temp.path().join(format!("intermediate{V2_BUNDLE_SUFFIX}"));
+    let two_step_path = temp.path().join(format!("two-step{V2_BUNDLE_SUFFIX}"));
+
+    let direct = BundleStore::new(&fixture)
+        .upgrade_v1_to_v3(&direct_path)
+        .unwrap();
+    let intermediate = BundleStore::new(&fixture)
+        .upgrade_v1_to_v2(&intermediate_path)
+        .unwrap();
+    let two_step = intermediate.upgrade_v2_to_v3(&two_step_path).unwrap();
+
+    assert_eq!(direct.read_v3().unwrap(), two_step.read_v3().unwrap());
+}

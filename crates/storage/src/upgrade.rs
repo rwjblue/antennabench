@@ -148,6 +148,86 @@ impl BundleStore {
         }
         Ok(destination_store)
     }
+
+    /// Creates a new schema-v3 bundle directly from schema v1 without
+    /// mutating the source or inventing facts absent from the legacy model.
+    pub fn upgrade_v1_to_v3(
+        &self,
+        destination: impl AsRef<Path>,
+    ) -> Result<BundleStore, BundleUpgradeError> {
+        let source_before = snapshot_tree(self)?;
+        ensure_destination_outside_source(self.root(), destination.as_ref())?;
+        let inspection = self.inspect()?;
+        if !inspection.report().allows(BundleValidationProfile::Upgrade) {
+            return Err(BundleUpgradeError::Ineligible {
+                source: BundleValidationError::from_report(inspection.report().clone()),
+            });
+        }
+        let bundle =
+            inspection
+                .bundle()
+                .cloned()
+                .ok_or_else(|| BundleUpgradeError::Ineligible {
+                    source: BundleValidationError::from_report(inspection.report().clone()),
+                })?;
+        if bundle.manifest.schema_version != SCHEMA_VERSION_V1 {
+            return Err(BundleUpgradeError::NotVersionOne {
+                actual: bundle.manifest.schema_version,
+            });
+        }
+        let wsjtx_path = self.root().join(&bundle.manifest.files.wsjtx);
+        let wsjtx_bytes = read_bounded(
+            self,
+            &wsjtx_path,
+            self.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Read,
+        )?;
+        let wsjtx_text =
+            std::str::from_utf8(&wsjtx_bytes).map_err(|source| BundleStoreError::InvalidUtf8 {
+                path: wsjtx_path,
+                source,
+            })?;
+        let wsjtx_lines = wsjtx_text
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        let v2 = migrate_bundle(&bundle, &wsjtx_lines)?;
+        verify_semantic_projection(&bundle, v2.clone().into_current().bundle)?;
+        let mut v3 = upgrade_v2_bundle_model(v2);
+        BundleStore::refresh_v3_checkpoint(&mut v3)?;
+
+        let destination_store = self.derived(destination);
+        destination_store.write_v3_for_upgrade(&v3)?;
+        let result = (|| {
+            copy_legacy_attachments(
+                self,
+                &self.root().join(&bundle.manifest.files.attachments_dir),
+                &destination_store
+                    .root()
+                    .join(&v3.manifest.files.attachments_dir),
+            )?;
+            for record in &v3.adapter_records {
+                if let AdapterInput::Attachment { attachment } = &record.input {
+                    destination_store.read_attachment(attachment)?;
+                }
+            }
+            if destination_store.read_v3()? != v3 {
+                return Err(BundleUpgradeError::V3RoundTripMismatch);
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(error);
+        }
+        if source_before != snapshot_tree(self)? {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(BundleUpgradeError::SourceChanged);
+        }
+        Ok(destination_store)
+    }
 }
 
 fn migrate_bundle(
