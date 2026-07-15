@@ -228,6 +228,13 @@ read/report/export inputs and must be upgraded non-destructively before a
 conductor mutates them. The exact boundary and filesystem limitations are in
 [Schema-V2 Live Persistence And Recovery](live-persistence.md).
 
+The deterministic desktop E2E harness composes the same production boundaries
+through setup, conductor events, captured WSJT-X datagrams, a bounded adapter
+gap, lost acknowledgement, torn stream write, recovery, terminal report
+refresh, exact HTML/checkpoint exports, destination collisions, and reopen. A
+fixed scenario seed plus panic-time bundle/log retention makes failures
+reproducible without adding test-only authority to the runtime command surface.
+
 ## Setup And Conductor Delivery
 
 The conductor tracker

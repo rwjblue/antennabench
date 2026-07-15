@@ -942,15 +942,18 @@ pub(crate) fn mutate_active_session_conductor(
 #[cfg(test)]
 mod tests {
     use std::{
-        io,
+        fs, io,
         path::{Path, PathBuf},
         sync::{Arc, Mutex},
     };
 
-    use antennabench_core::{Band, PlannedSlot, SessionLifecycleV2, V2_BUNDLE_SUFFIX};
+    use antennabench_core::{
+        reduce_operator_events_v2, AdapterInput, Band, CorrectableOperatorEventPayloadV2,
+        PlannedSlot, SessionLifecycleV2, V2_BUNDLE_SUFFIX,
+    };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
-        LivePersistencePoint,
+        LivePersistencePoint, LiveStreamV2, RecoveryDispositionV2,
     };
     use chrono::{DateTime, TimeZone, Utc};
     use tempfile::TempDir;
@@ -960,7 +963,14 @@ mod tests {
         ConductorMutationRequest, ConductorPhase, ConductorSessionState, CorrectableAction,
         SlotEvidenceStatus,
     };
-    use crate::open_session::{activate_created_bundle, ActiveSessionState, SessionErrorKind};
+    use crate::{
+        open_session::{
+            activate_created_bundle, e2e_report_snapshot, export_e2e_snapshots, ActiveSessionState,
+            SessionErrorKind,
+        },
+        setup::create_e2e_session,
+        wsjtx_session::inject_e2e_wsjtx_sequence,
+    };
 
     #[derive(Debug)]
     struct TestHooks {
@@ -1073,6 +1083,43 @@ mod tests {
             expected_revision: view.revision,
             action,
         }
+    }
+
+    struct FailureArtifacts {
+        source: PathBuf,
+        seed: &'static str,
+    }
+
+    impl Drop for FailureArtifacts {
+        fn drop(&mut self) {
+            if !std::thread::panicking() {
+                return;
+            }
+            let destination = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/desktop-e2e-failures")
+                .join(self.seed);
+            let _ = fs::remove_dir_all(&destination);
+            let _ = copy_tree(&self.source, &destination);
+            eprintln!(
+                "desktop-e2e failure-artifacts={} seed={}",
+                destination.display(),
+                self.seed
+            );
+        }
+    }
+
+    fn copy_tree(source: &Path, destination: &Path) -> io::Result<()> {
+        fs::create_dir_all(destination)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            let target = destination.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_tree(&entry.path(), &target)?;
+            } else {
+                fs::copy(entry.path(), target)?;
+            }
+        }
+        Ok(())
     }
 
     #[test]
@@ -1278,6 +1325,307 @@ mod tests {
         println!(
             "desktop-e2e result=manual-conductor revision={} lifecycle={:?}",
             ended.revision, ended.lifecycle
+        );
+    }
+
+    #[test]
+    fn desktop_e2e_complete_local_workflow_is_coherent_recoverable_and_exportable() {
+        const SEED: &str = "complete-workflow-v1";
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("scenario-seed.txt"), SEED).unwrap();
+        let _failure_artifacts = FailureArtifacts {
+            source: temp.path().to_path_buf(),
+            seed: SEED,
+        };
+        let active = ActiveSessionState::default();
+        let created = create_e2e_session(temp.path(), &active);
+        assert_eq!(created.slot_ids.len(), 4);
+        assert_eq!(created.antenna_labels, ["Vertical", "Dipole"]);
+        let store = BundleStore::new(&created.path);
+        let initial = store.read_v2_checkpointed().unwrap();
+        assert_eq!(initial.manifest.session_id, created.session_id);
+        assert_eq!(initial.session_state.revision, 0);
+        assert_eq!(initial.session_state.lifecycle, SessionLifecycleV2::Ready);
+
+        let at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 20).unwrap();
+        let hooks = Arc::new(TestHooks::new(at));
+        let conductor = ConductorSessionState::default();
+        let ready = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+        let start_request = request(
+            &ready,
+            ConductorAction::Start {
+                note: Some("deterministic complete workflow".into()),
+            },
+        );
+        hooks.fail_once_at(LivePersistencePoint::BeforeAcknowledge);
+        let started =
+            mutate_conductor_with_hooks(&active, &conductor, start_request.clone(), hooks.clone())
+                .unwrap();
+        let retried =
+            mutate_conductor_with_hooks(&active, &conductor, start_request, hooks.clone()).unwrap();
+        assert_eq!(started.revision, 1);
+        assert_eq!(retried.revision, 1);
+        assert_eq!(store.read_v2_checkpointed().unwrap().events.len(), 1);
+
+        let confirmed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &retried,
+                ConductorAction::ConfirmAntenna {
+                    slot_id: created.slot_ids[0].clone(),
+                    antenna_label: created.antenna_labels[1].clone(),
+                    note: Some("operator verified the actual switch".into()),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let original_confirmation = confirmed
+            .effective_events
+            .iter()
+            .find(|event| event.kind == "antenna_state_confirmed")
+            .unwrap()
+            .source_event_id
+            .clone();
+        let missed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &confirmed,
+                ConductorAction::MarkMissed {
+                    slot_id: created.slot_ids[1].clone(),
+                    reason: Some("operator was unavailable".into()),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let bad = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &missed,
+                ConductorAction::MarkBad {
+                    slot_id: created.slot_ids[2].clone(),
+                    reason: "feedline connection was suspect".into(),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let noted = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &bad,
+                ConductorAction::AddNote {
+                    slot_id: Some(created.slot_ids[0].clone()),
+                    note: "manual evidence remains available without WSJT-X".into(),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let corrected = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &noted,
+                ConductorAction::ReplaceEvent {
+                    target_event_id: original_confirmation,
+                    slot_id: Some(created.slot_ids[0].clone()),
+                    replacement: CorrectableAction::ConfirmAntenna {
+                        antenna_label: created.antenna_labels[0].clone(),
+                        note: Some("corrected after inspecting the switch".into()),
+                    },
+                    reason: "first actual-state entry selected the wrong label".into(),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let interrupted = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &corrected,
+                ConductorAction::Interrupt {
+                    reason: Some("planned operator pause".into()),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        assert_eq!(interrupted.lifecycle, SessionLifecycleV2::Interrupted);
+        let resumed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &interrupted,
+                ConductorAction::Resume {
+                    note: Some("operator returned".into()),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        assert_eq!(resumed.lifecycle, SessionLifecycleV2::Running);
+
+        let wsjtx_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 1, 50).unwrap();
+        let intake = inject_e2e_wsjtx_sequence(&created.path, wsjtx_at);
+        assert_eq!(intake.adapter_records, 4);
+        assert_eq!(intake.observations, 1);
+        assert_eq!(intake.gaps, 1);
+        assert!(intake.revision > resumed.revision);
+
+        hooks.set_now(Utc.with_ymd_and_hms(2026, 7, 15, 20, 2, 30).unwrap());
+        let current = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+        hooks.fail_once_at(LivePersistencePoint::MidStreamWrite(LiveStreamV2::Events));
+        let crash = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &current,
+                ConductorAction::AddNote {
+                    slot_id: None,
+                    note: "torn crash mutation must not become evidence".into(),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap_err();
+        assert_eq!(crash.kind, SessionErrorKind::Filesystem);
+        assert_eq!(
+            store.read_v2_checkpointed().unwrap().session_state.revision,
+            intake.revision
+        );
+
+        let crash_recovery = store.recover_v2_with_hooks(hooks.clone()).unwrap();
+        assert_eq!(crash_recovery.disposition, RecoveryDispositionV2::Clean);
+        assert_eq!(crash_recovery.starting_revision, intake.revision);
+        assert_eq!(crash_recovery.recovered_revision, intake.revision);
+        assert_eq!(crash_recovery.final_revision, intake.revision + 1);
+        assert!(crash_recovery.interruption.is_some());
+
+        let reopened_active = ActiveSessionState::default();
+        activate_created_bundle(&reopened_active, created.path.clone()).unwrap();
+        let recovered_conductor = ConductorSessionState::default();
+        let recovered =
+            read_conductor_with_hooks(&reopened_active, &recovered_conductor, hooks.clone())
+                .unwrap();
+        assert_eq!(recovered.lifecycle, SessionLifecycleV2::Interrupted);
+        let recovery = recovered
+            .recovery
+            .as_ref()
+            .expect("process recovery details");
+        assert_eq!(recovery.disposition, "clean");
+        assert_eq!(recovery.starting_revision, intake.revision + 1);
+        assert_eq!(recovery.final_revision, intake.revision + 1);
+        assert!(!recovery.interruption_recorded);
+        let resumed = mutate_conductor_with_hooks(
+            &reopened_active,
+            &recovered_conductor,
+            request(
+                &recovered,
+                ConductorAction::Resume {
+                    note: Some("resumed after deterministic crash recovery".into()),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let ended = mutate_conductor_with_hooks(
+            &reopened_active,
+            &recovered_conductor,
+            request(
+                &resumed,
+                ConductorAction::End {
+                    reason: Some("complete workflow finished".into()),
+                },
+            ),
+            hooks,
+        )
+        .unwrap();
+        assert_eq!(ended.lifecycle, SessionLifecycleV2::Ended);
+
+        let final_bundle = store.read_v2_checkpointed().unwrap();
+        assert_eq!(
+            final_bundle.session_state.lifecycle,
+            SessionLifecycleV2::Ended
+        );
+        assert_eq!(final_bundle.session_state.revision, ended.revision);
+        assert_eq!(final_bundle.adapter_records.len(), 4);
+        assert_eq!(final_bundle.observations.len(), 1);
+        assert!(final_bundle.adapter_records.iter().take(3).all(|record| {
+            matches!(
+                &record.input,
+                AdapterInput::Inline {
+                    data,
+                    encoding: Some(encoding),
+                    ..
+                } if !data.is_empty() && encoding == "hex"
+            )
+        }));
+        assert!(!final_bundle.events.iter().any(|event| {
+            matches!(
+                &event.payload,
+                antennabench_core::OperatorEventPayloadV2::NoteAdded { note }
+                    if note.contains("torn crash mutation")
+            )
+        }));
+        let reduction = reduce_operator_events_v2(SessionLifecycleV2::Ready, &final_bundle.events);
+        assert_eq!(reduction.lifecycle, SessionLifecycleV2::Ended);
+        assert!(reduction.diagnostics.is_empty());
+        assert!(reduction.effective_events.iter().any(|event| {
+            event.payload
+                == CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
+                    antenna_label: created.antenna_labels[0].clone(),
+                    note: Some("corrected after inspecting the switch".into()),
+                }
+        }));
+
+        let exported = export_e2e_snapshots(&reopened_active, temp.path());
+        assert_eq!(exported.revision, ended.revision);
+        assert!(exported.presentation_id > 0);
+        assert!(exported.report_path.exists());
+        assert!(exported.report_html.contains(&format!(
+            "<dt>Checkpoint revision</dt><dd>{}</dd>",
+            ended.revision
+        )));
+        assert!(exported.report_html.contains("Ended / final"));
+        assert!(exported
+            .report_html
+            .contains("Incomplete: 1 explicit acquisition gap(s)"));
+        assert!(exported
+            .report_html
+            .contains("Lifecycle and interruption history"));
+
+        let exported_store = BundleStore::new(&exported.bundle_path);
+        let reopened_bundle = exported_store.read_v2_checkpointed().unwrap();
+        assert_eq!(reopened_bundle, final_bundle);
+        let final_active = ActiveSessionState::default();
+        activate_created_bundle(&final_active, exported.bundle_path.clone()).unwrap();
+        let (report_revision, presentation_id, reopened_html) = e2e_report_snapshot(&final_active);
+        assert_eq!(report_revision, ended.revision);
+        assert!(presentation_id > 0);
+        assert_eq!(reopened_html, exported.report_html);
+        fs::write(
+            temp.path().join("scenario-result.txt"),
+            format!(
+                "seed={SEED}\nrevision={}\nevents={}\nadapter_records={}\nobservations={}\n",
+                ended.revision,
+                final_bundle.events.len(),
+                final_bundle.adapter_records.len(),
+                final_bundle.observations.len()
+            ),
+        )
+        .unwrap();
+        eprintln!(
+            "desktop-e2e result=complete-workflow seed={SEED} revision={} report={} bundle={}",
+            ended.revision,
+            exported.report_path.display(),
+            exported.bundle_path.display()
         );
     }
 

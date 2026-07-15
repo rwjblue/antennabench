@@ -1093,6 +1093,72 @@ pub(crate) fn refresh_active_session_report(
 }
 
 #[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct E2eExportedSnapshots {
+    pub(crate) report_path: PathBuf,
+    pub(crate) bundle_path: PathBuf,
+    pub(crate) revision: u64,
+    pub(crate) presentation_id: u64,
+    pub(crate) report_html: String,
+}
+
+#[cfg(test)]
+pub(crate) fn e2e_report_snapshot(state: &ActiveSessionState) -> (u64, u64, String) {
+    let presentation = refresh_active_session_report_for(state).expect("coherent report refresh");
+    (
+        presentation.revision.expect("schema-v2 report revision"),
+        presentation.presentation_id,
+        presentation.report_html,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn export_e2e_snapshots(
+    state: &ActiveSessionState,
+    root: &Path,
+) -> E2eExportedSnapshots {
+    let presentation = refresh_active_session_report_for(state).expect("coherent report refresh");
+    let revision = presentation.revision.expect("schema-v2 report revision");
+    let report_path = root.join("complete-workflow-report.html");
+    let bundle_path = root.join(format!("complete-workflow-export{V2_BUNDLE_SUFFIX}"));
+    let report_outcome =
+        export_active_report_with_selection(state, |_| Ok(Some(report_path.clone())))
+            .expect("standalone report export");
+    assert!(matches!(
+        report_outcome,
+        ExportReportOutcome::Exported {
+            revision: Some(exported),
+            ..
+        } if exported == revision
+    ));
+    assert!(export_active_report_with_selection(state, |_| Ok(Some(report_path.clone()))).is_err());
+    let bundle_outcome =
+        export_active_session_with_selection(state, |_| Ok(Some(bundle_path.clone())))
+            .expect("lossless checkpoint export");
+    assert!(matches!(
+        bundle_outcome,
+        ExportSessionOutcome::Exported {
+            revision: Some(exported),
+            ..
+        } if exported == revision
+    ));
+    assert!(
+        export_active_session_with_selection(state, |_| Ok(Some(bundle_path.clone()))).is_err()
+    );
+    assert_eq!(
+        std::fs::read_to_string(&report_path).expect("exported HTML"),
+        presentation.report_html
+    );
+    E2eExportedSnapshots {
+        report_path,
+        bundle_path,
+        revision,
+        presentation_id: presentation.presentation_id,
+        report_html: presentation.report_html,
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::{fs, io, path::Path};
 

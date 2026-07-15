@@ -175,6 +175,14 @@ experiment model or receive general host authority. Reports and exports consume
 one committed checkpoint revision, and rendered output never becomes source
 evidence.
 
+Routine unattended coverage composes that entire local path in one seeded
+scenario: reviewed setup, manual and synthetic evidence, retry and crash
+recovery, explicit acquisition incompleteness, final report refresh, both
+exports, collision safety, and reopen. It uses the production reducers,
+persistence, parser, analysis, renderer, and desktop command seams without
+hardware, network services, native pickers, display coordinates, or timing
+sleeps.
+
 ## Hosted Sharing
 
 Hosted sharing is an optional extension of the local workflow, not a dependency

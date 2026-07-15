@@ -299,20 +299,20 @@ mise run desktop:dev
 
 `desktop:e2e` is the routine desktop workflow check for agents and developers.
 It injects deterministic setup/conductor clocks and IDs plus open/save
-selections immediately below the native picker adapter. The task reviews and
-creates an exact checkpointed schema-v2 setup, exercises cancellation and
-active-session replacement, then runs the production manual conductor through
-start, explicit actual-antenna evidence, correction/retraction, interruption,
-resume, end, idempotent lost-response retry, stale revision, and restart
-recovery. It injects the captured WSJT-X sequence below the socket and verifies
-one atomic raw-evidence/observation mutation. It also runs the Rust open,
-normalized validation, analysis, report
-rendering, lossless export verification, and reopen path. The task asserts
-source non-mutation, exported tree/byte equality, complete setup publication,
-and terminal lifecycle enforcement, and separately covers normal open/export
-cancellation and a typed malformed-JSON failure. Temporary sources and
-destinations are isolated and automatically removed. The task does not launch
-Tauri, create a window, take focus, or send keyboard or pointer input.
+selections immediately below the native picker adapter. One composed seeded
+scenario reviews and creates an exact checkpointed schema-v2 setup, then runs
+the production manual conductor through start, a lost-response retry, explicit
+actual-antenna confirmation, missed/bad/note/correction evidence, an operator
+interruption/resume, synthetic WSJT-X raw evidence plus observation, a bounded
+adapter gap, a torn-write failpoint, process recovery, final resume/end, report
+refresh, exact standalone HTML export, checkpointed bundle export, collision
+rejection, and reopen. It asserts revision identity, retry idempotency, raw hex,
+effective corrections, explicit gap disclosure, terminal lifecycle, exported
+checkpoint equality, and deterministic report identity. Focused scenarios also
+cover cancellation, stale revisions, replacement, malformed JSON, and the
+remaining recovery/resource matrices. Temporary sources and destinations are
+isolated and automatically removed. The task does not launch Tauri, create a
+window, open a socket, take focus, or send keyboard or pointer input.
 
 The task streams phase diagnostics to the terminal and overwrites the bounded
 `target/desktop-e2e/last-run.log` artifact on every run. It records the platform,
@@ -320,6 +320,9 @@ elapsed seconds, and final status without depending on a Unix-only timing tool.
 CI runs the same task, so failures retain the selected phase, fixture path,
 typed error kind, technical detail, and Rust assertion context in both the
 artifact and job log.
+The composed scenario records its fixed seed and result inside the temporary
+scenario root; if an assertion panics, that exact root is copied to
+`target/desktop-e2e-failures/<seed>/` before temporary cleanup.
 
 On the 2026-07-13 macOS development machine, the warm task completed in 0.42 s.
 The prior issue #18 foreground smoke took 3 min 49 s from application relaunch

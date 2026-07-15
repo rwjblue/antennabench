@@ -28,6 +28,10 @@ The current implementation focus is the bundle-first Rust foundation:
 - optional loopback WSJT-X orchestration with expected-client admission,
   atomic raw-evidence/observation checkpoint mutations, explicit non-observation
   dispositions, stale-heartbeat status, and fail-closed acquisition gaps
+- one deterministic unattended setup-to-final-export scenario covering manual
+  and synthetic evidence, retry/crash recovery, gap disclosure, report identity,
+  collision safety, and checkpoint reopen without external processes or UI
+  automation
 - a realistic, purpose-built synthetic canonical sample-report session spanning
   two antennas, two bands, usable and excluded evidence, and missing data
 - golden fixture coverage
@@ -52,6 +56,8 @@ and
 [Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md),
 validated setup, checkpointed bundle creation, and the complete manual/no-rig
 conductor and bounded live WSJT-X orchestration are now shipped.
+Coherent live/final report refresh and export plus the composed unattended
+end-to-end proof are also shipped.
 
 The dependency-ordered implementation path is:
 
@@ -66,7 +72,8 @@ The dependency-ordered implementation path is:
 5. Granular evidence eligibility, bounded report/IPC behavior, and coherent
    live/final report refresh and export are implemented (#52, #57, and #64),
    including the same-session presentation fix from #41.
-6. Prove the workflow with deterministic unattended end-to-end coverage (#65).
+6. The deterministic unattended setup-to-final-export proof is implemented
+   (#65).
 
 Optional rig control, public spots, hosted sharing, and stronger comparative
 conclusions remain outside this milestone. Manual/no-rig operation must be

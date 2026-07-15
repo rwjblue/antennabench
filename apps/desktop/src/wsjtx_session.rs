@@ -985,6 +985,110 @@ pub(crate) fn stop_active_session_wsjtx(
 }
 
 #[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct E2eWsjtxResult {
+    pub(crate) revision: u64,
+    pub(crate) adapter_records: usize,
+    pub(crate) observations: usize,
+    pub(crate) gaps: usize,
+}
+
+#[cfg(test)]
+pub(crate) fn inject_e2e_wsjtx_sequence(
+    source: &Path,
+    received_at: DateTime<Utc>,
+) -> E2eWsjtxResult {
+    use antennabench_wsjtx::WsjtxAdapterLimits;
+
+    #[derive(Debug)]
+    struct DeterministicHooks(Mutex<u64>, DateTime<Utc>);
+
+    impl LivePersistenceHooks for DeterministicHooks {
+        fn now(&self) -> DateTime<Utc> {
+            self.1
+        }
+
+        fn new_id(&self, kind: &str) -> String {
+            let mut next = self.0.lock().unwrap();
+            let id = format!("e2e-{kind}-{next:04}");
+            *next += 1;
+            id
+        }
+    }
+
+    let store = BundleStore::new(source);
+    let bundle = store.read_v2_checkpointed().expect("running checkpoint");
+    let hooks = Arc::new(DeterministicHooks(Mutex::new(1), received_at));
+    let config = LiveIngestConfig {
+        session_id: bundle.manifest.session_id.clone(),
+        receiver_id: "e2e-fixture-receiver".into(),
+        station_callsign: bundle.station.callsign,
+        station_grid: bundle.station.grid,
+        session_started_at: received_at - Duration::minutes(2),
+    };
+    let mut limits = WsjtxAdapterLimits::testing(512);
+    limits.udp_rate_burst = 3;
+    limits.udp_rate_per_second = 3;
+    let mut orchestrator = WsjtxOrchestrator {
+        store: store.clone(),
+        ingest: LiveWsjtxIngest::new_with_limits(config, limits).expect("bounded live ingest"),
+        session_id: bundle.manifest.session_id,
+        receiver_id: "e2e-fixture-receiver".into(),
+        expected_client_id: "WSJT-X".into(),
+        hooks,
+    };
+    let fixture = include_str!("../../../fixtures/wsjtx/udp/schema3-live-sequence.hex");
+    let datagrams = fixture
+        .lines()
+        .map(|line| {
+            line.split_once('=')
+                .expect("named fixture datagram")
+                .1
+                .as_bytes()
+                .chunks_exact(2)
+                .map(|chunk| u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let status = Mutex::new(WsjtxReceiverStatus::default());
+    for bytes in &datagrams {
+        assert!(matches!(
+            orchestrator.process(
+                ReceivedUdpDatagram {
+                    bytes: bytes.clone(),
+                    source: "127.0.0.1:2237".parse().unwrap(),
+                    received_at,
+                },
+                &status,
+            ),
+            IntakeDecision::Continue
+        ));
+    }
+    assert!(matches!(
+        orchestrator.process(
+            ReceivedUdpDatagram {
+                bytes: datagrams[0].clone(),
+                source: "127.0.0.1:2237".parse().unwrap(),
+                received_at,
+            },
+            &status,
+        ),
+        IntakeDecision::Stop
+    ));
+    let bundle = store.read_v2_checkpointed().expect("ingested checkpoint");
+    E2eWsjtxResult {
+        revision: bundle.session_state.revision,
+        adapter_records: bundle.adapter_records.len(),
+        observations: bundle.observations.len(),
+        gaps: bundle
+            .adapter_records
+            .iter()
+            .filter(|record| record.record_type == "acquisition_gap")
+            .count(),
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::{
         io,
