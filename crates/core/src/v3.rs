@@ -3,7 +3,18 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{Band, ExperimentMode, SessionGoal, IDENTITY_MAX_BYTES};
+use crate::{
+    AdapterRecordV2, AnalysisFile, AntennasFile, Band, BundleFilesV2, BundleManifestV2,
+    EventCorrectionActionV2, EventTimeBasisV2, ExperimentMode, MutationMember, ObservationRecordV2,
+    PropagationRecordV2, Provenance, SessionGoal, SessionStateV2, Station, IDENTITY_MAX_BYTES,
+};
+
+pub type BundleFilesV3 = BundleFilesV2;
+pub type BundleManifestV3 = BundleManifestV2;
+pub type SessionStateV3 = SessionStateV2;
+pub type AdapterRecordV3 = AdapterRecordV2;
+pub type ObservationRecordV3 = ObservationRecordV2;
+pub type PropagationRecordV3 = PropagationRecordV2;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -152,6 +163,190 @@ pub struct ScheduleV3 {
     pub slots: Vec<PlannedSlotV3>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecordMetaV3 {
+    pub schema_version: u16,
+    pub session_id: String,
+    pub recorded_at: DateTime<Utc>,
+    pub provenance: Provenance,
+    pub mutation: MutationMember,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SignalStateConfirmationV3 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frequency_hz: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<SignalModeV3>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power_watts: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitted_callsign: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cadence_followed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CorrectableOperatorEventPayloadV3 {
+    AntennaStateConfirmed {
+        antenna_label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    SignalStateConfirmed {
+        confirmation: SignalStateConfirmationV3,
+    },
+    SlotMissed {
+        reason: Option<String>,
+    },
+    SlotBad {
+        reason: String,
+    },
+    NoteAdded {
+        note: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReplacementOperatorEventV3 {
+    pub occurred_at: DateTime<Utc>,
+    pub time_basis: EventTimeBasisV2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uncertainty_seconds: Option<u32>,
+    pub slot_id: Option<String>,
+    pub payload: CorrectableOperatorEventPayloadV3,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum EventCorrectionActionV3 {
+    Retract,
+    Replace {
+        replacement: ReplacementOperatorEventV3,
+    },
+}
+
+impl From<EventCorrectionActionV2> for EventCorrectionActionV3 {
+    fn from(value: EventCorrectionActionV2) -> Self {
+        match value {
+            EventCorrectionActionV2::Retract => Self::Retract,
+            EventCorrectionActionV2::Replace { replacement } => Self::Replace {
+                replacement: ReplacementOperatorEventV3 {
+                    occurred_at: replacement.occurred_at,
+                    time_basis: replacement.time_basis,
+                    uncertainty_seconds: replacement.uncertainty_seconds,
+                    slot_id: replacement.slot_id,
+                    payload: match replacement.payload {
+                        crate::CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
+                            antenna_label,
+                            note,
+                        } => CorrectableOperatorEventPayloadV3::AntennaStateConfirmed {
+                            antenna_label,
+                            note,
+                        },
+                        crate::CorrectableOperatorEventPayloadV2::SlotMissed { reason } => {
+                            CorrectableOperatorEventPayloadV3::SlotMissed { reason }
+                        }
+                        crate::CorrectableOperatorEventPayloadV2::SlotBad { reason } => {
+                            CorrectableOperatorEventPayloadV3::SlotBad { reason }
+                        }
+                        crate::CorrectableOperatorEventPayloadV2::NoteAdded { note } => {
+                            CorrectableOperatorEventPayloadV3::NoteAdded { note }
+                        }
+                    },
+                },
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OperatorEventPayloadV3 {
+    SessionStarted {
+        note: Option<String>,
+    },
+    SessionInterrupted {
+        reason: Option<String>,
+    },
+    InterruptionDetected {
+        reason: Option<String>,
+    },
+    SessionResumed {
+        note: Option<String>,
+    },
+    SessionEnded {
+        reason: Option<String>,
+    },
+    SessionAbandoned {
+        reason: Option<String>,
+    },
+    AntennaStateConfirmed {
+        antenna_label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    SignalStateConfirmed {
+        confirmation: SignalStateConfirmationV3,
+    },
+    SlotMissed {
+        reason: Option<String>,
+    },
+    SlotBad {
+        reason: String,
+    },
+    NoteAdded {
+        note: String,
+    },
+    EventCorrected {
+        target_event_id: String,
+        correction: EventCorrectionActionV3,
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OperatorEventV3 {
+    pub meta: RecordMetaV3,
+    pub event_id: String,
+    pub occurred_at: DateTime<Utc>,
+    pub time_basis: EventTimeBasisV2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uncertainty_seconds: Option<u32>,
+    pub slot_id: Option<String>,
+    pub payload: OperatorEventPayloadV3,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RigRecordV3 {
+    pub meta: RecordMetaV3,
+    pub record_id: String,
+    pub adapter_record_ids: Vec<String>,
+    pub status: String,
+    pub frequency_hz: Option<u64>,
+    pub mode: Option<String>,
+    pub power_watts: Option<f32>,
+    pub raw: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BundleV3Contents {
+    pub manifest: BundleManifestV3,
+    pub session_state: SessionStateV3,
+    pub station: Station,
+    pub antennas: AntennasFile,
+    pub schedule: ScheduleV3,
+    pub events: Vec<OperatorEventV3>,
+    pub observations: Vec<ObservationRecordV3>,
+    pub adapter_records: Vec<AdapterRecordV3>,
+    pub rig: Vec<RigRecordV3>,
+    pub propagation: Vec<PropagationRecordV3>,
+    pub analysis: AnalysisFile,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalPlanDiagnosticV3 {
     pub code: &'static str,
@@ -252,6 +447,132 @@ pub fn validate_signal_plan_schedule_v3(
             validate_rbn_suppression(&slots, &mut diagnostics);
         }
         validate_counterbalance(&slots, &mut diagnostics);
+    }
+
+    diagnostics
+}
+
+pub fn validate_signal_state_event_v3(
+    schedule: &ScheduleV3,
+    event: &OperatorEventV3,
+) -> Vec<SignalPlanDiagnosticV3> {
+    let OperatorEventPayloadV3::SignalStateConfirmed { confirmation } = &event.payload else {
+        return Vec::new();
+    };
+    let mut diagnostics = Vec::new();
+    let Some(slot_id) = event.slot_id.as_deref() else {
+        diagnostics.push(diagnostic(
+            "signal_state.missing_slot",
+            "/slot_id".into(),
+            "signal-state confirmation must identify one planned slot",
+        ));
+        return diagnostics;
+    };
+    let Some(slot) = schedule.slots.iter().find(|slot| slot.slot_id == slot_id) else {
+        diagnostics.push(diagnostic(
+            "signal_state.unknown_slot",
+            "/slot_id".into(),
+            "signal-state confirmation references an unknown slot",
+        ));
+        return diagnostics;
+    };
+    let Some(allocation) = &slot.signal else {
+        diagnostics.push(diagnostic(
+            "signal_state.slot_without_plan",
+            "/slot_id".into(),
+            "signal-state confirmation references a slot without a signal allocation",
+        ));
+        return diagnostics;
+    };
+    let Some(plan) = schedule
+        .signal_plans
+        .iter()
+        .find(|plan| plan.signal_plan_id == allocation.signal_plan_id)
+    else {
+        diagnostics.push(diagnostic(
+            "signal_state.unknown_plan",
+            "/slot_id".into(),
+            "signal-state confirmation cannot resolve the slot's signal plan",
+        ));
+        return diagnostics;
+    };
+
+    for (present, field) in [
+        (confirmation.frequency_hz.is_some(), "frequency_hz"),
+        (confirmation.mode.is_some(), "mode"),
+        (
+            confirmation.transmitted_callsign.is_some(),
+            "transmitted_callsign",
+        ),
+        (confirmation.cadence_followed.is_some(), "cadence_followed"),
+    ] {
+        if !present {
+            diagnostics.push(diagnostic(
+                "signal_state.missing_actual_fact",
+                format!("/payload/confirmation/{field}"),
+                format!("actual {field} was not confirmed"),
+            ));
+        }
+    }
+    if confirmation.frequency_hz == Some(0) {
+        diagnostics.push(diagnostic(
+            "signal_state.invalid_frequency",
+            "/payload/confirmation/frequency_hz".into(),
+            "confirmed frequency must be greater than zero",
+        ));
+    } else if confirmation
+        .frequency_hz
+        .is_some_and(|value| value != allocation.frequency_hz)
+    {
+        diagnostics.push(diagnostic(
+            "signal_state.frequency_mismatch",
+            "/payload/confirmation/frequency_hz".into(),
+            "confirmed frequency differs from the planned slot frequency",
+        ));
+    }
+    if confirmation.mode.is_some_and(|value| value != plan.mode) {
+        diagnostics.push(diagnostic(
+            "signal_state.mode_mismatch",
+            "/payload/confirmation/mode".into(),
+            "confirmed mode differs from the signal plan",
+        ));
+    }
+    if confirmation
+        .power_watts
+        .is_some_and(|value| !value.is_finite() || value <= 0.0)
+    {
+        diagnostics.push(diagnostic(
+            "signal_state.invalid_power",
+            "/payload/confirmation/power_watts".into(),
+            "confirmed power must be finite and greater than zero",
+        ));
+    } else if matches!(
+        (confirmation.power_watts, plan.planned_power_watts),
+        (Some(actual), Some(planned)) if actual != planned
+    ) {
+        diagnostics.push(diagnostic(
+            "signal_state.power_mismatch",
+            "/payload/confirmation/power_watts".into(),
+            "confirmed power differs from the signal plan",
+        ));
+    }
+    if confirmation
+        .transmitted_callsign
+        .as_ref()
+        .is_some_and(|value| !value.eq_ignore_ascii_case(&plan.transmitted_callsign))
+    {
+        diagnostics.push(diagnostic(
+            "signal_state.identity_mismatch",
+            "/payload/confirmation/transmitted_callsign".into(),
+            "confirmed transmitted identity differs from the signal plan",
+        ));
+    }
+    if confirmation.cadence_followed == Some(false) {
+        diagnostics.push(diagnostic(
+            "signal_state.cadence_mismatch",
+            "/payload/confirmation/cadence_followed".into(),
+            "operator reported that the planned cadence was not followed",
+        ));
     }
 
     diagnostics

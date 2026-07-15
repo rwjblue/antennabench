@@ -1,7 +1,10 @@
 use antennabench_core::{
-    validate_signal_plan_schedule_v3, Band, CounterbalanceBlockIdV3, ExperimentMode, PlannedSlotV3,
+    validate_signal_plan_schedule_v3, validate_signal_state_event_v3, AcquisitionChannelId,
+    AdapterId, Band, CounterbalanceBlockIdV3, EventTimeBasisV2, ExperimentMode, MutationMember,
+    OperatorEventPayloadV3, OperatorEventV3, PlannedSlotV3, Provenance, ProviderId, RecordMetaV3,
     ScheduleV3, SessionGoal, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3,
-    SignalModeV3, SignalPlanIdV3, SignalPlanV3, SignalVariantIdV3, SCHEMA_VERSION_V3,
+    SignalModeV3, SignalPlanIdV3, SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3,
+    SourceId, SCHEMA_VERSION_V3,
 };
 use chrono::{Duration, TimeZone, Utc};
 
@@ -144,4 +147,68 @@ fn signal_plan_machine_identities_are_bounded_and_lowercase() {
     for invalid in ["", "RBN", "-leading", "two..dots", "has space"] {
         assert!(SignalPlanIdV3::new(invalid).is_err(), "{invalid}");
     }
+}
+
+#[test]
+fn manual_signal_confirmation_is_typed_and_reports_missing_or_changed_actual_facts() {
+    let schedule = schedule(
+        plan(
+            SignalModeV3::Cw,
+            SignalCollectionProfileV3::ManualObservation,
+        ),
+        vec![slot(1, 0, "A", 14_050_000, "fixed", "block-1", 0)],
+    );
+    let event = OperatorEventV3 {
+        meta: RecordMetaV3 {
+            schema_version: SCHEMA_VERSION_V3,
+            session_id: "session-v3".into(),
+            recorded_at: schedule.slots[0].starts_at,
+            provenance: Provenance {
+                provider_id: ProviderId::new("antennabench").unwrap(),
+                source_id: SourceId::new("operator-evidence").unwrap(),
+                acquisition_channel: AcquisitionChannelId::new("operator-entry").unwrap(),
+                adapter_id: AdapterId::new("antennabench.operator").unwrap(),
+                adapter_version: "3".into(),
+            },
+            mutation: MutationMember {
+                mutation_id: "mutation-1".into(),
+                member_index: 0,
+                member_count: 1,
+            },
+        },
+        event_id: "signal-confirmation-1".into(),
+        occurred_at: schedule.slots[0].starts_at,
+        time_basis: EventTimeBasisV2::OperatorReported,
+        uncertainty_seconds: None,
+        slot_id: Some("slot-1".into()),
+        payload: OperatorEventPayloadV3::SignalStateConfirmed {
+            confirmation: SignalStateConfirmationV3 {
+                frequency_hz: Some(14_050_100),
+                mode: Some(SignalModeV3::Rtty),
+                power_watts: None,
+                transmitted_callsign: None,
+                cadence_followed: Some(false),
+                note: Some("operator noticed the mismatch".into()),
+            },
+        },
+    };
+
+    let diagnostics = validate_signal_state_event_v3(&schedule, &event);
+    let codes = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code)
+        .collect::<Vec<_>>();
+    assert!(codes.contains(&"signal_state.frequency_mismatch"));
+    assert!(codes.contains(&"signal_state.mode_mismatch"));
+    assert!(codes.contains(&"signal_state.missing_actual_fact"));
+    assert!(codes.contains(&"signal_state.cadence_mismatch"));
+
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["payload"]["kind"], "signal_state_confirmed");
+    assert_eq!(json["payload"]["confirmation"]["frequency_hz"], 14_050_100);
+    assert!(json["payload"]["confirmation"].get("power_watts").is_none());
+    assert_eq!(
+        serde_json::from_value::<OperatorEventV3>(json).unwrap(),
+        event
+    );
 }
