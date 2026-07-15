@@ -1657,8 +1657,7 @@ fn durable_attachment(
                 message: "recovery attachment digest is invalid".into(),
             })?;
     let path = paths.attachments_dir.join(relative);
-    File::open(&path)
-        .and_then(|file| file.sync_all())
+    sync_regular_file(&path)
         .map_err(|source| live_io("synchronize recovery attachment", &path, source))?;
     if let Some(parent) = path.parent() {
         sync_directory(parent)
@@ -1745,11 +1744,9 @@ fn copy_checkpointed_attachments(
                 ),
             });
         }
-        File::open(&destination_path)
-            .and_then(|file| file.sync_all())
-            .map_err(|source| {
-                live_io("synchronize exported attachment", &destination_path, source)
-            })?;
+        sync_regular_file(&destination_path).map_err(|source| {
+            live_io("synchronize exported attachment", &destination_path, source)
+        })?;
     }
     sync_directory(&destination_digest_dir).map_err(|source| {
         live_io(
@@ -2691,7 +2688,7 @@ fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Resul
         fs::remove_file(&previous_temp)?;
     }
     fs::copy(current, &previous_temp)?;
-    File::open(&previous_temp)?.sync_all()?;
+    sync_regular_file(&previous_temp)?;
     fs::rename(&previous_temp, previous)?;
     fs::rename(temp, current)
 }
@@ -2701,7 +2698,7 @@ fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Resul
     let previous_temp = previous.with_extension("json.next");
     remove_file_if_present(&previous_temp)?;
     fs::copy(current, &previous_temp)?;
-    File::open(&previous_temp)?.sync_all()?;
+    sync_regular_file(&previous_temp)?;
     move_file_write_through(&previous_temp, previous)?;
     move_file_write_through(temp, current)
 }
@@ -2716,20 +2713,33 @@ fn probe_live_persistence(path: &Path) -> io::Result<()> {
     let probe_id = Uuid::new_v4().simple();
     let current = path.join(format!(".antennabench-durability-{probe_id}.current"));
     let replacement = path.join(format!(".antennabench-durability-{probe_id}.next"));
+    let previous = path.join(format!(".antennabench-durability-{probe_id}.previous"));
+    let previous_temp = previous.with_extension("json.next");
     let result = (|| {
         write_synced_probe(&current, b"current")?;
         write_synced_probe(&replacement, b"replacement")?;
-        move_file_write_through(&replacement, &current)?;
+        replace_checkpoint(&replacement, &current, &previous)?;
         if fs::read(&current)? != b"replacement" {
             return Err(io::Error::other(
                 "write-through replacement did not preserve the replacement bytes",
+            ));
+        }
+        if fs::read(&previous)? != b"current" {
+            return Err(io::Error::other(
+                "write-through replacement did not preserve the prior bytes",
             ));
         }
         Ok(())
     })();
     let cleanup_current = remove_file_if_present(&current);
     let cleanup_replacement = remove_file_if_present(&replacement);
-    result.and(cleanup_current).and(cleanup_replacement)
+    let cleanup_previous = remove_file_if_present(&previous);
+    let cleanup_previous_temp = remove_file_if_present(&previous_temp);
+    result
+        .and(cleanup_current)
+        .and(cleanup_replacement)
+        .and(cleanup_previous)
+        .and(cleanup_previous_temp)
 }
 
 #[cfg(windows)]
@@ -2785,6 +2795,10 @@ fn remove_file_if_present(path: &Path) -> io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
     }
+}
+
+fn sync_regular_file(path: &Path) -> io::Result<()> {
+    OpenOptions::new().write(true).open(path)?.sync_all()
 }
 
 #[cfg(unix)]
