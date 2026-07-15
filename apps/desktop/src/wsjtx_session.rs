@@ -47,6 +47,7 @@ pub(crate) struct WsjtxSessionState(Mutex<WsjtxRuntime>);
 #[derive(Default)]
 struct WsjtxRuntime {
     active: Option<ReceiverHandle>,
+    last_source: Option<PathBuf>,
     last_status: Option<WsjtxReceiverStatus>,
 }
 
@@ -157,6 +158,7 @@ impl WsjtxSessionState {
     }
 
     fn finish_stop(&self, handle: ReceiverHandle, reason: &str) -> WsjtxReceiverStatus {
+        let source = handle.source.clone();
         handle.stop.store(true, Ordering::Release);
         let status = handle.status.clone();
         let _ = handle.worker.join();
@@ -174,6 +176,7 @@ impl WsjtxSessionState {
             });
         }
         if let Ok(mut runtime) = self.0.lock() {
+            runtime.last_source = Some(source);
             runtime.last_status = Some(snapshot.clone());
         }
         snapshot
@@ -190,7 +193,11 @@ impl WsjtxSessionState {
                     .as_ref()
                     .filter(|handle| handle.source == source)
                     .and_then(|handle| handle.status.lock().ok().map(|status| status.clone()))
-                    .or_else(|| runtime.last_status.clone())
+                    .or_else(|| {
+                        (runtime.last_source.as_deref() == Some(source))
+                            .then(|| runtime.last_status.clone())
+                            .flatten()
+                    })
             })
             .unwrap_or_default();
         if status.phase == WsjtxReceiverPhase::Running {
@@ -463,6 +470,12 @@ impl WsjtxOrchestrator {
             }
         };
         if parsed.message.client_id() != self.expected_client_id {
+            if let Err(LiveIngestError::Resource(error)) = self
+                .ingest
+                .ingest_datagram(&datagram.bytes, datagram.received_at)
+            {
+                return self.stop_for_resource_gap(&snapshot, &datagram, status, error.diagnostic);
+            }
             let mutation = self.adapter_only_mutation(
                 &snapshot,
                 &datagram,
@@ -526,27 +539,37 @@ impl WsjtxOrchestrator {
                 )
             }
             Err(LiveIngestError::Resource(error)) => {
-                let diagnostic = error.diagnostic;
-                let mutation = self.adapter_only_mutation(
-                    &snapshot,
-                    &datagram,
-                    "acquisition_gap",
-                    AdapterDisposition::PartiallyNormalized,
-                    "wsjtx.acquisition-gap",
-                    None,
-                );
-                let decision = self.commit_or_stop(
-                    mutation,
-                    status,
-                    Some((diagnostic.code, format!("{:?}", diagnostic), true)),
-                );
-                set_failed(status, diagnostic.code, format!("{:?}", diagnostic), true);
-                if matches!(decision, IntakeDecision::Continue) {
-                    IntakeDecision::Stop
-                } else {
-                    decision
-                }
+                self.stop_for_resource_gap(&snapshot, &datagram, status, error.diagnostic)
             }
+        }
+    }
+
+    fn stop_for_resource_gap(
+        &self,
+        snapshot: &BundleV2Contents,
+        datagram: &ReceivedUdpDatagram,
+        status: &Mutex<WsjtxReceiverStatus>,
+        diagnostic: antennabench_wsjtx::AdapterResourceDiagnostic,
+    ) -> IntakeDecision {
+        let message = format!("{diagnostic:?}");
+        let mutation = self.adapter_only_mutation(
+            snapshot,
+            datagram,
+            "acquisition_gap",
+            AdapterDisposition::PartiallyNormalized,
+            "wsjtx.acquisition-gap",
+            None,
+        );
+        let decision = self.commit_or_stop(
+            mutation,
+            status,
+            Some((diagnostic.code, message.clone(), true)),
+        );
+        set_failed(status, diagnostic.code, message, true);
+        if matches!(decision, IntakeDecision::Continue) {
+            IntakeDecision::Stop
+        } else {
+            decision
         }
     }
 
@@ -1239,6 +1262,38 @@ mod tests {
     }
 
     #[test]
+    fn unexpected_clients_consume_the_bounded_admission_budget() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 15, 3, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = running_store(&temp);
+        let hooks = Arc::new(TestHooks::new(at));
+        let mut limits = WsjtxAdapterLimits::testing(512);
+        limits.udp_rate_burst = 1;
+        limits.udp_rate_per_second = 1;
+        let mut orchestrator = orchestrator(store.clone(), hooks, Some(limits));
+        let status = Mutex::new(WsjtxReceiverStatus::default());
+        let mut mismatch = fixture_datagrams()[0].clone();
+        mismatch[16..22].copy_from_slice(b"OTHER!");
+
+        assert!(matches!(
+            orchestrator.process(received(mismatch.clone(), at), &status),
+            IntakeDecision::Continue
+        ));
+        assert!(matches!(
+            orchestrator.process(received(mismatch, at), &status),
+            IntakeDecision::Stop
+        ));
+
+        let bundle = store.read_v2_checkpointed().unwrap();
+        assert_eq!(bundle.adapter_records.len(), 2);
+        assert_eq!(
+            bundle.adapter_records[0].disposition,
+            antennabench_core::AdapterDisposition::Filtered
+        );
+        assert_eq!(bundle.adapter_records[1].record_type, "acquisition_gap");
+    }
+
+    #[test]
     fn terminal_lifecycle_and_stale_heartbeat_are_typed_without_network_access() {
         let at = Utc.with_ymd_and_hms(2026, 7, 15, 3, 0, 0).unwrap();
         let temp = TempDir::new().unwrap();
@@ -1278,17 +1333,25 @@ mod tests {
         assert_eq!(status.lock().unwrap().phase, WsjtxReceiverPhase::Failed);
 
         let state = WsjtxSessionState::default();
-        state.0.lock().unwrap().last_status = Some(WsjtxReceiverStatus {
-            phase: WsjtxReceiverPhase::Running,
-            started_at: Some(at),
-            expected_client_id: Some("WSJT-X".into()),
-            ..WsjtxReceiverStatus::default()
-        });
+        {
+            let mut runtime = state.0.lock().unwrap();
+            runtime.last_source = Some(store.root().to_path_buf());
+            runtime.last_status = Some(WsjtxReceiverStatus {
+                phase: WsjtxReceiverPhase::Running,
+                started_at: Some(at),
+                expected_client_id: Some("WSJT-X".into()),
+                ..WsjtxReceiverStatus::default()
+            });
+        }
         let stale = state.status_for_source(store.root(), at + chrono::Duration::seconds(46));
         assert_eq!(stale.phase, WsjtxReceiverPhase::Stale);
         assert_eq!(
             stale.diagnostic.unwrap().code,
             "wsjtx.client.stale_heartbeat"
+        );
+        assert_eq!(
+            state.status_for_source(&store.root().join("other"), at),
+            WsjtxReceiverStatus::default()
         );
     }
 }
