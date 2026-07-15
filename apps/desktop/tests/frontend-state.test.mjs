@@ -5,17 +5,27 @@ import {
   WORKFLOWS,
   beginExportSession,
   beginOpenSession,
+  beginSetupCreation,
+  beginSetupReview,
+  editSessionSetup,
   exportSessionCancelled,
   exportSessionFailed,
   exportSessionSucceeded,
   initialState,
   invokeActiveSessionReport,
+  invokeCreateSessionFromReview,
   invokeExportSession,
   invokeOpenSession,
+  invokeReviewSessionSetup,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
   selectWorkflow,
+  setupCreationCancelled,
+  setupCreationFailed,
+  setupCreationSucceeded,
+  setupReviewFailed,
+  setupReviewSucceeded,
   updateReportFrame,
   viewModel,
   workflowFromHash,
@@ -33,7 +43,96 @@ test("the shell starts in session setup", () => {
     exportError: null,
     exportNotice: null,
     exportedBundleName: null,
+    setupStatus: "editing",
+    setupReview: null,
+    setupError: null,
+    setupNotice: null,
   });
+});
+
+test("setup review gates creation on a valid normalized Rust plan", () => {
+  const reviewing = beginSetupReview(initialState());
+  const invalid = setupReviewSucceeded(reviewing, {
+    valid: false,
+    reviewId: null,
+    diagnostics: [{ code: "bundle.semantic.invalid_required_text" }],
+    plan: null,
+  });
+  const reviewed = setupReviewSucceeded(beginSetupReview(invalid), {
+    valid: true,
+    reviewId: "review-1",
+    diagnostics: [],
+    plan: { sessionId: "session-1", slots: [] },
+  });
+
+  assert.equal(reviewing.setupStatus, "reviewing");
+  assert.equal(invalid.setupStatus, "invalid");
+  assert.equal(reviewed.setupStatus, "reviewed");
+  assert.equal(reviewed.setupReview.reviewId, "review-1");
+  assert.equal(editSessionSetup(reviewed).setupReview, null);
+});
+
+test("setup creation cancellation, failure, and success preserve coherent state", () => {
+  const reviewed = setupReviewSucceeded(beginSetupReview(initialState()), {
+    valid: true,
+    reviewId: "review-1",
+    diagnostics: [],
+    plan: { sessionId: "session-1", slots: [] },
+  });
+  const creating = beginSetupCreation(reviewed);
+  const cancelled = setupCreationCancelled(creating);
+  const failed = setupCreationFailed(creating, {
+    kind: "destination",
+    message: "Destination exists.",
+    detail: "/tmp/existing.session.antennabundle",
+  });
+  const session = {
+    sessionId: "session-1",
+    bundleName: "created.session.antennabundle",
+    reportHtml: "<!doctype html>",
+  };
+  const created = setupCreationSucceeded(creating, session);
+
+  assert.equal(cancelled.setupStatus, "reviewed");
+  assert.equal(cancelled.setupReview.reviewId, "review-1");
+  assert.equal(failed.setupStatus, "reviewed");
+  assert.equal(failed.setupError.kind, "destination");
+  assert.equal(created.setupStatus, "created");
+  assert.equal(created.session, session);
+  assert.equal(created.openStatus, "ready");
+  assert.equal(created.reportPresentationId, 1);
+});
+
+test("setup bridge exposes only review and reviewed-creation commands", async () => {
+  const calls = [];
+  const invoke = async (...args) => {
+    calls.push(args);
+    return args[0] === "review_session_setup"
+      ? { valid: true, reviewId: "review-1" }
+      : { status: "created", session: { sessionId: "session-1" } };
+  };
+  const draft = { station: {}, antennas: [], schedule: {} };
+
+  const review = await invokeReviewSessionSetup(invoke, draft);
+  const created = await invokeCreateSessionFromReview(invoke, review.reviewId);
+
+  assert.deepEqual(calls, [
+    ["review_session_setup", { draft }],
+    ["create_session_from_review", { reviewId: "review-1" }],
+  ]);
+  assert.equal(created.status, "created");
+});
+
+test("setup native errors remain typed and editable", () => {
+  const failed = setupReviewFailed(beginSetupReview(initialState()), {
+    kind: "resource",
+    message: "The setup review is too large.",
+    detail: "resource.desktop.ipc_bytes",
+  });
+
+  assert.equal(failed.setupStatus, "error");
+  assert.equal(failed.setupError.kind, "resource");
+  assert.equal(editSessionSetup(failed).setupStatus, "editing");
 });
 
 test("opening a session transitions through loading and ready", () => {

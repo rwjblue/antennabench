@@ -44,7 +44,8 @@ validation, mutation/recovery, and bounded-resource policies are settled by
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md),
 and
 [Decision 0011](decisions/0011-use-a-fixed-bounded-local-resource-profile.md),
-but the conductor remains planned rather than shipped.
+validated setup and checkpointed bundle creation are now shipped. The live
+conductor remains planned.
 
 The dependency-ordered implementation path is:
 
@@ -52,8 +53,8 @@ The dependency-ordered implementation path is:
    storage (#46, #50, #51, and #55).
 2. Checkpointed persistence/recovery and the lifecycle/correction reducers are
    implemented (#53 and #54).
-3. Deliver validated setup/bundle creation and the complete manual/no-rig
-   conductor (#61 and #62).
+3. Validated setup/bundle creation is implemented (#61); deliver the complete
+   manual/no-rig conductor next (#62).
 4. Bound adapter ingress and orchestrate live WSJT-X evidence (#56 and #63).
 5. Add granular evidence eligibility, bounded report/IPC behavior, and coherent
    live/final report refresh and export (#52, #57, and #64). The same-session

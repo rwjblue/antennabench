@@ -105,12 +105,13 @@ an unmistakable aggregate overview with complete omission counts and no sampled
 rows; if even that cannot fit, report generation fails while storage-safe
 lossless export remains available.
 
-## Planned Local Conductor Delivery
+## Local Setup And Conductor Delivery
 
 The local conductor is tracked by
-[#45](https://github.com/rwjblue/antennabench/issues/45) and remains planned
-work. Its implementation is intentionally split so the UI cannot outrun the
-durable, validation, and resource boundaries:
+[#45](https://github.com/rwjblue/antennabench/issues/45). Validated local setup
+and bundle creation are implemented; live conductor behavior remains split into
+focused follow-up slices so the UI cannot outrun the durable, validation, and
+resource boundaries:
 
 1. Schema-v2, layered validation, strict write preflight, and bounded storage
    establish what can be created and mutated (#46, #50, #51, and #55).
@@ -119,8 +120,9 @@ durable, validation, and resource boundaries:
    lifecycle, correction, explicit-actual-state, conflict-exclusion, durable
    append, plan-generation, locking, snapshot, export, and recovery layers are
    implemented.
-3. Validated setup creates a new bundle, then the manual/no-rig conductor runs
-   it without depending on any optional adapter (#61 and #62).
+3. Validated setup now creates and opens a new checkpointed schema-v2 bundle
+   from an exact normalized review (#61). The manual/no-rig conductor then runs
+   it without depending on any optional adapter (#62).
 4. Bounded WSJT-X ingress and desktop orchestration add live evidence without
    making adapter health a lifecycle prerequisite (#56 and #63).
 5. Granular evidence eligibility and bounded report/IPC behavior feed coherent
@@ -128,12 +130,22 @@ durable, validation, and resource boundaries:
 6. A deterministic unattended scenario proves creation through interruption,
    recovery, completion, reporting, export, and reopen (#65).
 
-All setup, mutation, adapter, clock/identity, filesystem, and network authority
-stays behind focused Rust-owned commands. JavaScript presents typed drafts,
-actions, diagnostics, and derived report documents; it does not become a
-second experiment model or receive general host authority. Reports and exports
-consume one committed checkpoint revision, and rendered output never becomes
-source evidence.
+Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
+antenna definitions, and schedule timing. Rust trims and types the values,
+constructs stable schedule slots, applies strict-creation diagnostics, and
+returns the exact normalized review without touching a destination. Creation
+accepts only that review identity, owns the native destination picker, writes
+and verifies in a sibling staging directory, probes the live filesystem
+capability, and publishes the complete bundle before opening it as the active
+session. Cancellation, stale review, validation failure, and existing
+destinations do not replace active state or expose a partial destination.
+
+All mutation, adapter, clock/identity, filesystem, and network authority stays
+behind focused Rust-owned commands. JavaScript presents typed drafts, actions,
+diagnostics, and derived report documents; it does not become a second
+experiment model or receive general host authority. Reports and exports consume
+one committed checkpoint revision, and rendered output never becomes source
+evidence.
 
 ## Hosted Sharing
 

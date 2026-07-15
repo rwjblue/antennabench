@@ -57,32 +57,103 @@
           <section class="workflow-panel" data-panel="setup" aria-labelledby="setup-title">
             <div class="panel-heading">
               <div><p class="eyebrow">Prepare an experiment</p><h1 id="setup-title">Session setup</h1></div>
-              <span class="status-chip">Scaffold only</span>
+              <span class="status-chip muted" data-setup-status>Draft</span>
             </div>
-            <p class="lede">Define the plan before collecting evidence. Setup editing is represented here as a workflow boundary and is not implemented in this slice.</p>
+            <p class="lede">Enter the experiment once, review the exact normalized UTC-backed plan, then create a new checkpointed local session. Validation and persistence remain inside trusted Rust.</p>
 
-            <div class="setup-grid">
-              <article class="card">
-                <span class="card-index">A</span><h2>Station</h2>
-                <p>Callsign, grid, power, and experiment goal.</p>
-                <button type="button" disabled>Editing unavailable</button>
-              </article>
-              <article class="card">
-                <span class="card-index">B</span><h2>Antennas</h2>
-                <p>Freeform labels and optional installation context.</p>
-                <button type="button" disabled>Editing unavailable</button>
-              </article>
-              <article class="card">
-                <span class="card-index">C</span><h2>Schedule</h2>
-                <p>Planned bands, antenna assignments, and WSPR slots.</p>
-                <button type="button" disabled>Editing unavailable</button>
-              </article>
-            </div>
+            <form class="setup-form" data-setup-form novalidate>
+              <fieldset class="setup-section">
+                <legend><span>01</span> Station</legend>
+                <div class="field-grid">
+                  <label>Callsign<input data-setup-field="callsign" autocomplete="off" placeholder="N1RWJ" /></label>
+                  <label>Grid<input data-setup-field="grid" autocomplete="off" placeholder="FN42" /></label>
+                  <label>Transmit power (W)<input data-setup-field="powerWatts" inputmode="decimal" placeholder="5" /></label>
+                  <label class="field-wide">Operator notes<textarea data-setup-field="operatorNotes" rows="2" placeholder="Optional setup context"></textarea></label>
+                </div>
+              </fieldset>
 
-            <div class="boundary-note">
-              <strong>Durable boundary</strong>
-              <p>Future setup actions will write the session bundle through canonical Rust libraries. This interface keeps only disposable navigation state.</p>
+              <fieldset class="setup-section">
+                <legend><span>02</span> Antennas and explicit order</legend>
+                <p class="field-help">Rows are persisted and scheduled in A/B order. Add more rows for a larger comparison.</p>
+                <div class="antenna-editor" data-antenna-row>
+                  <div class="antenna-heading"><strong data-antenna-title>Antenna A</strong><button type="button" data-remove-antenna>Remove</button></div>
+                  <div class="field-grid">
+                    <label>Unambiguous label<input data-antenna-field="label" placeholder="Vertical" /></label>
+                    <label>Facets<input data-antenna-field="facets" placeholder="omnidirectional, ground mounted" /></label>
+                    <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label>
+                    <label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label>
+                    <label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label>
+                    <label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label>
+                    <label>Tuner<input data-antenna-field="tuner" /></label>
+                    <label>Feedline<input data-antenna-field="feedline" /></label>
+                    <label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                  </div>
+                </div>
+                <div class="antenna-editor" data-antenna-row>
+                  <div class="antenna-heading"><strong data-antenna-title>Antenna B</strong><button type="button" data-remove-antenna>Remove</button></div>
+                  <div class="field-grid">
+                    <label>Unambiguous label<input data-antenna-field="label" placeholder="Dipole" /></label>
+                    <label>Facets<input data-antenna-field="facets" placeholder="broadside east-west" /></label>
+                    <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label>
+                    <label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label>
+                    <label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label>
+                    <label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label>
+                    <label>Tuner<input data-antenna-field="tuner" /></label>
+                    <label>Feedline<input data-antenna-field="feedline" /></label>
+                    <label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                  </div>
+                </div>
+                <button class="text-action" type="button" data-add-antenna>+ Add antenna</button>
+                <template data-antenna-template>
+                  <div class="antenna-editor" data-antenna-row>
+                    <div class="antenna-heading"><strong data-antenna-title>Antenna</strong><button type="button" data-remove-antenna>Remove</button></div>
+                    <div class="field-grid">
+                      <label>Unambiguous label<input data-antenna-field="label" /></label>
+                      <label>Facets<input data-antenna-field="facets" /></label>
+                      <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label>
+                      <label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label>
+                      <label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label>
+                      <label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label>
+                      <label>Tuner<input data-antenna-field="tuner" /></label>
+                      <label>Feedline<input data-antenna-field="feedline" /></label>
+                      <label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                    </div>
+                  </div>
+                </template>
+              </fieldset>
+
+              <fieldset class="setup-section">
+                <legend><span>03</span> Deterministic schedule</legend>
+                <div class="field-grid">
+                  <label>Experiment mode<select data-setup-field="mode"><option value="whole_station_ab">Whole-station A/B</option><option value="tx_focused">TX focused</option><option value="rx_focused">RX focused</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
+                  <label>Goal<select data-setup-field="goal"><option value="general_coverage">General coverage</option><option value="dx">DX</option><option value="regional">Regional</option><option value="nvis_local">NVIS / local</option><option value="weak_signal_reliability">Weak-signal reliability</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
+                  <label>Local start time<input type="datetime-local" data-setup-field="startsAt" /></label>
+                  <label>Band<select data-setup-field="band"><option value="160m">160 m</option><option value="80m">80 m</option><option value="60m">60 m</option><option value="40m">40 m</option><option value="30m">30 m</option><option value="20m" selected>20 m</option><option value="17m">17 m</option><option value="15m">15 m</option><option value="12m">12 m</option><option value="10m">10 m</option><option value="6m">6 m</option><option value="2m">2 m</option></select></label>
+                  <label>Slot duration (seconds)<input data-setup-field="durationSeconds" inputmode="numeric" value="120" /></label>
+                  <label>Guard (seconds)<input data-setup-field="guardSeconds" inputmode="numeric" value="10" /></label>
+                  <label>Complete A/B rounds<input data-setup-field="rounds" inputmode="numeric" value="5" /></label>
+                </div>
+              </fieldset>
+
+              <div class="setup-actions">
+                <button class="primary-action" type="submit" data-review-setup>Review normalized plan</button>
+                <button class="secondary-action" type="button" data-create-session disabled>Choose destination and create</button>
+              </div>
+            </form>
+
+            <div class="open-feedback" data-setup-feedback hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div><strong data-setup-feedback-message></strong><p data-setup-feedback-detail></p></div>
             </div>
+            <ul class="setup-diagnostics" data-setup-diagnostics hidden></ul>
+
+            <section class="setup-review" data-setup-review hidden aria-labelledby="review-title">
+              <div><p class="eyebrow">Exact commit candidate</p><h2 id="review-title">Normalized plan review</h2></div>
+              <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div></dl>
+              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Band</th><th>Local time · UTC</th><th>Window</th></tr></thead><tbody data-review-slots></tbody></table></div>
+            </section>
+
+            <div class="boundary-note"><strong>Trusted boundary</strong><p>The webview submits typed draft values and a review ID only. Rust owns validation, normalized timestamps, collision-resistant IDs, the native destination picker, checkpointed creation, and active-session state.</p></div>
           </section>
 
           <section class="workflow-panel" data-panel="run" aria-labelledby="run-title" hidden>

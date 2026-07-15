@@ -58,6 +58,9 @@ The current storage API exposes inspection plus three profiled read modes:
 - `BundleStore::read_current()`: the shared projection with v2 structured
   provenance, generic adapter evidence, and checkpoint sidecars retained.
 - `BundleStore::read_v2()`: the explicitly versioned v2 wire representation.
+- `BundleStore::create_v2_checkpointed()`: strict new-bundle creation through a
+  synchronized sibling staging directory, live-capability probe, reopen
+  verification, and complete-directory publication.
 
 `BundleStore::upgrade_v1_to_v2()` is the only migration boundary. It creates a
 new neutral-suffix destination, preserves the v1 source bytes, maps all legacy
@@ -225,7 +228,7 @@ read/report/export inputs and must be upgraded non-destructively before a
 conductor mutates them. The exact boundary and filesystem limitations are in
 [Schema-V2 Live Persistence And Recovery](live-persistence.md).
 
-## Planned Conductor Delivery
+## Setup And Planned Conductor Delivery
 
 The conductor tracker
 ([#45](https://github.com/rwjblue/antennabench/issues/45)) turns the approved
@@ -248,26 +251,31 @@ schema v2 + validation + bounded storage
         coherent report/export -> end-to-end proof
 ```
 
-Schema and safety prerequisites are #46 and #50 through #57. Focused product
-slices are #61 for validated setup and bundle creation, #62 for the
+Schema and safety prerequisites are #46 and #50 through #57. The #61 validated
+setup and bundle-creation slice is implemented. Remaining product slices are
+#62 for the
 manual/no-rig conductor, #63 for live WSJT-X orchestration, #64 for coherent
 live/final report and export, and #65 for deterministic end-to-end coverage.
 The slices consume the checkpoint and event contracts; they do not define
 competing persistence, lifecycle, correction, or resource semantics.
 
-The trusted boundary remains Rust-owned throughout. Setup and conductor
-commands accept typed intent plus an expected checkpoint revision, create
-trusted mutation IDs and timestamps, validate before durable promotion, and
-return typed outcomes. The frontend owns presentation and disposable input
-state only. It receives no general path, filesystem, socket, clock, identity,
-or network authority.
+The trusted boundary remains Rust-owned throughout. Setup review accepts a
+typed draft, assigns trusted session/plan/slot identities and time, applies the
+strict creation profile, and retains the exact normalized commit candidate.
+Creation accepts only the retained review identity; Rust owns the native picker,
+synchronized sibling staging, live capability probe, complete publication, and
+active-session replacement. Conductor commands will add expected checkpoint
+revisions and trusted mutation identities. The frontend owns presentation and
+disposable input state only. It receives no general path, filesystem, socket,
+clock, identity, or network authority.
 
 Manual/no-rig operation is the first complete vertical path. Live WSJT-X is an
 optional bounded producer: admitted raw evidence and normalized observations
 commit together, and a resource or acquisition gap is explicit before affected
 intake stops. Reports, report export, and lossless bundle export select one
 verified checkpoint revision so derived views cannot mix live generations.
-None of this is implemented conductor behavior until the focused issues land.
+Setup creation is shipped behavior; live conductor behavior remains deferred
+until its focused issues land.
 
 ## Desktop Shell Boundary
 
@@ -276,6 +284,12 @@ assets. Its JavaScript owns disposable workflow and loading state plus the small
 summary returned for an active session. It does not model bundle contents,
 normalize evidence, analyze observations, render report markup, or persist UI
 state.
+
+The allowlisted `review_session_setup` command maps disposable station,
+antenna, and schedule input to stable field diagnostics and an exact normalized
+plan. `create_session_from_review` owns the native save dialog and checkpointed
+new-bundle publication, then makes the reopened bundle active. The webview sees
+only a review identity and the active-session summary.
 
 The allowlisted `open_session_bundle` application command owns the native
 directory picker and composes storage, normalization, validation, report
@@ -292,18 +306,21 @@ destinations, symbolic links, and unsupported filesystem entries are rejected;
 an incomplete new destination is rolled back safely after copy or verification
 failure. The frontend receives no paths and has no general filesystem or dialog
 command permission. The dialog plugin is registered for native Rust use, but
-its frontend permissions are not granted. The only retained backend state is
-the selected source reference and derived active-session presentation; opening
-and exporting do not write to the source bundle.
+its frontend permissions are not granted. Backend state retains at most one
+exact reviewed setup candidate plus the selected source reference and derived
+active-session presentation. Editing or re-reviewing replaces the candidate;
+successful creation consumes it. Opening and exporting do not write to the
+source bundle.
 
 Native open/save pickers are thin path-selection adapters around private Rust
 orchestration functions. The unattended desktop integration test substitutes
-only that selection result, then exercises the same storage, validation,
-analysis, report, active-state, export-verification, and reopen code used by the
-Tauri commands. This seam adds no webview command, permission, path argument, or
-release-only behavior. Native picker presentation and OS path handoff remain a
-small optional interactive platform smoke; domain and workflow regression
-coverage runs without a window or foreground input.
+only that selection result and deterministic setup hooks, then exercises the
+same review, checkpointed creation, storage, validation, analysis, report,
+active-state, export-verification, and reopen code used by the Tauri commands.
+This seam adds no webview permission, path argument, or release-only behavior.
+Native picker presentation and OS path handoff remain a small optional
+interactive platform smoke; domain and workflow regression coverage runs
+without a window or foreground input.
 
 The report document is displayed through a sandboxed `srcdoc` frame without
 script, same-origin, navigation, or network authority. The trusted report

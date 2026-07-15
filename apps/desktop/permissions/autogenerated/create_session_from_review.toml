@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-session-from-review"
+description = "Enables the create_session_from_review command without any pre-configured scope."
+commands.allow = ["create_session_from_review"]
+
+[[permission]]
+identifier = "deny-create-session-from-review"
+description = "Denies the create_session_from_review command without any pre-configured scope."
+commands.deny = ["create_session_from_review"]

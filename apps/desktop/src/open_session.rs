@@ -50,6 +50,14 @@ impl ActiveSessionState {
     }
 }
 
+pub(crate) fn with_foreground_operation<T>(
+    state: &ActiveSessionState,
+    operation: impl FnOnce() -> Result<T, SessionErrorPayload>,
+) -> Result<T, SessionErrorPayload> {
+    let _foreground = state.begin_foreground()?;
+    operation()
+}
+
 impl Drop for ForegroundGuard<'_> {
     fn drop(&mut self) {
         if let Ok(mut state) = self.0 .0.lock() {
@@ -68,13 +76,13 @@ struct ActiveSession {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenedSession {
-    bundle_name: String,
-    session_id: String,
-    callsign: String,
-    grid: String,
-    antenna_count: usize,
-    slot_count: usize,
-    observation_count: usize,
+    pub(crate) bundle_name: String,
+    pub(crate) session_id: String,
+    pub(crate) callsign: String,
+    pub(crate) grid: String,
+    pub(crate) antenna_count: usize,
+    pub(crate) slot_count: usize,
+    pub(crate) observation_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -118,7 +126,11 @@ pub(crate) struct SessionErrorPayload {
 }
 
 impl SessionErrorPayload {
-    fn new(kind: SessionErrorKind, message: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub(crate) fn new(
+        kind: SessionErrorKind,
+        message: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
         Self {
             kind,
             message: message.into(),
@@ -126,7 +138,7 @@ impl SessionErrorPayload {
         }
     }
 
-    fn report_pipeline(detail: impl Into<String>) -> Self {
+    pub(crate) fn report_pipeline(detail: impl Into<String>) -> Self {
         Self::new(
             SessionErrorKind::ReportPipeline,
             "The local report could not be prepared.",
@@ -134,7 +146,7 @@ impl SessionErrorPayload {
         )
     }
 
-    fn resource(
+    pub(crate) fn resource(
         kind: SessionErrorKind,
         code: &str,
         stage: &str,
@@ -428,6 +440,28 @@ fn build_active_session(
         },
         report_html,
     })
+}
+
+pub(crate) fn activate_created_bundle(
+    state: &ActiveSessionState,
+    path: PathBuf,
+) -> Result<OpenedSession, SessionErrorPayload> {
+    let session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
+    let summary = session.summary.clone();
+    check_ipc_payload(
+        &OpenSessionOutcome::Opened {
+            session: summary.clone(),
+        },
+        SESSION_SUMMARY_IPC_BYTES,
+        "session_summary",
+    )?;
+    let mut active = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    active.active = Some(session);
+    active.export_source = Some(path);
+    Ok(summary)
 }
 
 fn open_session_with_selection<F>(

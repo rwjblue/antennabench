@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-review-session-setup"
+description = "Enables the review_session_setup command without any pre-configured scope."
+commands.allow = ["review_session_setup"]
+
+[[permission]]
+identifier = "deny-review-session-setup"
+description = "Denies the review_session_setup command without any pre-configured scope."
+commands.deny = ["review_session_setup"]

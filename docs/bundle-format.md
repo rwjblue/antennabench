@@ -65,6 +65,15 @@ are implemented by #53. Typed lifecycle/correction reduction is implemented by
 #54 and is shared by v2 inspection, mutation, analysis, and reports. See
 [Schema-V2 Live Persistence And Recovery](live-persistence.md).
 
+Newly reviewed desktop sessions use
+`BundleStore::create_v2_checkpointed()`. The strict bundle is written and
+synchronized under a uniquely named sibling staging directory, reopened
+through the live-writer capability boundary, compared with its reviewed model,
+and only then published at the absent `.session.antennabundle` destination.
+The initial checkpoint is lifecycle `ready`, revision zero, and contains exact
+root and empty-stream digests. Failed validation or preparation removes the
+staging directory; an existing destination is never an overwrite target.
+
 Version 1 is never silently rewritten to gain these semantics. It remains
 readable and losslessly copyable; live mutation requires an explicit v2 upgrade
 to a new `.session.antennabundle` destination.

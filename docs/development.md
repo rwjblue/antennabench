@@ -289,14 +289,16 @@ mise run desktop:dev
 ```
 
 `desktop:e2e` is the routine desktop workflow check for agents and developers.
-It injects deterministic open/save selections immediately below the native
-picker adapter, then runs the production Rust open, normalized validation,
-analysis, report rendering, active-session state, lossless export verification,
-and reopen path. It asserts source non-mutation and exported tree/byte equality,
-and separately covers normal open/export cancellation and a typed malformed-JSON
-failure. Temporary sources and destinations are isolated and automatically
-removed. The task does not launch Tauri, create a window, take focus, or send
-keyboard or pointer input.
+It injects deterministic setup clocks/IDs and open/save selections immediately
+below the native picker adapter. The task reviews and creates an exact
+checkpointed schema-v2 setup, exercises cancellation and active-session
+replacement, then runs the production Rust open, normalized validation,
+analysis, report rendering, lossless export verification, and reopen path. It
+asserts source non-mutation, exported tree/byte equality, and complete setup
+publication, and separately covers normal open/export cancellation and a typed
+malformed-JSON failure. Temporary sources and destinations are isolated and
+automatically removed. The task does not launch Tauri, create a window, take
+focus, or send keyboard or pointer input.
 
 The task streams phase diagnostics to the terminal and overwrites the bounded
 `target/desktop-e2e/last-run.log` artifact on every run. It records the platform,

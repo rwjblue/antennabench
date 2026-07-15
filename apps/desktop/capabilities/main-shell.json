@@ -1,9 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-shell",
-  "description": "Main shell capability limited to opening, losslessly exporting, and reporting active sessions.",
+  "description": "Main shell capability limited to reviewing and creating setup plans, opening sessions, lossless export, and active reports.",
   "windows": ["main"],
   "permissions": [
+    "allow-review-session-setup",
+    "allow-create-session-from-review",
     "allow-open-session-bundle",
     "allow-export-active-session",
     "allow-active-session-report"
