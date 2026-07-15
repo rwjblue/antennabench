@@ -2,13 +2,14 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use antennabench_core::{
     AcquisitionChannelId, AdapterId, AdapterInput, AnalysisFile, AnalysisStatus, Antenna,
-    AntennasFile, Band, BundleFilesV3, BundleManifestV3, BundleV3Contents, CounterbalanceBlockIdV3,
+    AntennasFile, Band, BundleFilesV3, BundleManifestV3, BundleV3Contents,
+    CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3, EventCorrectionActionV3,
     EventTimeBasisV2, ExperimentMode, MutationMember, OperatorEventPayloadV3, OperatorEventV3,
-    PlanGenerationV2, PlannedSlotV3, Provenance, ProviderId, RecordMetaV3, ScheduleV3, SessionGoal,
-    SessionLifecycleV2, SessionStateV3, SignalAllocationV3, SignalCadenceV3,
-    SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3, SignalPlanV3,
-    SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station, SCHEMA_VERSION_V3,
-    V2_BUNDLE_SUFFIX,
+    PlanGenerationV2, PlannedSlotV3, Provenance, ProviderId, RecordMetaV3,
+    ReplacementOperatorEventV3, RigRecordV3, ScheduleV3, SessionGoal, SessionLifecycleV2,
+    SessionStateV3, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3,
+    SignalPlanIdV3, SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station,
+    SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{BundleAttachment, BundleStore, BundleStoreError};
 use chrono::{TimeZone, Utc};
@@ -120,27 +121,82 @@ fn bundle() -> BundleV3Contents {
                 }),
             }],
         },
-        events: vec![OperatorEventV3 {
-            meta,
-            event_id: "signal-confirmation-1".into(),
-            occurred_at: now,
-            time_basis: EventTimeBasisV2::OperatorReported,
-            uncertainty_seconds: None,
-            slot_id: Some(slot_id),
-            payload: OperatorEventPayloadV3::SignalStateConfirmed {
-                confirmation: SignalStateConfirmationV3 {
-                    frequency_hz: Some(14_050_000),
-                    mode: Some(SignalModeV3::Cw),
-                    power_watts: Some(10.0),
-                    transmitted_callsign: Some("N1RWJ".into()),
-                    cadence_followed: Some(true),
-                    note: None,
+        events: vec![
+            OperatorEventV3 {
+                meta: meta.clone(),
+                event_id: "signal-confirmation-1".into(),
+                occurred_at: now,
+                time_basis: EventTimeBasisV2::OperatorReported,
+                uncertainty_seconds: None,
+                slot_id: Some(slot_id.clone()),
+                payload: OperatorEventPayloadV3::SignalStateConfirmed {
+                    confirmation: SignalStateConfirmationV3 {
+                        frequency_hz: Some(14_050_100),
+                        mode: Some(SignalModeV3::Cw),
+                        power_watts: Some(10.0),
+                        transmitted_callsign: Some("N1RWJ".into()),
+                        cadence_followed: Some(true),
+                        note: Some("initial entry".into()),
+                    },
                 },
             },
-        }],
+            OperatorEventV3 {
+                meta: RecordMetaV3 {
+                    mutation: MutationMember {
+                        mutation_id: "mutation-2".into(),
+                        member_index: 0,
+                        member_count: 1,
+                    },
+                    ..meta.clone()
+                },
+                event_id: "signal-correction-1".into(),
+                occurred_at: now,
+                time_basis: EventTimeBasisV2::OperatorReported,
+                uncertainty_seconds: None,
+                slot_id: None,
+                payload: OperatorEventPayloadV3::EventCorrected {
+                    target_event_id: "signal-confirmation-1".into(),
+                    correction: EventCorrectionActionV3::Replace {
+                        replacement: ReplacementOperatorEventV3 {
+                            occurred_at: now,
+                            time_basis: EventTimeBasisV2::OperatorReported,
+                            uncertainty_seconds: None,
+                            slot_id: Some(slot_id),
+                            payload: CorrectableOperatorEventPayloadV3::SignalStateConfirmed {
+                                confirmation: SignalStateConfirmationV3 {
+                                    frequency_hz: Some(14_050_000),
+                                    mode: Some(SignalModeV3::Cw),
+                                    power_watts: Some(10.0),
+                                    transmitted_callsign: Some("N1RWJ".into()),
+                                    cadence_followed: Some(true),
+                                    note: Some("corrected from operator log".into()),
+                                },
+                            },
+                        },
+                    },
+                    reason: "frequency was entered incorrectly".into(),
+                },
+            },
+        ],
         observations: Vec::new(),
         adapter_records: Vec::new(),
-        rig: Vec::new(),
+        rig: vec![RigRecordV3 {
+            meta: RecordMetaV3 {
+                mutation: MutationMember {
+                    mutation_id: "mutation-3".into(),
+                    member_index: 0,
+                    member_count: 1,
+                },
+                ..meta
+            },
+            record_id: "rig-1".into(),
+            adapter_record_ids: Vec::new(),
+            status: "observed".into(),
+            frequency_hz: Some(14_050_000),
+            mode: Some("CW".into()),
+            power_watts: Some(9.5),
+            raw: serde_json::json!({"source": "manual read-back"}),
+        }],
         propagation: Vec::new(),
         analysis: AnalysisFile {
             schema_version: SCHEMA_VERSION_V3,
@@ -167,6 +223,8 @@ fn v3_static_bundle_round_trips_with_signal_plan_and_confirmation() {
         store.read_v3().unwrap().schedule.signal_plans[0].signal_plan_id,
         SignalPlanIdV3::new("manual-cw").unwrap()
     );
+    assert_eq!(store.read_v3().unwrap().events.len(), 2);
+    assert_eq!(store.read_v3().unwrap().rig[0].power_watts, Some(9.5));
     let current = store.read_current().unwrap();
     assert!(current.bundle.events.is_empty());
     assert!(current

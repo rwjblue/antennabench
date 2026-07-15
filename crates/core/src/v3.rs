@@ -803,8 +803,16 @@ pub fn validate_signal_state_event_v3(
     let OperatorEventPayloadV3::SignalStateConfirmed { confirmation } = &event.payload else {
         return Vec::new();
     };
+    validate_signal_state_confirmation_v3(schedule, event.slot_id.as_deref(), confirmation)
+}
+
+pub fn validate_signal_state_confirmation_v3(
+    schedule: &ScheduleV3,
+    slot_id: Option<&str>,
+    confirmation: &SignalStateConfirmationV3,
+) -> Vec<SignalPlanDiagnosticV3> {
     let mut diagnostics = Vec::new();
-    let Some(slot_id) = event.slot_id.as_deref() else {
+    let Some(slot_id) = slot_id else {
         diagnostics.push(diagnostic(
             "signal_state.missing_slot",
             "/slot_id".into(),

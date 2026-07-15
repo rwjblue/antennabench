@@ -1,9 +1,11 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    validate_bundle_report, validate_signal_plan_schedule_v3, validate_signal_state_event_v3,
-    AdapterInput, BundleManifestV3, BundleV3Contents, BundleValidationProfile,
-    BundleValidationReport, SessionStateV3, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+    reduce_operator_events_v3, validate_bundle_report, validate_signal_plan_schedule_v3,
+    validate_signal_state_confirmation_v3, validate_signal_state_event_v3, AdapterInput,
+    BundleManifestV3, BundleV3Contents, BundleValidationProfile, BundleValidationReport,
+    CorrectableOperatorEventPayloadV3, SessionLifecycleV2, SessionStateV3, SCHEMA_VERSION_V3,
+    V2_BUNDLE_SUFFIX,
 };
 
 use super::{
@@ -338,6 +340,47 @@ fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> 
             "{}: {}",
             diagnostic.code, diagnostic.message
         )));
+    }
+    let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &bundle.events);
+    if let Some(diagnostic) = reduction.diagnostics.first() {
+        return Err(invalid_v3(format!(
+            "operator event {} is invalid: {}",
+            diagnostic.event_id, diagnostic.message
+        )));
+    }
+    if reduction.lifecycle != bundle.session_state.lifecycle {
+        return Err(invalid_v3(
+            "operator event lifecycle does not match the session checkpoint",
+        ));
+    }
+    for effective in &reduction.effective_events {
+        let CorrectableOperatorEventPayloadV3::SignalStateConfirmed { confirmation } =
+            &effective.payload
+        else {
+            continue;
+        };
+        if let Some(diagnostic) = validate_signal_state_confirmation_v3(
+            &bundle.schedule,
+            effective.slot_id.as_deref(),
+            confirmation,
+        )
+        .into_iter()
+        .find(|diagnostic| {
+            matches!(
+                diagnostic.code,
+                "signal_state.missing_slot"
+                    | "signal_state.unknown_slot"
+                    | "signal_state.slot_without_plan"
+                    | "signal_state.unknown_plan"
+                    | "signal_state.invalid_frequency"
+                    | "signal_state.invalid_power"
+            )
+        }) {
+            return Err(invalid_v3(format!(
+                "{}: {}",
+                diagnostic.code, diagnostic.message
+            )));
+        }
     }
     for event in &bundle.events {
         if event.meta.schema_version != SCHEMA_VERSION_V3 || event.meta.session_id != session_id {

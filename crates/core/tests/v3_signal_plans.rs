@@ -1,10 +1,11 @@
 use antennabench_core::{
-    validate_signal_plan_schedule_v3, validate_signal_state_event_v3, AcquisitionChannelId,
-    AdapterId, Band, CounterbalanceBlockIdV3, EventTimeBasisV2, ExperimentMode, MutationMember,
-    OperatorEventPayloadV3, OperatorEventV3, PlannedSlotV3, Provenance, ProviderId, RecordMetaV3,
-    ScheduleV3, SessionGoal, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3,
-    SignalModeV3, SignalPlanIdV3, SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3,
-    SourceId, SCHEMA_VERSION_V3,
+    reduce_operator_events_v3, validate_signal_plan_schedule_v3, validate_signal_state_event_v3,
+    AcquisitionChannelId, AdapterId, Band, CorrectableOperatorEventPayloadV3,
+    CounterbalanceBlockIdV3, EventCorrectionActionV3, EventTimeBasisV2, ExperimentMode,
+    MutationMember, OperatorEventPayloadV3, OperatorEventV3, PlannedSlotV3, Provenance, ProviderId,
+    RecordMetaV3, ReplacementOperatorEventV3, ScheduleV3, SessionGoal, SessionLifecycleV2,
+    SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3,
+    SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3, SourceId, SCHEMA_VERSION_V3,
 };
 use chrono::{Duration, TimeZone, Utc};
 
@@ -211,4 +212,59 @@ fn manual_signal_confirmation_is_typed_and_reports_missing_or_changed_actual_fac
         serde_json::from_value::<OperatorEventV3>(json).unwrap(),
         event
     );
+
+    let mut correction_meta = event.meta.clone();
+    correction_meta.mutation.mutation_id = "mutation-2".into();
+    let correction = OperatorEventV3 {
+        meta: correction_meta,
+        event_id: "signal-correction-1".into(),
+        occurred_at: event.occurred_at + Duration::seconds(5),
+        time_basis: EventTimeBasisV2::OperatorReported,
+        uncertainty_seconds: None,
+        slot_id: None,
+        payload: OperatorEventPayloadV3::EventCorrected {
+            target_event_id: event.event_id.clone(),
+            correction: EventCorrectionActionV3::Replace {
+                replacement: ReplacementOperatorEventV3 {
+                    occurred_at: event.occurred_at,
+                    time_basis: EventTimeBasisV2::OperatorReported,
+                    uncertainty_seconds: None,
+                    slot_id: event.slot_id.clone(),
+                    payload: CorrectableOperatorEventPayloadV3::SignalStateConfirmed {
+                        confirmation: SignalStateConfirmationV3 {
+                            frequency_hz: Some(14_050_000),
+                            mode: Some(SignalModeV3::Cw),
+                            power_watts: Some(10.0),
+                            transmitted_callsign: Some("N1RWJ".into()),
+                            cadence_followed: Some(true),
+                            note: Some("corrected from the operator log".into()),
+                        },
+                    },
+                },
+            },
+            reason: "entered the first confirmation incorrectly".into(),
+        },
+    };
+    let reduction = reduce_operator_events_v3(
+        SessionLifecycleV2::Ready,
+        &[event.clone(), correction.clone()],
+    );
+    assert!(reduction.diagnostics.is_empty());
+    assert_eq!(reduction.effective_events.len(), 1);
+    assert_eq!(
+        reduction.effective_events[0].source_event_id,
+        event.event_id
+    );
+    assert_eq!(
+        reduction.effective_events[0].effective_through_event_id,
+        correction.event_id
+    );
+    assert!(matches!(
+        &reduction.effective_events[0].payload,
+        CorrectableOperatorEventPayloadV3::SignalStateConfirmed { confirmation }
+            if confirmation.frequency_hz == Some(14_050_000)
+                && confirmation.mode == Some(SignalModeV3::Cw)
+                && confirmation.power_watts == Some(10.0)
+                && confirmation.cadence_followed == Some(true)
+    ));
 }

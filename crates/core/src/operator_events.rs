@@ -4,9 +4,11 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::{
-    CorrectableOperatorEventPayloadV2, EventCorrectionActionV2, EventTimeBasisV2, OperatorEvent,
-    OperatorEventPayloadV2, OperatorEventType, OperatorEventV2, RecordMeta, RecordSource,
-    ReplacementOperatorEventV2, SessionLifecycleV2, SCHEMA_VERSION_V2,
+    CorrectableOperatorEventPayloadV2, CorrectableOperatorEventPayloadV3, EventCorrectionActionV2,
+    EventCorrectionActionV3, EventTimeBasisV2, OperatorEvent, OperatorEventPayloadV2,
+    OperatorEventPayloadV3, OperatorEventType, OperatorEventV2, OperatorEventV3, RecordMeta,
+    RecordSource, ReplacementOperatorEventV2, ReplacementOperatorEventV3, SessionLifecycleV2,
+    SCHEMA_VERSION_V2,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -484,6 +486,343 @@ fn effective_from_replacement(
 
 fn diagnostic(
     event: &OperatorEventV2,
+    related_event_id: Option<&str>,
+    code: OperatorEventDiagnosticCodeV2,
+    message: impl Into<String>,
+) -> OperatorEventDiagnosticV2 {
+    OperatorEventDiagnosticV2 {
+        event_id: event.event_id.clone(),
+        related_event_id: related_event_id.map(str::to_string),
+        code,
+        message: message.into(),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectiveOperatorEventV3 {
+    pub session_id: String,
+    pub source_event_id: String,
+    pub effective_through_event_id: String,
+    pub recorded_at: DateTime<Utc>,
+    pub occurred_at: DateTime<Utc>,
+    pub time_basis: EventTimeBasisV2,
+    pub uncertainty_seconds: Option<u32>,
+    pub slot_id: Option<String>,
+    pub payload: CorrectableOperatorEventPayloadV3,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OperatorEventReductionV3 {
+    pub lifecycle: SessionLifecycleV2,
+    pub effective_events: Vec<EffectiveOperatorEventV3>,
+    pub diagnostics: Vec<OperatorEventDiagnosticV2>,
+}
+
+/// Reduces schema-v3 lifecycle and correctable evidence in committed append
+/// order. Signal-state confirmations follow the same correction rules as other
+/// operator facts and never derive an actual value from the plan.
+pub fn reduce_operator_events_v3(
+    initial_lifecycle: SessionLifecycleV2,
+    events: &[OperatorEventV3],
+) -> OperatorEventReductionV3 {
+    let mut lifecycle = initial_lifecycle;
+    let mut diagnostics = Vec::new();
+    let mut seen_ids = HashSet::new();
+    let mut originals = HashMap::<String, usize>::new();
+    let mut effective = Vec::<Option<EffectiveOperatorEventV3>>::new();
+
+    for event in events {
+        if !seen_ids.insert(event.event_id.as_str()) {
+            diagnostics.push(diagnostic_v3(
+                event,
+                None,
+                OperatorEventDiagnosticCodeV2::DuplicateEventId,
+                "event ID is duplicated",
+            ));
+            continue;
+        }
+        if let Some(message) = event_shape_error_v3(event) {
+            diagnostics.push(diagnostic_v3(
+                event,
+                None,
+                OperatorEventDiagnosticCodeV2::InvalidEventShape,
+                message,
+            ));
+            continue;
+        }
+        if is_lifecycle_payload_v3(&event.payload) {
+            match apply_lifecycle_transition_v3(lifecycle, &event.payload) {
+                Ok(next) => lifecycle = next,
+                Err(error) => diagnostics.push(diagnostic_v3(
+                    event,
+                    None,
+                    OperatorEventDiagnosticCodeV2::InvalidLifecycleTransition,
+                    error.to_string(),
+                )),
+            }
+            continue;
+        }
+        if matches!(
+            lifecycle,
+            SessionLifecycleV2::Ended | SessionLifecycleV2::Abandoned
+        ) {
+            diagnostics.push(diagnostic_v3(
+                event,
+                None,
+                OperatorEventDiagnosticCodeV2::InvalidLifecycleTransition,
+                "operator evidence cannot be appended after a terminal lifecycle event",
+            ));
+            continue;
+        }
+        match &event.payload {
+            OperatorEventPayloadV3::EventCorrected {
+                target_event_id,
+                correction,
+                reason,
+            } => {
+                if reason.trim().is_empty() {
+                    diagnostics.push(diagnostic_v3(
+                        event,
+                        Some(target_event_id),
+                        OperatorEventDiagnosticCodeV2::InvalidCorrectionReason,
+                        "correction reason must not be empty",
+                    ));
+                    continue;
+                }
+                let Some(&target_index) = originals.get(target_event_id) else {
+                    diagnostics.push(diagnostic_v3(
+                        event,
+                        Some(target_event_id),
+                        OperatorEventDiagnosticCodeV2::InvalidCorrectionTarget,
+                        "correction target must be an earlier correctable event",
+                    ));
+                    continue;
+                };
+                match correction {
+                    EventCorrectionActionV3::Retract => effective[target_index] = None,
+                    EventCorrectionActionV3::Replace { replacement } => {
+                        effective[target_index] = Some(EffectiveOperatorEventV3 {
+                            session_id: event.meta.session_id.clone(),
+                            source_event_id: target_event_id.clone(),
+                            effective_through_event_id: event.event_id.clone(),
+                            recorded_at: event.meta.recorded_at,
+                            occurred_at: replacement.occurred_at,
+                            time_basis: replacement.time_basis,
+                            uncertainty_seconds: replacement.uncertainty_seconds,
+                            slot_id: replacement.slot_id.clone(),
+                            payload: replacement.payload.clone(),
+                        });
+                    }
+                }
+            }
+            payload => {
+                let Some(payload) = correctable_payload_v3(payload) else {
+                    diagnostics.push(diagnostic_v3(
+                        event,
+                        None,
+                        OperatorEventDiagnosticCodeV2::InvalidEventShape,
+                        "event payload is neither lifecycle evidence nor correctable operator evidence",
+                    ));
+                    continue;
+                };
+                let index = effective.len();
+                originals.insert(event.event_id.clone(), index);
+                effective.push(Some(EffectiveOperatorEventV3 {
+                    session_id: event.meta.session_id.clone(),
+                    source_event_id: event.event_id.clone(),
+                    effective_through_event_id: event.event_id.clone(),
+                    recorded_at: event.meta.recorded_at,
+                    occurred_at: event.occurred_at,
+                    time_basis: event.time_basis,
+                    uncertainty_seconds: event.uncertainty_seconds,
+                    slot_id: event.slot_id.clone(),
+                    payload,
+                }));
+            }
+        }
+    }
+
+    OperatorEventReductionV3 {
+        lifecycle,
+        effective_events: effective.into_iter().flatten().collect(),
+        diagnostics,
+    }
+}
+
+fn apply_lifecycle_transition_v3(
+    current: SessionLifecycleV2,
+    payload: &OperatorEventPayloadV3,
+) -> Result<SessionLifecycleV2, LifecycleTransitionErrorV2> {
+    use OperatorEventPayloadV3 as Payload;
+    use SessionLifecycleV2 as State;
+    match (current, payload) {
+        (State::Ready, Payload::SessionStarted { .. }) => Ok(State::Running),
+        (
+            State::Running,
+            Payload::SessionInterrupted { .. } | Payload::InterruptionDetected { .. },
+        ) => Ok(State::Interrupted),
+        (State::Interrupted, Payload::SessionResumed { .. }) => Ok(State::Running),
+        (State::Running | State::Interrupted, Payload::SessionEnded { .. }) => Ok(State::Ended),
+        (
+            State::Draft | State::Ready | State::Running | State::Interrupted,
+            Payload::SessionAbandoned { .. },
+        ) => Ok(State::Abandoned),
+        (_, payload) if !is_lifecycle_payload_v3(payload) => {
+            Err(LifecycleTransitionErrorV2::NotLifecycle)
+        }
+        (from, _) => Err(LifecycleTransitionErrorV2::InvalidTransition { from }),
+    }
+}
+
+fn is_lifecycle_payload_v3(payload: &OperatorEventPayloadV3) -> bool {
+    matches!(
+        payload,
+        OperatorEventPayloadV3::SessionStarted { .. }
+            | OperatorEventPayloadV3::SessionInterrupted { .. }
+            | OperatorEventPayloadV3::InterruptionDetected { .. }
+            | OperatorEventPayloadV3::SessionResumed { .. }
+            | OperatorEventPayloadV3::SessionEnded { .. }
+            | OperatorEventPayloadV3::SessionAbandoned { .. }
+    )
+}
+
+fn event_shape_error_v3(event: &OperatorEventV3) -> Option<String> {
+    let slot_required = |kind: &str| {
+        event
+            .slot_id
+            .is_none()
+            .then(|| format!("{kind} requires a planned slot reference"))
+    };
+    match &event.payload {
+        payload if is_lifecycle_payload_v3(payload) && event.slot_id.is_some() => {
+            Some("lifecycle events must not reference a planned slot".into())
+        }
+        OperatorEventPayloadV3::AntennaStateConfirmed { antenna_label, .. } => {
+            slot_required("antenna confirmation").or_else(|| {
+                (antenna_label.trim().is_empty() || antenna_label.trim() != antenna_label)
+                    .then(|| "actual antenna label must be nonempty and trimmed".into())
+            })
+        }
+        OperatorEventPayloadV3::SignalStateConfirmed { .. } => {
+            slot_required("signal-state confirmation")
+        }
+        OperatorEventPayloadV3::SlotMissed { .. } => slot_required("missed-slot event"),
+        OperatorEventPayloadV3::SlotBad { reason } => {
+            slot_required("bad-slot event").or_else(|| {
+                reason
+                    .trim()
+                    .is_empty()
+                    .then(|| "bad-slot reason must not be empty".into())
+            })
+        }
+        OperatorEventPayloadV3::NoteAdded { note } => note
+            .trim()
+            .is_empty()
+            .then(|| "operator note must not be empty".into()),
+        OperatorEventPayloadV3::EventCorrected {
+            target_event_id,
+            correction,
+            reason,
+        } => {
+            if event.slot_id.is_some() {
+                return Some(
+                    "correction events carry replacement slot state in the correction payload"
+                        .into(),
+                );
+            }
+            if target_event_id.trim().is_empty() {
+                return Some("correction target event ID must not be empty".into());
+            }
+            if reason.trim().is_empty() {
+                return Some("correction reason must not be empty".into());
+            }
+            match correction {
+                EventCorrectionActionV3::Retract => None,
+                EventCorrectionActionV3::Replace { replacement } => {
+                    replacement_shape_error_v3(replacement)
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
+fn replacement_shape_error_v3(replacement: &ReplacementOperatorEventV3) -> Option<String> {
+    match &replacement.payload {
+        CorrectableOperatorEventPayloadV3::AntennaStateConfirmed { antenna_label, .. } => {
+            replacement
+                .slot_id
+                .is_none()
+                .then(|| {
+                    "replacement antenna confirmation requires a planned slot reference".into()
+                })
+                .or_else(|| {
+                    (antenna_label.trim().is_empty() || antenna_label.trim() != antenna_label).then(
+                        || "replacement actual antenna label must be nonempty and trimmed".into(),
+                    )
+                })
+        }
+        CorrectableOperatorEventPayloadV3::SignalStateConfirmed { .. } => {
+            replacement.slot_id.is_none().then(|| {
+                "replacement signal-state confirmation requires a planned slot reference".into()
+            })
+        }
+        CorrectableOperatorEventPayloadV3::SlotMissed { .. } => replacement
+            .slot_id
+            .is_none()
+            .then(|| "replacement missed-slot event requires a planned slot reference".into()),
+        CorrectableOperatorEventPayloadV3::SlotBad { reason } => replacement
+            .slot_id
+            .is_none()
+            .then(|| "replacement bad-slot event requires a planned slot reference".into())
+            .or_else(|| {
+                reason
+                    .trim()
+                    .is_empty()
+                    .then(|| "replacement bad-slot reason must not be empty".into())
+            }),
+        CorrectableOperatorEventPayloadV3::NoteAdded { note } => note
+            .trim()
+            .is_empty()
+            .then(|| "replacement operator note must not be empty".into()),
+    }
+}
+
+fn correctable_payload_v3(
+    payload: &OperatorEventPayloadV3,
+) -> Option<CorrectableOperatorEventPayloadV3> {
+    match payload {
+        OperatorEventPayloadV3::AntennaStateConfirmed {
+            antenna_label,
+            note,
+        } => Some(CorrectableOperatorEventPayloadV3::AntennaStateConfirmed {
+            antenna_label: antenna_label.clone(),
+            note: note.clone(),
+        }),
+        OperatorEventPayloadV3::SignalStateConfirmed { confirmation } => {
+            Some(CorrectableOperatorEventPayloadV3::SignalStateConfirmed {
+                confirmation: confirmation.clone(),
+            })
+        }
+        OperatorEventPayloadV3::SlotMissed { reason } => {
+            Some(CorrectableOperatorEventPayloadV3::SlotMissed {
+                reason: reason.clone(),
+            })
+        }
+        OperatorEventPayloadV3::SlotBad { reason } => {
+            Some(CorrectableOperatorEventPayloadV3::SlotBad {
+                reason: reason.clone(),
+            })
+        }
+        OperatorEventPayloadV3::NoteAdded { note } => {
+            Some(CorrectableOperatorEventPayloadV3::NoteAdded { note: note.clone() })
+        }
+        _ => None,
+    }
+}
+
+fn diagnostic_v3(
+    event: &OperatorEventV3,
     related_event_id: Option<&str>,
     code: OperatorEventDiagnosticCodeV2,
     message: impl Into<String>,
