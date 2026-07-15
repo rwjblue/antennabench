@@ -47,6 +47,9 @@ The current implementation focus is the bundle-first Rust foundation:
   missingness, order, duplicate/conflict, repeated-path, and stratum facts
 - standalone paired diagnostics for data quality, differences, SNR over time,
   and distance/azimuth path context with accessible table equivalents
+- deterministic station and remote-endpoint solar elevation, daylight,
+  twilight, and gray-line context with typed missing locations and accessible
+  table projection
 - optional NOAA SWPC F10.7 and provisional estimated-Kp acquisition with pure
   captured-fixture parsing, source envelopes, freshness and polling policy,
   typed best-effort failures, and duplicate suppression

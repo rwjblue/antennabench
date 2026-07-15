@@ -26,8 +26,92 @@ pub struct AnalysisSummary {
     pub bands: Vec<BandEvidenceSummary>,
     pub slots: Vec<SlotEvidenceSummary>,
     pub comparison: PairedComparisonAnalysis,
+    pub solar_context: SolarContextAnalysis,
     #[serde(default, skip_serializing_if = "EvidenceEligibility::is_empty")]
     pub eligibility: EvidenceEligibility,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SolarContextAnalysis {
+    pub algorithm: SolarContextAlgorithm,
+    pub rows: Vec<SolarContextRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SolarContextAlgorithm {
+    pub algorithm_id: String,
+    pub algorithm_version: u16,
+    pub coordinate_method: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SolarContextRow {
+    pub stratum: ComparisonStratum,
+    pub block_index: usize,
+    pub order: ComparisonOrder,
+    pub remote_path: String,
+    pub left: SolarObservationContext,
+    pub right: SolarObservationContext,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SolarObservationContext {
+    pub observation_id: String,
+    pub timestamp: DateTime<Utc>,
+    pub station: SolarEndpointContext,
+    pub remote: SolarEndpointContext,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SolarEndpointRole {
+    Station,
+    Remote,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SolarEndpointContext {
+    pub role: SolarEndpointRole,
+    pub endpoint_id: String,
+    pub grid: Option<String>,
+    pub result: SolarPositionResult,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SolarPositionResult {
+    Available {
+        coordinates: SolarCoordinates,
+        elevation_degrees: f64,
+        light_state: SolarLightState,
+        gray_line: bool,
+    },
+    Missing {
+        reason: SolarContextMissingReason,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SolarCoordinates {
+    pub latitude_degrees: f64,
+    pub longitude_degrees: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SolarContextMissingReason {
+    MissingGrid,
+    InvalidGrid,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SolarLightState {
+    Daylight,
+    CivilTwilight,
+    NauticalTwilight,
+    AstronomicalTwilight,
+    Night,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

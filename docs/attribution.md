@@ -24,3 +24,14 @@ The existing WSPR.live and NOAA SWPC boundaries retain their provider/source
 identity in bundle provenance. Their checked-in test fixtures remain reduced or
 synthetic as documented in [Development](development.md); external service
 availability and third-party rights are never treated as bundle invariants.
+
+## NOAA Solar Calculation References
+
+Derived solar context uses the equations documented in NOAA Global Monitoring
+Laboratory's [General Solar Position
+Calculations](https://gml.noaa.gov/grad/solcalc/solareqns.PDF). Exact twilight
+boundaries follow the NOAA/National Weather Service descriptions of [civil,
+nautical, and astronomical twilight](https://www.weather.gov/fsd/twilight).
+These references define a local deterministic calculation; AntennaBench does
+not acquire a NOAA observation, contact a NOAA service while analyzing, or
+represent the result as NOAA-provided evidence.

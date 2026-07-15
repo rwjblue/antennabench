@@ -114,6 +114,26 @@ reduced to a per-path median before the stratum median so prolific paths do not
 receive extra headline weight. Uncertainty intervals and automated conclusions
 remain deferred.
 
+Solar context is a separate analysis-owned projection over those paired rows.
+For each left and right observation it preserves the full comparison stratum,
+direction, remote callsign, observation identity, and UTC timestamp, then emits
+separately identified station and remote endpoint results. A valid 4-, 6-, or
+8-character Maidenhead locator is an explicit bounded location input; analysis
+uses the center of that locator cell and records both the original locator and
+derived latitude/longitude. It never resolves a callsign or substitutes a
+nearby/default location. Missing and malformed locators remain distinct typed
+results.
+
+The platform-neutral `noaa-gml-fractional-year` algorithm version 1 implements
+the NOAA GML fractional-year equation-of-time and solar-declination equations
+with geometric, uncorrected elevation. `maidenhead-cell-center-v1` identifies
+the coordinate conversion. Light-state boundaries use the Sun's geometric
+center: daylight is elevation at or above 0 degrees; civil, nautical, and
+astronomical twilight begin at -6, -12, and -18 degrees respectively; lower
+elevations are night. `gray_line` means any of the three twilight categories.
+These identifiers, exact coordinates, timestamps, elevations, and categories
+are serialized in the derived analysis/report model, not the source bundle.
+
 Report construction accepts one `BundleContents` value and its matching layered
 report, then invokes analysis internally, preventing callers from pairing bundle
 context with a summary from another bundle. Its compatibility helper computes
@@ -121,7 +141,7 @@ that report directly for already-typed inputs. It deterministically projects ses
 evidence sections, typed notices, paired comparison availability and
 diagnostics, and concrete chart-ready rows for antenna SNR, band evidence, slot
 evidence, overlap, data-quality timelines, paired differences, and SNR over
-time. Validation-driven exclusions remain serializable structured data and render
+time, plus station and remote solar context. Validation-driven exclusions remain serializable structured data and render
 in an operator-facing eligibility disclosure table. The model is otherwise
 renderer-neutral: it contains no generated
 prose, winner logic, generic chart configuration, or rendering output. The
@@ -141,7 +161,9 @@ distance, or azimuth facts as `location unavailable`, and show unique-path and
 45-degree display-sector concentration counts. The sectors are presentation
 bins, not goal thresholds or estimates of unobserved directions. The report
 states the fixed right-minus-left orientation and warns that adjacent slots do
-not remove propagation or time confounding. Every report-provided string is
+not remove propagation or time confounding. Solar rows explicitly state that
+they are derived context rather than captured observations and neither adjust
+comparison values nor provide a causal explanation. Every report-provided string is
 HTML-escaped; bundle text is never accepted as markup, script, a template, or a
 style value.
 

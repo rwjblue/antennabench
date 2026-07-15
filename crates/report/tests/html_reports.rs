@@ -181,6 +181,16 @@ fn escapes_every_untrusted_report_string() {
     for row in &mut report.comparison.path_summaries {
         row.remote_path = hostile.clone();
     }
+    for row in &mut report.solar_context.rows {
+        row.remote_path = hostile.clone();
+        for observation in [&mut row.left, &mut row.right] {
+            observation.observation_id = hostile.clone();
+            observation.station.endpoint_id = hostile.clone();
+            observation.remote.endpoint_id = hostile.clone();
+            observation.station.grid = Some(hostile.clone());
+            observation.remote.grid = Some(hostile.clone());
+        }
+    }
 
     let html = render_standalone_html(&report).unwrap();
 
@@ -411,6 +421,27 @@ fn renders_stratified_location_context_missingness_and_concentration() {
 
     let empty = render_standalone_html(&canonical_report()).unwrap();
     assert!(empty.contains("No paired rows are available for location views."));
+}
+
+#[test]
+fn renders_derived_solar_context_with_method_and_non_causal_caveat() {
+    let report = paired_report(true);
+    let html = render_standalone_html(&report).unwrap();
+
+    for expected in [
+        "Derived solar context",
+        "noaa-gml-fractional-year",
+        "maidenhead-cell-center-v1",
+        "Derived station and remote-endpoint solar context",
+        "They are not captured propagation observations",
+        "do not establish a cause",
+        "Station:",
+        "Remote:",
+    ] {
+        assert!(html.contains(expected), "missing solar context: {expected}");
+    }
+    assert!(!html.contains("solar score"));
+    assert!(!html.contains("caused the difference"));
 }
 
 fn canonical_report() -> SessionReport {

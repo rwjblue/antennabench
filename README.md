@@ -38,14 +38,17 @@ Implemented:
 - Deterministic paired descriptive data for adjacent A/B slots, with explicit
   availability, strata, overlap, missingness, order, duplicate/conflict, raw
   pair, per-path, and equal-path-weight summary facts.
+- Deterministic station and remote-endpoint solar elevation and daylight,
+  twilight, and gray-line context derived from UTC observation times and
+  explicit Maidenhead locator cell centers, with typed missing locations.
 - Deterministic, in-memory report data derived from one bundle, with session
   context, conservative evidence sections, typed notices, and concrete
   renderer-neutral rows for antenna SNR, band evidence, and slot evidence.
 - Standalone offline HTML report rendering with embedded styling, accessible
   chart tables, paired availability/overlap/timeline/difference/SNR diagnostics,
   stratified distance/azimuth path context with explicit missing location and
-  concentration counts, restrictive content security policy, and hostile-text
-  escaping.
+  concentration counts, descriptive derived solar context, restrictive content
+  security policy, and hostile-text escaping.
 - A Tauri desktop shell that opens existing directory bundles, validates and
   analyzes them without mutation, refreshes revision-keyed live/final reports
   in an isolated frame, exports the exact visible standalone HTML snapshot,

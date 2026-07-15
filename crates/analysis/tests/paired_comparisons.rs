@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use antennabench_analysis::{
     summarize_bundle, ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder,
-    PathDirection,
+    PathDirection, SolarContextMissingReason, SolarEndpointRole, SolarLightState,
+    SolarPositionResult,
 };
 use antennabench_core::{
     normalize_bundle, Band, BundleContents, ExperimentMode, ObservationKind, ObservationRecord,
@@ -346,6 +347,56 @@ fn preserves_fixed_order_time_drift_balanced_order_and_bidirectional_deltas() {
     assert!(deltas.iter().any(|delta| *delta < 0.0));
     assert!(deltas.contains(&0.0));
     assert!(deltas.iter().any(|delta| *delta > 0.0));
+}
+
+#[test]
+fn derives_typed_deterministic_solar_context_without_inventing_locations() {
+    let mut bundle = bundle_with_layout(&["A", "B"]);
+    let mut left = tx_observation(&bundle, "solar-left", 0, "K1SOLAR", Some(-20.0));
+    left.reporter_grid = None;
+    let mut right = tx_observation(&bundle, "solar-right", 1, "K1SOLAR", Some(-18.0));
+    right.reporter_grid = Some("not-a-grid".into());
+    bundle.observations = vec![right, left];
+
+    let forward = summary(bundle.clone()).solar_context;
+    bundle.observations.reverse();
+    let reordered = summary(bundle).solar_context;
+    assert_eq!(forward, reordered);
+    assert_eq!(forward.rows.len(), 1);
+    let row = &forward.rows[0];
+    assert_eq!(row.stratum.direction, PathDirection::Transmit);
+    assert_eq!(row.stratum.mode.as_str(), "WSPR");
+    assert_eq!(row.left.observation_id, "solar-left");
+    assert_eq!(row.right.observation_id, "solar-right");
+    assert_eq!(row.left.station.role, SolarEndpointRole::Station);
+    assert_eq!(row.left.remote.role, SolarEndpointRole::Remote);
+    assert!(matches!(
+        row.left.station.result,
+        SolarPositionResult::Available {
+            light_state: SolarLightState::Daylight
+                | SolarLightState::CivilTwilight
+                | SolarLightState::NauticalTwilight
+                | SolarLightState::AstronomicalTwilight
+                | SolarLightState::Night,
+            ..
+        }
+    ));
+    assert_eq!(
+        row.left.remote.result,
+        SolarPositionResult::Missing {
+            reason: SolarContextMissingReason::MissingGrid
+        }
+    );
+    assert_eq!(
+        row.right.remote.result,
+        SolarPositionResult::Missing {
+            reason: SolarContextMissingReason::InvalidGrid
+        }
+    );
+    let serialized = serde_json::to_string(&forward).expect("solar context should serialize");
+    for prohibited in ["winner", "better", "caused", "superior"] {
+        assert!(!serialized.contains(prohibited));
+    }
 }
 
 fn summary(bundle: BundleContents) -> antennabench_analysis::AnalysisSummary {

@@ -7,7 +7,7 @@ use antennabench_analysis::{
     ComparisonAvailability, ComparisonOrder, ComparisonSide, ComparisonStratum,
     ComparisonTimelineRow, EligibilityExclusionCategory, EligibilityScope, EvidenceQuality,
     ObservationCounts, ObservationExclusionReason, PairedObservationRow, PathDirection,
-    SnrStatistics,
+    SnrStatistics, SolarEndpointContext, SolarLightState, SolarPositionResult,
 };
 use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
@@ -501,6 +501,7 @@ fn render_comparison(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     render_paired_differences(out, report);
     render_paired_snr_time(out, report);
     render_location_views(out, report);
+    render_solar_context(out, report);
     render_stratum_summaries(out, report);
     out.push_str("</section>");
 }
@@ -712,6 +713,81 @@ fn render_location_views(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport
         render_distance_view(out, &rows);
         render_azimuth_view(out, &rows);
         out.push_str("</section>");
+    }
+}
+
+fn render_solar_context(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<h3>Derived solar context</h3><p class=\"notice\">Solar elevation and light state are deterministic geometric context derived from UTC timestamps and explicit Maidenhead locator cell centers. They are not captured propagation observations, do not adjust comparison values, and do not establish a cause for an observed difference.</p>");
+    write_html!(
+        out,
+        "<p class=\"footnote\">Algorithm: {} v{}; coordinates: {}. Daylight begins at 0°, civil twilight at −6°, nautical twilight at −12°, astronomical twilight at −18°; gray line denotes any twilight category.</p>",
+        escape_html(&report.solar_context.algorithm.algorithm_id),
+        report.solar_context.algorithm.algorithm_version,
+        escape_html(&report.solar_context.algorithm.coordinate_method)
+    );
+    if report.solar_context.rows.is_empty() {
+        out.push_str(
+            "<p class=\"empty\">No eligible paired rows are available for solar context.</p>",
+        );
+        return;
+    }
+    out.push_str("<div class=\"table-wrap\"><table><caption>Derived station and remote-endpoint solar context</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Side</th><th scope=\"col\">Observation</th><th scope=\"col\">UTC time</th><th scope=\"col\">Endpoint</th><th scope=\"col\">Grid</th><th scope=\"col\">Coordinates</th><th scope=\"col\">Elevation</th><th scope=\"col\">Light state</th><th scope=\"col\">Gray line</th></tr></thead><tbody>");
+    for row in &report.solar_context.rows {
+        for (side, observation) in [("Left", &row.left), ("Right", &row.right)] {
+            for endpoint in [&observation.station, &observation.remote] {
+                solar_table_row(out, row, side, observation, endpoint);
+            }
+        }
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn solar_table_row(
+    out: &mut CheckedHtmlWriter<'_>,
+    row: &antennabench_analysis::SolarContextRow,
+    side: &str,
+    observation: &antennabench_analysis::SolarObservationContext,
+    endpoint: &SolarEndpointContext,
+) {
+    let role = match endpoint.role {
+        antennabench_analysis::SolarEndpointRole::Station => "Station",
+        antennabench_analysis::SolarEndpointRole::Remote => "Remote",
+    };
+    let (coordinates, elevation, state, gray_line) = match &endpoint.result {
+        SolarPositionResult::Available {
+            coordinates,
+            elevation_degrees,
+            light_state,
+            gray_line,
+        } => (
+            format!(
+                "{:.6}°, {:.6}°",
+                coordinates.latitude_degrees, coordinates.longitude_degrees
+            ),
+            format!("{:.3}°", elevation_degrees),
+            solar_light_state(*light_state),
+            yes_no(*gray_line),
+        ),
+        SolarPositionResult::Missing { reason } => (
+            "Unavailable".into(),
+            "Unavailable".into(),
+            match reason {
+                antennabench_analysis::SolarContextMissingReason::MissingGrid => "Missing grid",
+                antennabench_analysis::SolarContextMissingReason::InvalidGrid => "Invalid grid",
+            },
+            "Unavailable",
+        ),
+    };
+    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}: {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, side, escape_html(&observation.observation_id), timestamp(observation.timestamp), role, escape_html(&endpoint.endpoint_id), optional_text(endpoint.grid.as_deref()), coordinates, elevation, state, gray_line);
+}
+
+fn solar_light_state(state: SolarLightState) -> &'static str {
+    match state {
+        SolarLightState::Daylight => "Daylight",
+        SolarLightState::CivilTwilight => "Civil twilight",
+        SolarLightState::NauticalTwilight => "Nautical twilight",
+        SolarLightState::AstronomicalTwilight => "Astronomical twilight",
+        SolarLightState::Night => "Night",
     }
 }
 
@@ -1388,6 +1464,7 @@ fn detail_family(value: ReportDetailFamily) -> &'static str {
         ReportDetailFamily::PathOverlap => "path overlap",
         ReportDetailFamily::ComparisonTimeline => "comparison timeline",
         ReportDetailFamily::PairedObservations => "paired observation",
+        ReportDetailFamily::SolarContext => "solar-context",
         ReportDetailFamily::PathSummaries => "path summary",
         ReportDetailFamily::Strata => "comparison stratum",
         ReportDetailFamily::Charts => "chart",

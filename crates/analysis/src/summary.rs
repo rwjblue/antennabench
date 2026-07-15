@@ -8,9 +8,9 @@ use antennabench_core::{
 };
 
 use crate::{
-    comparison::analyze_paired_comparison, AnalysisBudget, AnalysisCancellationToken,
-    AnalysisError, AnalysisResourceLimits, AnalysisResourceStage, AnalysisSummary,
-    AntennaEvidenceSummary, BandEvidenceSummary, EligibilityExclusionCategory,
+    comparison::analyze_paired_comparison, solar::derive_solar_context, AnalysisBudget,
+    AnalysisCancellationToken, AnalysisError, AnalysisResourceLimits, AnalysisResourceStage,
+    AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary, EligibilityExclusionCategory,
     EligibilityExclusionCount, EligibilityScope, EvidenceEligibility, EvidenceQuality,
     EvidenceSummary, ExclusionCount, ObservationCounts, ObservationExclusionReason,
     ObservationKindCount, SlotEvidenceSummary, SnrStatistics, ANALYSIS_RESOURCE_LIMITS,
@@ -287,6 +287,7 @@ pub fn summarize_bundle_with_resources(
     budget.cancelled(AnalysisResourceStage::Compare, "paired_comparison")?;
     let comparison =
         analyze_paired_comparison(&analysis_bundle, &alignment.slots, &observations, &budget)?;
+    let solar_context = derive_solar_context(&analysis_bundle, &comparison, &budget)?;
     for (role, entries) in [
         ("comparison_blocks", comparison.blocks.len()),
         ("comparison_overlap_rows", comparison.overlap_rows.len()),
@@ -306,6 +307,7 @@ pub fn summarize_bundle_with_resources(
         bands,
         slots,
         comparison,
+        solar_context,
         eligibility: plan.eligibility,
     })
 }

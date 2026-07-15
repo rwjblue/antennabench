@@ -406,6 +406,14 @@ fn summarizes_the_minimal_whole_station_fixture() {
         "paired_rows": [],
         "path_summaries": [],
         "strata": []
+      },
+      "solar_context": {
+        "algorithm": {
+          "algorithm_id": "noaa-gml-fractional-year",
+          "algorithm_version": 1,
+          "coordinate_method": "maidenhead-cell-center-v1"
+        },
+        "rows": []
       }
     }
     "#);
@@ -726,6 +734,14 @@ fn summarizes_only_observations_from_the_wsjtx_hardening_fixture() {
         "paired_rows": [],
         "path_summaries": [],
         "strata": []
+      },
+      "solar_context": {
+        "algorithm": {
+          "algorithm_id": "noaa-gml-fractional-year",
+          "algorithm_version": 1,
+          "coordinate_method": "maidenhead-cell-center-v1"
+        },
+        "rows": []
       }
     }
     "#);

@@ -248,6 +248,17 @@ prove unrelated slots and summaries remain usable. Structural antenna ambiguity
 continues to fail deterministically, while non-finite SNR becomes an affected-
 observation exclusion in serialized and rendered reports.
 
+Solar-context tests independently fixture-check the deterministic approximation
+against the NOAA GML Solar Geometry Calculator's uncorrected elevation for
+40° N, 105° W at 2024-06-20 12:00 UTC (NOAA: 3.93770°), with a pinned maximum
+0.5° fixture difference. Unit and integration cases also cover exact 0/-6/-12/-18°
+category boundaries, polar day and night, leap-year UTC rollover, invalid and
+non-finite coordinates, valid 4/6/8-character Maidenhead cell centers, typed
+missing versus malformed grids, reordered source observations, serialized
+algorithm/input metadata, and hostile report strings. The 0.5° assertion is a
+fixture regression bound, not a global physical-accuracy claim; atmospheric
+refraction and the finite locator cell are deliberately outside the model.
+
 To generate the canonical sample as an untracked verification artifact:
 
 ```bash

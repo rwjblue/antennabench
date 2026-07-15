@@ -94,6 +94,7 @@ fn build_report_with_resources_and_snapshot(
         bands,
         slots,
         comparison,
+        mut solar_context,
         eligibility,
     } = summary;
 
@@ -121,6 +122,7 @@ fn build_report_with_resources_and_snapshot(
     };
     let mut notices = build_notices(&context, &evidence);
     if !full_detail {
+        solar_context.rows.clear();
         detail_counts.append_notices(&mut notices);
     }
 
@@ -133,6 +135,7 @@ fn build_report_with_resources_and_snapshot(
         context,
         evidence,
         comparison: project_comparison(comparison, full_detail),
+        solar_context,
         chart_data,
         notices,
         snapshot,
@@ -331,6 +334,10 @@ impl DetailCounts {
                     comparison.paired_rows.len(),
                 ),
                 (
+                    ReportDetailFamily::SolarContext,
+                    summary.solar_context.rows.len(),
+                ),
+                (
                     ReportDetailFamily::PathSummaries,
                     comparison.path_summaries.len(),
                 ),
@@ -369,6 +376,7 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     report.comparison.overlap_rows.clear();
     report.comparison.timeline_rows.clear();
     report.comparison.paired_rows.clear();
+    report.solar_context.rows.clear();
     report.comparison.path_summaries.clear();
     report.comparison.strata.clear();
     report.chart_data = ReportChartData::default();

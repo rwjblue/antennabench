@@ -180,6 +180,7 @@ fn canonical_sample_exercises_the_complete_report_input_pipeline() {
         report.comparison.paired_rows,
         summary.comparison.paired_rows
     );
+    assert_eq!(report.solar_context, summary.solar_context);
     assert!(report.notices.is_empty());
 }
 

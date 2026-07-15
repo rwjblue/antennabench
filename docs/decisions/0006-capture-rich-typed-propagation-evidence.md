@@ -196,6 +196,18 @@ If derived values are persisted for reproducibility, they belong in versioned
 analysis metadata with the algorithm and inputs identified. Missing coordinates
 produce missing path context rather than an inferred default.
 
+The implemented derived boundary uses the NOAA GML fractional-year equations
+as `noaa-gml-fractional-year` version 1 and geometric elevation without an
+atmospheric-refraction correction. Explicit 4-, 6-, and 8-character Maidenhead
+locators are converted to their cell centers by
+`maidenhead-cell-center-v1`; absent and malformed locators stay separately
+typed missing results. Daylight begins at 0 degrees elevation, civil twilight
+at -6 degrees, nautical twilight at -12 degrees, astronomical twilight at -18
+degrees, and night below -18 degrees. Gray line denotes any of those three
+twilight categories. Analysis/report rows retain the exact locator, derived
+coordinates, UTC time, endpoint identity, and algorithm identifiers without
+adding any record to the bundle evidence streams.
+
 ## Report And Analysis Boundary
 
 Propagation evidence remains attributed session context. Reports may present

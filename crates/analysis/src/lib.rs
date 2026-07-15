@@ -1,6 +1,7 @@
 mod comparison;
 mod model;
 mod resource;
+mod solar;
 mod summary;
 
 pub use model::*;
