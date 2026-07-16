@@ -740,9 +740,7 @@ function mount(root, browserWindow) {
   const conductorPanel = root.querySelector("[data-conductor]");
   const conductorEmpty = root.querySelector("[data-conductor-empty]");
   const conductorStatus = root.querySelector("[data-conductor-status]");
-  const conductorRevision = root.querySelector("[data-conductor-revision]");
   const conductorLifecycle = root.querySelector("[data-conductor-lifecycle]");
-  const conductorNow = root.querySelector("[data-conductor-now]");
   const conductorAntennaInUse = root.querySelector("[data-conductor-antenna-in-use]");
   const conductorPhase = root.querySelector("[data-conductor-phase]");
   const conductorGuidance = root.querySelector("[data-conductor-guidance]");
@@ -925,9 +923,7 @@ function mount(root, browserWindow) {
         countdownAnchorKey = nextAnchor?.key ?? null;
         transitionRefreshKey = null;
       }
-      conductorRevision.textContent = `${view.bundleName} · revision ${view.revision}`;
       conductorLifecycle.textContent = humanizeIdentifier(view.lifecycle);
-      conductorNow.textContent = formatReviewTime(view.now);
       conductorAntennaInUse.textContent = view.antennaInUse ?? "None";
       conductorPhase.textContent = humanizeIdentifier(view.phase);
       conductorGuidance.textContent = view.guidance;
@@ -1698,7 +1694,7 @@ function conductorFeedbackModel(state) {
     return {
       kind: "ready",
       message: "A previously running session was recovered as interrupted.",
-      detail: `Recovery moved revision ${recovery.startingRevision} to ${recovery.finalRevision}; ${recovery.artifactCount} preserved recovery artifact(s).`,
+      detail: `${recovery.artifactCount} recovery artifact(s) were preserved.`,
     };
   }
   if (recovery && recovery.disposition !== "clean") {
@@ -1740,20 +1736,23 @@ function conductorActionCompletedLabel(action) {
   }
 }
 
-function wsprLiveAcquisitionModel(state) {
+export function wsprLiveAcquisitionModel(state) {
+  const localTime = (value) => formatActiveRunTime(value, {
+    now: state.conductor?.now,
+  });
   if (state.wsprLiveAcquisitionStatus === "fetching") {
     return {
-      phase: "Fetching from WSPR.live…",
-      detail: "The bounded native client is retrieving one cumulative response.",
+      phase: "Collecting public spots…",
+      detail: "AntennaBench is checking WSPR.live now.",
       diagnostic: "",
       retry: false,
     };
   }
   if (state.wsprLiveAcquisitionError) {
     return {
-      phase: "Automatic acquisition unavailable",
+      phase: "Public spots need attention",
       detail: state.wsprLiveAcquisitionError.message,
-      diagnostic: state.wsprLiveAcquisitionError.detail,
+      diagnostic: "",
       retry: true,
       endWithout: state.conductor?.phase === "finalizing",
     };
@@ -1761,56 +1760,56 @@ function wsprLiveAcquisitionModel(state) {
   const outcome = state.wsprLiveAcquisition;
   if (outcome?.status === "disabled") {
     return {
-      phase: "Automatic public spots are off",
-      detail: "This session remains fully local. Manual WSPR.live JSON import is still available as a recovery or offline path.",
+      phase: "Automatic collection is off",
+      detail: "No public spots will be collected automatically. You can still import saved WSPR.live data later.",
       diagnostic: "",
       retry: false,
     };
   }
   if (!outcome || outcome.status === "dormant") {
     return {
-      phase: "Waiting for antenna confirmation",
-      detail: "The first confirmation establishes actual state. Later confirmations authorize the preceding segment; the final confirmed segment is captured after it ends.",
+      phase: "Waiting for the first completed cycle",
+      detail: "Automatic collection will begin after a WSPR cycle completes.",
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "waiting") {
     return {
-      phase: "Waiting for source ingestion",
-      detail: `Segment ${outcome.completedSlotId} becomes eligible at ${formatReviewTime(outcome.notBefore)}. Later requests overlap earlier windows to recover delayed spots.`,
+      phase: "Waiting briefly for public spots",
+      detail: `Spots from the last completed cycle should be available after ${localTime(outcome.notBefore)}.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "up_to_date") {
     return {
-      phase: "Captured through authorized segments",
-      detail: `WSPR.live evidence is committed through ${formatReviewTime(outcome.capturedThrough)}. Completeness remains unknown.`,
+      phase: "Public spots are up to date",
+      detail: `Spots collected through ${localTime(outcome.capturedThrough)}.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "captured") {
     return {
-      phase: "Public spots captured",
-      detail: `${outcome.observationsCreated} observation(s) committed through ${formatReviewTime(outcome.capturedThrough)}; ${outcome.duplicate} duplicate(s) and ${outcome.conflict} conflict(s) retained explicitly.`,
+      phase: "Public spots collected",
+      detail: `${outcome.observationsCreated} new public spot(s) collected through ${localTime(outcome.capturedThrough)}.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "completed") {
     return {
-      phase: "Final public spots captured",
-      detail: `WSPR.live evidence is committed through ${formatReviewTime(outcome.capturedThrough)} and the durable session ended automatically.`,
+      phase: "Final public spots collected",
+      detail: `Spots collected through ${localTime(outcome.capturedThrough)}. The session ended automatically.`,
       diagnostic: "",
       retry: false,
     };
   }
   return {
-    phase: "WSPR.live acquisition failed",
-    detail: outcome.message,
-    diagnostic: outcome.detail,
+    phase: "Public spots need attention",
+    detail: outcome.message || "Automatic public spot collection could not finish.",
+    diagnostic: "",
     retry: true,
     endWithout: state.conductor?.phase === "finalizing",
   };

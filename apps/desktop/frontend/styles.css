@@ -171,7 +171,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .action-list button.secondary-action:disabled { cursor: not-allowed; }
 
 .conductor { display: grid; gap: 18px; }
-.conductor-context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.conductor-context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .conductor-context > div { display: grid; gap: 5px; min-width: 0; padding: 13px 15px; border: 1px solid #d7ddd5; border-radius: 11px; background: #fff; }
 .conductor-context span, .slot-focus article > span { color: #77857f; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .conductor-context strong { color: #315d57; font-size: 0.76rem; overflow-wrap: anywhere; }

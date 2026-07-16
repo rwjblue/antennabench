@@ -77,6 +77,7 @@ import {
   wsprLiveImportCancelled,
   wsprLiveImportFailed,
   wsprLiveImportSucceeded,
+  wsprLiveAcquisitionModel,
 } from "../frontend/app.mjs";
 
 test("the shell starts in session setup", () => {
@@ -565,6 +566,50 @@ test("automatic WSPR.live acquisition remains typed and accepts only retry inten
     ["advance_active_session_wspr_live", { request: { retry: false } }],
     ["advance_active_session_wspr_live", { request: { retry: true } }],
   ]);
+});
+
+test("active-run public spot states stay plain and hide opaque identifiers", () => {
+  const conductor = {
+    phase: "between_slots",
+    now: "2026-07-16T15:00:00Z",
+  };
+  const opaque = "b75f805a-2476-47ff-99cb-7e0a26a96ab1";
+  const states = [
+    { wsprLiveAcquisitionStatus: "fetching", conductor },
+    { wsprLiveAcquisitionError: { message: "WSPR.live is unavailable.", detail: opaque }, conductor },
+    { wsprLiveAcquisition: { status: "disabled", providerId: opaque }, conductor },
+    { wsprLiveAcquisition: { status: "dormant", completedSlotId: opaque }, conductor },
+    { wsprLiveAcquisition: { status: "waiting", completedSlotId: opaque, notBefore: "2026-07-16T15:05:00Z" }, conductor },
+    { wsprLiveAcquisition: { status: "up_to_date", capturedThrough: "2026-07-16T15:04:00Z", requestWindow: opaque }, conductor },
+    { wsprLiveAcquisition: { status: "captured", capturedThrough: "2026-07-16T15:04:00Z", observationsCreated: 3, duplicate: 1, conflict: 0, segmentId: opaque }, conductor },
+    { wsprLiveAcquisition: { status: "completed", capturedThrough: "2026-07-16T15:04:00Z", providerId: opaque }, conductor },
+    { wsprLiveAcquisition: { status: "failed", message: "Collection stopped.", detail: opaque }, conductor },
+  ];
+  const presentations = states.map(wsprLiveAcquisitionModel);
+  for (const presentation of presentations) {
+    assert.doesNotMatch(JSON.stringify(presentation), new RegExp(opaque));
+    assert.doesNotMatch(
+      `${presentation.phase} ${presentation.detail}`,
+      /becomes eligible|authorize the preceding segment|overlap earlier windows|completeness/i,
+    );
+  }
+  assert.deepEqual(presentations.map(({ phase }) => phase), [
+    "Collecting public spots…",
+    "Public spots need attention",
+    "Automatic collection is off",
+    "Waiting for the first completed cycle",
+    "Waiting briefly for public spots",
+    "Public spots are up to date",
+    "Public spots collected",
+    "Final public spots collected",
+    "Public spots need attention",
+  ]);
+
+  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  const runPanel = html.match(/data-panel="run"[\s\S]*?data-panel="transfer"/u)?.[0] ?? "";
+  assert.doesNotMatch(runPanel, /data-conductor-revision|data-conductor-now|Checkpoint|Current time/);
+  assert.match(runPanel, /data-conductor-lifecycle|data-conductor-antenna-in-use/);
+  assert.match(runPanel, /<button type="button" data-conductor-refresh>Refresh<\/button>/);
 });
 
 test("setup bridge exposes only review and reviewed-creation commands", async () => {

@@ -207,7 +207,11 @@ complete. While a WSPR transmission is active, the prompt instead keeps the
 current antenna connected until completion and offers no early-switch timing
 action. Skipping an unarmed cycle is a durable, correctable missed-cycle fact
 that advances the intended order. Notes and corrections are task-level
-shortcuts; checkpoint details, receiver configuration, diagnostics, and action
+shortcuts. The secondary run surface shows operator-useful lifecycle and current
+antenna state without checkpoint revisions, backend clock values, or opaque
+identifiers. Public-spot status uses short waiting, collecting, collected,
+disabled, and retry language; detailed request windows and provenance remain in
+durable evidence and reports. Receiver configuration, diagnostics, and action
 history use progressive disclosure. Every mutation shows a pending state
 followed by explicit success or typed failure.
 
