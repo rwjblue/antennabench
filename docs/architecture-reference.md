@@ -334,8 +334,11 @@ The checked-in native ES modules divide that disposable frontend boundary by
 responsibility. `state.mjs` owns workflow state and transitions, `bridge.mjs`
 owns the fixed Tauri command names and payload construction, `models.mjs` owns
 pure formatting and derived presentation models plus contextual-help behavior,
-and `forms.mjs` owns setup and evidence input normalization. `app.mjs` remains
-the browser entry module and owns DOM lookup, rendering, and event binding.
+and `forms.mjs` owns setup and evidence input normalization. `elements.mjs`
+owns the fail-fast checked-in HTML selector contract, while `renderers.mjs`
+owns navigation, setup, active-run, transfer, and report presentation through
+explicit element capabilities. `app.mjs` remains the browser entry module and
+owns only platform binding and UI event wiring.
 `controller.mjs` owns mutable application state and asynchronous command
 sequencing through injected invoke, navigation, clock, timer, focus/visibility,
 prompt/confirmation, countdown, and render ports. The browser entry binds those

@@ -22,6 +22,11 @@ import {
   invokeStopSessionWsjtx,
 } from "../frontend/bridge.mjs";
 import {
+  REQUIRED_ELEMENT_LIST_SELECTORS,
+  REQUIRED_ELEMENT_SELECTORS,
+  collectDesktopElements,
+} from "../frontend/elements.mjs";
+import {
   applyStationPreferences,
   readEvidenceAction,
   readEvidenceReplacement,
@@ -99,6 +104,22 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
   assert.equal(tauri.build.frontendDist, "frontend");
   assert.equal(existsSync(new URL("../package.json", import.meta.url)), false);
   assert.equal(existsSync(new URL("../package-lock.json", import.meta.url)), false);
+});
+
+test("the checked-in HTML satisfies the fail-fast renderer element inventory", () => {
+  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  for (const selector of [
+    ...Object.values(REQUIRED_ELEMENT_SELECTORS),
+    ...Object.values(REQUIRED_ELEMENT_LIST_SELECTORS),
+  ]) {
+    const fragment = selector.replace(/^\[/, "").replace(/\]$/, "");
+    assert.match(html, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+
+  assert.throws(
+    () => collectDesktopElements({ querySelector: () => null, querySelectorAll: () => [] }),
+    /Missing required desktop element mainContent/,
+  );
 });
 
 test("contextual help is centralized, keyboard accessible, and fully inventoried", () => {

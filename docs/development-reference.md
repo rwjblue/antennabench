@@ -337,6 +337,8 @@ The desktop-specific commands are:
 
 ```bash
 mise run desktop:e2e
+mise run desktop:frontend-test
+mise run desktop:frontend-coverage
 mise run desktop:test
 mise run desktop:build
 mise run desktop:dev
@@ -394,8 +396,24 @@ interval registration, focus/visibility/hash listeners, prompts, confirmations,
 and countdown presentation. They assert setup, open, conductor, WSJT-X,
 WSPR.live, report, refresh, duplicate-operation, transition-timer, and disposal
 behavior without a window, native picker, live timer, or Tauri runtime. DOM
-lookup and workflow-specific rendering remain in `app.mjs` pending their
-separate renderer-contract extraction.
+lookup is centralized by the fail-fast `elements.mjs` selector inventory.
+`renderers.mjs` gives navigation, setup, active-run, transfer, and report
+presentation separate ownership and consumes only explicit element/root/time
+capabilities. Narrow dependency-free fake elements verify visible/hidden,
+enabled/disabled, dynamic child, feedback, countdown, accessibility, and
+revision-keyed `srcdoc` behavior.
+
+`desktop:frontend-test` runs those named behavior tests with Node's built-in
+line, branch, and function coverage report; `desktop:frontend-coverage` is the
+explicit report command. Coverage percentages are diagnostic indicators, not
+an acceptance threshold: named workflow states and contract edges determine
+adequacy, while uncovered lines guide focused additions. The suite does not
+verify native webview layout, CSS painting, platform focus integration, or
+Tauri's actual injected global. Add a window-level smoke suite only after a
+reproducible defect crosses one of those real-webview boundaries and cannot be
+represented through the current element or platform ports; one such defect is
+evidence for a focused decision, not automatic permission to add WebDriver or
+a frontend dependency.
 
 ## Desktop Release Artifact Construction
 
