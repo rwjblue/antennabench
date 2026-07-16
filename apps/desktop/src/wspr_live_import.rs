@@ -8,7 +8,7 @@ use antennabench_wsjtx::{
     WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
 };
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
@@ -38,12 +38,6 @@ pub(crate) enum WsprLiveImportOutcome {
     },
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct WsprLiveImportRequest {
-    authority_confirmed: bool,
-}
-
 pub(crate) struct CommittedWsprLiveResponse {
     pub(crate) session: OpenedSession,
     pub(crate) revision: u64,
@@ -54,15 +48,7 @@ pub(crate) struct CommittedWsprLiveResponse {
 pub(crate) async fn import_active_session_wspr_live(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
-    request: WsprLiveImportRequest,
 ) -> Result<WsprLiveImportOutcome, SessionErrorPayload> {
-    if !request.authority_confirmed {
-        return Err(SessionErrorPayload::new(
-            SessionErrorKind::Validation,
-            "Confirm that you may use the supplied WSPR.live response.",
-            "authorityConfirmed must be true before the native file picker opens",
-        ));
-    }
     let Some(selection) = app
         .dialog()
         .file()

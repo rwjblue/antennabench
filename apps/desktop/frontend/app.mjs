@@ -450,8 +450,8 @@ export function invokeExportSession(invoke) {
   return invoke("export_active_session");
 }
 
-export function invokeImportActiveSessionWsprLive(invoke, authorityConfirmed = true) {
-  return invoke("import_active_session_wspr_live", { request: { authorityConfirmed } });
+export function invokeImportActiveSessionWsprLive(invoke) {
+  return invoke("import_active_session_wspr_live");
 }
 
 export function invokeImportActiveSessionRbn(invoke) {
@@ -624,7 +624,6 @@ function mount(root, browserWindow) {
   const exportButton = root.querySelector("[data-export-session]");
   const importWsprLiveButton = root.querySelector("[data-import-wspr-live]");
   const importRbnButton = root.querySelector("[data-import-rbn]");
-  const importAuthority = root.querySelector("[data-import-authority]");
   const transferStatus = root.querySelector("[data-transfer-status]");
   const openFeedback = root.querySelector("[data-open-feedback]");
   const feedbackMessage = root.querySelector("[data-feedback-message]");
@@ -850,13 +849,9 @@ function mount(root, browserWindow) {
       : exportLoading
         ? "Exporting…"
         : "Export copy";
-    importWsprLiveButton.disabled = state.session?.lifecycle !== "running"
-      || !importAuthority.checked
-      || importLoading;
+    importWsprLiveButton.disabled = state.session?.lifecycle !== "running" || importLoading;
     importWsprLiveButton.textContent = state.session?.lifecycle !== "running"
       ? "Open a running session first"
-      : !importAuthority.checked
-        ? "Confirm source authority first"
       : importLoading
         ? "Importing…"
         : "Choose WSPR.live JSON";
@@ -1313,7 +1308,7 @@ function mount(root, browserWindow) {
     try {
       const invoke = browserWindow.__TAURI__?.core?.invoke;
       if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      const outcome = await invokeImportActiveSessionWsprLive(invoke, importAuthority.checked);
+      const outcome = await invokeImportActiveSessionWsprLive(invoke);
       if (outcome.status === "cancelled") {
         state = wsprLiveImportCancelled(state);
       } else if (outcome.status === "imported" && outcome.session) {
@@ -1327,8 +1322,6 @@ function mount(root, browserWindow) {
     render();
     if (state.importStatus === "ready") await refreshReport();
   });
-  importAuthority.addEventListener("change", render);
-
   importRbnButton.addEventListener("click", async () => {
     const eligible = state.session?.schemaVersion === 3
       && !["draft", "ready"].includes(state.session?.lifecycle);

@@ -154,11 +154,13 @@
                 </div>
               </fieldset>
 
-              <fieldset class="setup-section">
-                <legend><span>05</span> Optional public spots</legend>
-                <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Use WSPR.live public spots for this session</label>
-                <p class="field-help"><a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> is a volunteer WSPRnet mirror for personal research and freely accessible projects. If enabled, AntennaBench sends only the transmitter callsign, bounded UTC window, selected bands, and fixed WSPR-2 filter after durable antenna confirmations. It does not send the bundle, grid, antenna labels, observations, or notes. Source completeness is unknown. Automatic acquisition is enabled for new sessions; uncheck this box for a fully local session.</p>
-              </fieldset>
+              <div class="setup-section setup-source-note">
+                <p>Public WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Source completeness is unknown.</p>
+                <details>
+                  <summary>Offline option</summary>
+                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Gather WSPR.live spots automatically for this session</label>
+                </details>
+              </div>
 
               <div class="setup-actions">
                 <button class="primary-action" type="submit" data-review-setup>Review normalized plan</button>
@@ -281,7 +283,7 @@
             <p class="lede">Bundle operations will stay behind narrow Rust services. The webview receives no general filesystem authority.</p>
             <div class="action-list">
               <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report without changing the source.</p></div><button class="primary-action" type="button" data-open-session>Choose bundle</button></article>
-              <article><div><span>Import evidence</span><h2>Add a WSPR.live JSON response</h2><p><a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> is a volunteer WSPRnet mirror. AntennaBench repeats the active session’s callsign, half-open schedule window, bands, and WSPR-2 filter locally; it makes no network request.</p><label class="authority-confirmation"><input type="checkbox" data-import-authority> I confirm I may use the supplied response for this session.</label></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Confirm source authority first</button></article>
+              <article><div><span>Recovery import</span><h2>Add a saved WSPR.live response</h2><p>If automatic acquisition was interrupted, select a <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> JSON response for the active session. AntennaBench validates it against the session before importing any spots.</p></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Open a running session first</button></article>
               <article><div><span>Import evidence</span><h2>Add an RBN daily ZIP archive</h2><p>Select an official <a href="https://www.reversebeacon.net/raw_data/" target="_blank" rel="noreferrer">Reverse Beacon Network daily archive</a>. AntennaBench performs no download: it filters the selected local ZIP to the schema-v3 session callsign, half-open schedule window, and bands, then preserves the exact ZIP in the bundle.</p></div><button class="secondary-action" type="button" data-import-rbn disabled>Open a session first</button></article>
               <article><div><span>Export</span><h2>Copy the active bundle</h2><p>Preserve the original durable files and attachments losslessly.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
             </div>

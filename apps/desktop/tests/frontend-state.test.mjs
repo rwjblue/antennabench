@@ -134,6 +134,9 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
     setupHtml,
     /data-setup-field="wsprLiveAcquisitionEnabled" checked/,
   );
+  assert.doesNotMatch(setupHtml, /Optional public spots/);
+  assert.match(setupHtml, /Public WSPR spots are gathered automatically/);
+  assert.doesNotMatch(setupHtml, /data-import-authority|Confirm source authority/);
 
   const values = new Map([
     ["callsign", "N1RWJ"],
@@ -683,7 +686,7 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["export_active_session"],
     ["refresh_active_session_report"],
     ["export_active_session_report"],
-    ["import_active_session_wspr_live", { request: { authorityConfirmed: true } }],
+    ["import_active_session_wspr_live"],
     ["import_active_session_rbn"],
   ]);
   assert.equal(result.status, "opened");
