@@ -20,10 +20,9 @@ pub use v3::*;
 pub use validation::*;
 pub use wspr::*;
 
-/// Schema used by the legacy adapter APIs. New durable bundles use v2.
+/// Schema used by legacy adapter APIs.
 pub const SCHEMA_VERSION: u16 = SCHEMA_VERSION_V1;
 pub const SCHEMA_VERSION_V1: u16 = 1;
 pub const SCHEMA_VERSION_V2: u16 = 2;
-/// Selected by ADR 0016; storage dispatch remains v2 until #86 lands fully.
 pub const SCHEMA_VERSION_V3: u16 = 3;
-pub const LATEST_SCHEMA_VERSION: u16 = SCHEMA_VERSION_V2;
+pub const LATEST_SCHEMA_VERSION: u16 = SCHEMA_VERSION_V3;

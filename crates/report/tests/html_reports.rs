@@ -73,6 +73,7 @@ fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
             occurred_at: "2026-07-14T22:00:00Z".parse().unwrap(),
             detail: Some("recovered <without inventing evidence>".into()),
         }],
+        wspr_cycles: Vec::new(),
         adapter_evidence: ReportAdapterEvidence {
             record_count: 9,
             accepted_count: 5,

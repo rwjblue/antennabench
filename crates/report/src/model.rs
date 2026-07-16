@@ -34,6 +34,8 @@ pub struct ReportSnapshotContext {
     pub checkpoint_revision: Option<u64>,
     pub lifecycle: Option<SessionLifecycleV2>,
     pub lifecycle_events: Vec<ReportLifecycleEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wspr_cycles: Vec<ReportWsprCycle>,
     pub adapter_evidence: ReportAdapterEvidence,
 }
 
@@ -42,8 +44,30 @@ impl ReportSnapshotContext {
         self.checkpoint_revision.is_none()
             && self.lifecycle.is_none()
             && self.lifecycle_events.is_empty()
+            && self.wspr_cycles.is_empty()
             && self.adapter_evidence.record_count == 0
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportWsprCycle {
+    pub intent_id: String,
+    pub sequence_number: u32,
+    pub band: Band,
+    pub planned_antenna: String,
+    pub actual_antenna: Option<String>,
+    pub ready_at: Option<DateTime<Utc>>,
+    pub starts_at: Option<DateTime<Utc>>,
+    pub transmission_ends_at: Option<DateTime<Utc>>,
+    pub attribution: ReportWsprAttribution,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportWsprAttribution {
+    Pending,
+    Attributable,
+    UnknownAntennaOccupancy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -5,13 +5,14 @@ use std::{
 };
 
 use antennabench_core::{
-    reduce_operator_events_v2, reduce_operator_events_v3, validate_signal_state_confirmation_v3,
-    BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2,
-    CorrectableOperatorEventPayloadV3, EventCorrectionActionV2, EventCorrectionActionV3,
-    EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
-    OperatorEventV2, OperatorEventV3, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
-    ReplacementOperatorEventV2, ReplacementOperatorEventV3, SessionLifecycleV2, SignalModeV3,
-    SignalStateConfirmationV3, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+    next_wspr_cycle_after_ready, project_wspr_run_v3, reduce_operator_events_v2,
+    reduce_operator_events_v3, validate_signal_state_confirmation_v3, BundleV2Contents,
+    BundleV3Contents, CorrectableOperatorEventPayloadV2, CorrectableOperatorEventPayloadV3,
+    EventCorrectionActionV2, EventCorrectionActionV3, EventTimeBasisV2, MutationMember,
+    OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2, OperatorEventV3, Provenance,
+    RecordMetaV2, RecordMetaV3, RecordSource, ReplacementOperatorEventV2,
+    ReplacementOperatorEventV3, SessionLifecycleV2, SignalModeV3, SignalStateConfirmationV3,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -63,6 +64,8 @@ pub(crate) struct ConductorView {
     antennas: Vec<String>,
     current_slot: Option<ConductorSlotView>,
     next_slot: Option<ConductorSlotView>,
+    next_intent: Option<ConductorIntentView>,
+    antenna_in_use: Option<String>,
     slots: Vec<ConductorSlotView>,
     effective_events: Vec<ConductorEventView>,
     diagnostics: Vec<ConductorDiagnostic>,
@@ -77,11 +80,21 @@ enum ConductorPhase {
     Guard,
     Active,
     BetweenSlots,
+    Switching,
     Finalizing,
     Complete,
     Interrupted,
     Ended,
     Abandoned,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConductorIntentView {
+    intent_id: String,
+    sequence_number: u32,
+    band: String,
+    antenna_label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -194,6 +207,13 @@ enum ConductorAction {
     },
     Abandon {
         reason: Option<String>,
+    },
+    BeginAntennaSwitch {
+        note: Option<String>,
+    },
+    ArmWsprCycle {
+        intent_id: String,
+        antenna_label: String,
     },
     ConfirmAntenna {
         slot_id: String,
@@ -446,6 +466,13 @@ fn action_payload(
                 reason: optional_text(reason),
             },
         ),
+        ConductorAction::BeginAntennaSwitch { .. } | ConductorAction::ArmWsprCycle { .. } => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Validation,
+                "Operator-paced WSPR actions require a current session.",
+                "schema-v2 sessions do not support durable cycle intentions",
+            ));
+        }
         ConductorAction::ConfirmAntenna {
             slot_id,
             antenna_label,
@@ -640,6 +667,33 @@ fn action_payload_v3(
                 reason: optional_text(reason),
             },
         ),
+        ConductorAction::BeginAntennaSwitch { note } => (
+            None,
+            OperatorEventPayloadV3::AntennaSwitchStarted {
+                note: optional_text(note),
+            },
+        ),
+        ConductorAction::ArmWsprCycle {
+            intent_id,
+            antenna_label,
+        } => {
+            let cycle = next_wspr_cycle_after_ready(occurred_at, Duration::seconds(1)).map_err(
+                |error| {
+                    SessionErrorPayload::new(
+                        SessionErrorKind::Validation,
+                        "The next WSPR cycle could not be calculated.",
+                        error.to_string(),
+                    )
+                },
+            )?;
+            (
+                Some(required_text(intent_id, "intentId")?),
+                OperatorEventPayloadV3::WsprCycleArmed {
+                    antenna_label: required_text(antenna_label, "antennaLabel")?,
+                    cycle_starts_at: cycle.starts_at,
+                },
+            )
+        }
         ConductorAction::ConfirmAntenna {
             slot_id,
             antenna_label,
@@ -869,6 +923,8 @@ fn build_view(
             .collect(),
         current_slot: current_index.map(|index| slots[index].clone()),
         next_slot: next_index.map(|index| slots[index].clone()),
+        next_intent: None,
+        antenna_in_use: current_index.and_then(|index| slots[index].actual_antenna.clone()),
         slots,
         effective_events,
         diagnostics,
@@ -884,6 +940,7 @@ fn build_view_v3(
     recovery: Option<ConductorRecoveryView>,
 ) -> ConductorView {
     let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &bundle.events);
+    let run_projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
     let mut evidence = BTreeMap::<String, Vec<&CorrectableOperatorEventPayloadV3>>::new();
     let mut effective_events = Vec::new();
     for event in &reduction.effective_events {
@@ -903,6 +960,32 @@ fn build_view_v3(
             summary,
         });
     }
+    for event in &bundle.events {
+        let (kind, summary) = match &event.payload {
+            OperatorEventPayloadV3::AntennaSwitchStarted { note } => (
+                "antenna_switch_started",
+                note.clone()
+                    .unwrap_or_else(|| "Antenna switching started; occupancy is unknown.".into()),
+            ),
+            OperatorEventPayloadV3::WsprCycleArmed {
+                antenna_label,
+                cycle_starts_at,
+            } => (
+                "wspr_cycle_armed",
+                format!("{antenna_label} ready; WSPR cycle armed for {cycle_starts_at}."),
+            ),
+            _ => continue,
+        };
+        effective_events.push(ConductorEventView {
+            source_event_id: event.event_id.clone(),
+            effective_through_event_id: event.event_id.clone(),
+            occurred_at: event.occurred_at,
+            slot_id: event.slot_id.clone(),
+            kind,
+            summary,
+        });
+    }
+    effective_events.sort_by_key(|event| event.occurred_at);
 
     let mut diagnostics = reduction
         .diagnostics
@@ -914,14 +997,40 @@ fn build_view_v3(
             event_id: Some(diagnostic.event_id),
         })
         .collect::<Vec<_>>();
+    diagnostics.extend(
+        run_projection
+            .diagnostics
+            .iter()
+            .map(|diagnostic| ConductorDiagnostic {
+                code: diagnostic.code.into(),
+                message: diagnostic.message.clone(),
+                slot_id: None,
+                event_id: Some(diagnostic.event_id.clone()),
+            }),
+    );
 
-    let slots = bundle
-        .schedule
+    let projected_schedule = bundle.clone().into_current().bundle.schedule;
+    let slots = projected_schedule
         .slots
         .iter()
         .map(|slot| {
+            let intent = bundle
+                .schedule
+                .wspr_cycle_intents
+                .iter()
+                .find(|intent| intent.intent_id == slot.slot_id);
+            let armed_cycle = run_projection
+                .cycles
+                .iter()
+                .find(|cycle| cycle.intent_id == slot.slot_id);
             let facts = evidence.get(&slot.slot_id).map(Vec::as_slice).unwrap_or(&[]);
-            let (evidence_status, actual_antenna) = slot_evidence_v3(facts);
+            let (mut evidence_status, mut actual_antenna) = slot_evidence_v3(facts);
+            if evidence_status == SlotEvidenceStatus::Unknown {
+                if let Some(cycle) = armed_cycle {
+                    evidence_status = SlotEvidenceStatus::Confirmed;
+                    actual_antenna = Some(cycle.antenna_label.clone());
+                }
+            }
             if evidence_status == SlotEvidenceStatus::Conflicting {
                 diagnostics.push(ConductorDiagnostic {
                     code: "conductor.slot.conflicting_evidence".into(),
@@ -941,8 +1050,18 @@ fn build_view_v3(
                     _ => None,
                 })
                 .collect::<Vec<_>>();
+            let allocation = intent
+                .and_then(|intent| intent.signal.as_ref())
+                .or_else(|| {
+                    bundle
+                        .schedule
+                        .slots
+                        .iter()
+                        .find(|legacy| legacy.slot_id == slot.slot_id)
+                        .and_then(|legacy| legacy.signal.as_ref())
+                });
             let (actual_signal, signal_status) = match confirmations.as_slice() {
-                [] if slot.signal.is_some() => (None, SignalEvidenceStatus::Missing),
+                [] if allocation.is_some() => (None, SignalEvidenceStatus::Missing),
                 [] => (None, SignalEvidenceStatus::NotPlanned),
                 [confirmation] => {
                     let signal_diagnostics = validate_signal_state_confirmation_v3(
@@ -976,7 +1095,7 @@ fn build_view_v3(
                     (None, SignalEvidenceStatus::Conflicting)
                 }
             };
-            let planned_signal = slot.signal.as_ref().and_then(|allocation| {
+            let planned_signal = allocation.and_then(|allocation| {
                 bundle
                     .schedule
                     .signal_plans
@@ -998,14 +1117,21 @@ fn build_view_v3(
             ConductorSlotView {
                 slot_id: slot.slot_id.clone(),
                 sequence_number: slot.sequence_number,
-                starts_at: slot.starts_at,
-                usable_at: slot.starts_at + Duration::seconds(i64::from(slot.guard_seconds)),
-                ends_at: slot.starts_at + Duration::seconds(i64::from(slot.duration_seconds)),
+                starts_at: armed_cycle.map_or(slot.starts_at, |cycle| cycle.window.starts_at),
+                usable_at: armed_cycle.map_or(
+                    slot.starts_at + Duration::seconds(i64::from(slot.guard_seconds)),
+                    |cycle| cycle.window.starts_at,
+                ),
+                ends_at: armed_cycle.map_or(
+                    slot.starts_at + Duration::seconds(i64::from(slot.duration_seconds)),
+                    |cycle| cycle.window.transmission_ends_at,
+                ),
                 band: serde_json::to_value(slot.band)
                     .ok()
                     .and_then(|value| value.as_str().map(str::to_string))
                     .unwrap_or_else(|| format!("{:?}", slot.band)),
-                planned_antenna: slot.antenna_label.clone(),
+                planned_antenna: intent
+                    .map_or_else(|| slot.antenna_label.clone(), |intent| intent.antenna_label.clone()),
                 actual_antenna,
                 evidence_status,
                 planned_signal,
@@ -1015,8 +1141,43 @@ fn build_view_v3(
         })
         .collect::<Vec<_>>();
 
-    let (phase, guidance, seconds_to_transition, current_index, next_index) =
-        timing_projection(reduction.lifecycle, false, &slots, now);
+    let next_intent = bundle.schedule.wspr_cycle_intents.iter().find(|intent| {
+        !run_projection
+            .cycles
+            .iter()
+            .any(|cycle| cycle.intent_id == intent.intent_id)
+    });
+    let switching = bundle
+        .events
+        .iter()
+        .rev()
+        .find(|event| {
+            matches!(
+                event.payload,
+                OperatorEventPayloadV3::AntennaSwitchStarted { .. }
+                    | OperatorEventPayloadV3::WsprCycleArmed { .. }
+            )
+        })
+        .is_some_and(|event| {
+            matches!(
+                event.payload,
+                OperatorEventPayloadV3::AntennaSwitchStarted { .. }
+            )
+        });
+    let (phase, guidance, seconds_to_transition, current_index, next_index) = timing_projection_v3(
+        reduction.lifecycle,
+        bundle.session_state.wspr_live_acquisition_enabled,
+        &slots,
+        next_intent,
+        switching,
+        now,
+    );
+    let antenna_in_use = run_projection
+        .occupancies
+        .iter()
+        .rev()
+        .find(|interval| interval.ends_at.is_none())
+        .map(|interval| interval.antenna_label.clone());
     ConductorView {
         bundle_name,
         session_id: bundle.manifest.session_id.clone(),
@@ -1035,6 +1196,16 @@ fn build_view_v3(
             .collect(),
         current_slot: current_index.map(|index| slots[index].clone()),
         next_slot: next_index.map(|index| slots[index].clone()),
+        next_intent: next_intent.map(|intent| ConductorIntentView {
+            intent_id: intent.intent_id.clone(),
+            sequence_number: intent.sequence_number,
+            band: serde_json::to_value(intent.band)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_string))
+                .unwrap_or_else(|| format!("{:?}", intent.band)),
+            antenna_label: intent.antenna_label.clone(),
+        }),
+        antenna_in_use,
         slots,
         effective_events,
         diagnostics,
@@ -1298,6 +1469,160 @@ fn timing_projection(
             .into(),
         None,
         None,
+        None,
+    )
+}
+
+fn timing_projection_v3(
+    lifecycle: SessionLifecycleV2,
+    wspr_live_acquisition_enabled: bool,
+    slots: &[ConductorSlotView],
+    next_intent: Option<&antennabench_core::WsprCycleIntentV3>,
+    switching: bool,
+    now: DateTime<Utc>,
+) -> (
+    ConductorPhase,
+    String,
+    Option<i64>,
+    Option<usize>,
+    Option<usize>,
+) {
+    match lifecycle {
+        SessionLifecycleV2::Ready | SessionLifecycleV2::Draft => {
+            return (
+                ConductorPhase::Ready,
+                "Start when you are ready. Cycle timing will be chosen from actual operator actions."
+                    .into(),
+                None,
+                None,
+                None,
+            );
+        }
+        SessionLifecycleV2::Interrupted => {
+            return (
+                ConductorPhase::Interrupted,
+                "The session is interrupted and antenna occupancy is unknown. Resume, then confirm an antenna again."
+                    .into(),
+                None,
+                None,
+                None,
+            );
+        }
+        SessionLifecycleV2::Ended => {
+            return (
+                ConductorPhase::Ended,
+                "The session is ended and no further evidence can be appended.".into(),
+                None,
+                None,
+                None,
+            );
+        }
+        SessionLifecycleV2::Abandoned => {
+            return (
+                ConductorPhase::Abandoned,
+                "The session is abandoned and its existing evidence remains preserved.".into(),
+                None,
+                None,
+                None,
+            );
+        }
+        SessionLifecycleV2::Running => {}
+    }
+
+    if let Some(index) = slots
+        .iter()
+        .position(|slot| now >= slot.starts_at && now < slot.ends_at)
+    {
+        return (
+            ConductorPhase::Active,
+            format!(
+                "WSPR cycle {} is transmitting on {}. Keep {} connected until the transmission completes.",
+                slots[index].sequence_number, slots[index].band, slots[index].planned_antenna
+            ),
+            Some((slots[index].ends_at - now).num_seconds().max(0)),
+            Some(index),
+            None,
+        );
+    }
+
+    if let Some(index) = slots.iter().position(|slot| slot.starts_at > now) {
+        return (
+            ConductorPhase::AwaitingSlot,
+            format!(
+                "{} is ready. WSPR cycle {} starts at the next protocol boundary.",
+                slots[index]
+                    .actual_antenna
+                    .as_deref()
+                    .unwrap_or(&slots[index].planned_antenna),
+                slots[index].sequence_number
+            ),
+            Some((slots[index].starts_at - now).num_seconds().max(0)),
+            None,
+            Some(index),
+        );
+    }
+
+    let completed_index = slots
+        .iter()
+        .enumerate()
+        .filter(|(_, slot)| slot.ends_at <= now)
+        .max_by_key(|(_, slot)| slot.ends_at)
+        .map(|(index, _)| index);
+    if let Some(intent) = next_intent {
+        return (
+            if switching {
+                ConductorPhase::Switching
+            } else {
+                ConductorPhase::BetweenSlots
+            },
+            if switching {
+                format!(
+                    "Switch to {} for cycle {}. Confirm ready only after the switch is complete.",
+                    intent.antenna_label, intent.sequence_number
+                )
+            } else {
+                format!(
+                    "Next is {} on {}. Begin the switch; there is no hidden deadline.",
+                    intent.antenna_label,
+                    serde_json::to_value(intent.band)
+                        .ok()
+                        .and_then(|value| value.as_str().map(str::to_string))
+                        .unwrap_or_else(|| format!("{:?}", intent.band))
+                )
+            },
+            None,
+            completed_index,
+            None,
+        );
+    }
+
+    if let Some(final_slot) = wspr_live_acquisition_enabled
+        .then(|| slots.last())
+        .flatten()
+    {
+        let acquisition_at =
+            final_slot.ends_at + Duration::seconds(WSPR_LIVE_INGESTION_GRACE_SECONDS);
+        return (
+            ConductorPhase::Finalizing,
+            if now < acquisition_at {
+                "All intended cycles are complete. Waiting briefly for WSPR.live ingestion before final capture."
+                    .into()
+            } else {
+                "Final WSPR.live acquisition is due. AntennaBench will finish automatically or show a retry action."
+                    .into()
+            },
+            Some((acquisition_at - now).num_seconds().max(0)),
+            completed_index,
+            None,
+        );
+    }
+
+    (
+        ConductorPhase::Complete,
+        "All intended WSPR cycles are complete. End the session when you are satisfied with the evidence."
+            .into(),
+        None,
+        completed_index,
         None,
     )
 }
@@ -1744,10 +2069,10 @@ mod tests {
         let conductor = ConductorSessionState::default();
 
         let ready = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
-        assert_eq!(ready.slots[0].signal_status, SignalEvidenceStatus::Missing);
+        assert!(ready.slots.is_empty());
         assert_eq!(
-            ready.slots[0].planned_signal.as_ref().unwrap().mode,
-            SignalModeV3::Cw
+            ready.next_intent.as_ref().unwrap().intent_id,
+            created.slot_ids[0]
         );
         let started = mutate_conductor_with_hooks(
             &active,
@@ -1756,25 +2081,42 @@ mod tests {
             hooks.clone(),
         )
         .unwrap();
-        let antenna = mutate_conductor_with_hooks(
+        let switching = mutate_conductor_with_hooks(
             &active,
             &conductor,
             request(
                 &started,
-                ConductorAction::ConfirmAntenna {
-                    slot_id: created.slot_ids[0].clone(),
-                    antenna_label: created.antenna_labels[0].clone(),
-                    note: None,
+                ConductorAction::BeginAntennaSwitch {
+                    note: Some("operator reached for the switch".into()),
                 },
             ),
             hooks.clone(),
         )
         .unwrap();
+        assert_eq!(switching.phase, ConductorPhase::Switching);
+        let armed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &switching,
+                ConductorAction::ArmWsprCycle {
+                    intent_id: created.slot_ids[0].clone(),
+                    antenna_label: created.antenna_labels[0].clone(),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        assert_eq!(armed.slots[0].signal_status, SignalEvidenceStatus::Missing);
+        assert_eq!(
+            armed.slots[0].planned_signal.as_ref().unwrap().mode,
+            SignalModeV3::Cw
+        );
         let confirmed = mutate_conductor_with_hooks(
             &active,
             &conductor,
             request(
-                &antenna,
+                &armed,
                 ConductorAction::ConfirmSignal {
                     slot_id: created.slot_ids[0].clone(),
                     frequency_hz: Some(14_050_000),
@@ -1785,11 +2127,11 @@ mod tests {
                     note: Some("operator confirmed actual transmission".into()),
                 },
             ),
-            hooks,
+            hooks.clone(),
         )
         .unwrap();
 
-        assert_eq!(confirmed.revision, 3);
+        assert_eq!(confirmed.revision, 4);
         assert_eq!(
             confirmed.slots[0].signal_status,
             SignalEvidenceStatus::Confirmed
@@ -1803,8 +2145,8 @@ mod tests {
             Some(14_050_000)
         );
         let persisted = store.read_v3_checkpointed().unwrap();
-        assert_eq!(persisted.events.len(), 3);
-        assert_eq!(persisted.session_state.revision, 3);
+        assert_eq!(persisted.events.len(), 4);
+        assert_eq!(persisted.session_state.revision, 4);
     }
 
     struct FailureArtifacts {
@@ -2147,11 +2489,41 @@ mod tests {
         assert_eq!(retried.revision, 1);
         assert_eq!(store.read_v3_checkpointed().unwrap().events.len(), 1);
 
-        let confirmed = mutate_conductor_with_hooks(
+        let switching = mutate_conductor_with_hooks(
             &active,
             &conductor,
             request(
                 &retried,
+                ConductorAction::BeginAntennaSwitch {
+                    note: Some("operator began the first manual switch".into()),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        let armed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &switching,
+                ConductorAction::ArmWsprCycle {
+                    intent_id: created.slot_ids[0].clone(),
+                    antenna_label: created.antenna_labels[0].clone(),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            armed.slots[0].starts_at,
+            Utc.with_ymd_and_hms(2026, 7, 15, 20, 2, 1).unwrap()
+        );
+        assert_eq!(armed.antenna_in_use.as_deref(), Some("Vertical"));
+        let confirmed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &armed,
                 ConductorAction::ConfirmAntenna {
                     slot_id: created.slot_ids[0].clone(),
                     antenna_label: created.antenna_labels[1].clone(),
@@ -2252,14 +2624,14 @@ mod tests {
         .unwrap();
         assert_eq!(resumed.lifecycle, SessionLifecycleV2::Running);
 
-        let wsjtx_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 1, 50).unwrap();
+        let wsjtx_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 3, 55).unwrap();
         let intake = inject_e2e_wsjtx_sequence(&created.path, wsjtx_at);
         assert_eq!(intake.adapter_records, 4);
         assert_eq!(intake.observations, 1);
         assert_eq!(intake.gaps, 1);
         assert!(intake.revision > resumed.revision);
 
-        hooks.set_now(Utc.with_ymd_and_hms(2026, 7, 15, 20, 2, 30).unwrap());
+        hooks.set_now(Utc.with_ymd_and_hms(2026, 7, 15, 20, 4, 30).unwrap());
         let current = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
         hooks.fail_once_at(LivePersistencePoint::MidStreamWrite(LiveStreamV2::Events));
         let crash = mutate_conductor_with_hooks(
@@ -2380,6 +2752,12 @@ mod tests {
         assert!(exported
             .report_html
             .contains("Lifecycle and interruption history"));
+        assert!(exported
+            .report_html
+            .contains("Intended WSPR order and observed antenna use"));
+        assert!(exported
+            .report_html
+            .contains("Unknown — antenna changed during transmission"));
 
         let exported_store = BundleStore::new(&exported.bundle_path);
         let reopened_bundle = exported_store.read_v3_checkpointed().unwrap();

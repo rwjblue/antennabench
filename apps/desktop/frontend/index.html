@@ -122,14 +122,12 @@
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>03</span> Deterministic schedule</legend>
+                <legend><span>03</span> Run plan</legend>
+                <p class="field-help">Choose the intended antenna order. Actual WSPR cycle times are set during the run after each antenna is ready.</p>
                 <div class="field-grid">
                   <label>Experiment mode<select data-setup-field="mode"><option value="whole_station_ab">Whole-station A/B</option><option value="tx_focused">TX focused</option><option value="rx_focused">RX focused</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
                   <label>Goal<select data-setup-field="goal"><option value="general_coverage">General coverage</option><option value="dx">DX</option><option value="regional">Regional</option><option value="nvis_local">NVIS / local</option><option value="weak_signal_reliability">Weak-signal reliability</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
-                  <label>Local start time<input type="datetime-local" data-setup-field="startsAt" /></label>
                   <label>Band<select data-setup-field="band"><option value="160m">160 m</option><option value="80m">80 m</option><option value="60m">60 m</option><option value="40m">40 m</option><option value="30m">30 m</option><option value="20m" selected>20 m</option><option value="17m">17 m</option><option value="15m">15 m</option><option value="12m">12 m</option><option value="10m">10 m</option><option value="6m">6 m</option><option value="2m">2 m</option></select></label>
-                  <label>Slot duration (seconds)<input data-setup-field="durationSeconds" inputmode="numeric" value="120" /></label>
-                  <label>Guard (seconds)<input data-setup-field="guardSeconds" inputmode="numeric" value="10" /></label>
                   <label>Complete A/B rounds<input data-setup-field="rounds" inputmode="numeric" value="5" /></label>
                 </div>
               </fieldset>
@@ -174,9 +172,9 @@
             <ul class="setup-diagnostics" data-setup-diagnostics hidden></ul>
 
             <section class="setup-review" data-setup-review hidden aria-labelledby="review-title">
-              <div><p class="eyebrow">Exact commit candidate</p><h2 id="review-title">Normalized plan review</h2></div>
+              <div><p class="eyebrow">Run guidance</p><h2 id="review-title">Normalized plan review</h2></div>
               <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div></dl>
-              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Band</th><th>Signal</th><th>Local time · UTC</th><th>Window</th></tr></thead><tbody data-review-slots></tbody></table></div>
+              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Band</th><th>Signal</th></tr></thead><tbody data-review-slots></tbody></table></div>
             </section>
 
           </section>
@@ -204,7 +202,8 @@
               <div class="conductor-context">
                 <div><span>Checkpoint</span><strong data-conductor-revision></strong></div>
                 <div><span>Durable lifecycle</span><strong data-conductor-lifecycle></strong></div>
-                <div><span>Trusted time</span><strong data-conductor-now></strong></div>
+                <div><span>Current time</span><strong data-conductor-now></strong></div>
+                <div><span>Antenna in use</span><strong data-conductor-antenna-in-use></strong></div>
               </div>
 
               <section class="conductor-prompt" aria-live="polite">
@@ -213,13 +212,15 @@
               </section>
 
               <div class="slot-focus">
-                <article><span>Current slot</span><div data-current-slot></div></article>
-                <article><span>Next slot</span><div data-next-slot></div></article>
+                <article><span>Current / last cycle</span><div data-current-slot></div></article>
+                <article><span>Next cycle</span><div data-next-slot></div></article>
               </div>
 
               <div class="conductor-actions" data-lifecycle-actions>
                 <button type="button" data-conductor-action="start">Start</button>
                 <button type="button" data-conductor-action="resume">Resume</button>
+                <button type="button" data-conductor-action="begin_antenna_switch">Begin antenna switch</button>
+                <button type="button" class="primary-action" data-conductor-action="arm_wspr_cycle">Antenna ready</button>
                 <button type="button" data-conductor-action="interrupt">Interrupt</button>
                 <button type="button" data-conductor-action="end">End</button>
                 <button type="button" class="danger-action" data-conductor-action="abandon">Abandon</button>
@@ -269,7 +270,6 @@
                 <div data-conductor-events></div>
               </section>
 
-              <div class="boundary-note"><strong>Trusted boundary</strong><p>Rust owns checkpoint recovery, clocks, IDs, expected revisions, mutation idempotency, lifecycle validation, the loopback UDP socket, client admission, and adapter persistence. The webview receives bounded status and submits only focused conductor or receiver intent.</p></div>
             </div>
           </section>
 

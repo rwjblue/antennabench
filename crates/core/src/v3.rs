@@ -157,6 +157,16 @@ pub struct PlannedSlotV3 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WsprCycleIntentV3 {
+    pub intent_id: String,
+    pub sequence_number: u32,
+    pub band: Band,
+    pub antenna_label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<SignalAllocationV3>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleV3 {
     pub schema_version: u16,
     pub session_id: String,
@@ -164,6 +174,9 @@ pub struct ScheduleV3 {
     pub goal: SessionGoal,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub signal_plans: Vec<SignalPlanV3>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wspr_cycle_intents: Vec<WsprCycleIntentV3>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub slots: Vec<PlannedSlotV3>,
 }
 
@@ -288,6 +301,14 @@ pub enum OperatorEventPayloadV3 {
     SessionAbandoned {
         reason: Option<String>,
     },
+    AntennaSwitchStarted {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    WsprCycleArmed {
+        antenna_label: String,
+        cycle_starts_at: DateTime<Utc>,
+    },
     AntennaStateConfirmed {
         antenna_label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -371,25 +392,62 @@ impl BundleV3Contents {
         self.station.schema_version = SCHEMA_VERSION_V2;
         self.antennas.schema_version = SCHEMA_VERSION_V2;
         self.analysis.schema_version = SCHEMA_VERSION_V2;
+        let mut projected_slots = self
+            .schedule
+            .slots
+            .into_iter()
+            .map(|slot| crate::PlannedSlot {
+                slot_id: slot.slot_id,
+                sequence_number: slot.sequence_number,
+                starts_at: slot.starts_at,
+                duration_seconds: slot.duration_seconds,
+                guard_seconds: slot.guard_seconds,
+                band: slot.band,
+                antenna_label: slot.antenna_label,
+            })
+            .collect::<Vec<_>>();
+        for event in &self.events {
+            let OperatorEventPayloadV3::WsprCycleArmed {
+                antenna_label,
+                cycle_starts_at,
+            } = &event.payload
+            else {
+                continue;
+            };
+            let Some(intent_id) = event.slot_id.as_deref() else {
+                continue;
+            };
+            let Some(intent) = self
+                .schedule
+                .wspr_cycle_intents
+                .iter()
+                .find(|intent| intent.intent_id == intent_id)
+            else {
+                continue;
+            };
+            if projected_slots
+                .iter()
+                .any(|slot| slot.slot_id == intent.intent_id)
+            {
+                continue;
+            }
+            projected_slots.push(crate::PlannedSlot {
+                slot_id: intent.intent_id.clone(),
+                sequence_number: intent.sequence_number,
+                starts_at: *cycle_starts_at,
+                duration_seconds: 120,
+                guard_seconds: 0,
+                band: intent.band,
+                antenna_label: antenna_label.clone(),
+            });
+        }
+        projected_slots.sort_by_key(|slot| (slot.sequence_number, slot.starts_at));
         let schedule = Schedule {
             schema_version: SCHEMA_VERSION_V2,
             session_id: self.schedule.session_id,
             mode: self.schedule.mode,
             goal: self.schedule.goal,
-            slots: self
-                .schedule
-                .slots
-                .into_iter()
-                .map(|slot| crate::PlannedSlot {
-                    slot_id: slot.slot_id,
-                    sequence_number: slot.sequence_number,
-                    starts_at: slot.starts_at,
-                    duration_seconds: slot.duration_seconds,
-                    guard_seconds: slot.guard_seconds,
-                    band: slot.band,
-                    antenna_label: slot.antenna_label,
-                })
-                .collect(),
+            slots: projected_slots,
         };
         let events = self
             .events
@@ -476,6 +534,13 @@ fn project_v3_event_to_v2(event: OperatorEventV3) -> Option<OperatorEventV2> {
         }
         OperatorEventPayloadV3::SessionAbandoned { reason } => {
             OperatorEventPayloadV2::SessionAbandoned { reason }
+        }
+        OperatorEventPayloadV3::AntennaSwitchStarted { .. } => return None,
+        OperatorEventPayloadV3::WsprCycleArmed { antenna_label, .. } => {
+            OperatorEventPayloadV2::AntennaStateConfirmed {
+                antenna_label,
+                note: Some("Antenna ready for the armed WSPR cycle.".into()),
+            }
         }
         OperatorEventPayloadV3::AntennaStateConfirmed {
             antenna_label,
@@ -568,6 +633,7 @@ pub fn upgrade_v2_bundle_model(mut bundle: BundleV2Contents) -> BundleV3Contents
         mode: bundle.schedule.mode,
         goal: bundle.schedule.goal,
         signal_plans: Vec::new(),
+        wspr_cycle_intents: Vec::new(),
         slots: bundle
             .schedule
             .slots
@@ -783,6 +849,25 @@ pub fn validate_signal_plan_schedule_v3(
             .or_default()
             .push((index, slot, allocation));
     }
+    for (index, intent) in schedule.wspr_cycle_intents.iter().enumerate() {
+        let Some(allocation) = &intent.signal else {
+            continue;
+        };
+        if allocation.frequency_hz == 0 {
+            diagnostics.push(diagnostic(
+                "signal_plan.invalid_frequency",
+                format!("/wspr_cycle_intents/{index}/signal/frequency_hz"),
+                "planned frequency must be greater than zero",
+            ));
+        }
+        if !plans.contains_key(&allocation.signal_plan_id) {
+            diagnostics.push(diagnostic(
+                "signal_plan.unknown_reference",
+                format!("/wspr_cycle_intents/{index}/signal/signal_plan_id"),
+                "cycle intent references an unknown signal plan",
+            ));
+        }
+    }
 
     for (plan_id, mut slots) in allocations {
         let plan = plans[&plan_id];
@@ -820,19 +905,36 @@ pub fn validate_signal_state_confirmation_v3(
         ));
         return diagnostics;
     };
-    let Some(slot) = schedule.slots.iter().find(|slot| slot.slot_id == slot_id) else {
+    let allocation = schedule
+        .slots
+        .iter()
+        .find(|slot| slot.slot_id == slot_id)
+        .and_then(|slot| slot.signal.as_ref())
+        .or_else(|| {
+            schedule
+                .wspr_cycle_intents
+                .iter()
+                .find(|intent| intent.intent_id == slot_id)
+                .and_then(|intent| intent.signal.as_ref())
+        });
+    let known_reference = schedule.slots.iter().any(|slot| slot.slot_id == slot_id)
+        || schedule
+            .wspr_cycle_intents
+            .iter()
+            .any(|intent| intent.intent_id == slot_id);
+    if !known_reference {
         diagnostics.push(diagnostic(
             "signal_state.unknown_slot",
             "/slot_id".into(),
-            "signal-state confirmation references an unknown slot",
+            "signal-state confirmation references an unknown cycle intent",
         ));
         return diagnostics;
-    };
-    let Some(allocation) = &slot.signal else {
+    }
+    let Some(allocation) = allocation else {
         diagnostics.push(diagnostic(
             "signal_state.slot_without_plan",
             "/slot_id".into(),
-            "signal-state confirmation references a slot without a signal allocation",
+            "signal-state confirmation references a cycle intent without a signal allocation",
         ));
         return diagnostics;
     };

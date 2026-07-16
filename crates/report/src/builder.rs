@@ -309,7 +309,10 @@ impl DetailCounts {
                     ReportDetailFamily::LifecycleHistory,
                     snapshot.lifecycle_events.len(),
                 ),
-                (ReportDetailFamily::Schedule, bundle.schedule.slots.len()),
+                (
+                    ReportDetailFamily::Schedule,
+                    bundle.schedule.slots.len() + snapshot.wspr_cycles.len(),
+                ),
                 (
                     ReportDetailFamily::AntennaContext,
                     bundle.antennas.antennas.len(),
@@ -381,6 +384,7 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     report.comparison.strata.clear();
     report.chart_data = ReportChartData::default();
     report.snapshot.lifecycle_events.clear();
+    report.snapshot.wspr_cycles.clear();
     report
         .notices
         .retain(|notice| !matches!(notice, ReportNotice::DetailOmitted { .. }));

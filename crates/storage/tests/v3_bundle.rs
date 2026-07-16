@@ -104,6 +104,7 @@ fn bundle() -> BundleV3Contents {
                 },
                 collection_profile: SignalCollectionProfileV3::ManualObservation,
             }],
+            wspr_cycle_intents: Vec::new(),
             slots: vec![PlannedSlotV3 {
                 slot_id: slot_id.clone(),
                 sequence_number: 1,

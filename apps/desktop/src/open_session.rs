@@ -8,15 +8,15 @@ use std::{
 
 use antennabench_analysis::AnalysisError;
 use antennabench_core::{
-    normalize_bundle, AdapterDisposition, AdapterInput, AdapterRecordV2, Band, BundleContents,
-    BundleV3Contents, BundleValidationError, BundleValidationReport, OperatorEventPayloadV2,
-    OperatorEventPayloadV3, SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+    normalize_bundle, project_wspr_run_v3, AdapterDisposition, AdapterInput, AdapterRecordV2, Band,
+    BundleContents, BundleV3Contents, BundleValidationError, BundleValidationReport,
+    OperatorEventPayloadV2, OperatorEventPayloadV3, SessionLifecycleV2, SCHEMA_VERSION_V2,
+    SCHEMA_VERSION_V3, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence, ReportCompleteness,
     ReportError, ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind,
-    ReportSnapshotContext,
+    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::{Deserialize, Serialize};
@@ -437,6 +437,7 @@ fn validation_error_detail(source: &antennabench_core::BundleValidationError) ->
 
 struct LoadedSnapshot {
     bundle: BundleContents,
+    intended_cycle_count: usize,
     schema_version: u16,
     validation: BundleValidationReport,
     report_snapshot: ReportSnapshotContext,
@@ -469,27 +470,46 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
     let store = BundleStore::new(path);
     if bundle_name.ends_with(V2_BUNDLE_SUFFIX) {
         let schema_version = store.schema_version()?;
-        let (current, revision, lifecycle, report_snapshot) = match schema_version {
-            SCHEMA_VERSION_V2 => {
-                let bundle = store.read_v2_checkpointed()?;
-                let revision = bundle.session_state.revision;
-                let lifecycle = bundle.session_state.lifecycle;
-                let report_snapshot = report_snapshot(&bundle);
-                (bundle.into_current(), revision, lifecycle, report_snapshot)
-            }
-            SCHEMA_VERSION_V3 => {
-                let bundle = store.read_v3_checkpointed()?;
-                let revision = bundle.session_state.revision;
-                let lifecycle = bundle.session_state.lifecycle;
-                let report_snapshot = report_snapshot_v3(&bundle);
-                (bundle.into_current(), revision, lifecycle, report_snapshot)
-            }
-            actual => {
-                return Err(OpenSessionError::Storage(
-                    BundleStoreError::UnsupportedSchemaVersion { actual },
-                ));
-            }
-        };
+        let (current, revision, lifecycle, report_snapshot, intended_cycle_count) =
+            match schema_version {
+                SCHEMA_VERSION_V2 => {
+                    let bundle = store.read_v2_checkpointed()?;
+                    let revision = bundle.session_state.revision;
+                    let lifecycle = bundle.session_state.lifecycle;
+                    let report_snapshot = report_snapshot(&bundle);
+                    let intended_cycle_count = bundle.schedule.slots.len();
+                    (
+                        bundle.into_current(),
+                        revision,
+                        lifecycle,
+                        report_snapshot,
+                        intended_cycle_count,
+                    )
+                }
+                SCHEMA_VERSION_V3 => {
+                    let bundle = store.read_v3_checkpointed()?;
+                    let revision = bundle.session_state.revision;
+                    let lifecycle = bundle.session_state.lifecycle;
+                    let report_snapshot = report_snapshot_v3(&bundle);
+                    let intended_cycle_count = bundle
+                        .schedule
+                        .wspr_cycle_intents
+                        .len()
+                        .max(bundle.schedule.slots.len());
+                    (
+                        bundle.into_current(),
+                        revision,
+                        lifecycle,
+                        report_snapshot,
+                        intended_cycle_count,
+                    )
+                }
+                actual => {
+                    return Err(OpenSessionError::Storage(
+                        BundleStoreError::UnsupportedSchemaVersion { actual },
+                    ));
+                }
+            };
         let (inspected, validation) = store.inspect()?.into_current_parts();
         let inspected = inspected.ok_or_else(|| {
             OpenSessionError::Storage(BundleStoreError::Validation {
@@ -502,6 +522,7 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
         let bundle = normalize_bundle(current.bundle);
         Ok(LoadedSnapshot {
             bundle,
+            intended_cycle_count,
             schema_version,
             validation,
             report_snapshot,
@@ -511,6 +532,7 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
     } else {
         let (bundle, validation) = store.read_for_analysis()?;
         Ok(LoadedSnapshot {
+            intended_cycle_count: bundle.schedule.slots.len(),
             schema_version: bundle.manifest.schema_version,
             bundle,
             validation,
@@ -560,6 +582,7 @@ fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapsh
         checkpoint_revision: Some(bundle.session_state.revision),
         lifecycle: Some(bundle.session_state.lifecycle),
         lifecycle_events,
+        wspr_cycles: Vec::new(),
         adapter_evidence: adapter,
     }
 }
@@ -599,10 +622,40 @@ fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
             })
         })
         .collect();
+    let projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
+    let wspr_cycles = bundle
+        .schedule
+        .wspr_cycle_intents
+        .iter()
+        .map(|intent| {
+            let observed = projection
+                .cycles
+                .iter()
+                .find(|cycle| cycle.intent_id == intent.intent_id);
+            ReportWsprCycle {
+                intent_id: intent.intent_id.clone(),
+                sequence_number: intent.sequence_number,
+                band: intent.band,
+                planned_antenna: intent.antenna_label.clone(),
+                actual_antenna: observed.map(|cycle| cycle.antenna_label.clone()),
+                ready_at: observed.map(|cycle| cycle.ready_at),
+                starts_at: observed.map(|cycle| cycle.window.starts_at),
+                transmission_ends_at: observed.map(|cycle| cycle.window.transmission_ends_at),
+                attribution: observed.map_or(ReportWsprAttribution::Pending, |cycle| {
+                    if cycle.occupancy_fully_covers_transmission {
+                        ReportWsprAttribution::Attributable
+                    } else {
+                        ReportWsprAttribution::UnknownAntennaOccupancy
+                    }
+                }),
+            }
+        })
+        .collect();
     ReportSnapshotContext {
         checkpoint_revision: Some(bundle.session_state.revision),
         lifecycle: Some(bundle.session_state.lifecycle),
         lifecycle_events,
+        wspr_cycles,
         adapter_evidence: adapter,
     }
 }
@@ -783,7 +836,7 @@ fn build_active_session(
             callsign: snapshot.bundle.station.callsign.clone(),
             grid: snapshot.bundle.station.grid.clone(),
             antenna_count: snapshot.bundle.antennas.antennas.len(),
-            slot_count: snapshot.bundle.schedule.slots.len(),
+            slot_count: snapshot.intended_cycle_count,
             observation_count: snapshot.bundle.observations.len(),
             schema_version: snapshot.schema_version,
             revision: snapshot.revision,
@@ -1099,7 +1152,7 @@ fn refresh_active_session_report_for(
             callsign: snapshot.bundle.station.callsign.clone(),
             grid: snapshot.bundle.station.grid.clone(),
             antenna_count: snapshot.bundle.antennas.antennas.len(),
-            slot_count: snapshot.bundle.schedule.slots.len(),
+            slot_count: snapshot.intended_cycle_count,
             observation_count: snapshot.bundle.observations.len(),
             schema_version: snapshot.schema_version,
             revision: snapshot.revision,

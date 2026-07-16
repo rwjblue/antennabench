@@ -5,12 +5,11 @@ use std::{
 };
 
 use antennabench_core::{
-    reduce_operator_events_v2, reduce_operator_events_v3, AdapterInput, AdapterRecordV2,
-    BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2,
-    CorrectableOperatorEventPayloadV3, EventTimeBasisV2, MutationMember, OperatorEventPayloadV2,
-    OperatorEventPayloadV3, OperatorEventV2, OperatorEventV3, PlannedSlot, Provenance,
-    RecordMetaV2, RecordMetaV3, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V3,
+    project_wspr_run_v3, reduce_operator_events_v2, AdapterInput, AdapterRecordV2,
+    BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2, EventTimeBasisV2,
+    MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
+    OperatorEventV3, PlannedSlot, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
+    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -75,7 +74,38 @@ impl AcquisitionSnapshot {
     fn projected_slots(&self) -> Vec<PlannedSlot> {
         match self {
             Self::V2(bundle) => bundle.schedule.slots.clone(),
-            Self::V3(bundle) => bundle.clone().into_current().bundle.schedule.slots,
+            Self::V3(bundle) => {
+                let attributable = project_wspr_run_v3(&bundle.schedule, &bundle.events)
+                    .cycles
+                    .into_iter()
+                    .filter(|cycle| cycle.occupancy_fully_covers_transmission)
+                    .map(|cycle| cycle.intent_id)
+                    .collect::<BTreeSet<_>>();
+                bundle
+                    .clone()
+                    .into_current()
+                    .bundle
+                    .schedule
+                    .slots
+                    .into_iter()
+                    .filter(|slot| attributable.contains(&slot.slot_id))
+                    .collect()
+            }
+        }
+    }
+
+    fn final_intent_id(&self) -> Option<&str> {
+        match self {
+            Self::V2(bundle) => bundle
+                .schedule
+                .slots
+                .last()
+                .map(|slot| slot.slot_id.as_str()),
+            Self::V3(bundle) => bundle
+                .schedule
+                .wspr_cycle_intents
+                .last()
+                .map(|intent| intent.intent_id.as_str()),
         }
     }
 
@@ -413,10 +443,14 @@ fn final_capture_is_complete(
     authorized_plans: &[WsprLiveAcquisitionPlan],
     captured_through: DateTime<Utc>,
 ) -> bool {
+    let Some(final_intent_id) = bundle.final_intent_id() else {
+        return false;
+    };
     bundle.projected_slots().last().is_some_and(|final_slot| {
-        authorized_plans
-            .iter()
-            .any(|plan| plan.completed_slot_id == final_slot.slot_id)
+        final_slot.slot_id == final_intent_id
+            && authorized_plans
+                .iter()
+                .any(|plan| plan.completed_slot_id == final_slot.slot_id)
             && final_slot
                 .starts_at
                 .checked_add_signed(Duration::seconds(i64::from(final_slot.duration_seconds)))
@@ -616,17 +650,11 @@ fn authorized_plans(
         ),
         AcquisitionSnapshot::V3(bundle) => (
             bundle.station.callsign.as_str(),
-            reduce_operator_events_v3(SessionLifecycleV2::Ready, &bundle.events)
-                .effective_events
+            project_wspr_run_v3(&bundle.schedule, &bundle.events)
+                .cycles
                 .into_iter()
-                .filter_map(|event| {
-                    matches!(
-                        event.payload,
-                        CorrectableOperatorEventPayloadV3::AntennaStateConfirmed { .. }
-                    )
-                    .then_some(event.slot_id)
-                    .flatten()
-                })
+                .filter(|cycle| cycle.occupancy_fully_covers_transmission)
+                .map(|cycle| cycle.intent_id)
                 .collect::<BTreeSet<_>>(),
         ),
     };
@@ -743,30 +771,31 @@ mod tests {
         .unwrap();
         let mut writer = store.open_v3_writer().unwrap();
         let snapshot = writer.snapshot().clone();
-        let final_end = snapshot
-            .schedule
-            .slots
-            .iter()
-            .map(|slot| {
-                slot.starts_at + chrono::Duration::seconds(i64::from(slot.duration_seconds))
-            })
-            .max()
-            .unwrap();
+        let first_cycle: DateTime<Utc> = "2026-07-15T20:00:01Z".parse().unwrap();
+        let final_cycle = first_cycle
+            + chrono::Duration::seconds(
+                120 * i64::try_from(snapshot.schedule.wspr_cycle_intents.len() - 1).unwrap(),
+            );
+        let final_end = final_cycle + chrono::Duration::seconds(120);
         let mut actions = vec![(
             None,
-            snapshot.schedule.slots[0].starts_at,
+            first_cycle - chrono::Duration::seconds(30),
             OperatorEventPayloadV3::SessionStarted { note: None },
         )];
-        actions.extend(snapshot.schedule.slots.iter().map(|slot| {
-            (
-                Some(slot.slot_id.clone()),
-                slot.starts_at,
-                OperatorEventPayloadV3::AntennaStateConfirmed {
-                    antenna_label: slot.antenna_label.clone(),
-                    note: None,
-                },
-            )
-        }));
+        actions.extend(snapshot.schedule.wspr_cycle_intents.iter().enumerate().map(
+            |(index, intent)| {
+                let cycle_starts_at =
+                    first_cycle + chrono::Duration::seconds(120 * i64::try_from(index).unwrap());
+                (
+                    Some(intent.intent_id.clone()),
+                    cycle_starts_at - chrono::Duration::seconds(1),
+                    OperatorEventPayloadV3::WsprCycleArmed {
+                        antenna_label: intent.antenna_label.clone(),
+                        cycle_starts_at,
+                    },
+                )
+            },
+        ));
         for (index, (slot_id, occurred_at, payload)) in actions.into_iter().enumerate() {
             let mutation_id = format!("automatic-test-mutation-{index}");
             let event = OperatorEventV3 {

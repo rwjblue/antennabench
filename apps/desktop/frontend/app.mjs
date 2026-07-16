@@ -636,6 +636,7 @@ function mount(root, browserWindow) {
   const conductorRevision = root.querySelector("[data-conductor-revision]");
   const conductorLifecycle = root.querySelector("[data-conductor-lifecycle]");
   const conductorNow = root.querySelector("[data-conductor-now]");
+  const conductorAntennaInUse = root.querySelector("[data-conductor-antenna-in-use]");
   const conductorPhase = root.querySelector("[data-conductor-phase]");
   const conductorGuidance = root.querySelector("[data-conductor-guidance]");
   const conductorCountdown = root.querySelector("[data-conductor-countdown]");
@@ -762,7 +763,7 @@ function mount(root, browserWindow) {
       const signalSummary = plan.signalPlan
         ? `${humanizeIdentifier(plan.signalPlan.mode)} · ${humanizeIdentifier(plan.signalPlan.collectionProfile)} · ${plan.signalPlan.frequenciesHz.length} frequencies`
         : `WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
-      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} slots · ${signalSummary}`;
+      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} operator-paced cycles · ${signalSummary}`;
       setupReviewSlots.replaceChildren(
         ...plan.slots.map((slot) => {
           const row = root.createElement("tr");
@@ -773,8 +774,6 @@ function mount(root, browserWindow) {
             slot.signal
               ? `${slot.signal.frequencyHz} Hz · ${slot.signal.frequencyVariantId} · ${slot.signal.counterbalanceBlockId}/${slot.signal.counterbalancePosition}`
               : "—",
-            formatReviewTime(slot.startsAt),
-            `${slot.durationSeconds}s + ${slot.guardSeconds}s guard`,
           ]) {
             const cell = root.createElement("td");
             cell.textContent = String(value);
@@ -809,13 +808,15 @@ function mount(root, browserWindow) {
       conductorRevision.textContent = `${view.bundleName} · revision ${view.revision}`;
       conductorLifecycle.textContent = humanizeIdentifier(view.lifecycle);
       conductorNow.textContent = formatReviewTime(view.now);
+      conductorAntennaInUse.textContent = view.antennaInUse ?? "None";
       conductorPhase.textContent = humanizeIdentifier(view.phase);
       conductorGuidance.textContent = view.guidance;
       conductorCountdown.textContent = view.secondsToTransition === null
         ? ""
         : formatCountdown(view.secondsToTransition);
       renderSlot(currentSlot, view.currentSlot, root);
-      renderSlot(nextSlot, view.nextSlot, root);
+      if (view.nextSlot) renderSlot(nextSlot, view.nextSlot, root);
+      else renderIntent(nextSlot, view.nextIntent, root);
       replaceSelectOptions(evidenceSlot, [
         { value: "", label: "No slot / session note" },
         ...view.slots.map((slot) => ({
@@ -832,9 +833,17 @@ function mount(root, browserWindow) {
       const evidenceAllowed = ["running", "interrupted"].includes(view.lifecycle);
       evidenceForm.querySelector("button[type=submit]").disabled = conductorBusy || !evidenceAllowed;
       lifecycleButtons.forEach((button) => {
+        const action = button.dataset.conductorAction;
+        const isSwitchAction = action === "begin_antenna_switch";
+        const isArmAction = action === "arm_wspr_cycle";
+        if (isArmAction && view.nextIntent) {
+          button.textContent = `${view.nextIntent.antennaLabel} ready`;
+        }
         button.disabled = conductorBusy
-          || !allowed.has(button.dataset.conductorAction)
-          || (view.phase === "finalizing" && button.dataset.conductorAction === "end");
+          || (isSwitchAction && (view.lifecycle !== "running" || view.nextIntent === null || view.phase === "switching"))
+          || (isArmAction && (view.lifecycle !== "running" || view.nextIntent === null || view.phase !== "switching"))
+          || (!isSwitchAction && !isArmAction && !allowed.has(action))
+          || (view.phase === "finalizing" && action === "end");
       });
       conductorDiagnostics.replaceChildren(
         ...view.diagnostics.map((diagnostic) => {
@@ -1134,15 +1143,30 @@ function mount(root, browserWindow) {
   lifecycleButtons.forEach((button) => {
     button.addEventListener("click", async () => {
       const kind = button.dataset.conductorAction;
+      if (kind === "begin_antenna_switch") {
+        if (state.conductor?.phase === "active"
+          && !browserWindow.confirm("The WSPR transmission is still active. Beginning the switch now will mark this cycle as having unknown antenna occupancy. Continue?")) return;
+        await submitConductorAction({ kind, note: null });
+        return;
+      }
+      if (kind === "arm_wspr_cycle") {
+        const intent = state.conductor?.nextIntent;
+        if (!intent) return;
+        await submitConductorAction({
+          kind,
+          intentId: intent.intentId,
+          antennaLabel: intent.antennaLabel,
+        });
+        return;
+      }
+      if (kind === "start" || kind === "resume") {
+        await submitConductorAction({ kind, note: null });
+        return;
+      }
       if (kind === "abandon" && !browserWindow.confirm("Abandon this session? Existing evidence will remain, but the lifecycle is terminal.")) return;
-      const detail = ["interrupt", "end", "abandon"].includes(kind)
-        ? browserWindow.prompt(`Optional ${kind} reason:`, "")
-        : browserWindow.prompt(`Optional ${kind} note:`, "");
+      const detail = browserWindow.prompt(`Optional ${kind} reason:`, "");
       if (detail === null) return;
-      const action = kind === "start" || kind === "resume"
-        ? { kind, note: detail }
-        : { kind, reason: detail };
-      await submitConductorAction(action);
+      await submitConductorAction({ kind, reason: detail });
     });
   });
 
@@ -1628,6 +1652,24 @@ function renderSlot(container, slot, root) {
   }
 }
 
+function renderIntent(container, intent, root) {
+  container.replaceChildren();
+  if (!intent) {
+    const empty = root.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = "None";
+    container.append(empty);
+    return;
+  }
+  const title = root.createElement("strong");
+  title.textContent = `#${intent.sequenceNumber} · ${intent.antennaLabel}`;
+  const band = root.createElement("p");
+  band.textContent = intent.band;
+  const timing = root.createElement("p");
+  timing.textContent = "Timing will be set after you confirm the antenna is ready.";
+  container.append(title, band, timing);
+}
+
 function replaceSelectOptions(select, options) {
   const signature = JSON.stringify(options);
   if (select.dataset.options === signature) return;
@@ -1817,8 +1859,6 @@ function optionalField(row, field) {
 
 export function readSetupDraft(form) {
   const value = (field) => form.querySelector(`[data-setup-field="${field}"]`).value;
-  const localStart = value("startsAt");
-  const startsAt = localStart ? new Date(localStart).toISOString() : "";
   const signalPlanEnabled = form.querySelector('[data-setup-field="signalPlanEnabled"]').checked;
   return {
     station: {
@@ -1841,10 +1881,7 @@ export function readSetupDraft(form) {
     schedule: {
       mode: value("mode"),
       goal: value("goal"),
-      startsAt,
       band: value("band"),
-      durationSeconds: value("durationSeconds"),
-      guardSeconds: value("guardSeconds"),
       rounds: value("rounds"),
     },
     wsprLiveAcquisitionEnabled: form.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]').checked,

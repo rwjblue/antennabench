@@ -144,6 +144,8 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.doesNotMatch(setupHtml, /data-import-authority|Confirm source authority/);
   const setupPanel = setupHtml.match(/data-panel="setup"[\s\S]*?data-panel="run"/)?.[0] ?? "";
   assert.doesNotMatch(setupPanel, /Facets|placeholder=|Trusted boundary|trusted Rust/);
+  assert.doesNotMatch(setupPanel, /Deterministic schedule|startsAt|durationSeconds|guardSeconds/);
+  assert.match(setupPanel, /Actual WSPR cycle times are set during the run/);
   assert.match(setupPanel, /Optional antenna details/);
   assert.match(setupPanel, /Advanced: controlled CW or RTTY signal/);
 
@@ -154,10 +156,7 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
     ["operatorNotes", ""],
     ["mode", "whole_station_ab"],
     ["goal", "general_coverage"],
-    ["startsAt", ""],
     ["band", "20m"],
-    ["durationSeconds", "120"],
-    ["guardSeconds", "10"],
     ["rounds", "2"],
   ]);
   const publicSpots = { checked: true };
@@ -245,8 +244,7 @@ test("setup serializes an explicit typed signal plan without WSPR.live", () => {
   const values = new Map([
     ["callsign", "N1RWJ"], ["grid", "FN42"], ["powerWatts", "5"],
     ["operatorNotes", ""], ["mode", "tx_focused"], ["goal", "general_coverage"],
-    ["startsAt", ""], ["band", "20m"], ["durationSeconds", "120"],
-    ["guardSeconds", "10"], ["rounds", "2"], ["signalMode", "cw"],
+    ["band", "20m"], ["rounds", "2"], ["signalMode", "cw"],
     ["signalCollectionProfile", "rbn_cw_v1"], ["signalPlannedPowerWatts", "5"],
     ["signalTransmittedCallsign", "n1rwj"], ["signalMessage", "CQ N1RWJ TEST"],
     ["signalRepetitionCount", "2"], ["signalKeySpeedWpm", "20"],

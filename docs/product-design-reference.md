@@ -20,18 +20,21 @@ The intended workflow is:
 1. Record station basics such as callsign, grid, and power.
 2. Define one or more antennas with freeform labels and optional installation
    details.
-3. Define a schedule of WSPR slots across bands and antenna labels.
-4. Record operator events such as switched, missed slot, bad slot, notes, and
-   session end.
+3. Define the intended WSPR cycle order across bands and antenna labels.
+4. Record actual switch starts, antenna readiness, armed protocol cycles,
+   interruptions, notes, and session end.
 5. Ingest local and external observations.
-6. Align observations to planned slots, preserving confidence and uncertainty.
+6. Align observations only to fully occupied actual cycles, preserving
+   confidence and uncertainty.
 7. Export a portable session bundle.
 8. Generate reports from the bundle.
 
-The shipped manual conductor keeps planned and actual state distinct. A slot points to
-the schedule's intended antenna, while each switch confirmation records the
-actual antenna independently. Missed/bad marks and later corrections append to
-the evidence history instead of rewriting it. Draft, ready, running,
+The shipped manual conductor keeps intended and actual state distinct. A cycle
+intention names the planned antenna without a timestamp. The operator records
+when a manual switch starts and when the next antenna is ready; AntennaBench
+then arms the next eligible WSPR boundary. Missed/bad marks and later
+corrections append to the evidence history instead of rewriting it. Draft,
+ready, running,
 interrupted/resumed, ended, and abandoned lifecycle states remain durable and
 auditable under
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md).
@@ -145,14 +148,14 @@ the UI could not outrun the durable, validation, and resource boundaries:
    recovery, completion, reporting, export, and reopen (#65).
 
 Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
-antenna definitions, and schedule timing. The routine form keeps station
+antenna definitions, and cycle repetitions. The routine form keeps station
 identity plus antenna labels/descriptions visible and places optional metadata
 behind disclosure. A user-triggered system-location request can fill a
 six-character Maidenhead grid; permission denial or lookup failure leaves
 manual entry available, and raw coordinates are never persisted. Rust trims and
-types values, uppercases callsigns,
-constructs stable schedule slots, applies strict-creation diagnostics, and
-returns the exact normalized review without touching a destination. Creation
+types values, uppercases callsigns, constructs stable ordered cycle intentions,
+applies strict-creation diagnostics, and returns the exact normalized review
+without touching a destination. Creation
 accepts only that review identity, allocates a collision-safe callsign/time name
 under the platform application-data directory, writes and verifies in a sibling
 staging directory, probes the live filesystem capability, and publishes the
@@ -176,8 +179,8 @@ and the WSJT-X execution path use the same v3 envelope without requiring a
 controlled signal plan.
 
 The active-run surface reads one verified checkpoint revision and derives its
-phase/countdown from a Rust-owned clock plus the durable schedule. A Rust-issued
-action token binds the first submission time and idempotent mutation identity;
+phase/countdown from a Rust-owned clock plus durable readiness actions. A
+Rust-issued action token binds the first submission time and idempotent mutation identity;
 retrying a lost response cannot duplicate evidence, while a stale revision
 fails without overwrite. Opening a session left running records one durable
 recovery-system interruption before resume/end actions are offered. Ended and
@@ -185,8 +188,8 @@ abandoned sessions are terminal, and schema-v1 sources remain read-only.
 
 The active-run surface can start or stop one optional WSJT-X receiver while the
 session is running. Rust owns the socket, expected-client filter, bounded
-adapter state, raw hex preservation, slot annotation, retry identity, and
-checkpoint append. Interruption, terminal lifecycle, active-session
+adapter state, raw hex preservation, conservative actual-cycle annotation,
+retry identity, and checkpoint append. Interruption, terminal lifecycle, active-session
 replacement, adapter resource exhaustion, or an unrecordable persistence error
 stops affected intake. Receiver absence or failure never blocks operator
 evidence, lifecycle actions, or lossless export.

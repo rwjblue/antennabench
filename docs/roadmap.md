@@ -10,11 +10,12 @@ Issues carry the detailed scope, dependencies, and acceptance criteria.
 AntennaBench has a complete local manual/no-rig workflow for repeatable WSPR
 sessions:
 
-- review station, antenna, and schedule setup before creating a bundle;
-- conduct a session with current/next-slot guidance and explicit actual-state
-  confirmations, misses, bad slots, notes, and corrections;
+- review station, antenna, and intended cycle order before creating a bundle;
+- conduct operator-paced cycles with explicit switch starts, antenna readiness,
+  actual protocol timing, occupancy, notes, and corrections;
 - recover an interrupted run without rewriting its evidence history;
-- optionally collect bounded WSJT-X and WSPR.live evidence;
+- optionally collect bounded WSJT-X evidence and automatically gather
+  default-on WSPR.live public spots;
 - import supported WSPR.live JSON and Reverse Beacon Network archives;
 - inspect conservative descriptive reports; and
 - export standalone HTML or a verified copy of the complete session bundle.

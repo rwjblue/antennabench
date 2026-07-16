@@ -293,13 +293,14 @@ does not define competing persistence, lifecycle, correction, or resource
 semantics.
 
 The trusted boundary remains Rust-owned throughout. Setup review accepts a
-typed draft, assigns trusted session/plan/slot identities and time, applies the
+typed draft, assigns trusted session/plan/cycle-intention identities, applies the
 strict creation profile, and retains the exact normalized commit candidate.
 Creation accepts only the retained review identity; Rust owns the native picker,
 synchronized sibling staging, live capability probe, complete publication, and
 active-session replacement. `active_session_conductor` recovers a newly active
-v2 source once and projects lifecycle, current/next slots, trusted-time phase,
-effective evidence, and diagnostics from one checkpoint. The focused mutation
+source once and projects lifecycle, intended order, actual armed cycles,
+antenna occupancy, backend time, effective evidence, and diagnostics from one
+checkpoint. The focused mutation
 command accepts an expected revision, Rust-issued bounded action token, and
 typed operator intent. Rust assigns first-submission time/event identity and
 uses the existing checkpoint writer; committed lost acknowledgements and exact
@@ -318,7 +319,7 @@ re-reads the checkpoint identity after rendering and retries boundedly if live
 intake advanced. Only a verified candidate replaces the retained presentation;
 the same revision keeps the same presentation identity. The renderer-neutral
 model and HTML disclose checkpoint revision, lifecycle/interruption history,
-adapter dispositions and acquisition gaps, planned versus actual slot state,
+adapter dispositions and acquisition gaps, intended versus observed WSPR use,
 eligibility exclusions, and full-detail versus bounded-overview completeness.
 
 ## Desktop Shell Boundary

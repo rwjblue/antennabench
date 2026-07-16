@@ -1,10 +1,11 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    reduce_operator_events_v3, validate_bundle_report, validate_signal_plan_schedule_v3,
-    validate_signal_state_confirmation_v3, validate_signal_state_event_v3, AdapterInput,
-    BundleManifestV3, BundleV3Contents, BundleValidationProfile, BundleValidationReport,
-    CorrectableOperatorEventPayloadV3, SessionLifecycleV2, SessionStateV3, SCHEMA_VERSION_V3,
+    codes, project_wspr_run_v3, reduce_operator_events_v3, validate_bundle_report,
+    validate_signal_plan_schedule_v3, validate_signal_state_confirmation_v3,
+    validate_signal_state_event_v3, AdapterInput, BundleManifestV3, BundleV3Contents,
+    BundleValidationProfile, BundleValidationReport, CorrectableOperatorEventPayloadV3,
+    OperatorEventPayloadV3, SessionLifecycleV2, SessionStateV3, SCHEMA_VERSION_V3,
     V2_BUNDLE_SUFFIX,
 };
 
@@ -31,8 +32,22 @@ impl BundleStore {
             &paths,
             SCHEMA_VERSION_V3,
         ));
+        let intent_native = !bundle.schedule.wspr_cycle_intents.is_empty();
         let current = bundle.into_current();
-        report.extend(validate_bundle_report(&current.bundle).into_diagnostics());
+        report.extend(
+            validate_bundle_report(&current.bundle)
+                .into_diagnostics()
+                .into_iter()
+                .filter(|diagnostic| {
+                    !intent_native
+                        || !matches!(
+                            diagnostic.code.as_str(),
+                            codes::EMPTY_SCHEDULE
+                                | codes::EXPERIMENT_SHAPE_MISMATCH
+                                | codes::UNKNOWN_EVENT_SLOT
+                        )
+                }),
+        );
         let current = report
             .allows(BundleValidationProfile::CompatibilityRead)
             .then_some(current);
@@ -340,6 +355,54 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
             "{}: {}",
             diagnostic.code, diagnostic.message
         )));
+    }
+    let mut intent_ids = std::collections::BTreeSet::new();
+    let mut intent_sequences = std::collections::BTreeSet::new();
+    let antenna_labels = bundle
+        .antennas
+        .antennas
+        .iter()
+        .map(|antenna| antenna.label.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for (index, intent) in bundle.schedule.wspr_cycle_intents.iter().enumerate() {
+        if intent.intent_id.trim().is_empty()
+            || intent.intent_id.trim() != intent.intent_id
+            || !intent.intent_id.is_ascii()
+            || !intent_ids.insert(intent.intent_id.as_str())
+        {
+            return Err(invalid_v3(
+                "WSPR cycle intent identities must be unique, nonempty, trimmed ASCII",
+            ));
+        }
+        if intent.sequence_number != u32::try_from(index + 1).unwrap_or(u32::MAX)
+            || !intent_sequences.insert(intent.sequence_number)
+        {
+            return Err(invalid_v3(
+                "WSPR cycle intentions must be stored in contiguous sequence-number order",
+            ));
+        }
+        if !antenna_labels.contains(intent.antenna_label.as_str()) {
+            return Err(invalid_v3(format!(
+                "WSPR cycle intent {} references unknown antenna {:?}",
+                intent.intent_id, intent.antenna_label
+            )));
+        }
+    }
+    let run_projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
+    if let Some(diagnostic) = run_projection.diagnostics.first() {
+        return Err(invalid_v3(format!(
+            "{} at event {}: {}",
+            diagnostic.code, diagnostic.event_id, diagnostic.message
+        )));
+    }
+    for event in &bundle.events {
+        if let OperatorEventPayloadV3::WsprCycleArmed { antenna_label, .. } = &event.payload {
+            if !antenna_labels.contains(antenna_label.as_str()) {
+                return Err(invalid_v3(format!(
+                    "armed WSPR cycle references unknown antenna {antenna_label:?}"
+                )));
+            }
+        }
     }
     let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &bundle.events);
     if let Some(diagnostic) = reduction.diagnostics.first() {

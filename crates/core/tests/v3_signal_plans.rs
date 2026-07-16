@@ -62,6 +62,7 @@ fn schedule(plan: SignalPlanV3, slots: Vec<PlannedSlotV3>) -> ScheduleV3 {
         mode: ExperimentMode::TxFocused,
         goal: SessionGoal::GeneralCoverage,
         signal_plans: vec![plan],
+        wspr_cycle_intents: Vec::new(),
         slots,
     }
 }

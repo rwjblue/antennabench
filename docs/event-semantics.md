@@ -58,6 +58,18 @@ verified lifecycle was running.
 
 ## Operator Evidence
 
+Schema v3 adds two non-correctable operational facts for operator-paced WSPR:
+
+- `antenna_switch_started` closes the current half-open antenna-occupancy
+  interval; and
+- `wspr_cycle_armed` records the intended cycle, actual antenna, readiness
+  action time, and backend-selected WSPR boundary.
+
+Intentions must be armed in their stored order. Readiness never backdates a
+cycle and reusing or skipping an intention is invalid. Interruption, detected
+recovery, end, and abandon also close occupancy because continued antenna use
+is no longer known.
+
 The correctable payloads are:
 
 - `antenna_state_confirmed`, with an explicit actual antenna label;
@@ -85,6 +97,13 @@ corrections produce a typed diagnostic and leave the previous effective view
 unchanged.
 
 ## Alignment And Eligibility
+
+For operator-paced WSPR, a cycle is attributable only when one recorded antenna
+occupancy covers the complete half-open transmission interval. The nominal
+cycle starts one second into an even UTC minute and its 162 symbols occupy
+110.592 seconds. A boundary switch at the exact transmission end is valid; an
+earlier switch leaves the cycle's antenna unknown. Public and local spots use
+only these fully covered actual cycles.
 
 Schema-v1 alignment retains its historical planned-label behavior. Schema-v2
 alignment requires explicit actual state:

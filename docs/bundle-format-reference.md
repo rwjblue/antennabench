@@ -88,7 +88,7 @@ readable and losslessly copyable; live mutation requires an explicit v2 upgrade
 to a new `.session.antennabundle` destination.
 
 [Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md)
-selects schema v3 for typed non-WSPR transmit signal plans. V3 adds reusable
+selected schema v3 for typed non-WSPR transmit signal plans. V3 adds reusable
 CW/RTTY plan definitions containing planned power, exact transmitted identity,
 cadence, and collection profile; each participating slot carries an exact
 frequency, frequency-variant identity, counterbalance block, and position. The
@@ -110,6 +110,16 @@ The schema-v3 writer can also append attachment-backed adapter records and
 normalized observations in one checkpoint revision. It admits this evidence
 after a session has started, including post-session import into ended or
 interrupted sessions, without changing lifecycle state.
+
+[Decision 0017](decisions/0017-use-operator-paced-wspr-cycles.md) also makes v3
+the authoring format for new WSPR sessions. `schedule.json` stores ordered
+`wspr_cycle_intents` without timestamps. Append-only `antenna_switch_started`
+and `wspr_cycle_armed` events record actual manual progress, backend-selected
+protocol boundaries, and half-open antenna occupancy. Legacy `slots` remain a
+versioned compatibility field but are empty in newly authored WSPR bundles.
+Readers project actual armed cycles when a slot-oriented analysis path is
+required. Attribution requires one antenna occupancy interval to cover the
+complete 110.592-second transmission.
 
 ## Provider-Neutral Evidence
 

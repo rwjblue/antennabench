@@ -10,10 +10,10 @@ use antennabench_core::{
     AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, BundleDiagnostic,
     BundleDiagnosticSeverity, BundleFileRole, BundleFilesV2, BundleManifestV2, BundleV2Contents,
     BundleV3Contents, BundleValidationProfile, CounterbalanceBlockIdV3, ExperimentMode,
-    PlanGenerationV2, PlannedSlot, PlannedSlotV3, Schedule, SessionGoal, SessionLifecycleV2,
-    SessionStateV2, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3,
-    SignalPlanIdV3, SignalPlanV3, SignalVariantIdV3, Station, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    V2_BUNDLE_SUFFIX,
+    PlanGenerationV2, PlannedSlot, Schedule, SessionGoal, SessionLifecycleV2, SessionStateV2,
+    SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3,
+    SignalPlanV3, SignalVariantIdV3, Station, WsprCycleIntentV3, SCHEMA_VERSION_V2,
+    SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
     BundleStore, BundleStoreError, LivePersistenceError, LivePersistenceHooks,
@@ -132,10 +132,7 @@ struct SetupAntennaDraft {
 struct SetupScheduleDraft {
     mode: ExperimentMode,
     goal: SessionGoal,
-    starts_at: String,
     band: Band,
-    duration_seconds: String,
-    guard_seconds: String,
     rounds: String,
 }
 
@@ -208,10 +205,6 @@ struct SetupAntennaReview {
 struct SetupSlotReview {
     slot_id: String,
     sequence_number: u32,
-    starts_at: DateTime<Utc>,
-    ends_at: DateTime<Utc>,
-    duration_seconds: u32,
-    guard_seconds: u32,
     band: Band,
     antenna_label: String,
     signal: Option<SetupSlotSignalReview>,
@@ -487,29 +480,6 @@ fn build_review(
         });
     }
 
-    let starts_at = match DateTime::parse_from_rfc3339(draft.schedule.starts_at.trim()) {
-        Ok(value) => Some(value.with_timezone(&Utc)),
-        Err(_) => {
-            diagnostics.push(field_diagnostic(
-                "setup.wire.invalid_timestamp",
-                "schedule.startsAt",
-                "Start time must include an unambiguous UTC offset",
-            ));
-            None
-        }
-    };
-    let duration_seconds = parse_required::<u32>(
-        &draft.schedule.duration_seconds,
-        "schedule.durationSeconds",
-        "Slot duration",
-        &mut diagnostics,
-    );
-    let guard_seconds = parse_required::<u32>(
-        &draft.schedule.guard_seconds,
-        "schedule.guardSeconds",
-        "Guard time",
-        &mut diagnostics,
-    );
     let rounds = parse_required::<u32>(
         &draft.schedule.rounds,
         "schedule.rounds",
@@ -541,17 +511,6 @@ fn build_review(
             "Controlled signal plans require an even number of counterbalance blocks",
         ));
     }
-    if matches!(
-        (signal_plan.as_ref(), duration_seconds),
-        (Some(plan), Some(duration)) if plan.transmit_seconds > duration
-    ) {
-        diagnostics.push(field_diagnostic(
-            "setup.signal_plan.transmit_exceeds_slot",
-            "signalPlan.transmitSeconds",
-            "Transmit duration cannot exceed the schedule slot duration",
-        ));
-    }
-
     let scheduled_labels = if draft.schedule.mode == ExperimentMode::SingleAntennaProfiling {
         antennas
             .iter()
@@ -594,9 +553,6 @@ fn build_review(
         });
     }
 
-    let starts_at = starts_at.expect("timestamp parsed without diagnostics");
-    let duration_seconds = duration_seconds.expect("duration parsed without diagnostics");
-    let guard_seconds = guard_seconds.expect("guard parsed without diagnostics");
     let rounds = rounds.expect("rounds parsed without diagnostics");
     let session_id = hooks.new_id("session");
     let created_at = hooks.now();
@@ -607,7 +563,7 @@ fn build_review(
         .map(|label| (*label).clone())
         .collect::<Vec<_>>();
     let mut slots = Vec::with_capacity(slot_count.expect("bounded slot count"));
-    let mut next_start = starts_at;
+    let mut next_start = created_at;
     for _ in 0..rounds {
         for antenna_label in &scheduled_labels {
             let sequence_number = u32::try_from(slots.len() + 1).expect("slot count is bounded");
@@ -615,12 +571,12 @@ fn build_review(
                 slot_id: hooks.new_id("slot"),
                 sequence_number,
                 starts_at: next_start,
-                duration_seconds,
-                guard_seconds,
+                duration_seconds: 120,
+                guard_seconds: 0,
                 band: draft.schedule.band,
                 antenna_label: (*antenna_label).clone(),
             });
-            next_start += Duration::seconds(i64::from(duration_seconds));
+            next_start += Duration::seconds(120);
         }
     }
 
@@ -691,21 +647,32 @@ fn build_review(
             error.to_string(),
         )
     })?;
+    let report = validate_bundle_report(&bundle.clone().into_current().bundle);
 
     let mut bundle = if let Some(signal_plan) = signal_plan {
         build_v3_setup_bundle(
             bundle,
             signal_plan,
             &scheduled_label_values,
-            starts_at,
-            duration_seconds,
-            guard_seconds,
             rounds,
             draft.schedule.band,
             hooks,
         )?
     } else {
-        upgrade_v2_bundle_model(bundle)
+        let mut bundle = upgrade_v2_bundle_model(bundle);
+        bundle.schedule.wspr_cycle_intents = bundle
+            .schedule
+            .slots
+            .drain(..)
+            .map(|slot| WsprCycleIntentV3 {
+                intent_id: slot.slot_id,
+                sequence_number: slot.sequence_number,
+                band: slot.band,
+                antenna_label: slot.antenna_label,
+                signal: slot.signal,
+            })
+            .collect();
+        bundle
     };
     BundleStore::refresh_v3_checkpoint(&mut bundle).map_err(|error| {
         SessionErrorPayload::new(
@@ -715,7 +682,6 @@ fn build_review(
         )
     })?;
 
-    let report = validate_bundle_report(&bundle.clone().into_current().bundle);
     let mut core_diagnostics = report
         .diagnostics()
         .iter()
@@ -809,12 +775,6 @@ fn setup_diagnostic_from_core(diagnostic: &BundleDiagnostic) -> SetupDiagnostic 
                 "schedule.mode".into()
             } else if path == "/slots" {
                 "schedule.rounds".into()
-            } else if path.ends_with("/duration_seconds") {
-                "schedule.durationSeconds".into()
-            } else if path.ends_with("/guard_seconds") {
-                "schedule.guardSeconds".into()
-            } else if path.ends_with("/starts_at") {
-                "schedule.startsAt".into()
             } else {
                 "schedule".into()
             }
@@ -837,9 +797,6 @@ fn build_v3_setup_bundle(
     bundle: BundleV2Contents,
     plan: ParsedSignalPlan,
     antenna_labels: &[String],
-    starts_at: DateTime<Utc>,
-    duration_seconds: u32,
-    guard_seconds: u32,
     blocks: u32,
     band: Band,
     hooks: &dyn LivePersistenceHooks,
@@ -863,14 +820,13 @@ fn build_v3_setup_bundle(
         .len()
         .checked_mul(variants.len())
         .ok_or_else(|| SessionErrorPayload::report_pipeline("signal schedule size overflowed"))?;
-    let mut slots = Vec::with_capacity(
+    let mut intents = Vec::with_capacity(
         block_size
             .checked_mul(usize::try_from(blocks).unwrap_or(usize::MAX))
             .ok_or_else(|| {
                 SessionErrorPayload::report_pipeline("signal schedule size overflowed")
             })?,
     );
-    let mut next_start = starts_at;
     for block_index in 0..blocks {
         let block_id =
             CounterbalanceBlockIdV3::new(format!("block-{}", block_index + 1)).map_err(|_| {
@@ -895,15 +851,12 @@ fn build_v3_setup_bundle(
         }
         pairs.sort_by_key(|(position, _, _, _)| *position);
         for (position, antenna_label, frequency_variant_id, frequency_hz) in pairs {
-            let sequence_number = u32::try_from(slots.len() + 1).map_err(|_| {
+            let sequence_number = u32::try_from(intents.len() + 1).map_err(|_| {
                 SessionErrorPayload::report_pipeline("signal slot count overflowed")
             })?;
-            slots.push(PlannedSlotV3 {
-                slot_id: hooks.new_id("slot"),
+            intents.push(WsprCycleIntentV3 {
+                intent_id: hooks.new_id("intent"),
                 sequence_number,
-                starts_at: next_start,
-                duration_seconds,
-                guard_seconds,
                 band,
                 antenna_label,
                 signal: Some(SignalAllocationV3 {
@@ -918,7 +871,6 @@ fn build_v3_setup_bundle(
                     })?,
                 }),
             });
-            next_start += Duration::seconds(i64::from(duration_seconds));
         }
     }
     bundle.schedule.signal_plans = vec![SignalPlanV3 {
@@ -936,7 +888,8 @@ fn build_v3_setup_bundle(
         },
         collection_profile: plan.collection_profile,
     }];
-    bundle.schedule.slots = slots;
+    bundle.schedule.slots.clear();
+    bundle.schedule.wspr_cycle_intents = intents;
     Ok(bundle)
 }
 
@@ -976,27 +929,23 @@ fn setup_plan_review_v3(bundle: &BundleV3Contents) -> SetupPlanReview {
             interval_seconds: plan.cadence.interval_seconds,
             frequencies_hz: bundle
                 .schedule
-                .slots
+                .wspr_cycle_intents
                 .iter()
-                .filter_map(|slot| slot.signal.as_ref().map(|signal| signal.frequency_hz))
+                .filter_map(|intent| intent.signal.as_ref().map(|signal| signal.frequency_hz))
                 .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect(),
         }),
         slots: bundle
             .schedule
-            .slots
+            .wspr_cycle_intents
             .iter()
-            .map(|slot| SetupSlotReview {
-                slot_id: slot.slot_id.clone(),
-                sequence_number: slot.sequence_number,
-                starts_at: slot.starts_at,
-                ends_at: slot.starts_at + Duration::seconds(i64::from(slot.duration_seconds)),
-                duration_seconds: slot.duration_seconds,
-                guard_seconds: slot.guard_seconds,
-                band: slot.band,
-                antenna_label: slot.antenna_label.clone(),
-                signal: slot.signal.as_ref().map(|signal| SetupSlotSignalReview {
+            .map(|intent| SetupSlotReview {
+                slot_id: intent.intent_id.clone(),
+                sequence_number: intent.sequence_number,
+                band: intent.band,
+                antenna_label: intent.antenna_label.clone(),
+                signal: intent.signal.as_ref().map(|signal| SetupSlotSignalReview {
                     frequency_hz: signal.frequency_hz,
                     frequency_variant_id: signal.frequency_variant_id.as_str().into(),
                     counterbalance_block_id: signal.counterbalance_block_id.as_str().into(),
@@ -1393,10 +1342,7 @@ fn create_e2e_session_with_signal(
         schedule: SetupScheduleDraft {
             mode: ExperimentMode::WholeStationAb,
             goal: SessionGoal::GeneralCoverage,
-            starts_at: "2026-07-15T16:00:00-04:00".into(),
             band: Band::M20,
-            duration_seconds: "120".into(),
-            guard_seconds: "10".into(),
             rounds: "2".into(),
         },
         wspr_live_acquisition_enabled: false,
@@ -1510,10 +1456,7 @@ mod tests {
             schedule: SetupScheduleDraft {
                 mode: ExperimentMode::WholeStationAb,
                 goal: SessionGoal::GeneralCoverage,
-                starts_at: "2026-07-15T02:00:00-04:00".into(),
                 band: Band::M20,
-                duration_seconds: "120".into(),
-                guard_seconds: "10".into(),
                 rounds: "2".into(),
             },
             wspr_live_acquisition_enabled: false,
@@ -1522,7 +1465,7 @@ mod tests {
     }
 
     #[test]
-    fn review_normalizes_exact_deterministic_bundle_plan() {
+    fn review_normalizes_an_untimed_operator_paced_plan() {
         let state = SetupSessionState::default();
         let review = build_review(&state, valid_draft(), &FixedHooks::new()).unwrap();
 
@@ -1539,10 +1482,7 @@ mod tests {
         assert_eq!(plan.slots[0].slot_id, "slot-0004");
         assert_eq!(plan.slots[0].antenna_label, "Vertical");
         assert_eq!(plan.slots[1].antenna_label, "Dipole");
-        assert_eq!(
-            plan.slots[2].starts_at,
-            plan.slots[0].starts_at + Duration::seconds(240)
-        );
+        assert_eq!(plan.slots[2].sequence_number, 3);
     }
 
     #[test]
@@ -1592,7 +1532,8 @@ mod tests {
         let persisted = BundleStore::new(path).read_v3_checkpointed().unwrap();
         assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V3);
         assert_eq!(persisted.schedule.signal_plans.len(), 1);
-        assert_eq!(persisted.schedule.slots.len(), 8);
+        assert_eq!(persisted.schedule.wspr_cycle_intents.len(), 8);
+        assert!(persisted.schedule.slots.is_empty());
     }
 
     #[test]
@@ -1624,7 +1565,6 @@ mod tests {
         let mut draft = valid_draft();
         draft.station.callsign = " ".into();
         draft.antennas[1].label = "Vertical".into();
-        draft.schedule.guard_seconds = "120".into();
 
         let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
 
@@ -1638,10 +1578,6 @@ mod tests {
             diagnostic.code == "bundle.semantic.duplicate_antenna_label"
                 && diagnostic.field == "antennas.1.label"
         }));
-        assert!(review
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "bundle.semantic.invalid_slot_guard"));
         assert!(state.0.lock().unwrap().is_none());
     }
 
@@ -1677,11 +1613,15 @@ mod tests {
         assert_eq!(persisted.manifest.session_id, session.session_id);
         assert_eq!(persisted.session_state.lifecycle, SessionLifecycleV2::Ready);
         assert!(!persisted.session_state.wspr_live_acquisition_enabled);
-        assert_eq!(persisted.schedule.slots[0].slot_id, "slot-0004");
+        assert_eq!(
+            persisted.schedule.wspr_cycle_intents[0].intent_id,
+            "slot-0004"
+        );
+        assert!(persisted.schedule.slots.is_empty());
         println!(
             "desktop-e2e result=setup-created revision={} slots={}",
             persisted.session_state.revision,
-            persisted.schedule.slots.len()
+            persisted.schedule.wspr_cycle_intents.len()
         );
     }
 

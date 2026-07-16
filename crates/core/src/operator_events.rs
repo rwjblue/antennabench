@@ -574,7 +574,17 @@ pub fn reduce_operator_events_v3(
             ));
             continue;
         }
+        if is_operational_payload_v3(&event.payload) && lifecycle != SessionLifecycleV2::Running {
+            diagnostics.push(diagnostic_v3(
+                event,
+                None,
+                OperatorEventDiagnosticCodeV2::InvalidLifecycleTransition,
+                "operator-paced run actions require a running session",
+            ));
+            continue;
+        }
         match &event.payload {
+            payload if is_operational_payload_v3(payload) => continue,
             OperatorEventPayloadV3::EventCorrected {
                 target_event_id,
                 correction,
@@ -686,6 +696,14 @@ fn is_lifecycle_payload_v3(payload: &OperatorEventPayloadV3) -> bool {
     )
 }
 
+fn is_operational_payload_v3(payload: &OperatorEventPayloadV3) -> bool {
+    matches!(
+        payload,
+        OperatorEventPayloadV3::AntennaSwitchStarted { .. }
+            | OperatorEventPayloadV3::WsprCycleArmed { .. }
+    )
+}
+
 fn event_shape_error_v3(event: &OperatorEventV3) -> Option<String> {
     let slot_required = |kind: &str| {
         event
@@ -697,6 +715,27 @@ fn event_shape_error_v3(event: &OperatorEventV3) -> Option<String> {
         payload if is_lifecycle_payload_v3(payload) && event.slot_id.is_some() => {
             Some("lifecycle events must not reference a planned slot".into())
         }
+        OperatorEventPayloadV3::AntennaSwitchStarted { .. } => event
+            .slot_id
+            .is_some()
+            .then(|| "antenna-switch events must not reference a cycle intent".into()),
+        OperatorEventPayloadV3::WsprCycleArmed {
+            antenna_label,
+            cycle_starts_at,
+        } => slot_required("armed WSPR cycle")
+            .or_else(|| {
+                (antenna_label.trim().is_empty() || antenna_label.trim() != antenna_label)
+                    .then(|| "armed WSPR cycle antenna label must be nonempty and trimmed".into())
+            })
+            .or_else(|| {
+                (!crate::is_wspr_cycle_start(*cycle_starts_at)).then(|| {
+                    "armed WSPR cycle must start one second into an even UTC minute".into()
+                })
+            })
+            .or_else(|| {
+                (*cycle_starts_at < event.occurred_at)
+                    .then(|| "armed WSPR cycle cannot start before the antenna was ready".into())
+            }),
         OperatorEventPayloadV3::AntennaStateConfirmed { antenna_label, .. } => {
             slot_required("antenna confirmation").or_else(|| {
                 (antenna_label.trim().is_empty() || antenna_label.trim() != antenna_label)

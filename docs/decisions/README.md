@@ -31,6 +31,8 @@ historical references, not tutorials or work trackers; start with the
   Acquisition](0015-use-an-import-first-wspr-public-spot-boundary.md)
 - [0016: Use Reusable Counterbalanced Transmit Signal
   Plans](0016-use-reusable-counterbalanced-transmit-signal-plans.md)
+- [0017: Use Operator-Paced WSPR
+  Cycles](0017-use-operator-paced-wspr-cycles.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions

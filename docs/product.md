@@ -11,15 +11,16 @@ experiment and makes its limitations visible.
 
 ## What You Do
 
-Before transmitting, describe the station and antennas and choose the timing
-for a repeatable schedule. During the session, AntennaBench shows the
-current and next slot. You confirm the antenna actually in use and can mark a
-slot missed or bad, add a note, or correct an earlier entry.
+Before transmitting, describe the station and antennas and choose their
+repeatable order. There are no setup-time timestamps or manual-switch
+deadlines. During the session, begin the antenna switch and confirm when the
+next antenna is ready. AntennaBench then selects the next eligible even-minute
+WSPR cycle and records the actual antenna-occupancy interval.
 
-Observation sources are optional. You can run the session manually, receive
-local WSPR decodes from WSJT-X, and bring in supported public observations. A
-network or adapter failure does not prevent you from recording operator actions
-or exporting the session.
+Local WSJT-X reception is optional. WSPR.live public spots are gathered
+automatically by default after completed cycles, with source and completeness
+disclosed in the report. A network or adapter failure does not prevent you from
+recording operator actions or exporting the session.
 
 When the run is over, AntennaBench builds a local report and can export:
 
@@ -33,10 +34,11 @@ can show coverage by antenna, band, and slot; same-path SNR differences;
 unmatched observations; time and switching-order context; and available path
 distance or direction.
 
-It also says what is missing. A planned switch is not treated as a confirmed
-switch. A missing decode is not treated as a zero-strength signal. Conflicting,
-damaged, or ineligible records remain disclosed instead of quietly improving
-the result.
+It also says what is missing. Intended order is shown separately from observed
+antenna use. A cycle switched before its 110.592-second transmission completed
+has unknown antenna attribution. A missing decode is not treated as a
+zero-strength signal. Conflicting, damaged, or ineligible records remain
+disclosed instead of quietly improving the result.
 
 AntennaBench does not currently declare a winning antenna. Evidence may be
 interesting while still being too sparse or imbalanced for that claim.

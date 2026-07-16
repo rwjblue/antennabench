@@ -13,12 +13,14 @@ the source of truth.
 
 ## A Session In Four Steps
 
-1. **Plan** — enter station details, describe the antennas, and build a
-   repeatable schedule.
-2. **Run** — follow the current/next-slot guidance and record the antenna
-   actually used, missed or bad slots, notes, and corrections.
-3. **Collect** — optionally receive local WSJT-X decodes and import public WSPR
-   or Reverse Beacon Network observations.
+1. **Plan** — enter station details, name the antennas, and choose their
+   repeatable order.
+2. **Run** — switch at your own pace; after each antenna is ready, AntennaBench
+   selects the next valid WSPR cycle and records how long that antenna was in
+   use.
+3. **Collect** — optionally receive local WSJT-X decodes; WSPR.live public
+   spots are gathered automatically by default. Reverse Beacon Network imports
+   support controlled non-WSPR experiments.
 4. **Review** — inspect a conservative local report, then export the report or
    the complete session bundle.
 

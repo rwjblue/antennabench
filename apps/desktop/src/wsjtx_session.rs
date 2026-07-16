@@ -11,10 +11,11 @@ use std::{
 };
 
 use antennabench_core::{
-    annotate_bundle_observations, AdapterDisposition, AdapterInput, AdapterReasonId,
-    AdapterRecordV2, BundleContents, BundleV2Contents, BundleV3Contents, MutationMember,
-    NormalizedRecordKind, NormalizedRecordLink, ObservationRecord, ObservationRecordV2, Provenance,
-    RecordMetaV2, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    annotate_bundle_observations, project_wspr_run_v3, AdapterDisposition, AdapterInput,
+    AdapterReasonId, AdapterRecordV2, BundleContents, BundleV2Contents, BundleV3Contents,
+    MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecord,
+    ObservationRecordV2, Provenance, RecordMetaV2, RecordSource, SessionLifecycleV2,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
@@ -177,6 +178,9 @@ impl WsjtxSnapshot {
                 .map(|slot| slot.starts_at)
                 .min(),
             Self::V3(bundle) => bundle
+                .clone()
+                .into_current()
+                .bundle
                 .schedule
                 .slots
                 .iter()
@@ -185,10 +189,27 @@ impl WsjtxSnapshot {
         }
     }
 
-    fn current_bundle(&self) -> BundleContents {
+    fn current_bundle(&self, observed_at: DateTime<Utc>) -> BundleContents {
         match self {
             Self::V2(bundle) => bundle.clone().into_current().bundle,
-            Self::V3(bundle) => bundle.clone().into_current().bundle,
+            Self::V3(bundle) => {
+                let projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
+                let attributable = projection
+                    .cycles
+                    .iter()
+                    .filter(|cycle| {
+                        cycle.occupancy_fully_covers_transmission
+                            && cycle.window.transmission_ends_at <= observed_at
+                    })
+                    .map(|cycle| cycle.intent_id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>();
+                let mut current = bundle.clone().into_current().bundle;
+                current
+                    .schedule
+                    .slots
+                    .retain(|slot| attributable.contains(slot.slot_id.as_str()));
+                current
+            }
         }
     }
 }
@@ -666,7 +687,7 @@ impl WsjtxOrchestrator {
         let reason = reason(&recorded.disposition);
         let has_observation = recorded.observation.is_some();
         let observation = recorded.observation.map(|observation| {
-            let mut current = snapshot.current_bundle();
+            let mut current = snapshot.current_bundle(datagram.received_at);
             current.observations.push(observation);
             annotate_bundle_observations(&mut current);
             let observation = current
@@ -1208,8 +1229,10 @@ mod tests {
     };
 
     use antennabench_core::{
-        EventTimeBasisV2, OperatorEventPayloadV2, OperatorEventV2, SessionLifecycleV2,
-        SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
+        EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
+        OperatorEventV2, OperatorEventV3, Provenance, RecordMetaV3, RecordSource,
+        SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+        WSPR_TRANSMISSION_MILLISECONDS,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -1221,8 +1244,9 @@ mod tests {
 
     use super::{
         IntakeDecision, ReceivedUdpDatagram, WsjtxOrchestrator, WsjtxReceiverPhase,
-        WsjtxReceiverStatus, WsjtxSessionState,
+        WsjtxReceiverStatus, WsjtxSessionState, WsjtxSnapshot,
     };
+    use crate::{open_session::ActiveSessionState, setup::create_e2e_session};
 
     #[derive(Debug)]
     struct TestHooks {
@@ -1271,6 +1295,78 @@ mod tests {
     fn fixture_root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle")
+    }
+
+    fn v3_event(
+        session_id: &str,
+        event_id: &str,
+        occurred_at: DateTime<Utc>,
+        slot_id: Option<String>,
+        payload: OperatorEventPayloadV3,
+    ) -> OperatorEventV3 {
+        OperatorEventV3 {
+            meta: RecordMetaV3 {
+                schema_version: SCHEMA_VERSION_V3,
+                session_id: session_id.into(),
+                recorded_at: occurred_at,
+                provenance: Provenance::from_legacy(
+                    RecordSource::Operator,
+                    env!("CARGO_PKG_VERSION"),
+                ),
+                mutation: MutationMember {
+                    mutation_id: format!("mutation-{event_id}"),
+                    member_index: 0,
+                    member_count: 1,
+                },
+            },
+            event_id: event_id.into(),
+            occurred_at,
+            time_basis: EventTimeBasisV2::ObservedNow,
+            uncertainty_seconds: None,
+            slot_id,
+            payload,
+        }
+    }
+
+    #[test]
+    fn schema_v3_wsjt_x_attribution_requires_completed_full_antenna_occupancy() {
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let created = create_e2e_session(temp.path(), &active);
+        let mut bundle = BundleStore::new(created.path)
+            .read_v3_checkpointed()
+            .unwrap();
+        let intent = bundle.schedule.wspr_cycle_intents[0].clone();
+        let cycle_starts_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 1).unwrap();
+        bundle.events.push(v3_event(
+            &bundle.manifest.session_id,
+            "ready",
+            cycle_starts_at - chrono::Duration::seconds(1),
+            Some(intent.intent_id.clone()),
+            OperatorEventPayloadV3::WsprCycleArmed {
+                antenna_label: intent.antenna_label,
+                cycle_starts_at,
+            },
+        ));
+        let transmission_ends_at =
+            cycle_starts_at + chrono::Duration::milliseconds(WSPR_TRANSMISSION_MILLISECONDS);
+
+        let before_decode = WsjtxSnapshot::V3(bundle.clone())
+            .current_bundle(transmission_ends_at - chrono::Duration::milliseconds(1));
+        assert!(before_decode.schedule.slots.is_empty());
+        let attributable = WsjtxSnapshot::V3(bundle.clone()).current_bundle(transmission_ends_at);
+        assert_eq!(attributable.schedule.slots.len(), 1);
+
+        bundle.events.push(v3_event(
+            &bundle.manifest.session_id,
+            "switch-early",
+            cycle_starts_at + chrono::Duration::seconds(30),
+            None,
+            OperatorEventPayloadV3::AntennaSwitchStarted { note: None },
+        ));
+        let unknown = WsjtxSnapshot::V3(bundle)
+            .current_bundle(transmission_ends_at + chrono::Duration::seconds(30));
+        assert!(unknown.schedule.slots.is_empty());
     }
 
     fn running_store(temp: &TempDir) -> BundleStore {
