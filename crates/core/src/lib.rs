@@ -7,6 +7,7 @@ mod semantics;
 mod v2;
 mod v3;
 mod validation;
+pub mod wspr;
 
 pub use alignment::*;
 pub use diagnostics::*;
@@ -17,6 +18,7 @@ pub use semantics::*;
 pub use v2::*;
 pub use v3::*;
 pub use validation::*;
+pub use wspr::*;
 
 /// Schema used by the legacy adapter APIs. New durable bundles use v2.
 pub const SCHEMA_VERSION: u16 = SCHEMA_VERSION_V1;
