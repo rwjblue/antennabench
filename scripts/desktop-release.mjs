@@ -498,7 +498,7 @@ async function buildTarget({ root, target, tag, runnerLabel }) {
   return stageApp({ root, app, target, tag, runnerLabel, trustMode: "local", inputs });
 }
 
-function readTargetManifest(directory) {
+export function readTargetManifest(directory) {
   const filename = path.join(directory, "artifact-manifest.json");
   const manifest = JSON.parse(fs.readFileSync(filename, "utf8"));
   if (manifest.schema_version !== 1 || manifest.state !== "complete") {
@@ -544,6 +544,84 @@ function readTargetManifest(directory) {
   if (!manifest.publishable) expectedEntries.push("NON_PUBLISHABLE.txt");
   validateStagedEntries(directory, expectedEntries);
   return { directory, manifest };
+}
+
+export function readCompleteArtifactSet(directory) {
+  const entries = fs.readdirSync(directory).sort(bytewise);
+  const releaseManifestName = entries.find((entry) => entry.endsWith("-release-manifest.json"));
+  const checksumName = entries.find((entry) => entry.endsWith("-SHA256SUMS"));
+  if (!releaseManifestName || !checksumName) {
+    throw new Error("complete release set is missing its manifest or SHA256SUMS file");
+  }
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, releaseManifestName), "utf8"));
+  if (
+    manifest.schema_version !== 1 ||
+    manifest.state !== "complete" ||
+    manifest.publishable !== true
+  ) {
+    throw new Error(`${releaseManifestName} is not a complete publishable schema-v1 release manifest`);
+  }
+  assertVersionTag(manifest.version, manifest.tag);
+  if (manifest.product !== PRODUCT || manifest.bundle_identifier !== BUNDLE_IDENTIFIER) {
+    throw new Error(`${releaseManifestName} does not match the application release contract`);
+  }
+  if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== TARGET_ORDER.length) {
+    throw new Error(`${releaseManifestName} must contain exactly ${TARGET_ORDER.length} artifacts`);
+  }
+  const targets = manifest.artifacts.map((artifact) => artifact.target).sort(bytewise);
+  if (JSON.stringify(targets) !== JSON.stringify([...TARGET_ORDER].sort(bytewise))) {
+    throw new Error(`${releaseManifestName} does not contain the exact native target set`);
+  }
+  const expectedArchives = manifest.artifacts.map((artifact) => archiveName(manifest.version, artifact.target));
+  for (const artifact of manifest.artifacts) {
+    if (artifact.filename !== archiveName(manifest.version, artifact.target)) {
+      throw new Error(`${releaseManifestName} contains an invalid artifact filename`);
+    }
+    const filename = path.join(directory, artifact.filename);
+    if (!fs.existsSync(filename)) throw new Error(`${artifact.filename} is missing`);
+    if (fs.statSync(filename).size !== artifact.size || sha256File(filename) !== artifact.sha256) {
+      throw new Error(`${artifact.filename} does not match the release manifest`);
+    }
+  }
+  validateStagedEntries(directory, [...expectedArchives, releaseManifestName, checksumName]);
+
+  const checksumText = fs.readFileSync(path.join(directory, checksumName), "utf8");
+  const expectedChecksums = checksumLines([
+    ...manifest.artifacts.map((artifact) => [artifact.filename, artifact.sha256]),
+    [releaseManifestName, sha256File(path.join(directory, releaseManifestName))],
+  ]);
+  if (checksumText !== expectedChecksums) {
+    throw new Error(`${checksumName} does not exactly match the final release bytes`);
+  }
+  return { checksumName, entries, manifest, releaseManifestName };
+}
+
+export async function verifyCompleteArtifacts({ directory, inspectTarget }) {
+  const complete = readCompleteArtifactSet(directory);
+  if (inspectTarget) {
+    const contract = targetContract(inspectTarget);
+    validateHost(inspectTarget, contract.runner);
+    const artifact = complete.manifest.artifacts.find((candidate) => candidate.target === inspectTarget);
+    const extracted = fs.mkdtempSync(path.join(path.dirname(directory), ".verify-release-"));
+    try {
+      capture("ditto", ["-x", "-k", path.join(directory, artifact.filename), extracted], {
+        timeout: 300_000,
+      });
+      validateStagedEntries(extracted, [`${PRODUCT}.app`]);
+      const evidence = inspectApp(path.join(extracted, `${PRODUCT}.app`), {
+        target: inspectTarget,
+        version: complete.manifest.version,
+        trustMode: "release",
+      });
+      if (canonicalJson(evidence) !== canonicalJson(artifact.app)) {
+        throw new Error(`${artifact.filename} final application evidence differs from its manifest`);
+      }
+    } finally {
+      fs.rmSync(extracted, { recursive: true, force: true });
+    }
+  }
+  console.log(`Verified complete release set at ${directory}`);
+  return complete;
 }
 
 export async function assembleArtifacts({ root, inputs, requirePublishable = false }) {
@@ -686,8 +764,13 @@ async function main() {
       inputs: options.inputs.map((input) => path.resolve(input)),
       requirePublishable: options.requirePublishable,
     });
+  } else if (options.command === "verify") {
+    await verifyCompleteArtifacts({
+      directory: path.resolve(requireOption(options, "input")),
+      inspectTarget: options.target,
+    });
   } else {
-    throw new Error("usage: desktop-release.mjs build|stage|assemble [options]");
+    throw new Error("usage: desktop-release.mjs build|stage|assemble|verify [options]");
   }
 }
 

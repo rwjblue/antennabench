@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Import protected Apple credentials, sign, notarize, staple, and clean up"
+#USAGE arg "<app>" help="Path to the verified AntennaBench.app signing input"
+#USAGE arg "<evidence>" help="Directory for bounded notarization evidence"
+
+set -euo pipefail
+
+node scripts/desktop-publication.mjs sign --app "$usage_app" --evidence "$usage_evidence"

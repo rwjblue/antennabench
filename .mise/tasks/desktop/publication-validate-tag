@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Validate a stable release tag and its source before credential access"
+#USAGE arg "<tag>" help="Exact vMAJOR.MINOR.PATCH release tag"
+
+set -euo pipefail
+
+node scripts/desktop-publication.mjs validate-tag --tag "$usage_tag"

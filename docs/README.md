@@ -14,6 +14,8 @@ plans.
 - [Schema-V2 Live Persistence And Recovery](live-persistence.md): durable
   append, locking, checkpoint promotion, snapshots, export, and recovery.
 - [Development](development.md): local workflow, tests, and repo conventions.
+- [Desktop Releases](releasing.md): protected signing, draft verification,
+  installation, promotion, recovery, and credential operations.
 - [Hosted Foundation Operations](hosted-operations.md): environment isolation,
   verification, cost controls, drain, and teardown procedures.
 - [Attribution](attribution.md): external data/service attribution and fixture

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Create or safely resume an exact GitHub draft release without overwrites"
+#USAGE arg "<input>" help="Directory containing the four final release assets"
+#USAGE arg "<notes>" help="Generated release notes file"
+#USAGE arg "<tag>" help="Exact vMAJOR.MINOR.PATCH release tag"
+
+set -euo pipefail
+
+node scripts/desktop-publication.mjs publish-draft \
+  --input "$usage_input" \
+  --notes "$usage_notes" \
+  --tag "$usage_tag"

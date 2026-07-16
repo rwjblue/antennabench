@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Generate release notes from the validated tag and source"
+#USAGE arg "<tag>" help="Exact vMAJOR.MINOR.PATCH release tag"
+#USAGE arg "<output>" help="Release notes output file"
+
+set -euo pipefail
+
+node scripts/desktop-publication.mjs notes --tag "$usage_tag" --output "$usage_output"

@@ -1,0 +1,307 @@
+name: Signed desktop release draft
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Validate stable tag and source
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout complete source and tags
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Validate release tag, version, source, and main reachability
+        run: mise run desktop:publication-validate-tag -- "${{ github.ref_name }}"
+
+  preflight:
+    name: Fresh non-secret supply-chain preflight
+    permissions:
+      contents: read
+    uses: ./.github/workflows/rust-supply-chain.yml
+
+  build:
+    name: Build verified input (${{ matrix.target }})
+    needs: [tag, preflight]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Run portable and unattended desktop verification
+        run: |
+          mise run test
+          mise run desktop:frontend-test
+          mise run desktop:e2e
+
+      - name: Build exact non-publishable native input
+        run: >-
+          mise run desktop:release-bundle --
+          "${{ matrix.target }}"
+          --tag "${{ github.ref_name }}"
+          --runner-label "${{ matrix.runner }}"
+
+      - name: Upload manifest-bound signing input
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-release-input-${{ matrix.target }}
+          path: target/desktop-release/non-publishable/${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    name: Sign and notarize (${{ matrix.target }})
+    needs: build
+    environment: desktop-release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Download exact native signing input
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: desktop-release-input-${{ matrix.target }}
+          path: target/desktop-publication/download/${{ matrix.target }}
+
+      - name: Verify and extract signing input before credential use
+        run: >-
+          mise run desktop:publication-prepare --
+          "target/desktop-publication/download/${{ matrix.target }}"
+          "target/desktop-publication/signing/${{ matrix.target }}"
+          "${{ matrix.target }}"
+          "${{ github.ref_name }}"
+          "${{ github.sha }}"
+
+      - name: Import credentials, sign, notarize, staple, and clean up
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: >-
+          mise run desktop:publication-sign --
+          "target/desktop-publication/signing/${{ matrix.target }}/AntennaBench.app"
+          "target/desktop-publication/evidence/${{ matrix.target }}"
+
+      - name: Verify final trust and stage the publishable archive
+        run: >-
+          mise run desktop:release-stage --
+          "target/desktop-publication/signing/${{ matrix.target }}/AntennaBench.app"
+          "${{ matrix.target }}"
+          --trust-mode release
+          --tag "${{ github.ref_name }}"
+          --runner-label "${{ matrix.runner }}"
+
+      - name: Upload exact publishable target artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-release-signed-${{ matrix.target }}
+          path: target/desktop-release/publishable/${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Preserve bounded notarization evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-release-notarization-${{ matrix.target }}
+          path: target/desktop-publication/evidence/${{ matrix.target }}
+          if-no-files-found: warn
+          retention-days: 30
+
+  assemble:
+    name: Assemble exact publishable set
+    needs: sign
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Download Apple silicon artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: desktop-release-signed-aarch64-apple-darwin
+          path: target/desktop-publication/signed/aarch64-apple-darwin
+
+      - name: Download Intel artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: desktop-release-signed-x86_64-apple-darwin
+          path: target/desktop-publication/signed/x86_64-apple-darwin
+
+      - name: Assemble exact manifest, archives, and checksums
+        run: >-
+          mise run desktop:release-assemble --
+          target/desktop-publication/signed/aarch64-apple-darwin
+          target/desktop-publication/signed/x86_64-apple-darwin
+          --require-publishable
+
+      - name: Reverify the four final bytes
+        run: mise run desktop:release-verify -- target/desktop-release/publishable/complete
+
+      - name: Upload complete release set
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-release-complete
+          path: target/desktop-release/publishable/complete
+          if-no-files-found: error
+          retention-days: 7
+
+  attest:
+    name: Attest exact release bytes
+    needs: assemble
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download complete release set
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: desktop-release-complete
+          path: target/desktop-release/publishable/complete
+
+      - name: Generate GitHub build provenance
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: target/desktop-release/publishable/complete/*
+
+  publish:
+    name: Create or verify private draft
+    needs: attest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout complete tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Download complete release set
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: desktop-release-complete
+          path: target/desktop-release/publishable/complete
+
+      - name: Verify the mutation input
+        run: mise run desktop:release-verify -- target/desktop-release/publishable/complete
+
+      - name: Generate release notes
+        run: mise run desktop:publication-notes -- "${{ github.ref_name }}" target/desktop-publication/release-notes.md
+
+      - name: Create or safely resume an exact draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          mise run desktop:publication-publish-draft --
+          target/desktop-release/publishable/complete
+          target/desktop-publication/release-notes.md
+          "${{ github.ref_name }}"
+
+  verify:
+    name: Verify downloaded draft (${{ matrix.target }})
+    needs: publish
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout complete tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+          github_token: ${{ github.token }}
+
+      - name: Download and verify final draft bytes and attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          mise run desktop:publication-verify-draft --
+          "${{ github.ref_name }}"
+          "${{ matrix.target }}"
+          "target/desktop-publication/downloaded-draft/${{ matrix.target }}"

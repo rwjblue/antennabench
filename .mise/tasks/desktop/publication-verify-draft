@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Download and verify exact draft bytes, native trust, checksums, and attestations"
+#USAGE arg "<tag>" help="Exact vMAJOR.MINOR.PATCH release tag"
+#USAGE arg "<target>" help="Native target archive to extract and verify" {
+#USAGE   choices "aarch64-apple-darwin" "x86_64-apple-darwin"
+#USAGE }
+#USAGE arg "<output>" help="Clean directory for downloaded release assets"
+
+set -euo pipefail
+
+node scripts/desktop-publication.mjs verify-draft \
+  --tag "$usage_tag" \
+  --target "$usage_target" \
+  --output "$usage_output"

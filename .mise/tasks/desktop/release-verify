@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Verify an exact complete publishable release set and optional native archive"
+#USAGE arg "<input>" help="Directory containing the four final release assets"
+#USAGE flag "--target <target>" help="Native target archive to extract and verify"
+
+set -euo pipefail
+
+args=(verify --input "$usage_input")
+if [[ -n "${usage_target:-}" ]]; then
+  args+=(--target "$usage_target")
+fi
+node scripts/desktop-release.mjs "${args[@]}"

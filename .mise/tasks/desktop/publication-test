@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Test desktop publication boundaries and retry policy"
+
+set -euo pipefail
+
+node --test scripts/desktop-publication.test.mjs

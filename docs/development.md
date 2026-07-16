@@ -451,19 +451,21 @@ the release manifest, but not itself. The assembled local set remains under
 `target/desktop-release/non-publishable/complete` and cannot pass
 `--require-publishable`.
 
-Issue #36 owns the credentialed layer. Its protected tag workflow will sign,
-notarize, and staple each `.app`, then call `desktop:release-stage` with
+The protected `v*` tag workflow owns the credentialed layer. It signs,
+notarizes, and staples each `.app`, then calls `desktop:release-stage` with
 `--trust-mode release` and assemble with `--require-publishable`. Release mode
 fails unless Developer ID authority, hardened runtime, secure timestamp,
 stapled notarization, strict code-signature validation, and Gatekeeper
 assessment all pass. Only that complete output may be attached to a draft
-GitHub Release.
+GitHub Release. [Desktop Releases](releasing.md) is the maintained owner and
+user runbook; the workflow never publishes a stable release.
 
 Run the platform-independent parsing, naming, manifest, checksum, unexpected
 asset, and failure-cleanup regressions with:
 
 ```bash
 mise run desktop:release-test
+mise run desktop:publication-test
 ```
 
 For troubleshooting, inspect the command's first failing invariant. A host or

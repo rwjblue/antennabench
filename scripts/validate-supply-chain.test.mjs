@@ -5,6 +5,7 @@ import {
   validateDependabotText,
   validateDependencyReviewText,
   validateManifestCoverage,
+  validateReleaseWorkflowText,
   validateRepository,
   validateUsesText,
 } from "./validate-supply-chain.mjs";
@@ -87,6 +88,45 @@ jobs:
   assert.deepEqual(validateDependencyReviewText(valid), []);
   assert.ok(validateDependencyReviewText(valid.replace("pull_request:", "push:")).length);
   assert.ok(validateDependencyReviewText(valid.replace("moderate", "high")).length);
+});
+
+test("release workflow validator pins the trusted event and credential boundary", () => {
+  const valid = `name: release
+on:
+  push:
+    tags:
+      - "v*"
+permissions:
+  contents: read
+jobs:
+  sign:
+    environment: desktop-release
+    steps:
+      - run: echo \${{ secrets.APPLE_CERTIFICATE }} \${{ secrets.APPLE_CERTIFICATE_PASSWORD }} \${{ secrets.APPLE_API_ISSUER }} \${{ secrets.APPLE_API_KEY }} \${{ secrets.APPLE_API_PRIVATE_KEY }}
+  assemble:
+    steps:
+      - run: mise run desktop:release-assemble -- arm intel --require-publishable
+  attest:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/attest@${SHA} # v4.1.1
+  publish:
+    permissions:
+      contents: write
+    steps:
+      - run: mise run desktop:publication-publish-draft
+  verify:
+    steps:
+      - run: mise run desktop:publication-verify-draft
+`;
+  assert.deepEqual(validateReleaseWorkflowText(valid), []);
+  assert.ok(validateReleaseWorkflowText(valid.replace("environment: desktop-release", "environment: ci")).length);
+  assert.ok(validateReleaseWorkflowText(valid.replace("  assemble:\n", "  leak:\n    run: echo ${{ secrets.APPLE_API_KEY }}\n  assemble:\n")).length);
+  assert.ok(validateReleaseWorkflowText(valid.replace("  push:\n", "  pull_request:\n")).length);
+  assert.ok(validateReleaseWorkflowText(valid.replace("publication-publish-draft", "gh release publish")).length);
 });
 
 test("the repository satisfies its supply-chain convention", () => {

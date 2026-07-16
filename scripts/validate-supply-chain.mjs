@@ -111,6 +111,60 @@ export function validateDependencyReviewText(
   return errors;
 }
 
+export function validateReleaseWorkflowText(
+  text,
+  source = ".github/workflows/desktop-release.yml",
+) {
+  const errors = [];
+  const required = [
+    [/^  push:\s*\n    tags:\s*\n      - "v\*"\s*$/m, "must trigger only from v* tag pushes"],
+    [/^  sign:\s*$/m, "must have an isolated signing job"],
+    [/^    environment: desktop-release\s*$/m, "signing must use the desktop-release environment"],
+    [/mise run desktop:release-assemble[\s\S]*?--require-publishable/, "must require publishable target manifests"],
+    [/uses: actions\/attest@[0-9a-f]{40}\s+#\s+v\S+/, "must generate immutable GitHub attestations"],
+    [/^      id-token: write\s*$/m, "attestation job must have OIDC write permission"],
+    [/^      attestations: write\s*$/m, "attestation job must have attestation write permission"],
+    [/^      contents: write\s*$/m, "one release mutation job must have contents write permission"],
+    [/mise run desktop:publication-publish-draft/, "must use the fail-closed draft publication task"],
+    [/mise run desktop:publication-verify-draft/, "must re-download and verify draft bytes"],
+  ];
+  for (const [pattern, message] of required) {
+    if (!pattern.test(text)) errors.push(`${source}: ${message}`);
+  }
+  for (const forbidden of ["pull_request:", "workflow_dispatch:", "--clobber", "gh release publish", "--prerelease"]) {
+    if (text.includes(forbidden)) errors.push(`${source}: forbidden release path token ${forbidden}`);
+  }
+  if ((text.match(/^    environment: desktop-release\s*$/gm) ?? []).length !== 1) {
+    errors.push(`${source}: only the signing job may receive the protected environment`);
+  }
+  if ((text.match(/^      contents: write\s*$/gm) ?? []).length !== 1) {
+    errors.push(`${source}: contents write must be limited to one draft-publication job`);
+  }
+  if ((text.match(/^      id-token: write\s*$/gm) ?? []).length !== 1) {
+    errors.push(`${source}: OIDC write must be limited to one attestation job`);
+  }
+  const secretNames = [...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1]);
+  const expectedSecrets = [
+    "APPLE_API_ISSUER",
+    "APPLE_API_KEY",
+    "APPLE_API_PRIVATE_KEY",
+    "APPLE_CERTIFICATE",
+    "APPLE_CERTIFICATE_PASSWORD",
+  ];
+  if (JSON.stringify([...new Set(secretNames)].sort()) !== JSON.stringify(expectedSecrets)) {
+    errors.push(`${source}: protected signing secret inventory is not exact`);
+  }
+  const signStart = text.search(/^  sign:\s*$/m);
+  const nextJob = signStart === -1
+    ? null
+    : [...text.matchAll(/^  [a-z][a-z0-9_-]*:\s*$/gm)].find((match) => match.index > signStart);
+  const signEnd = nextJob?.index ?? -1;
+  if (signStart === -1 || signEnd <= signStart || /secrets\./.test(text.slice(0, signStart) + text.slice(signEnd))) {
+    errors.push(`${source}: Apple secrets must be referenced only inside the signing job`);
+  }
+  return errors;
+}
+
 export function validateRepository(root) {
   const errors = [];
   const workflowRoot = path.join(root, ".github", "workflows");
@@ -121,8 +175,10 @@ export function validateRepository(root) {
     if (!/^permissions:\s*\n\s{2}contents:\s*read\s*$/m.test(text)) {
       errors.push(`${relative}: workflow must declare top-level contents: read`);
     }
-    if (/secrets\./.test(text)) {
-      errors.push(`${relative}: ordinary pull-request workflow must not reference repository secrets`);
+    if (file === "desktop-release.yml") {
+      errors.push(...validateReleaseWorkflowText(text, relative));
+    } else if (/secrets\./.test(text)) {
+      errors.push(`${relative}: ordinary workflow must not reference repository secrets`);
     }
   }
 
