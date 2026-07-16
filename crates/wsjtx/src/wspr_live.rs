@@ -4,7 +4,7 @@ use antennabench_core::{
     AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId,
     AdapterRecordV2, AttachmentReference, Band, MutationMember, NormalizedRecordKind,
     NormalizedRecordLink, ObservationKind, ObservationRecordV2, PlannedSlot, Provenance,
-    ProviderId, RecordMetaV2, SourceId, SCHEMA_VERSION_V2,
+    ProviderId, RecordMetaV2, SourceId, WsprCycleDirection, SCHEMA_VERSION_V2,
 };
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde_json::Value;
@@ -78,6 +78,16 @@ pub struct WsprLiveImportConfig {
     pub selected_bands: Vec<Band>,
     pub captured_at: DateTime<Utc>,
     pub source_locator: Option<String>,
+    /// `None` for historical schedules whose cycle direction was not durably known.
+    pub confirmed_cycles: Option<Vec<WsprLiveConfirmedCycle>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WsprLiveConfirmedCycle {
+    pub starts_at: DateTime<Utc>,
+    pub transmission_ends_at: DateTime<Utc>,
+    pub band: Band,
+    pub direction: Option<WsprCycleDirection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,8 +137,9 @@ impl WsprLiveQueryPlan {
         let window_end = self.window_end.format("%Y-%m-%d %H:%M:%S");
 
         format!(
-            "SELECT {} FROM wspr.rx WHERE tx_sign = '{}' AND time >= toDateTime('{}', 'UTC') AND time < toDateTime('{}', 'UTC') AND band IN ({bands}) AND code = {} ORDER BY time, id FORMAT JSON",
+            "SELECT {} FROM wspr.rx WHERE (tx_sign = '{}' OR rx_sign = '{}') AND time >= toDateTime('{}', 'UTC') AND time < toDateTime('{}', 'UTC') AND band IN ({bands}) AND code = {} ORDER BY time, id FORMAT JSON",
             WSPR_LIVE_COLUMNS.join(", "),
+            self.session_callsign,
             self.session_callsign,
             window_start,
             window_end,
@@ -163,6 +174,8 @@ pub enum WsprLiveRowReason {
     Accepted,
     InvalidValue,
     CallsignFiltered,
+    AmbiguousCallsign,
+    DirectionFiltered,
     TimeFiltered,
     BandFiltered,
     UnsupportedBand,
@@ -197,6 +210,13 @@ pub struct WsprLiveSpot {
     pub drift_hz_per_minute: f32,
     pub receiver_version: Option<String>,
     pub mode_code: i16,
+    pub direction: WsprLiveSpotDirection,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WsprLiveSpotDirection {
+    Receive,
+    Transmit,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -494,6 +514,7 @@ pub fn parse_wspr_live_json_with_limits(
             config.window_start,
             config.window_end,
             &config.selected_bands,
+            config.confirmed_cycles.as_deref(),
         );
         summary.total += 1;
         match row.disposition {
@@ -669,6 +690,12 @@ pub fn prepare_wspr_live_acquisition(
             "window_end": config.window_end,
             "selected_bands": config.selected_bands,
             "mode": "WSPR-2",
+            "station_roles": ["tx_sign", "rx_sign"],
+            "direction_filter": if config.confirmed_cycles.is_none() {
+                "historical-direction-unknown"
+            } else {
+                "confirmed-cycle-at-source-time"
+            },
             "expected_columns": WSPR_LIVE_COLUMNS,
             "exact_response": exact_response,
             "completeness": "unknown",
@@ -796,6 +823,7 @@ fn existing_wspr_live_spots(
                 config.window_start,
                 config.window_end,
                 &config.selected_bands,
+                config.confirmed_cycles.as_deref(),
             );
             let spot = row.spot?;
             Some((spot.provider_spot_id, spot_fingerprint(&spot)))
@@ -821,6 +849,10 @@ fn spot_fingerprint(spot: &WsprLiveSpot) -> String {
         "drift_hz_per_minute": spot.drift_hz_per_minute,
         "receiver_version": spot.receiver_version,
         "mode_code": spot.mode_code,
+        "direction": match spot.direction {
+            WsprLiveSpotDirection::Receive => "receive",
+            WsprLiveSpotDirection::Transmit => "transmit",
+        },
     }))
 }
 
@@ -850,6 +882,8 @@ fn disposition_reason(
             WsprLiveRowReason::Accepted => "wspr-live.accepted",
             WsprLiveRowReason::InvalidValue => "wspr-live.invalid-value",
             WsprLiveRowReason::CallsignFiltered => "wspr-live.callsign-filtered",
+            WsprLiveRowReason::AmbiguousCallsign => "wspr-live.ambiguous-callsign",
+            WsprLiveRowReason::DirectionFiltered => "wspr-live.direction-filtered",
             WsprLiveRowReason::TimeFiltered => "wspr-live.time-filtered",
             WsprLiveRowReason::BandFiltered => "wspr-live.band-filtered",
             WsprLiveRowReason::UnsupportedBand => "wspr-live.unsupported-band",
@@ -885,7 +919,10 @@ fn wspr_live_observation(
         reporter_grid: spot.reporter_grid.clone(),
         heard_grid: spot.transmitter_grid.clone(),
         distance_km: spot.distance_km,
-        azimuth_degrees: spot.azimuth_degrees,
+        azimuth_degrees: match spot.direction {
+            WsprLiveSpotDirection::Receive => spot.receiver_azimuth_degrees,
+            WsprLiveSpotDirection::Transmit => spot.azimuth_degrees,
+        },
         snr_db: Some(spot.snr_db),
         drift_hz_per_minute: Some(spot.drift_hz_per_minute),
         power_watts: Some(crate::dbm_to_watts(spot.power_dbm)),
@@ -900,6 +937,10 @@ fn wspr_live_observation(
             "rx_azimuth_degrees": spot.receiver_azimuth_degrees,
             "receiver_version": spot.receiver_version,
             "mode_code": spot.mode_code,
+            "direction": match spot.direction {
+                WsprLiveSpotDirection::Receive => "receive",
+                WsprLiveSpotDirection::Transmit => "transmit",
+            },
         }),
     }
 }
@@ -940,6 +981,7 @@ fn classify_row(
     window_start: DateTime<Utc>,
     window_end: DateTime<Utc>,
     selected_bands: &[Band],
+    confirmed_cycles: Option<&[WsprLiveConfirmedCycle]>,
 ) -> WsprLiveRowResult {
     let Some(row) = raw.as_object() else {
         return row_result(
@@ -1028,17 +1070,35 @@ fn classify_row(
         );
     }
     let observed_at = observed_at.unwrap();
+    let reporter_call = reporter_call.unwrap();
     let transmitter_call = transmitter_call.unwrap();
-    if transmitter_call != session_callsign {
-        return row_result(
-            row_number,
-            provider_spot_id,
-            raw,
-            WsprLiveRowDisposition::Filtered,
-            WsprLiveRowReason::CallsignFiltered,
-            None,
-        );
-    }
+    let direction = match (
+        transmitter_call == session_callsign,
+        reporter_call == session_callsign,
+    ) {
+        (true, false) => WsprLiveSpotDirection::Transmit,
+        (false, true) => WsprLiveSpotDirection::Receive,
+        (true, true) => {
+            return row_result(
+                row_number,
+                provider_spot_id,
+                raw,
+                WsprLiveRowDisposition::Filtered,
+                WsprLiveRowReason::AmbiguousCallsign,
+                None,
+            );
+        }
+        (false, false) => {
+            return row_result(
+                row_number,
+                provider_spot_id,
+                raw,
+                WsprLiveRowDisposition::Filtered,
+                WsprLiveRowReason::CallsignFiltered,
+                None,
+            );
+        }
+    };
     if observed_at < window_start || observed_at >= window_end {
         return row_result(
             row_number,
@@ -1074,7 +1134,7 @@ fn classify_row(
         provider_spot_id: provider_spot_id.unwrap(),
         observed_at,
         band,
-        reporter_call: reporter_call.unwrap(),
+        reporter_call,
         reporter_grid: reporter_grid.unwrap(),
         transmitter_call,
         transmitter_grid: transmitter_grid.unwrap(),
@@ -1087,7 +1147,31 @@ fn classify_row(
         drift_hz_per_minute: drift.unwrap(),
         receiver_version: receiver_version.unwrap(),
         mode_code: mode_code.unwrap(),
+        direction,
     };
+    let expected_direction = match direction {
+        WsprLiveSpotDirection::Receive => WsprCycleDirection::Receive,
+        WsprLiveSpotDirection::Transmit => WsprCycleDirection::Transmit,
+    };
+    if confirmed_cycles.is_some_and(|cycles| {
+        !cycles.iter().any(|cycle| {
+            cycle.band == band
+                && cycle.starts_at <= observed_at
+                && observed_at < cycle.transmission_ends_at
+                && cycle
+                    .direction
+                    .is_none_or(|direction| direction == expected_direction)
+        })
+    }) {
+        return row_result(
+            row_number,
+            provider_spot_id,
+            raw,
+            WsprLiveRowDisposition::Filtered,
+            WsprLiveRowReason::DirectionFiltered,
+            Some(spot),
+        );
+    }
     row_result(
         row_number,
         provider_spot_id,

@@ -941,6 +941,7 @@ fn build_view(
 
 fn requires_wsjtx_receiver(bundle: &BundleV3Contents) -> bool {
     bundle.manifest.schema_version >= SCHEMA_VERSION_V4
+        && !bundle.session_state.wspr_live_acquisition_enabled
         && bundle.schedule.signal_plans.is_empty()
         && matches!(
             bundle.schedule.mode,
@@ -1969,7 +1970,7 @@ pub(crate) fn mutate_active_session_conductor(
                 return Err(SessionErrorPayload::new(
                     SessionErrorKind::Conflict,
                     "Start the required WSJT-X UDP receiver before starting this session.",
-                    "receive-capable schema-v4 WSPR sessions require active local WSJT-X intake",
+                    "receive-capable schema-v4 WSPR sessions require active local WSJT-X intake when automatic WSPR.live acquisition is disabled",
                 ));
             }
         }
@@ -2000,7 +2001,8 @@ mod tests {
 
     use antennabench_core::{
         reduce_operator_events_v3, AdapterInput, Band, CorrectableOperatorEventPayloadV3,
-        OperatorEventPayloadV3, PlannedSlot, SessionLifecycleV2, SignalModeV3, V2_BUNDLE_SUFFIX,
+        ExperimentMode, OperatorEventPayloadV3, PlannedSlot, SessionLifecycleV2, SignalModeV3,
+        V2_BUNDLE_SUFFIX,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -2049,12 +2051,25 @@ mod tests {
     }
 
     #[test]
-    fn schema_v4_receive_capable_wspr_sessions_require_wsjtx() {
+    fn receive_capable_wspr_sessions_require_udp_only_when_public_collection_is_off() {
         let temp = TempDir::new().unwrap();
         let active = ActiveSessionState::default();
         let wspr = create_e2e_session(temp.path(), &active);
-        let wspr_bundle = BundleStore::new(wspr.path).read_v3_checkpointed().unwrap();
-        assert!(requires_wsjtx_receiver(&wspr_bundle));
+        let mut wspr_bundle = BundleStore::new(wspr.path).read_v3_checkpointed().unwrap();
+        for mode in [
+            ExperimentMode::WholeStationAb,
+            ExperimentMode::RxFocused,
+            ExperimentMode::SingleAntennaProfiling,
+        ] {
+            wspr_bundle.schedule.mode = mode;
+            wspr_bundle.session_state.wspr_live_acquisition_enabled = false;
+            assert!(requires_wsjtx_receiver(&wspr_bundle));
+            wspr_bundle.session_state.wspr_live_acquisition_enabled = true;
+            assert!(!requires_wsjtx_receiver(&wspr_bundle));
+        }
+        wspr_bundle.schedule.mode = ExperimentMode::TxFocused;
+        wspr_bundle.session_state.wspr_live_acquisition_enabled = false;
+        assert!(!requires_wsjtx_receiver(&wspr_bundle));
 
         let signal = create_e2e_signal_session(temp.path(), &active);
         let signal_bundle = BundleStore::new(signal.path)
@@ -2832,7 +2847,7 @@ mod tests {
         let wsjtx_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 3, 55).unwrap();
         let intake = inject_e2e_wsjtx_sequence(&created.path, wsjtx_at);
         assert_eq!(intake.adapter_records, 4);
-        assert_eq!(intake.observations, 1);
+        assert_eq!(intake.observations, 0);
         assert_eq!(intake.gaps, 1);
         assert!(intake.revision > resumed.revision);
 
@@ -2913,7 +2928,11 @@ mod tests {
         );
         assert_eq!(final_bundle.session_state.revision, ended.revision);
         assert_eq!(final_bundle.adapter_records.len(), 4);
-        assert_eq!(final_bundle.observations.len(), 1);
+        assert!(final_bundle.observations.is_empty());
+        assert!(final_bundle
+            .adapter_records
+            .iter()
+            .any(|record| record.reason.as_str() == "wsjtx.direction-filtered"));
         assert!(final_bundle.adapter_records.iter().take(3).all(|record| {
             matches!(
                 &record.input,

@@ -152,10 +152,12 @@ Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
 antenna definitions, and complete repetitions. BOTH and four repetitions are
 the defaults. Each repetition visits every configured antenna once in each
 selected direction; the form derives the number of individual two-minute WSPR
-periods and ideal minimum time and presents automatic WSPR.live public spots as
-a normal attributed section before advanced controlled-signal setup. The
-offline opt-out remains available as secondary
-behavior; setup leaves evidence-completeness disclosure to reports. The routine
+periods and ideal minimum time and presents automatic bidirectional WSPR.live
+public spots as a normal attributed section before advanced controlled-signal
+setup. The online path requires WSJT-X **Upload spots** and network access, and
+discloses mirror lag plus unknown completeness. The offline opt-out remains
+secondary behavior; a receive-capable offline run requires the direct/local UDP
+receiver, while UDP is optional and separately attributed when WSPR.live is on. The routine
 form keeps station identity plus antenna labels/descriptions visible and places
 optional metadata behind disclosure. A user-triggered native macOS Core
 Location request can prompt for foreground permission and fill a six-character

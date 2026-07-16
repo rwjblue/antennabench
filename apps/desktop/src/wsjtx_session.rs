@@ -733,10 +733,8 @@ impl WsjtxOrchestrator {
     ) -> PendingWsjtxMutation {
         let mutation_id = self.hooks.new_id("wsjtx-mutation");
         let adapter_id = recorded.wsjtx_record.record_id;
-        let disposition = disposition(&recorded.disposition);
-        let reason = reason(&recorded.disposition);
-        let has_observation = recorded.observation.is_some();
-        let observation = recorded.observation.map(|observation| {
+        let mut direction_filtered = false;
+        let observation = recorded.observation.and_then(|observation| {
             let mut current = snapshot.current_bundle(datagram.received_at);
             current.observations.push(observation);
             annotate_bundle_observations(&mut current);
@@ -744,14 +742,22 @@ impl WsjtxOrchestrator {
                 .observations
                 .pop()
                 .expect("the just-appended observation remains present");
-            observation_v2(
-                observation,
-                &adapter_id,
-                &mutation_id,
-                if has_observation { 1 } else { 0 },
-                if has_observation { 2 } else { 1 },
-            )
+            if matches!(snapshot, WsjtxSnapshot::V3(_)) && observation.slot_id.is_none() {
+                direction_filtered = true;
+                return None;
+            }
+            Some(observation_v2(observation, &adapter_id, &mutation_id, 1, 2))
         });
+        let disposition = if direction_filtered {
+            AdapterDisposition::Filtered
+        } else {
+            disposition(&recorded.disposition)
+        };
+        let reason = if direction_filtered {
+            "wsjtx.direction-filtered".into()
+        } else {
+            reason(&recorded.disposition)
+        };
         let normalized_records = observation
             .as_ref()
             .map(|observation| {

@@ -296,8 +296,9 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
     /data-setup-field="wsprLiveAcquisitionEnabled" checked/,
   );
   assert.doesNotMatch(setupHtml, /Optional public spots/);
-  assert.match(setupHtml, /Public WSPR spots are gathered automatically/);
-  assert.doesNotMatch(setupHtml, /Source completeness is unknown/);
+  assert.match(setupHtml, /Delayed public TX and RX WSPR spots are gathered automatically/);
+  assert.match(setupHtml, /Upload spots/);
+  assert.match(setupHtml, /unknown completeness/);
   assert.doesNotMatch(setupHtml, /data-import-authority|Confirm source authority/);
   const setupPanel = setupHtml.match(/data-panel="setup"[\s\S]*?data-panel="run"/)?.[0] ?? "";
   assert.doesNotMatch(setupPanel, /Facets|placeholder=|Trusted boundary|trusted Rust/);
@@ -369,7 +370,7 @@ test("active run leads with task actions and hides implementation-oriented tools
   assert.match(runPanel, /Skip this cycle/);
   assert.match(runPanel, /Add note/);
   assert.match(runPanel, /Correct last action/);
-  assert.match(runPanel, /<details[^>]*>\s*<summary><span data-wsjtx-requirement>Required WSJT-X receiver/u);
+  assert.match(runPanel, /<details[^>]*>\s*<summary><span data-wsjtx-requirement>Local\/offline receive collection/u);
   assert.match(runPanel, /<details[^>]*data-corrections-panel/u);
   assert.doesNotMatch(runPanel, /Explicit operator evidence|Trusted boundary|Trusted time/);
 });
@@ -775,18 +776,18 @@ test("active-run public spot states stay plain and hide opaque identifiers", () 
     assert.doesNotMatch(JSON.stringify(presentation), new RegExp(opaque));
     assert.doesNotMatch(
       `${presentation.phase} ${presentation.detail}`,
-      /becomes eligible|authorize the preceding segment|overlap earlier windows|completeness/i,
+      /becomes eligible|authorize the preceding segment|overlap earlier windows/i,
     );
   }
   assert.deepEqual(presentations.map(({ phase }) => phase), [
-    "Collecting public spots…",
+    "Collecting delayed/public spots…",
     "Public spots need attention",
     "Automatic collection is off",
     "Waiting for the first completed cycle",
     "Waiting briefly for public spots",
-    "Public spots are up to date",
-    "Public spots collected",
-    "Final public spots collected",
+    "Delayed/public spots are up to date",
+    "Delayed/public spots collected",
+    "Final delayed/public spots collected",
     "Public spots need attention",
   ]);
 

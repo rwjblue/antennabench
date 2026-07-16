@@ -181,15 +181,17 @@ export function renderRun(elements, state, root, options = {}) {
   wsjtxForm.setAttribute("aria-busy", String(wsjtxBusy));
   wsjtxStart.disabled = conductorBusy || wsjtxBusy || wsjtxRunning || !["ready", "running"].includes(view.lifecycle);
   wsjtxStop.disabled = conductorBusy || wsjtxBusy || !wsjtxRunning;
-  wsjtxRequirement.textContent = view.wsjtxRequired ? "Required WSJT-X receiver" : "Optional WSJT-X receiver";
+  wsjtxRequirement.textContent = view.wsjtxRequired
+    ? "Local/offline receive collection · required"
+    : "Local/offline receive collection · optional";
   wsjtxPhase.textContent = state.wsjtx
     ? `${humanizeIdentifier(state.wsjtx.phase)}${state.wsjtx.bindAddress ? ` · ${state.wsjtx.bindAddress}` : ""}`
     : "Not started";
   wsjtxCounts.textContent = state.wsjtx
-    ? `${state.wsjtx.receivedDatagrams} received · ${state.wsjtx.committedMutations} committed · ${state.wsjtx.ignoredDatagrams} explicit non-observation disposition(s)`
+    ? `Direct/local active · ${state.wsjtx.receivedDatagrams} received · ${state.wsjtx.committedMutations} committed · ${state.wsjtx.ignoredDatagrams} explicit non-observation disposition(s)`
     : view.wsjtxRequired
-      ? "Start this UDP receiver before starting the session."
-      : "TX-only manual operation remains available without WSJT-X.";
+      ? "Direct/local inactive · start this UDP receiver before the receive-capable session."
+      : "Direct/local inactive · optional when delayed/public WSPR.live is enabled or the run has no receive periods.";
   const adapterDiagnostic = state.wsjtxError ?? state.wsjtx?.diagnostic ?? null;
   wsjtxDiagnostic.hidden = adapterDiagnostic === null;
   if (adapterDiagnostic) {

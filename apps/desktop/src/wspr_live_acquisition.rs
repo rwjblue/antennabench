@@ -9,8 +9,7 @@ use antennabench_core::{
     BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2, EventTimeBasisV2,
     MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
     OperatorEventV3, PlannedSlot, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
-    SessionLifecycleV2, WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V4,
+    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -18,8 +17,9 @@ use antennabench_storage::{
 use antennabench_wsjtx::{
     latest_due_wspr_live_acquisition, plan_wspr_live_acquisitions_for_confirmed_slots,
     AdapterCancellationToken, ReqwestWsprLiveTransport, WsprLiveAcquirer,
-    WsprLiveAcquisitionChannel, WsprLiveAcquisitionPlan, WsprLiveHttpTransport,
-    WsprLiveImportConfig, WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS, WSPR_LIVE_QUERY_ENDPOINT,
+    WsprLiveAcquisitionChannel, WsprLiveAcquisitionPlan, WsprLiveConfirmedCycle,
+    WsprLiveHttpTransport, WsprLiveImportConfig, WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS,
+    WSPR_LIVE_QUERY_ENDPOINT,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -76,14 +76,10 @@ impl AcquisitionSnapshot {
         match self {
             Self::V2(bundle) => bundle.schedule.slots.clone(),
             Self::V3(bundle) => {
-                let transmit_intents = bundle
+                let known_intents = bundle
                     .schedule
                     .wspr_cycle_intents
                     .iter()
-                    .filter(|intent| {
-                        intent.direction.is_none()
-                            || intent.direction == Some(WsprCycleDirection::Transmit)
-                    })
                     .map(|intent| intent.intent_id.as_str())
                     .collect::<BTreeSet<_>>();
                 let attributable = project_wspr_run_v3(&bundle.schedule, &bundle.events)
@@ -91,7 +87,7 @@ impl AcquisitionSnapshot {
                     .into_iter()
                     .filter(|cycle| {
                         cycle.occupancy_fully_covers_transmission
-                            && transmit_intents.contains(cycle.intent_id.as_str())
+                            && known_intents.contains(cycle.intent_id.as_str())
                     })
                     .map(|cycle| cycle.intent_id)
                     .collect::<BTreeSet<_>>();
@@ -124,18 +120,38 @@ impl AcquisitionSnapshot {
                             .cycles
                             .iter()
                             .rev()
-                            .find(|cycle| {
-                                cycle.occupancy_fully_covers_transmission
-                                    && bundle.schedule.wspr_cycle_intents.iter().any(|intent| {
-                                        intent.intent_id == cycle.intent_id
-                                            && (intent.direction.is_none()
-                                                || intent.direction
-                                                    == Some(WsprCycleDirection::Transmit))
-                                    })
-                            })
+                            .find(|cycle| cycle.occupancy_fully_covers_transmission)
                             .map(|cycle| cycle.intent_id.clone())
                     })
                     .flatten()
+            }
+        }
+    }
+
+    fn confirmed_cycles(&self) -> Option<Vec<WsprLiveConfirmedCycle>> {
+        match self {
+            Self::V2(_) => None,
+            Self::V3(bundle) if bundle.manifest.schema_version < SCHEMA_VERSION_V4 => None,
+            Self::V3(bundle) => {
+                let directions = bundle
+                    .schedule
+                    .wspr_cycle_intents
+                    .iter()
+                    .map(|intent| (intent.intent_id.as_str(), intent.direction))
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                Some(
+                    project_wspr_run_v3(&bundle.schedule, &bundle.events)
+                        .cycles
+                        .into_iter()
+                        .filter(|cycle| cycle.occupancy_fully_covers_transmission)
+                        .map(|cycle| WsprLiveConfirmedCycle {
+                            starts_at: cycle.window.starts_at,
+                            transmission_ends_at: cycle.window.transmission_ends_at,
+                            band: cycle.band,
+                            direction: directions.get(cycle.intent_id.as_str()).copied().flatten(),
+                        })
+                        .collect(),
+                )
             }
         }
     }
@@ -420,6 +436,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                 }),
             captured_at: response.received_at,
             source_locator: Some(WSPR_LIVE_QUERY_ENDPOINT.into()),
+            confirmed_cycles: snapshot.confirmed_cycles(),
         };
         let committed = match commit_wspr_live_response(
             active_state,
@@ -736,7 +753,7 @@ mod tests {
 
     use antennabench_core::{
         EventTimeBasisV2, MutationMember, OperatorEventPayloadV3, OperatorEventV3, Provenance,
-        RecordMetaV3, RecordSource, SessionLifecycleV2,
+        RecordMetaV3, RecordSource, SessionLifecycleV2, WsprCycleDirection,
     };
     use antennabench_storage::{BundleStore, LiveEventMutationV3};
     use antennabench_wsjtx::{
@@ -868,7 +885,7 @@ mod tests {
     }
 
     #[test]
-    fn final_public_capture_uses_the_last_attributable_cycle_when_later_intentions_are_skipped() {
+    fn final_public_capture_includes_confirmed_receive_and_transmit_cycles() {
         let temp = TempDir::new().unwrap();
         let active = ActiveSessionState::default();
         let created = create_e2e_session(temp.path(), &active);
@@ -962,10 +979,38 @@ mod tests {
                 .into_iter()
                 .map(|slot| slot.slot_id)
                 .collect::<Vec<_>>(),
-            vec![created.slot_ids[2].clone()]
+            created.slot_ids[..3].to_vec()
         );
         let plans = authorized_plans(&snapshot).unwrap();
         assert_eq!(plans.last().unwrap().completed_slot_id, created.slot_ids[2]);
+    }
+
+    #[test]
+    fn receive_only_transmit_only_and_single_antenna_snapshots_all_finalize() {
+        let temp = TempDir::new().unwrap();
+        let (_, path, _) = running_confirmed_session(temp.path(), true);
+        let original = BundleStore::new(path).read_v3_checkpointed().unwrap();
+
+        for (direction, single_antenna) in [
+            (WsprCycleDirection::Receive, false),
+            (WsprCycleDirection::Transmit, false),
+            (WsprCycleDirection::Receive, true),
+        ] {
+            let mut bundle = original.clone();
+            let first_antenna = bundle.schedule.wspr_cycle_intents[0].antenna_label.clone();
+            bundle.schedule.wspr_cycle_intents.retain(|intent| {
+                intent.direction == Some(direction)
+                    && (!single_antenna || intent.antenna_label == first_antenna)
+            });
+            let snapshot = AcquisitionSnapshot::V3(bundle);
+            assert!(!snapshot.projected_slots().is_empty());
+            assert!(snapshot.final_completed_slot_id().is_some());
+            let plans = authorized_plans(&snapshot).unwrap();
+            assert_eq!(
+                plans.last().map(|plan| plan.completed_slot_id.as_str()),
+                snapshot.final_completed_slot_id().as_deref()
+            );
+        }
     }
 
     #[test]

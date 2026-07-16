@@ -443,14 +443,24 @@ The durable boundaries are:
 - Public-spot and propagation sources preserve provenance and raw or near-raw
   inputs before normalizing supported values into bundle records. The first
   WSPR public-spot boundary preserves each bounded WSPR.live ClickHouse JSON
-  response as exact attachment evidence and emits TX `ImportedSpot`
-  observations only after repeating callsign, UTC-window, band, and WSPR-mode
-  filters. Manual file import is the offline/recovery path; an operator-opted-in
-  HTTPS client reuses the same parser for automatic acquisition. Neither path
-  makes public reports a session prerequisite; see
+  response as exact attachment evidence and emits direction-aware TX and RX
+  `ImportedSpot` observations only after repeating station-role, UTC-window,
+  band, WSPR-mode, and confirmed-cycle-direction filters. TX rows use the remote
+  receiver as reporter and provider transmit azimuth; RX rows use the local
+  station as reporter and provider receiver-side incoming azimuth. Ambiguous,
+  unrelated, and direction-mismatched rows remain filtered adapter evidence.
+  Manual file import is the offline/recovery path; the default HTTPS client
+  reuses the same parser for cumulative acquisition across confirmed receive
+  and transmit cycles. Neither path makes public reports a session prerequisite; see
   [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
   [#84](https://github.com/rwjblue/antennabench/issues/84), and
   [#85](https://github.com/rwjblue/antennabench/issues/85).
+- Live WSJT-X UDP is the direct/local receive source. It is required before a
+  receive-capable schema-v4 run only when WSPR.live is disabled, remains
+  optional when WSPR.live is enabled, and may run concurrently. New local
+  decodes must align to a fully occupied confirmed receive cycle; mismatches
+  retain their exact datagram as filtered evidence. UDP `LocalDecode` and
+  WSPR.live `ImportedSpot` records are never cross-source deduplicated or pooled.
 - The RBN boundary accepts only an operator-selected local daily ZIP. It pins
   the documented CSV header, streams the compressed member under fixed bounds,
   repeats exact heard-callsign, half-open UTC-window, and selected-band filters,
@@ -573,3 +583,11 @@ generation, and current status must identify the configured station in WSPR
 mode. Status transmitting/receiving/decoding values are tracked and preserved
 but do not gate a decode because WSJT-X status transitions and completed decode
 delivery need not occur in the same instant.
+
+For schema-v4 sessions, a new decode must also fall inside a fully occupied,
+confirmed receive cycle. A decode during a transmit cycle or outside confirmed
+receive occupancy keeps its exact UDP datagram with
+`wsjtx.direction-filtered` disposition but creates no `LocalDecode`
+observation. Historical unknown-direction evidence is not rewritten. The UDP
+receiver may run before or during any session; start preflight requires it only
+for receive-capable WSPR sessions whose delayed/public WSPR.live source is off.

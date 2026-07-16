@@ -4,6 +4,8 @@
 
 Accepted.
 
+Amended 2026-07-16 by #106.
+
 ## Decision
 
 Every newly authored WSPR cycle intention records whether the operator is to
@@ -24,11 +26,12 @@ TX-only and RX-only sessions similarly alternate `A, B` and `B, A`, producing
 `A, B, B, A` across two repetitions. This keeps each antenna equally represented
 in early and late positions without forcing an antenna change at every period.
 
-A schema-v4 session containing receive periods requires the local WSJT-X UDP
-receiver to be running before the session can start. The receiver may be armed
-while the session is still ready so the prerequisite does not lose the first
-decode. WSPR.live collection remains available for sessions with transmit
-periods and is unavailable for receive-only sessions.
+A schema-v4 session containing receive periods requires at least one selected
+receive source before it can start. Default-on WSPR.live satisfies that
+preflight for TX-only, RX-only, BOTH, and single-antenna WSPR sessions. If
+WSPR.live is disabled, the local WSJT-X UDP receiver must be running before a
+receive-capable session starts so the first decode is not lost. UDP may also run
+beside WSPR.live as separately attributed direct/local evidence.
 
 The conductor treats direction changes as operator actions even when the
 antenna stays connected. Before a receive period it tells the operator to turn
@@ -38,9 +41,10 @@ WSJT-X changes are presented independently, because either, both, or neither
 may be needed at a boundary.
 
 Evidence admission follows the same direction boundary. Local WSJT-X decodes
-can align only to receive intentions, while WSPR.live public reception reports
-can align only to transmit intentions. Schema-v3 intentions with no recorded
-direction retain their legacy behavior.
+can align only to receive intentions. WSPR.live rows where the station is
+`rx_sign` align only to receive intentions, and rows where it is `tx_sign`
+align only to transmit intentions; ambiguous self-role rows are filtered.
+Schema-v3 intentions with no recorded direction retain their legacy behavior.
 
 ## Consequences
 

@@ -153,9 +153,14 @@ destination containing referenced attachment bytes; `write_attachment()` and
 The selected first WSPR public-spot boundary uses these generic records rather
 than adding another provider-specific stream. A bounded operator-supplied or
 automatically acquired WSPR.live ClickHouse JSON response is retained as an
-exact attachment; row records preserve near-raw values and link accepted TX
-`ImportedSpot` observations. Callsign, UTC window, band, and WSPR mode are
-repeated in both paths, and missing public reports remain missing evidence. See
+exact attachment; row records preserve near-raw values and link accepted TX or
+RX `ImportedSpot` observations. The persisted
+`wspr_live_acquisition_enabled` field is unchanged, but now means automatic
+bidirectional collection. Callsign role, UTC window, band, WSPR mode, and known
+schema-v4 cycle direction are repeated in both paths. RX observations use the
+station as reporter, the remote transmitter as heard identity, and the
+provider's receiver-side incoming azimuth; both provider azimuths remain in raw
+evidence. Missing public reports remain missing evidence. See
 [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md).
 
 The RBN daily-archive boundary uses provider `reverse-beacon-network`, source

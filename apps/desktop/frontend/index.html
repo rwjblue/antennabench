@@ -143,10 +143,10 @@
 
               <fieldset class="setup-section">
                 <legend><span>04</span> WSPR Spots <button class="context-help" type="button" data-help-trigger="public_spots">?</button></legend>
-                <p class="field-help">Public WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror.</p>
+                <p class="field-help">Delayed public TX and RX WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Enable WSJT-X <strong>Upload spots</strong>, keep WSJT-X online, and expect ingestion delay and unknown completeness.</p>
                 <details class="advanced-fields">
                   <summary>Offline option</summary>
-                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Gather WSPR.live spots automatically for this session</label>
+                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Gather delayed/public WSPR.live TX and RX spots automatically</label>
                 </details>
               </fieldset>
 
@@ -247,16 +247,16 @@
               </details>
 
               <details class="receiver-panel" data-wspr-live-panel>
-                <summary>Public spot collection · <strong data-wspr-live-phase>Waiting for antenna confirmation</strong> <button class="context-help" type="button" data-help-trigger="wspr_live_status">?</button></summary>
-                <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror after the ingestion grace period. No separate fetch action is required.</p>
+                <summary>Delayed/public WSPR.live collection · <strong data-wspr-live-phase>Waiting for antenna confirmation</strong> <button class="context-help" type="button" data-help-trigger="wspr_live_status">?</button></summary>
+                <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror for both TX and RX rows after the ingestion grace period. No separate fetch action is required.</p>
                 <p class="receiver-diagnostic" data-wspr-live-diagnostic hidden></p>
                 <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry acquisition</button><button type="button" class="danger-action" data-wspr-live-end-without hidden>End without public spots</button></div>
               </details>
 
               <details class="receiver-panel">
-                <summary><span data-wsjtx-requirement>Required WSJT-X receiver</span> · <strong data-wsjtx-phase>Not started</strong> <button class="context-help" type="button" data-help-trigger="wsjtx_receiver">?</button></summary>
+                <summary><span data-wsjtx-requirement>Local/offline receive collection</span> · <strong data-wsjtx-phase>Not started</strong> <button class="context-help" type="button" data-help-trigger="wsjtx_receiver">?</button></summary>
                 <form data-wsjtx-form>
-                  <p class="field-help" data-wsjtx-counts>Start this UDP receiver before starting a Both or RX-focused session.</p>
+                  <p class="field-help" data-wsjtx-counts>This direct/local UDP source is optional with WSPR.live, required before receive-capable offline runs, and may run concurrently without merging evidence.</p>
                   <div class="field-grid receiver-fields">
                     <label>Loopback address<input type="text" value="127.0.0.1" data-wsjtx-bind-address></label>
                     <label>UDP port<input type="number" min="1" max="65535" value="2237" data-wsjtx-port></label>

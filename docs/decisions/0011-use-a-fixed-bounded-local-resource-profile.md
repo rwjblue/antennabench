@@ -175,6 +175,10 @@ reason. It cannot produce a complete normalized import.
 
 ### Live WSJT-X UDP
 
+The direct/local receiver retains these same limits whether it is the required
+offline receive source or runs optionally beside WSPR.live. Concurrent source
+use does not combine queues, deduplication identities, or evidence strata.
+
 | Boundary | Limit |
 | --- | ---: |
 | UDP datagram | 65,535 bytes |
@@ -431,4 +435,3 @@ availability, not infinite trust or capacity.
 - [Hosted boundary decision #11](https://github.com/rwjblue/antennabench/issues/11)
 - [Decision 0009](0009-use-layered-bundle-validation-profiles.md)
 - [Decision 0010](0010-checkpoint-append-only-live-session-mutations.md)
-

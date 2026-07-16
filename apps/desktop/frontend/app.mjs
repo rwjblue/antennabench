@@ -193,10 +193,10 @@ function mount(root, browserWindow) {
 
   wsprLiveRetry.addEventListener("click", () => controller.advanceWsprLive(true));
   wsprLiveEndWithout.addEventListener("click", async () => {
-    if (!controller.confirm("End this session without the final automatic WSPR.live capture? Existing evidence will remain.")) return;
+    if (!controller.confirm("End this session without the final automatic bidirectional WSPR.live capture? Existing evidence will remain.")) return;
     await controller.submitConductorAction({
       kind: "end",
-      reason: "Operator ended finalization without automatic WSPR.live public spots.",
+      reason: "Operator ended finalization without automatic bidirectional WSPR.live spots.",
     });
   });
 

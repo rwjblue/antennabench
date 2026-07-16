@@ -22,8 +22,8 @@ export const CONTEXT_HELP = Object.freeze({
     text: "One repetition tests every configured antenna in the selected direction. Both mode includes one receive and one transmit period per antenna; the estimate shows ideal WSPR time only.",
   },
   public_spots: {
-    title: "Automatic WSPR spots",
-    text: "AntennaBench normally gathers public reports of your transmissions from WSPR.live after completed cycles. Turn this off for an offline run; you can import saved data later.",
+    title: "Automatic bidirectional WSPR spots",
+    text: "AntennaBench gathers delayed public reports for both transmissions and receptions from WSPR.live; enable WSJT-X Upload spots and keep it online. Lag and completeness remain unknown, and you can turn this off for an offline run.",
   },
   controlled_signal: {
     title: "Controlled CW or RTTY plan",
@@ -54,12 +54,12 @@ export const CONTEXT_HELP = Object.freeze({
     text: "Pause keeps the session available to resume, while End closes it normally. Abandon is terminal and marks the run as intentionally discontinued; existing evidence remains.",
   },
   wspr_live_status: {
-    title: "Public spot collection",
-    text: "This status says whether AntennaBench is waiting, collecting, finished, off, or needs a retry. It never blocks manual operator actions or bundle export.",
+    title: "Delayed/public WSPR.live collection",
+    text: "This default online source gathers both TX and RX rows after WSPRnet/WSPR.live ingestion. Upload spots and network access are required; lag and completeness remain unknown.",
   },
   wsjtx_receiver: {
-    title: "WSJT-X UDP receiver",
-    text: "Connect the local WSJT-X UDP feed before starting a receive-capable session. It is required for Both and RX-focused WSPR runs and optional for TX-only runs.",
+    title: "Local/offline WSJT-X receiver",
+    text: "This direct UDP source is required before a receive-capable run only when WSPR.live is off. It can remain off for the default online path, or run alongside WSPR.live as separately attributed evidence.",
   },
 });
 
@@ -294,8 +294,8 @@ export function wsprLiveAcquisitionModel(state) {
   });
   if (state.wsprLiveAcquisitionStatus === "fetching") {
     return {
-      phase: "Collecting public spots…",
-      detail: "AntennaBench is checking WSPR.live now.",
+      phase: "Collecting delayed/public spots…",
+      detail: "Delayed/public active · AntennaBench is checking WSPR.live for TX and RX rows now.",
       diagnostic: "",
       retry: false,
     };
@@ -313,7 +313,7 @@ export function wsprLiveAcquisitionModel(state) {
   if (outcome?.status === "disabled") {
     return {
       phase: "Automatic collection is off",
-      detail: "No public spots will be collected automatically. You can still import saved WSPR.live data later.",
+      detail: "Delayed/public inactive · no WSPR.live spots will be collected automatically. Receive-capable runs require the direct/local UDP source.",
       diagnostic: "",
       retry: false,
     };
@@ -321,7 +321,7 @@ export function wsprLiveAcquisitionModel(state) {
   if (!outcome || outcome.status === "dormant") {
     return {
       phase: "Waiting for the first completed cycle",
-      detail: "Automatic collection will begin after a WSPR cycle completes.",
+      detail: "Delayed/public active · collection begins after a confirmed WSPR receive or transmit cycle completes.",
       diagnostic: "",
       retry: false,
     };
@@ -329,31 +329,31 @@ export function wsprLiveAcquisitionModel(state) {
   if (outcome.status === "waiting") {
     return {
       phase: "Waiting briefly for public spots",
-      detail: `Spots from the last completed cycle should be available after ${localTime(outcome.notBefore)}.`,
+      detail: `Delayed/public active · TX and RX spots from the last completed cycle may be available after ${localTime(outcome.notBefore)}; completeness is unknown.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "up_to_date") {
     return {
-      phase: "Public spots are up to date",
-      detail: `Spots collected through ${localTime(outcome.capturedThrough)}.`,
+      phase: "Delayed/public spots are up to date",
+      detail: `Delayed/public active · TX and RX spots collected through ${localTime(outcome.capturedThrough)} with unknown completeness.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "captured") {
     return {
-      phase: "Public spots collected",
-      detail: `${outcome.observationsCreated} new public spot(s) collected through ${localTime(outcome.capturedThrough)}.`,
+      phase: "Delayed/public spots collected",
+      detail: `Delayed/public active · ${outcome.observationsCreated} new TX/RX spot(s) collected through ${localTime(outcome.capturedThrough)} with unknown completeness.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "completed") {
     return {
-      phase: "Final public spots collected",
-      detail: `Spots collected through ${localTime(outcome.capturedThrough)}. The session ended automatically.`,
+      phase: "Final delayed/public spots collected",
+      detail: `TX and RX spots collected through ${localTime(outcome.capturedThrough)} with unknown completeness. The session ended automatically.`,
       diagnostic: "",
       retry: false,
     };
@@ -375,5 +375,3 @@ function lifecycleActionAvailability(lifecycle) {
     default: return new Set();
   }
 }
-
-

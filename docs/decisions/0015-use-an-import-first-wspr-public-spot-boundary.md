@@ -4,16 +4,29 @@ Date: 2026-07-14
 
 Amended: 2026-07-15
 
+Amended: 2026-07-16
+
 ## Decision
 
 AntennaBench selects WSPR.live's documented, read-only ClickHouse HTTPS
-interface as its first automatic source of transmit-path WSPR public reports.
+interface as its first automatic source of bidirectional WSPR public reports.
 The deterministic `FORMAT JSON` importer shipped first in
 [#84](https://github.com/rwjblue/antennabench/issues/84), establishing exact
 response preservation, filtering, normalization, replay, atomic persistence,
 and reporting without network availability. The automatic acquisition in
 [#85](https://github.com/rwjblue/antennabench/issues/85) reuses that complete
 evidence boundary; it does not introduce a second parser or normalization path.
+
+The 2026-07-16 amendment expands the fixed query from `tx_sign = station` to
+`(tx_sign = station OR rx_sign = station)`. RX rows normalize the station as
+reporter, the remote transmitter as heard, and `rx_azimuth` as the local
+incoming path; TX rows retain the original mapping. Both directions require a
+matching confirmed schema-v4 cycle at source time. This amendment supersedes
+the transmit-only query and normalization descriptions later in this record.
+WSJT-X **Upload spots**, connectivity, WSPRnet acceptance, and mirror ingestion
+are prerequisites for RX rows on this delayed/public path, whose completeness
+remains unknown. Direct/local UDP remains a separately attributed optional
+redundant or offline receive source and is never cross-source deduplicated.
 
 WSPR.live permits use for personal research and projects whose results remain
 freely accessible and prohibits commercial or profit-oriented use. The

@@ -1398,10 +1398,10 @@ fn observation_kind(value: ObservationKind) -> &'static str {
 fn record_source(value: RecordSource) -> &'static str {
     match value {
         RecordSource::Operator => "Operator",
-        RecordSource::WsjtxUdp => "WSJT-X UDP",
+        RecordSource::WsjtxUdp => "WSJT-X UDP (direct/local)",
         RecordSource::WsjtxLog => "WSJT-X log",
         RecordSource::Wsprnet => "WSPRnet",
-        RecordSource::WsprLive => "WSPR.live",
+        RecordSource::WsprLive => "WSPR.live (delayed/public)",
         RecordSource::ImportedFile => "Imported file",
         RecordSource::RigAdapter => "Rig adapter",
         RecordSource::NoaaSwpc => "NOAA SWPC",

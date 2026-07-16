@@ -220,7 +220,8 @@ batches, lost responses and idempotent retry, complete/torn/incomplete and
 duplicate tails, current/previous checkpoint selection, committed corruption,
 recovery attachments, interruption detection, and checkpointed export.
 
-`crates/wsjtx/tests/all_wspr_import.rs`, `crates/wsjtx/tests/live_udp.rs`, and
+`crates/wsjtx/tests/all_wspr_import.rs`, `crates/wsjtx/tests/live_udp.rs`,
+`crates/wsjtx/tests/wspr_live_import.rs`, and
 `crates/propagation/tests/acquisition.rs` pin the adapter portion of that same
 profile. They exercise exact and first-over offline source, line, and record
 limits; cancellation and malformed-row preservation; UDP datagram, queue, rate,
@@ -228,6 +229,10 @@ client, idle-eviction, and timed fixed-size dedup boundaries; and HTTP redirect,
 timeout, header, content-length, streamed body, media, encoding, quarantine, and
 cancellation outcomes. All network tests use injected transports or loopback;
 the verification suite never depends on a live NOAA or WSJT-X service.
+WSPR.live fixtures additionally pin the fixed bidirectional TX/RX query,
+station-role classification, receiver-side azimuth mapping, confirmed-cycle
+direction filtering, provider-ID replay behavior, and exact attachment
+provenance. They use synthetic ClickHouse JSON and never contact WSPR.live.
 
 Analysis/report resource tests inject tiny profiles around N-1/N/N+1 to pin
 per-collection and aggregate-live entry failures, cancellation checkpoints,

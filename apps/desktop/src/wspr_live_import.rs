@@ -1,15 +1,16 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    project_wspr_run_v3, SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
 };
 use antennabench_wsjtx::{
     derive_wspr_live_query_scope, parse_wspr_live_json, prepare_wspr_live_acquisition,
-    AdapterCancellationToken, ParsedWsprLiveJson, WsprLiveAcquisitionChannel, WsprLiveImportConfig,
-    WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
+    AdapterCancellationToken, ParsedWsprLiveJson, WsprLiveAcquisitionChannel,
+    WsprLiveConfirmedCycle, WsprLiveImportConfig, WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
 };
 use chrono::Utc;
 use serde::Serialize;
@@ -98,36 +99,11 @@ fn import_file(
     let bytes = fs::read(path).map_err(|error| file_error(path, error))?;
     let (bundle_path, _) = active_session_source(state)?;
     let store = BundleStore::new(&bundle_path);
-    let snapshot = store
-        .read_v2_checkpointed()
-        .map_err(crate::conductor::live_error_payload)?;
-    if snapshot.session_state.lifecycle != SessionLifecycleV2::Running {
-        return Err(SessionErrorPayload::new(
-            SessionErrorKind::Unsupported,
-            "WSPR.live evidence can be imported only while the session is running.",
-            format!("current lifecycle: {:?}", snapshot.session_state.lifecycle),
-        ));
-    }
-    let scope = derive_wspr_live_query_scope(&snapshot.station.callsign, &snapshot.schedule.slots)
-        .map_err(|error| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Unsupported,
-                "The active session has no valid scheduled WSPR.live query scope.",
-                error.to_string(),
-            )
-        })?;
     let captured_at = Utc::now();
     let source_locator = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned());
-    let config = WsprLiveImportConfig {
-        session_callsign: scope.session_callsign,
-        window_start: scope.window_start,
-        window_end: scope.window_end,
-        selected_bands: scope.selected_bands,
-        captured_at,
-        source_locator: source_locator.clone(),
-    };
+    let config = import_config(&store, captured_at, source_locator.clone())?;
     let committed = commit_wspr_live_response(
         state,
         &bundle_path,
@@ -148,6 +124,90 @@ fn import_file(
         conflict: summary.conflict,
         observations_created: summary.observations_created,
         evidence_completeness_known: summary.evidence_completeness_known,
+    })
+}
+
+fn import_config(
+    store: &BundleStore,
+    captured_at: chrono::DateTime<Utc>,
+    source_locator: Option<String>,
+) -> Result<WsprLiveImportConfig, SessionErrorPayload> {
+    let schema_version = store
+        .schema_version()
+        .map_err(LivePersistenceError::from)
+        .map_err(crate::conductor::live_error_payload)?;
+    let (callsign, slots, confirmed_cycles, lifecycle) = match schema_version {
+        SCHEMA_VERSION_V2 => {
+            let bundle = store
+                .read_v2_checkpointed()
+                .map_err(crate::conductor::live_error_payload)?;
+            (
+                bundle.station.callsign,
+                bundle.schedule.slots,
+                None,
+                bundle.session_state.lifecycle,
+            )
+        }
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+            let bundle = store
+                .read_v3_checkpointed()
+                .map_err(crate::conductor::live_error_payload)?;
+            let directions = bundle
+                .schedule
+                .wspr_cycle_intents
+                .iter()
+                .map(|intent| (intent.intent_id.as_str(), intent.direction))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let confirmed_cycles =
+                (bundle.manifest.schema_version >= SCHEMA_VERSION_V4).then(|| {
+                    project_wspr_run_v3(&bundle.schedule, &bundle.events)
+                        .cycles
+                        .into_iter()
+                        .filter(|cycle| cycle.occupancy_fully_covers_transmission)
+                        .map(|cycle| WsprLiveConfirmedCycle {
+                            starts_at: cycle.window.starts_at,
+                            transmission_ends_at: cycle.window.transmission_ends_at,
+                            band: cycle.band,
+                            direction: directions.get(cycle.intent_id.as_str()).copied().flatten(),
+                        })
+                        .collect()
+                });
+            drop(directions);
+            let lifecycle = bundle.session_state.lifecycle;
+            let callsign = bundle.station.callsign.clone();
+            let slots = bundle.into_current().bundle.schedule.slots;
+            (callsign, slots, confirmed_cycles, lifecycle)
+        }
+        actual => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Validation,
+                "This session format cannot import WSPR.live evidence.",
+                format!("unsupported schema version {actual}"),
+            ));
+        }
+    };
+    if lifecycle != SessionLifecycleV2::Running {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Unsupported,
+            "WSPR.live evidence can be imported only while the session is running.",
+            format!("current lifecycle: {lifecycle:?}"),
+        ));
+    }
+    let scope = derive_wspr_live_query_scope(&callsign, &slots).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Unsupported,
+            "The active session has no valid scheduled WSPR.live query scope.",
+            error.to_string(),
+        )
+    })?;
+    Ok(WsprLiveImportConfig {
+        session_callsign: scope.session_callsign,
+        window_start: scope.window_start,
+        window_end: scope.window_end,
+        selected_bands: scope.selected_bands,
+        captured_at,
+        source_locator,
+        confirmed_cycles,
     })
 }
 

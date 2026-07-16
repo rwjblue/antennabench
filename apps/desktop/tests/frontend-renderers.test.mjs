@@ -177,7 +177,8 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
     countdownKey: result.key,
   });
   assert.equal(e.wsjtxPhase.textContent, "Running · 127.0.0.1");
-  assert.equal(e.wsprLivePhase.textContent, "Collecting public spots…");
+  assert.equal(e.wsprLivePhase.textContent, "Collecting delayed/public spots…");
+  assert.match(e.wsjtxCounts.textContent, /Direct\/local active/);
   assert.equal(e.wsprLiveRetry.disabled, true);
 
   const slot = {

@@ -1,17 +1,17 @@
 use std::collections::BTreeSet;
 
 use antennabench_core::{
-    AdapterDisposition, AttachmentReference, Band, ObservationKind, PlannedSlot,
+    AdapterDisposition, AttachmentReference, Band, ObservationKind, PlannedSlot, WsprCycleDirection,
 };
 use antennabench_wsjtx::{
     derive_wspr_live_query_scope, latest_due_wspr_live_acquisition,
     parse_wspr_live_json_with_limits, plan_wspr_live_acquisition_for_completed_slot,
     plan_wspr_live_acquisitions_for_confirmed_slots, plan_wspr_live_query,
     prepare_wspr_live_acquisition, prepare_wspr_live_import, AdapterCancellationToken,
-    WsprLiveAcquisitionChannel, WsprLiveImportConfig, WsprLiveImportError, WsprLiveImportLimits,
-    WsprLiveQueryScope, WsprLiveRowDisposition, WsprLiveRowReason, WSPR_LIVE_COLUMNS,
-    WSPR_LIVE_INGESTION_GRACE_SECONDS, WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS,
-    WSPR_LIVE_QUERY_ENDPOINT,
+    WsprLiveAcquisitionChannel, WsprLiveConfirmedCycle, WsprLiveImportConfig, WsprLiveImportError,
+    WsprLiveImportLimits, WsprLiveQueryScope, WsprLiveRowDisposition, WsprLiveRowReason,
+    WsprLiveSpotDirection, WSPR_LIVE_COLUMNS, WSPR_LIVE_INGESTION_GRACE_SECONDS,
+    WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS, WSPR_LIVE_QUERY_ENDPOINT,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{json, Value};
@@ -24,6 +24,7 @@ fn config() -> WsprLiveImportConfig {
         selected_bands: vec![Band::M20, Band::M40],
         captured_at: Utc.with_ymd_and_hms(2026, 7, 15, 21, 5, 0).unwrap(),
         source_locator: Some("operator-selected.json".into()),
+        confirmed_cycles: None,
     }
 }
 
@@ -80,11 +81,11 @@ fn plans_an_exact_stable_bounded_query_and_encoded_url() {
     assert_eq!(plan.provider_bands, [7, 14]);
     assert_eq!(
         plan.sql(),
-        "SELECT id, time, band, rx_sign, rx_loc, tx_sign, tx_loc, distance, azimuth, rx_azimuth, frequency, power, snr, drift, version, code FROM wspr.rx WHERE tx_sign = 'N1RWJ' AND time >= toDateTime('2026-07-15 20:00:00', 'UTC') AND time < toDateTime('2026-07-15 21:00:00', 'UTC') AND band IN (7, 14) AND code = 1 ORDER BY time, id FORMAT JSON"
+        "SELECT id, time, band, rx_sign, rx_loc, tx_sign, tx_loc, distance, azimuth, rx_azimuth, frequency, power, snr, drift, version, code FROM wspr.rx WHERE (tx_sign = 'N1RWJ' OR rx_sign = 'N1RWJ') AND time >= toDateTime('2026-07-15 20:00:00', 'UTC') AND time < toDateTime('2026-07-15 21:00:00', 'UTC') AND band IN (7, 14) AND code = 1 ORDER BY time, id FORMAT JSON"
     );
     assert_eq!(
         plan.query_url(),
-        "https://db1.wspr.live/?query=SELECT%20id%2C%20time%2C%20band%2C%20rx_sign%2C%20rx_loc%2C%20tx_sign%2C%20tx_loc%2C%20distance%2C%20azimuth%2C%20rx_azimuth%2C%20frequency%2C%20power%2C%20snr%2C%20drift%2C%20version%2C%20code%20FROM%20wspr.rx%20WHERE%20tx_sign%20%3D%20%27N1RWJ%27%20AND%20time%20%3E%3D%20toDateTime%28%272026-07-15%2020%3A00%3A00%27%2C%20%27UTC%27%29%20AND%20time%20%3C%20toDateTime%28%272026-07-15%2021%3A00%3A00%27%2C%20%27UTC%27%29%20AND%20band%20IN%20%287%2C%2014%29%20AND%20code%20%3D%201%20ORDER%20BY%20time%2C%20id%20FORMAT%20JSON"
+        "https://db1.wspr.live/?query=SELECT%20id%2C%20time%2C%20band%2C%20rx_sign%2C%20rx_loc%2C%20tx_sign%2C%20tx_loc%2C%20distance%2C%20azimuth%2C%20rx_azimuth%2C%20frequency%2C%20power%2C%20snr%2C%20drift%2C%20version%2C%20code%20FROM%20wspr.rx%20WHERE%20%28tx_sign%20%3D%20%27N1RWJ%27%20OR%20rx_sign%20%3D%20%27N1RWJ%27%29%20AND%20time%20%3E%3D%20toDateTime%28%272026-07-15%2020%3A00%3A00%27%2C%20%27UTC%27%29%20AND%20time%20%3C%20toDateTime%28%272026-07-15%2021%3A00%3A00%27%2C%20%27UTC%27%29%20AND%20band%20IN%20%287%2C%2014%29%20AND%20code%20%3D%201%20ORDER%20BY%20time%2C%20id%20FORMAT%20JSON"
     );
     assert_eq!(WSPR_LIVE_QUERY_ENDPOINT, "https://db1.wspr.live/");
 }
@@ -373,6 +374,91 @@ fn accepts_a_synthetic_tx_report_with_exact_direction_and_units() {
     assert_eq!(spot.drift_hz_per_minute, 1.0);
     assert_eq!(spot.distance_km, Some(2450.0));
     assert_eq!(spot.azimuth_degrees, Some(252.0));
+    assert_eq!(spot.direction, WsprLiveSpotDirection::Transmit);
+}
+
+#[test]
+fn accepts_receive_rows_and_normalizes_the_local_receiver_perspective() {
+    let mut receive = row(7002);
+    receive["rx_sign"] = json!("N1RWJ");
+    receive["rx_loc"] = json!("FN42");
+    receive["tx_sign"] = json!("K1ABC");
+    receive["tx_loc"] = json!("EM12");
+    let parsed = parse_wspr_live_json_with_limits(
+        &document(vec![receive]),
+        &config(),
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+
+    let spot = parsed.rows[0].spot.as_ref().unwrap();
+    assert_eq!(spot.direction, WsprLiveSpotDirection::Receive);
+    assert_eq!(spot.reporter_call, "N1RWJ");
+    assert_eq!(spot.transmitter_call, "K1ABC");
+    let prepared = prepare_wspr_live_import(
+        &parsed,
+        &config(),
+        "session-1",
+        "receive",
+        attachment(),
+        &[],
+    );
+    let observation = &prepared.observations[0];
+    assert_eq!(observation.reporter_call.as_deref(), Some("N1RWJ"));
+    assert_eq!(observation.heard_call.as_deref(), Some("K1ABC"));
+    assert_eq!(observation.reporter_grid.as_deref(), Some("FN42"));
+    assert_eq!(observation.heard_grid.as_deref(), Some("EM12"));
+    assert_eq!(observation.azimuth_degrees, Some(65.0));
+    assert_eq!(observation.raw["tx_azimuth_degrees"], 252.0);
+    assert_eq!(observation.raw["rx_azimuth_degrees"], 65.0);
+    assert_eq!(observation.raw["direction"], "receive");
+}
+
+#[test]
+fn filters_ambiguous_roles_and_rows_outside_the_confirmed_cycle_direction() {
+    let mut ambiguous = row(7003);
+    ambiguous["rx_sign"] = json!("N1RWJ");
+    let mut receive = row(7004);
+    receive["rx_sign"] = json!("N1RWJ");
+    receive["tx_sign"] = json!("K1ABC");
+    let mut configured = config();
+    configured.confirmed_cycles = Some(vec![WsprLiveConfirmedCycle {
+        starts_at: Utc.with_ymd_and_hms(2026, 7, 15, 20, 12, 0).unwrap(),
+        transmission_ends_at: Utc.with_ymd_and_hms(2026, 7, 15, 20, 13, 51).unwrap(),
+        band: Band::M20,
+        direction: Some(WsprCycleDirection::Receive),
+    }]);
+    let parsed = parse_wspr_live_json_with_limits(
+        &document(vec![ambiguous, row(7005), receive]),
+        &configured,
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.summary.accepted, 1);
+    assert_eq!(parsed.summary.filtered, 2);
+    assert_eq!(parsed.rows[0].reason, WsprLiveRowReason::AmbiguousCallsign);
+    assert_eq!(parsed.rows[1].reason, WsprLiveRowReason::DirectionFiltered);
+    assert_eq!(
+        parsed.rows[2].spot.as_ref().unwrap().direction,
+        WsprLiveSpotDirection::Receive
+    );
+
+    configured.confirmed_cycles = Some(Vec::new());
+    let no_confirmed_cycle = parse_wspr_live_json_with_limits(
+        &document(vec![row(7006)]),
+        &configured,
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+    assert_eq!(
+        no_confirmed_cycle.rows[0].reason,
+        WsprLiveRowReason::DirectionFiltered,
+        "schema-v4 parsing fails closed before any cycle is confirmed"
+    );
 }
 
 #[test]

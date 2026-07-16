@@ -563,16 +563,6 @@ fn build_review(
             "WSPR.live acquisition applies only to WSPR sessions, not controlled CW/RTTY plans",
         ));
     }
-    if signal_plan.is_none()
-        && draft.schedule.mode == ExperimentMode::RxFocused
-        && draft.wspr_live_acquisition_enabled
-    {
-        diagnostics.push(field_diagnostic(
-            "setup.wspr_live.receive_only_conflict",
-            "wsprLiveAcquisitionEnabled",
-            "WSPR.live reports transmitted spots; turn it off for a receive-only session",
-        ));
-    }
     if signal_plan.is_some() && rounds.is_some_and(|rounds| rounds % 2 != 0) {
         diagnostics.push(field_diagnostic(
             "setup.signal_plan.unbalanced_rounds",
@@ -1623,7 +1613,7 @@ mod tests {
     }
 
     #[test]
-    fn receive_only_setup_rejects_transmit_public_spot_collection() {
+    fn receive_only_setup_accepts_bidirectional_public_spot_collection() {
         let state = SetupSessionState::default();
         let mut draft = valid_draft();
         draft.schedule.mode = ExperimentMode::RxFocused;
@@ -1631,11 +1621,8 @@ mod tests {
 
         let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
 
-        assert!(!review.valid);
-        assert!(review
-            .diagnostics
-            .iter()
-            .any(|diagnostic| { diagnostic.code == "setup.wspr_live.receive_only_conflict" }));
+        assert!(review.valid);
+        assert!(review.diagnostics.is_empty());
     }
 
     #[test]

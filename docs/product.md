@@ -16,8 +16,11 @@ transmit, receive, or both. BOTH is the default. One repetition visits every
 configured antenna once in each selected direction, and setup shows the
 resulting number of two-minute WSPR periods plus the ideal minimum time. Four
 default BOTH repetitions with two antennas are 16 periods, or 32 ideal minutes.
-Setup also identifies automatic transmit-path public spots as coming from
-WSPR.live, with an offline opt-out available as a secondary choice. There are
+Setup also identifies automatic bidirectional public spots as coming from
+WSPR.live, with an offline opt-out available as a secondary choice. Operators
+using this default online path enable WSJT-X **Upload spots** and keep WSJT-X
+online; WSPRnet acceptance, mirror ingestion delay, and completeness remain
+outside AntennaBench's control. There are
 no setup-time timestamps or manual-switch deadlines. During the session, begin
 the physical antenna change and press the named antenna's ready button once the
 change is complete. AntennaBench does not ask when switching began or measure
@@ -31,11 +34,13 @@ step. Short contextual help is available beside selected unfamiliar concepts;
 required instructions, validation, safety, and recovery guidance remain visible
 without opening it.
 
-Local WSJT-X UDP reception is required when the plan includes receive periods
-and optional for transmit-only runs. Before each period, Active Run separately
+Local WSJT-X UDP reception is an optional direct/local source when WSPR.live is
+enabled, and is required before a receive-capable run only when WSPR.live is
+disabled. It remains useful offline and may run alongside the delayed/public
+source; their provenance and analysis strata stay separate. Before each period, Active Run separately
 identifies any antenna change and whether WSJT-X Enable Tx must be turned on or
-off. WSPR.live public spots are gathered automatically by default for plans
-that transmit, with source and completeness disclosed in the report. A network
+off. WSPR.live TX and RX spots are gathered automatically by default for WSPR
+plans, with source, ingestion lag, and unknown completeness disclosed. A network
 or adapter failure does not prevent exporting already recorded session evidence.
 
 When the run is over, AntennaBench builds a local report and can export:
