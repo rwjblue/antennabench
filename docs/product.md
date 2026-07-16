@@ -17,9 +17,10 @@ once and shows the resulting number of two-minute WSPR cycles plus the ideal
 minimum cycle time. It also identifies automatic public spots as coming from
 WSPR.live, with an offline opt-out available as a secondary choice. There are
 no setup-time timestamps or manual-switch deadlines. During the session, begin
-the antenna switch and confirm when the next antenna is ready. AntennaBench then
-selects the next eligible even-minute WSPR cycle and records the actual
-antenna-occupancy interval.
+the physical antenna change and press the named antenna's ready button once the
+change is complete. AntennaBench does not ask when switching began or measure
+its duration. The readiness action selects the next eligible even-minute WSPR
+cycle and closes the prior antenna-occupancy interval at that recorded time.
 
 Active Run leads with one current instruction and one primary action. Notes,
 cycle skipping, corrections, receiver configuration, public-spot status, and

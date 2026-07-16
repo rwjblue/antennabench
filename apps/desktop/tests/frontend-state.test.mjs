@@ -19,6 +19,7 @@ import {
   beginWsprLiveImport,
   conductorLoadSucceeded,
   conductorMutationFailed,
+  conductorActionAvailable,
   currentPosition,
   editSessionSetup,
   exportSessionCancelled,
@@ -204,12 +205,27 @@ test("active run leads with task actions and hides implementation-oriented tools
   const runPanel = html.match(/<section class="workflow-panel" data-panel="run"[\s\S]*?<section class="workflow-panel" data-panel="transfer"/u)?.[0] ?? "";
   assert.match(runPanel, /Start session/);
   assert.match(runPanel, /Antenna ready/);
+  assert.doesNotMatch(runPanel, /Begin antenna switch|begin_antenna_switch/);
   assert.match(runPanel, /Skip this cycle/);
   assert.match(runPanel, /Add note/);
   assert.match(runPanel, /Correct last action/);
   assert.match(runPanel, /<details[^>]*>\s*<summary>Optional WSJT-X receiver/u);
   assert.match(runPanel, /<details[^>]*data-corrections-panel/u);
   assert.doesNotMatch(runPanel, /Explicit operator evidence|Trusted boundary|Trusted time/);
+});
+
+test("readiness is the only normal antenna-change action", () => {
+  const between = {
+    lifecycle: "running",
+    phase: "between_slots",
+    nextIntent: { intentId: "intent-1", antennaLabel: "Dipole" },
+  };
+  assert.equal(conductorActionAvailable(between, "arm_wspr_cycle"), true);
+  assert.equal(conductorActionAvailable({ ...between, phase: "switching" }, "arm_wspr_cycle"), true);
+  assert.equal(conductorActionAvailable({ ...between, phase: "active" }, "arm_wspr_cycle"), false);
+  assert.equal(conductorActionAvailable({ ...between, phase: "awaiting_slot" }, "arm_wspr_cycle"), false);
+  assert.equal(conductorActionAvailable({ ...between, lifecycle: "interrupted" }, "arm_wspr_cycle"), false);
+  assert.equal(conductorActionAvailable({ ...between, nextIntent: null }, "arm_wspr_cycle"), false);
 });
 
 test("saved station details fill only an untouched setup form", () => {

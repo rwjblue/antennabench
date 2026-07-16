@@ -101,9 +101,11 @@ unchanged.
 For operator-paced WSPR, a cycle is attributable only when one recorded antenna
 occupancy covers the complete half-open transmission interval. The nominal
 cycle starts one second into an even UTC minute and its 162 symbols occupy
-110.592 seconds. A boundary switch at the exact transmission end is valid; an
-earlier switch leaves the cycle's antenna unknown. Public and local spots use
-only these fully covered actual cycles.
+110.592 seconds. Routine schema-v3 operation closes the prior occupancy when
+the next antenna readiness event is recorded. Historical switch-start events
+remain readable: a recorded switch at the exact transmission end is valid,
+while an earlier one leaves the cycle's antenna unknown. Public and local spots
+use only these fully covered actual cycles.
 
 Schema-v1 alignment retains its historical planned-label behavior. Schema-v2
 alignment requires explicit actual state:

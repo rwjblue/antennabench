@@ -21,8 +21,8 @@ The intended workflow is:
 2. Define one or more antennas with freeform labels and optional installation
    details.
 3. Define the intended WSPR cycle order across bands and antenna labels.
-4. Record actual switch starts, antenna readiness, armed protocol cycles,
-   interruptions, notes, and session end.
+4. Record antenna readiness, armed WSPR cycles, interruptions, notes, and
+   session end.
 5. Ingest local and external observations.
 6. Align observations only to fully occupied actual cycles, preserving
    confidence and uncertainty.
@@ -30,11 +30,11 @@ The intended workflow is:
 8. Generate reports from the bundle.
 
 The shipped manual conductor keeps intended and actual state distinct. A cycle
-intention names the planned antenna without a timestamp. The operator records
-when a manual switch starts and when the next antenna is ready; AntennaBench
-then arms the next eligible WSPR boundary. Missed/bad marks and later
-corrections append to the evidence history instead of rewriting it. Draft,
-ready, running,
+intention names the planned antenna without a timestamp. The operator switches
+to the named antenna and records readiness once the physical change is
+complete; AntennaBench then arms the next eligible WSPR cycle. Missed/bad marks
+and later corrections append to the evidence history instead of rewriting it.
+Draft, ready, running,
 interrupted/resumed, ended, and abandoned lifecycle states remain durable and
 auditable under
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md).
@@ -184,19 +184,28 @@ and the WSJT-X execution path use the same v3 envelope without requiring a
 controlled signal plan.
 
 The active-run surface reads one verified checkpoint revision and derives its
-phase/countdown from a Rust-owned clock plus durable readiness actions. A
-Rust-issued action token binds the first submission time and idempotent mutation identity;
+phase/countdown from a Rust-owned clock plus durable readiness actions. Routine
+operation tells the operator to switch to the named antenna and press that
+antenna's ready button once afterward; it neither requests nor persists a
+switch-start time. Each readiness action closes the prior occupancy at the
+recorded ready time and opens the newly confirmed antenna occupancy. Historical
+schema-v3 switch-start events remain readable and retain their conservative
+occupancy effect. A Rust-issued action token binds the first submission time and
+idempotent mutation identity;
 retrying a lost response cannot duplicate evidence, while a stale revision
 fails without overwrite. Opening a session left running records one durable
 recovery-system interruption before resume/end actions are offered. Ended and
 abandoned sessions are terminal, and schema-v1 sources remain read-only.
 
-The routine presentation shows one prominent next action. Skipping an unarmed
-cycle is a durable, correctable missed-cycle fact that advances the intended
-order. Notes and corrections are task-level shortcuts; checkpoint details,
-receiver configuration, diagnostics, and action history use progressive
-disclosure. Every mutation shows a pending state followed by explicit success
-or typed failure.
+The routine presentation shows one prominent next action: switch to the named
+antenna, then press that antenna's ready button after the physical change is
+complete. While a WSPR transmission is active, the prompt instead keeps the
+current antenna connected until completion and offers no early-switch timing
+action. Skipping an unarmed cycle is a durable, correctable missed-cycle fact
+that advances the intended order. Notes and corrections are task-level
+shortcuts; checkpoint details, receiver configuration, diagnostics, and action
+history use progressive disclosure. Every mutation shows a pending state
+followed by explicit success or typed failure.
 
 The active-run surface can start or stop one optional WSJT-X receiver while the
 session is running. Rust owns the socket, expected-client filter, bounded

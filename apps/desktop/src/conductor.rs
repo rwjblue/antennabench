@@ -208,9 +208,6 @@ enum ConductorAction {
     Abandon {
         reason: Option<String>,
     },
-    BeginAntennaSwitch {
-        note: Option<String>,
-    },
     ArmWsprCycle {
         intent_id: String,
         antenna_label: String,
@@ -470,9 +467,7 @@ fn action_payload(
                 reason: optional_text(reason),
             },
         ),
-        ConductorAction::BeginAntennaSwitch { .. }
-        | ConductorAction::ArmWsprCycle { .. }
-        | ConductorAction::SkipWsprCycle { .. } => {
+        ConductorAction::ArmWsprCycle { .. } | ConductorAction::SkipWsprCycle { .. } => {
             return Err(SessionErrorPayload::new(
                 SessionErrorKind::Validation,
                 "Operator-paced WSPR actions require a current session.",
@@ -671,12 +666,6 @@ fn action_payload_v3(
             None,
             OperatorEventPayloadV3::SessionAbandoned {
                 reason: optional_text(reason),
-            },
-        ),
-        ConductorAction::BeginAntennaSwitch { note } => (
-            None,
-            OperatorEventPayloadV3::AntennaSwitchStarted {
-                note: optional_text(note),
             },
         ),
         ConductorAction::ArmWsprCycle {
@@ -1507,8 +1496,7 @@ fn timing_projection_v3(
         SessionLifecycleV2::Ready | SessionLifecycleV2::Draft => {
             return (
                 ConductorPhase::Ready,
-                "Start when you are ready. Cycle timing will be chosen from actual operator actions."
-                    .into(),
+                "Start when you are ready.".into(),
                 None,
                 None,
                 None,
@@ -1553,7 +1541,12 @@ fn timing_projection_v3(
             ConductorPhase::Active,
             format!(
                 "WSPR cycle {} is transmitting on {}. Keep {} connected until the transmission completes.",
-                slots[index].sequence_number, slots[index].band, slots[index].planned_antenna
+                slots[index].sequence_number,
+                slots[index].band,
+                slots[index]
+                    .actual_antenna
+                    .as_deref()
+                    .unwrap_or(&slots[index].planned_antenna)
             ),
             Some((slots[index].ends_at - now).num_seconds().max(0)),
             Some(index),
@@ -1565,7 +1558,7 @@ fn timing_projection_v3(
         return (
             ConductorPhase::AwaitingSlot,
             format!(
-                "{} is ready. WSPR cycle {} starts at the next protocol boundary.",
+                "{} is ready. WSPR cycle {} starts at the next even-minute WSPR time.",
                 slots[index]
                     .actual_antenna
                     .as_deref()
@@ -1591,21 +1584,10 @@ fn timing_projection_v3(
             } else {
                 ConductorPhase::BetweenSlots
             },
-            if switching {
-                format!(
-                    "Switch to {} for cycle {}. Confirm ready only after the switch is complete.",
-                    intent.antenna_label, intent.sequence_number
-                )
-            } else {
-                format!(
-                    "Next is {} on {}. Begin the switch; there is no hidden deadline.",
-                    intent.antenna_label,
-                    serde_json::to_value(intent.band)
-                        .ok()
-                        .and_then(|value| value.as_str().map(str::to_string))
-                        .unwrap_or_else(|| format!("{:?}", intent.band))
-                )
-            },
+            format!(
+                "Switch to {}, then click {} ready.",
+                intent.antenna_label, intent.antenna_label
+            ),
             None,
             completed_index,
             None,
@@ -1937,7 +1919,7 @@ mod tests {
 
     use antennabench_core::{
         reduce_operator_events_v3, AdapterInput, Band, CorrectableOperatorEventPayloadV3,
-        PlannedSlot, SessionLifecycleV2, SignalModeV3, V2_BUNDLE_SUFFIX,
+        OperatorEventPayloadV3, PlannedSlot, SessionLifecycleV2, SignalModeV3, V2_BUNDLE_SUFFIX,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -1947,7 +1929,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        mutate_conductor_with_hooks, read_conductor_with_hooks, ConductorAction,
+        build_view_v3, mutate_conductor_with_hooks, read_conductor_with_hooks, ConductorAction,
         ConductorMutationRequest, ConductorPhase, ConductorSessionState, CorrectableAction,
         SignalEvidenceStatus, SlotEvidenceStatus,
     };
@@ -2086,6 +2068,7 @@ mod tests {
 
         let ready = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
         assert!(ready.slots.is_empty());
+        assert_eq!(ready.guidance, "Start when you are ready.");
         assert_eq!(
             ready.next_intent.as_ref().unwrap().intent_id,
             created.slot_ids[0]
@@ -2097,24 +2080,16 @@ mod tests {
             hooks.clone(),
         )
         .unwrap();
-        let switching = mutate_conductor_with_hooks(
-            &active,
-            &conductor,
-            request(
-                &started,
-                ConductorAction::BeginAntennaSwitch {
-                    note: Some("operator reached for the switch".into()),
-                },
-            ),
-            hooks.clone(),
-        )
-        .unwrap();
-        assert_eq!(switching.phase, ConductorPhase::Switching);
+        assert_eq!(started.phase, ConductorPhase::BetweenSlots);
+        assert_eq!(
+            started.guidance,
+            "Switch to Vertical, then click Vertical ready."
+        );
         let armed = mutate_conductor_with_hooks(
             &active,
             &conductor,
             request(
-                &switching,
+                &started,
                 ConductorAction::ArmWsprCycle {
                     intent_id: created.slot_ids[0].clone(),
                     antenna_label: created.antenna_labels[0].clone(),
@@ -2123,6 +2098,9 @@ mod tests {
             hooks.clone(),
         )
         .unwrap();
+        assert_eq!(armed.phase, ConductorPhase::AwaitingSlot);
+        assert!(armed.guidance.contains("next even-minute WSPR time"));
+        assert!(!armed.guidance.contains("protocol boundary"));
         assert_eq!(armed.slots[0].signal_status, SignalEvidenceStatus::Missing);
         assert_eq!(
             armed.slots[0].planned_signal.as_ref().unwrap().mode,
@@ -2147,7 +2125,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(confirmed.revision, 4);
+        assert_eq!(confirmed.revision, 3);
         assert_eq!(
             confirmed.slots[0].signal_status,
             SignalEvidenceStatus::Confirmed
@@ -2161,8 +2139,68 @@ mod tests {
             Some(14_050_000)
         );
         let persisted = store.read_v3_checkpointed().unwrap();
-        assert_eq!(persisted.events.len(), 4);
-        assert_eq!(persisted.session_state.revision, 4);
+        assert_eq!(persisted.events.len(), 3);
+        assert_eq!(persisted.session_state.revision, 3);
+    }
+
+    #[test]
+    fn historical_switch_start_events_remain_readable_and_conservative() {
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let created = create_e2e_session(temp.path(), &active);
+        let store = BundleStore::new(&created.path);
+        let hooks = Arc::new(TestHooks::new(
+            Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 20).unwrap(),
+        ));
+        let conductor = ConductorSessionState::default();
+
+        let ready = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+        let started = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(&ready, ConductorAction::Start { note: None }),
+            hooks.clone(),
+        )
+        .unwrap();
+        let armed = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &started,
+                ConductorAction::ArmWsprCycle {
+                    intent_id: created.slot_ids[0].clone(),
+                    antenna_label: created.antenna_labels[0].clone(),
+                },
+            ),
+            hooks,
+        )
+        .unwrap();
+
+        let mut bundle = store.read_v3_checkpointed().unwrap();
+        let mut historical = bundle.events.last().unwrap().clone();
+        historical.event_id = "historical-switch-start".into();
+        historical.meta.mutation.mutation_id = "historical-switch-mutation".into();
+        historical.occurred_at = armed.slots[0].ends_at;
+        historical.slot_id = None;
+        historical.payload = OperatorEventPayloadV3::AntennaSwitchStarted {
+            note: Some("Imported from an earlier AntennaBench run.".into()),
+        };
+        bundle.events.push(historical);
+
+        let view = build_view_v3(
+            "historical.session.wsprabundle".into(),
+            &bundle,
+            armed.slots[0].ends_at + chrono::Duration::seconds(1),
+            "read-only-action-token".into(),
+            None,
+        );
+        assert_eq!(view.phase, ConductorPhase::Switching);
+        assert_eq!(view.antenna_in_use, None);
+        assert!(view.diagnostics.is_empty());
+        assert!(view.effective_events.iter().any(|event| {
+            event.kind == "antenna_switch_started"
+                && event.summary == "Imported from an earlier AntennaBench run."
+        }));
     }
 
     #[test]
@@ -2567,23 +2605,11 @@ mod tests {
         assert_eq!(retried.revision, 1);
         assert_eq!(store.read_v3_checkpointed().unwrap().events.len(), 1);
 
-        let switching = mutate_conductor_with_hooks(
-            &active,
-            &conductor,
-            request(
-                &retried,
-                ConductorAction::BeginAntennaSwitch {
-                    note: Some("operator began the first manual switch".into()),
-                },
-            ),
-            hooks.clone(),
-        )
-        .unwrap();
         let armed = mutate_conductor_with_hooks(
             &active,
             &conductor,
             request(
-                &switching,
+                &retried,
                 ConductorAction::ArmWsprCycle {
                     intent_id: created.slot_ids[0].clone(),
                     antenna_label: created.antenna_labels[0].clone(),

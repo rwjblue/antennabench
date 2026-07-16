@@ -29,13 +29,18 @@ Current WSJT-X documentation continues to describe WSPR as a two-minute
 sequence mode in the [WSJT-X user
 guide](https://wsjt.sourceforge.io/wsjtx-main_en.html#WSPR).
 
-Each readiness action starts a half-open antenna-occupancy interval. The next
-switch, interruption, recovery interruption, end, or abandon action closes it.
-A spot may be assigned to a cycle only when one interval covers the complete
-110.592-second transmission window. A switch exactly at the transmission end
-is safe; a switch before it makes attribution unknown. Reports retain every
-intention and show actual readiness, timing, antenna use, and attribution
-separately.
+Each readiness action starts a half-open antenna-occupancy interval and closes
+the prior interval at the recorded ready time. New routine operation does not
+record a separate switch-start time or switch duration. Interruption, recovery
+interruption, end, or abandon also closes the current occupancy.
+
+Historical schema-v3 `AntennaSwitchStarted` events remain readable and keep
+their original conservative effect of closing occupancy at their recorded
+time. A spot may be assigned to a cycle only when one interval covers the
+complete 110.592-second transmission window. A historical switch exactly at
+the transmission end is safe; an earlier historical switch makes attribution
+unknown. Reports retain every intention and show actual readiness, timing,
+antenna use, and attribution separately.
 
 These semantics are schema v3. The storage dispatcher remains version-aware so
 future schema versions can coexist with older readers and migrations, but new
@@ -46,12 +51,13 @@ semantics.
 
 - Setup asks for experiment order and repetition, not a clock prediction.
 - Start is immediate and visible; it does not claim that a transmission began.
+- Routine antenna changes persist one readiness action, not a switch-start time
+  or measured switch duration.
 - Manual switching can take arbitrarily long without silently missing a
   predefined slot.
-- Early switching is preserved as evidence and excludes only the affected
-  cycle from antenna attribution.
+- Historical switch-start evidence remains compatible and excludes only an
+  affected early-switched cycle from antenna attribution.
 - WSJT-X and WSPR.live use actual, fully occupied cycles rather than planned
   labels or setup timestamps.
 - Public-spot finalization waits for the final intended cycle, not merely the
   most recently observed cycle.
-

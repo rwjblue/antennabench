@@ -127,6 +127,21 @@ export function wsprRunPlanSummary(roundsValue, antennaCount) {
   };
 }
 
+export function conductorActionAvailable(view, action) {
+  if (action === "arm_wspr_cycle") {
+    return view.lifecycle === "running"
+      && view.nextIntent !== null
+      && ["between_slots", "switching"].includes(view.phase);
+  }
+  if (action === "skip_wspr_cycle") {
+    return view.lifecycle === "running"
+      && view.nextIntent !== null
+      && ["between_slots", "switching"].includes(view.phase);
+  }
+  return lifecycleActionAvailability(view.lifecycle).has(action)
+    && !(view.phase === "finalizing" && action === "end");
+}
+
 export function viewModel(state) {
   return WORKFLOWS.map((workflow) => ({
     workflow,
@@ -877,24 +892,15 @@ function mount(root, browserWindow) {
         view.antennas.map((antenna) => ({ value: antenna, label: antenna })),
       );
 
-      const allowed = lifecycleActionAvailability(view.lifecycle);
       const evidenceAllowed = ["running", "interrupted"].includes(view.lifecycle);
       evidenceForm.querySelector("button[type=submit]").disabled = conductorBusy || !evidenceAllowed;
       lifecycleButtons.forEach((button) => {
         const action = button.dataset.conductorAction;
-        const isSwitchAction = action === "begin_antenna_switch";
         const isArmAction = action === "arm_wspr_cycle";
-        const isSkipAction = action === "skip_wspr_cycle";
         if (isArmAction && view.nextIntent) {
           button.textContent = `${view.nextIntent.antennaLabel} ready`;
         }
-        const available = isSwitchAction
-          ? view.lifecycle === "running" && view.nextIntent !== null && view.phase !== "switching"
-          : isArmAction
-            ? view.lifecycle === "running" && view.nextIntent !== null && view.phase === "switching"
-            : isSkipAction
-              ? view.lifecycle === "running" && view.nextIntent !== null && ["between_slots", "switching"].includes(view.phase)
-              : allowed.has(action) && !(view.phase === "finalizing" && action === "end");
+        const available = conductorActionAvailable(view, action);
         button.hidden = !available;
         button.disabled = conductorBusy
           || !available;
@@ -1197,12 +1203,6 @@ function mount(root, browserWindow) {
   lifecycleButtons.forEach((button) => {
     button.addEventListener("click", async () => {
       const kind = button.dataset.conductorAction;
-      if (kind === "begin_antenna_switch") {
-        if (state.conductor?.phase === "active"
-          && !browserWindow.confirm("The WSPR transmission is still active. Beginning the switch now will mark this cycle as having unknown antenna occupancy. Continue?")) return;
-        await submitConductorAction({ kind, note: null });
-        return;
-      }
       if (kind === "arm_wspr_cycle") {
         const intent = state.conductor?.nextIntent;
         if (!intent) return;
@@ -1624,7 +1624,6 @@ function conductorActionLabel(action) {
   switch (action) {
     case "start": return "Starting the session";
     case "resume": return "Resuming the session";
-    case "begin_antenna_switch": return "Recording the antenna switch";
     case "arm_wspr_cycle": return "Scheduling the next WSPR cycle";
     case "skip_wspr_cycle": return "Skipping this cycle";
     case "interrupt": return "Pausing the session";
@@ -1641,7 +1640,6 @@ function conductorActionCompletedLabel(action) {
   switch (action) {
     case "start": return "Session started.";
     case "resume": return "Session resumed.";
-    case "begin_antenna_switch": return "Antenna switch started.";
     case "arm_wspr_cycle": return "Next WSPR cycle scheduled.";
     case "skip_wspr_cycle": return "Cycle skipped.";
     case "interrupt": return "Session paused.";
