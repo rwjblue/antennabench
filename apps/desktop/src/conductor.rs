@@ -12,7 +12,7 @@ use antennabench_core::{
     OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2, OperatorEventV3, Provenance,
     RecordMetaV2, RecordMetaV3, RecordSource, ReplacementOperatorEventV2,
     ReplacementOperatorEventV3, SessionLifecycleV2, SignalModeV3, SignalStateConfirmationV3,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+    WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -60,6 +60,7 @@ pub(crate) struct ConductorView {
     action_token: String,
     phase: ConductorPhase,
     guidance: String,
+    wsjtx_required: bool,
     seconds_to_transition: Option<i64>,
     antennas: Vec<String>,
     current_slot: Option<ConductorSlotView>,
@@ -95,6 +96,7 @@ struct ConductorIntentView {
     sequence_number: u32,
     band: String,
     antenna_label: String,
+    direction: Option<WsprCycleDirection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -107,6 +109,7 @@ struct ConductorSlotView {
     ends_at: DateTime<Utc>,
     band: String,
     planned_antenna: String,
+    direction: Option<WsprCycleDirection>,
     actual_antenna: Option<String>,
     evidence_status: SlotEvidenceStatus,
     planned_signal: Option<ConductorPlannedSignalView>,
@@ -782,6 +785,7 @@ fn action_payload_v3(
 
 fn event_for_action_v3(
     session_id: &str,
+    schema_version: u16,
     pending: &PendingAction,
     action: ConductorAction,
 ) -> Result<OperatorEventV3, SessionErrorPayload> {
@@ -791,7 +795,7 @@ fn event_for_action_v3(
     let (slot_id, payload) = action_payload_v3(action, occurred_at)?;
     Ok(OperatorEventV3 {
         meta: RecordMetaV3 {
-            schema_version: SCHEMA_VERSION_V3,
+            schema_version,
             session_id: session_id.to_string(),
             recorded_at: occurred_at,
             provenance: Provenance::from_legacy(RecordSource::Operator, env!("CARGO_PKG_VERSION")),
@@ -891,6 +895,7 @@ fn build_view(
                     .and_then(|value| value.as_str().map(str::to_string))
                     .unwrap_or_else(|| format!("{:?}", slot.band)),
                 planned_antenna: slot.antenna_label.clone(),
+                direction: None,
                 actual_antenna,
                 evidence_status,
                 planned_signal: None,
@@ -915,6 +920,7 @@ fn build_view(
         action_token,
         phase,
         guidance,
+        wsjtx_required: false,
         seconds_to_transition,
         antennas: bundle
             .antennas
@@ -931,6 +937,17 @@ fn build_view(
         diagnostics,
         recovery,
     }
+}
+
+fn requires_wsjtx_receiver(bundle: &BundleV3Contents) -> bool {
+    bundle.manifest.schema_version >= SCHEMA_VERSION_V4
+        && bundle.schedule.signal_plans.is_empty()
+        && matches!(
+            bundle.schedule.mode,
+            antennabench_core::ExperimentMode::WholeStationAb
+                | antennabench_core::ExperimentMode::RxFocused
+                | antennabench_core::ExperimentMode::SingleAntennaProfiling
+        )
 }
 
 fn build_view_v3(
@@ -1133,6 +1150,7 @@ fn build_view_v3(
                     .unwrap_or_else(|| format!("{:?}", slot.band)),
                 planned_antenna: intent
                     .map_or_else(|| slot.antenna_label.clone(), |intent| intent.antenna_label.clone()),
+                direction: intent.and_then(|intent| intent.direction),
                 actual_antenna,
                 evidence_status,
                 planned_signal,
@@ -1192,6 +1210,7 @@ fn build_view_v3(
         action_token,
         phase,
         guidance,
+        wsjtx_required: requires_wsjtx_receiver(bundle),
         seconds_to_transition,
         antennas: bundle
             .antennas
@@ -1209,6 +1228,7 @@ fn build_view_v3(
                 .and_then(|value| value.as_str().map(str::to_string))
                 .unwrap_or_else(|| format!("{:?}", intent.band)),
             antenna_label: intent.antenna_label.clone(),
+            direction: intent.direction,
         }),
         antenna_in_use,
         slots,
@@ -1537,10 +1557,16 @@ fn timing_projection_v3(
         .iter()
         .position(|slot| now >= slot.starts_at && now < slot.ends_at)
     {
+        let direction = slots[index].direction;
+        let operation = match direction {
+            Some(WsprCycleDirection::Receive) => "receiving",
+            Some(WsprCycleDirection::Transmit) => "transmitting",
+            None => "active",
+        };
         return (
             ConductorPhase::Active,
             format!(
-                "WSPR cycle {} is transmitting on {}. Keep {} connected until the transmission completes.",
+                "WSPR cycle {} is {operation} on {}. Keep {} connected until the WSPR period completes.",
                 slots[index].sequence_number,
                 slots[index].band,
                 slots[index]
@@ -1555,10 +1581,15 @@ fn timing_projection_v3(
     }
 
     if let Some(index) = slots.iter().position(|slot| slot.starts_at > now) {
+        let operation = match slots[index].direction {
+            Some(WsprCycleDirection::Receive) => "receive",
+            Some(WsprCycleDirection::Transmit) => "transmit",
+            None => "WSPR",
+        };
         return (
             ConductorPhase::AwaitingSlot,
             format!(
-                "{} is ready. WSPR cycle {} starts at the next even-minute WSPR time.",
+                "{} is ready to {operation}. WSPR cycle {} starts at the next even-minute WSPR time.",
                 slots[index]
                     .actual_antenna
                     .as_deref()
@@ -1578,15 +1609,43 @@ fn timing_projection_v3(
         .max_by_key(|(_, slot)| slot.ends_at)
         .map(|(index, _)| index);
     if let Some(intent) = next_intent {
+        let prior_slot = completed_index.and_then(|index| slots.get(index));
+        let prior_antenna = prior_slot.and_then(|slot| {
+            slot.actual_antenna
+                .as_deref()
+                .or(Some(&slot.planned_antenna))
+        });
+        let antenna_instruction = if prior_antenna == Some(intent.antenna_label.as_str()) {
+            format!("Keep {} connected", intent.antenna_label)
+        } else {
+            format!("Switch to {}", intent.antenna_label)
+        };
+        let direction_changed = prior_slot.map(|slot| slot.direction) != Some(intent.direction);
+        let (wsjtx_instruction, ready_label) = match intent.direction {
+            Some(WsprCycleDirection::Receive) => (
+                direction_changed.then_some("In WSJT-X, turn Enable Tx off and keep Monitor on"),
+                format!("Receive on {}", intent.antenna_label),
+            ),
+            Some(WsprCycleDirection::Transmit) => (
+                direction_changed.then_some("In WSJT-X, set Tx Pct to 100% and turn Enable Tx on"),
+                format!("Transmit on {}", intent.antenna_label),
+            ),
+            None => (
+                Some("Prepare WSJT-X for the next WSPR period"),
+                intent.antenna_label.clone(),
+            ),
+        };
         return (
             if switching {
                 ConductorPhase::Switching
             } else {
                 ConductorPhase::BetweenSlots
             },
-            format!(
-                "Switch to {}, then click {} ready.",
-                intent.antenna_label, intent.antenna_label
+            wsjtx_instruction.map_or_else(
+                || format!("{antenna_instruction}, then click {ready_label} ready."),
+                |instruction| {
+                    format!("{instruction}. {antenna_instruction}, then click {ready_label} ready.")
+                },
             ),
             None,
             completed_index,
@@ -1662,7 +1721,7 @@ fn read_conductor_with_hooks(
         let recovery = if !initialized {
             let report = match schema_version {
                 SCHEMA_VERSION_V2 => store.recover_v2_with_hooks(hooks.clone()),
-                SCHEMA_VERSION_V3 => store.recover_v3_with_hooks(hooks.clone()),
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => store.recover_v3_with_hooks(hooks.clone()),
                 actual => {
                     return Err(SessionErrorPayload::new(
                         SessionErrorKind::Unsupported,
@@ -1696,7 +1755,7 @@ fn read_conductor_with_hooks(
                 )?;
                 build_view(bundle_name, &bundle, now, action_token, recovery)
             }
-            SCHEMA_VERSION_V3 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
                 let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
                 register_view_action(
                     conductor_state,
@@ -1734,7 +1793,7 @@ fn mutate_conductor_with_hooks(
             SCHEMA_VERSION_V2 => {
                 mutate_conductor_v2(&store, bundle_name, conductor_state, request, hooks)
             }
-            SCHEMA_VERSION_V3 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
                 mutate_conductor_v3(&store, bundle_name, conductor_state, request, hooks)
             }
             actual => Err(SessionErrorPayload::new(
@@ -1839,7 +1898,12 @@ fn mutate_conductor_v3(
             "the action token does not match this session revision",
         ));
     }
-    let event = event_for_action_v3(&snapshot.manifest.session_id, &pending, request.action)?;
+    let event = event_for_action_v3(
+        &snapshot.manifest.session_id,
+        snapshot.manifest.schema_version,
+        &pending,
+        request.action,
+    )?;
     let mutation = LiveEventMutationV3 {
         expected_revision: request.expected_revision,
         mutation_id: pending.token.clone(),
@@ -1893,6 +1957,23 @@ pub(crate) fn mutate_active_session_conductor(
     conductor_state: State<'_, ConductorSessionState>,
     wsjtx_state: State<'_, WsjtxSessionState>,
 ) -> Result<ConductorView, SessionErrorPayload> {
+    if matches!(&request.action, ConductorAction::Start { .. }) {
+        let (source, _) = active_session_source(active_state.inner())?;
+        let store = BundleStore::new(&source);
+        let schema_version = store.schema_version().map_err(storage_error_payload)?;
+        if schema_version >= SCHEMA_VERSION_V4 {
+            let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
+            if requires_wsjtx_receiver(&bundle)
+                && !wsjtx_state.is_running_for_source(&source, Utc::now())
+            {
+                return Err(SessionErrorPayload::new(
+                    SessionErrorKind::Conflict,
+                    "Start the required WSJT-X UDP receiver before starting this session.",
+                    "receive-capable schema-v4 WSPR sessions require active local WSJT-X intake",
+                ));
+            }
+        }
+    }
     let view = mutate_conductor_with_hooks(
         active_state.inner(),
         conductor_state.inner(),
@@ -1929,9 +2010,9 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        build_view_v3, mutate_conductor_with_hooks, read_conductor_with_hooks, ConductorAction,
-        ConductorMutationRequest, ConductorPhase, ConductorSessionState, CorrectableAction,
-        SignalEvidenceStatus, SlotEvidenceStatus,
+        build_view_v3, mutate_conductor_with_hooks, read_conductor_with_hooks,
+        requires_wsjtx_receiver, ConductorAction, ConductorMutationRequest, ConductorPhase,
+        ConductorSessionState, CorrectableAction, SignalEvidenceStatus, SlotEvidenceStatus,
     };
     use crate::{
         open_session::{
@@ -1965,6 +2046,21 @@ mod tests {
         fn fail_once_at(&self, point: LivePersistencePoint) {
             *self.fail_once.lock().unwrap() = Some(point);
         }
+    }
+
+    #[test]
+    fn schema_v4_receive_capable_wspr_sessions_require_wsjtx() {
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let wspr = create_e2e_session(temp.path(), &active);
+        let wspr_bundle = BundleStore::new(wspr.path).read_v3_checkpointed().unwrap();
+        assert!(requires_wsjtx_receiver(&wspr_bundle));
+
+        let signal = create_e2e_signal_session(temp.path(), &active);
+        let signal_bundle = BundleStore::new(signal.path)
+            .read_v3_checkpointed()
+            .unwrap();
+        assert!(!requires_wsjtx_receiver(&signal_bundle));
     }
 
     impl LivePersistenceHooks for TestHooks {
@@ -2083,7 +2179,7 @@ mod tests {
         assert_eq!(started.phase, ConductorPhase::BetweenSlots);
         assert_eq!(
             started.guidance,
-            "Switch to Vertical, then click Vertical ready."
+            "In WSJT-X, set Tx Pct to 100% and turn Enable Tx on. Switch to Vertical, then click Transmit on Vertical ready."
         );
         let armed = mutate_conductor_with_hooks(
             &active,
@@ -2141,6 +2237,11 @@ mod tests {
         let persisted = store.read_v3_checkpointed().unwrap();
         assert_eq!(persisted.events.len(), 3);
         assert_eq!(persisted.session_state.revision, 3);
+
+        hooks.set_now(Utc.with_ymd_and_hms(2026, 7, 15, 20, 4, 0).unwrap());
+        let next_transmit = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+        assert!(!next_transmit.guidance.contains("Enable Tx"));
+        assert!(next_transmit.guidance.contains("Transmit on"));
     }
 
     #[test]
@@ -2577,7 +2678,7 @@ mod tests {
         };
         let active = ActiveSessionState::default();
         let created = create_e2e_session(temp.path(), &active);
-        assert_eq!(created.slot_ids.len(), 4);
+        assert_eq!(created.slot_ids.len(), 8);
         assert_eq!(created.antenna_labels, ["Vertical", "Dipole"]);
         let store = BundleStore::new(&created.path);
         let initial = store.read_v3_checkpointed().unwrap();

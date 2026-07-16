@@ -12,8 +12,8 @@ use antennabench_core::{
     BundleV3Contents, BundleValidationProfile, CounterbalanceBlockIdV3, ExperimentMode,
     PlanGenerationV2, PlannedSlot, Schedule, SessionGoal, SessionLifecycleV2, SessionStateV2,
     SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3,
-    SignalPlanV3, SignalVariantIdV3, Station, WsprCycleIntentV3, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+    SignalPlanV3, SignalVariantIdV3, Station, WsprCycleDirection, WsprCycleIntentV3,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
     BundleStore, BundleStoreError, LivePersistenceError, LivePersistenceHooks,
@@ -207,7 +207,66 @@ struct SetupSlotReview {
     sequence_number: u32,
     band: Band,
     antenna_label: String,
+    direction: Option<WsprCycleDirection>,
     signal: Option<SetupSlotSignalReview>,
+}
+
+fn planned_wspr_cycles(
+    antenna_labels: &[&String],
+    mode: ExperimentMode,
+    repetitions: u32,
+) -> Vec<(String, WsprCycleDirection)> {
+    let forward = antenna_labels
+        .iter()
+        .map(|label| (*label).clone())
+        .collect::<Vec<_>>();
+    let reverse = forward.iter().rev().cloned().collect::<Vec<_>>();
+    let mut cycles = Vec::new();
+    for repetition in 0..repetitions {
+        let (first, second) = if repetition.is_multiple_of(2) {
+            (&forward, &reverse)
+        } else {
+            (&reverse, &forward)
+        };
+        match mode {
+            ExperimentMode::WholeStationAb | ExperimentMode::SingleAntennaProfiling => {
+                cycles.extend(
+                    first
+                        .iter()
+                        .cloned()
+                        .map(|label| (label, WsprCycleDirection::Receive)),
+                );
+                cycles.extend(
+                    second
+                        .iter()
+                        .cloned()
+                        .map(|label| (label, WsprCycleDirection::Transmit)),
+                );
+            }
+            ExperimentMode::TxFocused => cycles.extend(
+                first
+                    .iter()
+                    .cloned()
+                    .map(|label| (label, WsprCycleDirection::Transmit)),
+            ),
+            ExperimentMode::RxFocused => cycles.extend(
+                first
+                    .iter()
+                    .cloned()
+                    .map(|label| (label, WsprCycleDirection::Receive)),
+            ),
+        }
+    }
+    cycles
+}
+
+fn use_latest_schema(bundle: &mut BundleV3Contents) {
+    bundle.manifest.schema_version = SCHEMA_VERSION_V4;
+    bundle.session_state.schema_version = SCHEMA_VERSION_V4;
+    bundle.station.schema_version = SCHEMA_VERSION_V4;
+    bundle.antennas.schema_version = SCHEMA_VERSION_V4;
+    bundle.schedule.schema_version = SCHEMA_VERSION_V4;
+    bundle.analysis.schema_version = SCHEMA_VERSION_V4;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -504,6 +563,16 @@ fn build_review(
             "WSPR.live acquisition applies only to WSPR sessions, not controlled CW/RTTY plans",
         ));
     }
+    if signal_plan.is_none()
+        && draft.schedule.mode == ExperimentMode::RxFocused
+        && draft.wspr_live_acquisition_enabled
+    {
+        diagnostics.push(field_diagnostic(
+            "setup.wspr_live.receive_only_conflict",
+            "wsprLiveAcquisitionEnabled",
+            "WSPR.live reports transmitted spots; turn it off for a receive-only session",
+        ));
+    }
     if signal_plan.is_some() && rounds.is_some_and(|rounds| rounds % 2 != 0) {
         diagnostics.push(field_diagnostic(
             "setup.signal_plan.unbalanced_rounds",
@@ -523,16 +592,17 @@ fn build_review(
             .map(|antenna| &antenna.label)
             .collect::<Vec<_>>()
     };
-    let slot_count = rounds
-        .and_then(|rounds| usize::try_from(rounds).ok())
-        .and_then(|rounds| rounds.checked_mul(scheduled_labels.len()))
-        .and_then(|count| {
-            count.checked_mul(
-                signal_plan
-                    .as_ref()
-                    .map_or(1, |plan| plan.frequencies_hz.len()),
-            )
-        });
+    let wspr_cycles = rounds
+        .map(|rounds| planned_wspr_cycles(&scheduled_labels, draft.schedule.mode, rounds))
+        .unwrap_or_default();
+    let slot_count = if let Some(plan) = signal_plan.as_ref() {
+        rounds
+            .and_then(|rounds| usize::try_from(rounds).ok())
+            .and_then(|rounds| rounds.checked_mul(scheduled_labels.len()))
+            .and_then(|count| count.checked_mul(plan.frequencies_hz.len()))
+    } else {
+        Some(wspr_cycles.len())
+    };
     if slot_count.is_some_and(|count| count > MAX_SETUP_SLOTS) {
         diagnostics.push(field_diagnostic(
             "setup.resource.too_many_slots",
@@ -564,8 +634,25 @@ fn build_review(
         .collect::<Vec<_>>();
     let mut slots = Vec::with_capacity(slot_count.expect("bounded slot count"));
     let mut next_start = created_at;
-    for _ in 0..rounds {
-        for antenna_label in &scheduled_labels {
+    if signal_plan.is_some() {
+        for _ in 0..rounds {
+            for antenna_label in &scheduled_labels {
+                let sequence_number =
+                    u32::try_from(slots.len() + 1).expect("slot count is bounded");
+                slots.push(PlannedSlot {
+                    slot_id: hooks.new_id("slot"),
+                    sequence_number,
+                    starts_at: next_start,
+                    duration_seconds: 120,
+                    guard_seconds: 0,
+                    band: draft.schedule.band,
+                    antenna_label: (*antenna_label).clone(),
+                });
+                next_start += Duration::seconds(120);
+            }
+        }
+    } else {
+        for (antenna_label, _) in &wspr_cycles {
             let sequence_number = u32::try_from(slots.len() + 1).expect("slot count is bounded");
             slots.push(PlannedSlot {
                 slot_id: hooks.new_id("slot"),
@@ -574,7 +661,7 @@ fn build_review(
                 duration_seconds: 120,
                 guard_seconds: 0,
                 band: draft.schedule.band,
-                antenna_label: (*antenna_label).clone(),
+                antenna_label: antenna_label.clone(),
             });
             next_start += Duration::seconds(120);
         }
@@ -664,20 +751,23 @@ fn build_review(
             .schedule
             .slots
             .drain(..)
-            .map(|slot| WsprCycleIntentV3 {
+            .zip(wspr_cycles.iter().map(|(_, direction)| *direction))
+            .map(|(slot, direction)| WsprCycleIntentV3 {
                 intent_id: slot.slot_id,
                 sequence_number: slot.sequence_number,
                 band: slot.band,
                 antenna_label: slot.antenna_label,
+                direction: Some(direction),
                 signal: slot.signal,
             })
             .collect();
         bundle
     };
+    use_latest_schema(&mut bundle);
     BundleStore::refresh_v3_checkpoint(&mut bundle).map_err(|error| {
         SessionErrorPayload::new(
             SessionErrorKind::Validation,
-            "The normalized schema-v3 setup plan could not be prepared.",
+            "The normalized schema-v4 setup plan could not be prepared.",
             error.to_string(),
         )
     })?;
@@ -859,6 +949,7 @@ fn build_v3_setup_bundle(
                 sequence_number,
                 band,
                 antenna_label,
+                direction: Some(WsprCycleDirection::Transmit),
                 signal: Some(SignalAllocationV3 {
                     signal_plan_id: signal_plan_id.clone(),
                     frequency_hz,
@@ -896,7 +987,7 @@ fn build_v3_setup_bundle(
 fn setup_plan_review_v3(bundle: &BundleV3Contents) -> SetupPlanReview {
     let signal_plan = bundle.schedule.signal_plans.first();
     SetupPlanReview {
-        schema_version: SCHEMA_VERSION_V3,
+        schema_version: bundle.manifest.schema_version,
         session_id: bundle.manifest.session_id.clone(),
         created_at: bundle.manifest.created_at,
         station: SetupStationReview {
@@ -945,6 +1036,7 @@ fn setup_plan_review_v3(bundle: &BundleV3Contents) -> SetupPlanReview {
                 sequence_number: intent.sequence_number,
                 band: intent.band,
                 antenna_label: intent.antenna_label.clone(),
+                direction: intent.direction,
                 signal: intent.signal.as_ref().map(|signal| SetupSlotSignalReview {
                     frequency_hz: signal.frequency_hz,
                     frequency_variant_id: signal.frequency_variant_id.as_str().into(),
@@ -1474,19 +1566,80 @@ mod tests {
         assert_eq!(review.review_id.as_deref(), Some("review-0003"));
         let plan = review.plan.unwrap();
         assert_eq!(plan.session_id, "session-0001");
-        assert_eq!(plan.schema_version, SCHEMA_VERSION_V3);
+        assert_eq!(plan.schema_version, SCHEMA_VERSION_V4);
         assert_eq!(plan.station.callsign, "N1RWJ");
         assert_eq!(plan.station.grid, "FN42");
         assert!(!plan.wspr_live_acquisition_enabled);
-        assert_eq!(plan.slots.len(), 4);
+        assert_eq!(plan.slots.len(), 8);
         assert_eq!(plan.slots[0].slot_id, "slot-0004");
         assert_eq!(plan.slots[0].antenna_label, "Vertical");
+        assert_eq!(plan.slots[0].direction, Some(WsprCycleDirection::Receive));
         assert_eq!(plan.slots[1].antenna_label, "Dipole");
+        assert_eq!(plan.slots[1].direction, Some(WsprCycleDirection::Receive));
+        assert_eq!(plan.slots[2].antenna_label, "Dipole");
+        assert_eq!(plan.slots[2].direction, Some(WsprCycleDirection::Transmit));
+        assert_eq!(plan.slots[3].antenna_label, "Vertical");
+        assert_eq!(plan.slots[3].direction, Some(WsprCycleDirection::Transmit));
         assert_eq!(plan.slots[2].sequence_number, 3);
     }
 
     #[test]
-    fn reviewed_signal_plan_creates_a_checkpointed_schema_v3_bundle() {
+    fn wspr_cycle_order_counterbalances_direction_and_antenna_order() {
+        let a = "A".to_string();
+        let b = "B".to_string();
+        let antennas = [&a, &b];
+
+        assert_eq!(
+            planned_wspr_cycles(&antennas, ExperimentMode::WholeStationAb, 2),
+            vec![
+                ("A".into(), WsprCycleDirection::Receive),
+                ("B".into(), WsprCycleDirection::Receive),
+                ("B".into(), WsprCycleDirection::Transmit),
+                ("A".into(), WsprCycleDirection::Transmit),
+                ("B".into(), WsprCycleDirection::Receive),
+                ("A".into(), WsprCycleDirection::Receive),
+                ("A".into(), WsprCycleDirection::Transmit),
+                ("B".into(), WsprCycleDirection::Transmit),
+            ]
+        );
+        assert_eq!(
+            planned_wspr_cycles(&antennas, ExperimentMode::TxFocused, 2),
+            vec![
+                ("A".into(), WsprCycleDirection::Transmit),
+                ("B".into(), WsprCycleDirection::Transmit),
+                ("B".into(), WsprCycleDirection::Transmit),
+                ("A".into(), WsprCycleDirection::Transmit),
+            ]
+        );
+        assert_eq!(
+            planned_wspr_cycles(&antennas, ExperimentMode::RxFocused, 2),
+            vec![
+                ("A".into(), WsprCycleDirection::Receive),
+                ("B".into(), WsprCycleDirection::Receive),
+                ("B".into(), WsprCycleDirection::Receive),
+                ("A".into(), WsprCycleDirection::Receive),
+            ]
+        );
+    }
+
+    #[test]
+    fn receive_only_setup_rejects_transmit_public_spot_collection() {
+        let state = SetupSessionState::default();
+        let mut draft = valid_draft();
+        draft.schedule.mode = ExperimentMode::RxFocused;
+        draft.wspr_live_acquisition_enabled = true;
+
+        let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
+
+        assert!(!review.valid);
+        assert!(review
+            .diagnostics
+            .iter()
+            .any(|diagnostic| { diagnostic.code == "setup.wspr_live.receive_only_conflict" }));
+    }
+
+    #[test]
+    fn reviewed_signal_plan_creates_a_checkpointed_schema_v4_bundle() {
         let state = SetupSessionState::default();
         let active = ActiveSessionState::default();
         let mut draft = valid_draft();
@@ -1509,7 +1662,7 @@ mod tests {
         assert!(review.valid, "diagnostics: {:?}", review.diagnostics);
         let review_id = review.review_id.unwrap();
         let plan = review.plan.unwrap();
-        assert_eq!(plan.schema_version, SCHEMA_VERSION_V3);
+        assert_eq!(plan.schema_version, SCHEMA_VERSION_V4);
         assert!(!plan.wspr_live_acquisition_enabled);
         assert_eq!(plan.slots.len(), 8);
         let signal_plan = plan.signal_plan.unwrap();
@@ -1530,7 +1683,7 @@ mod tests {
             create_with_selection(&state, &active, &review_id, |_| Ok(Some(path.clone()))).unwrap();
         assert!(matches!(outcome, CreateSessionOutcome::Created { .. }));
         let persisted = BundleStore::new(path).read_v3_checkpointed().unwrap();
-        assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V3);
+        assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V4);
         assert_eq!(persisted.schedule.signal_plans.len(), 1);
         assert_eq!(persisted.schedule.wspr_cycle_intents.len(), 8);
         assert!(persisted.schedule.slots.is_empty());
@@ -1605,7 +1758,7 @@ mod tests {
         };
         assert_eq!(session.session_id, "session-0001");
         assert_eq!(session.antenna_count, 2);
-        assert_eq!(session.slot_count, 4);
+        assert_eq!(session.slot_count, 8);
         assert!(setup_state.0.lock().unwrap().is_none());
         let persisted = BundleStore::new(destination)
             .read_v3_checkpointed()

@@ -126,14 +126,15 @@ the UI could not outrun the durable, validation, and resource boundaries:
    lifecycle, correction, explicit-actual-state, conflict-exclusion, durable
    append, plan-generation, locking, snapshot, export, and recovery layers are
    implemented.
-3. Validated setup creates and opens a new checkpointed schema-v3 bundle from
+3. Validated setup creates and opens a new checkpointed schema-v4 bundle from
    an exact normalized review (#61). The manual/no-rig conductor runs it without
    depending on any optional adapter, with current/next slot guidance, explicit
    actual-antenna confirmation, missed/bad/note facts, append-only correction,
    durable lifecycle transitions, and restart recovery (#62).
-4. Bounded WSJT-X ingress and desktop orchestration add live evidence without
-   making adapter health a lifecycle prerequisite (#56 and #63). The optional
-   receiver binds only a numeric loopback address, admits one expected client,
+4. Bounded WSJT-X ingress and desktop orchestration add live evidence (#56 and
+   #63). The receiver is a start prerequisite for schema-v4 plans containing
+   receive periods and optional for transmit-only plans. It binds only a numeric
+   loopback address, admits one expected client,
    and atomically commits raw datagram evidence with any normalized observation.
    Malformed, unsupported, filtered, duplicate, and acquisition-gap outcomes
    remain explicit; resource/persistence gaps stop intake without stopping the
@@ -148,11 +149,12 @@ the UI could not outrun the durable, validation, and resource boundaries:
    recovery, completion, reporting, export, and reopen (#65).
 
 Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
-antenna definitions, and complete-round repetitions. The routine form explains
-that each round visits every configured antenna, derives the number of
-individual two-minute WSPR cycles and ideal minimum cycle time, and presents
-automatic WSPR.live public spots as a normal attributed section before advanced
-controlled-signal setup. The offline opt-out remains available as secondary
+antenna definitions, and complete repetitions. BOTH and four repetitions are
+the defaults. Each repetition visits every configured antenna once in each
+selected direction; the form derives the number of individual two-minute WSPR
+periods and ideal minimum time and presents automatic WSPR.live public spots as
+a normal attributed section before advanced controlled-signal setup. The
+offline opt-out remains available as secondary
 behavior; setup leaves evidence-completeness disclosure to reports. The routine
 form keeps station identity plus antenna labels/descriptions visible and places
 optional metadata behind disclosure. A user-triggered native macOS Core
@@ -181,9 +183,9 @@ daily-archive import adds exact ZIP preservation and TX public reports without
 network acquisition. The boundary and RBN collection constraints are selected by
 [Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md)
 and tracked in
-[#86](https://github.com/rwjblue/antennabench/issues/86). Existing WSPR sessions
-and the WSJT-X execution path use the same v3 envelope without requiring a
-controlled signal plan.
+[#86](https://github.com/rwjblue/antennabench/issues/86). New WSPR sessions use
+the schema-v4 extension of the same envelope without requiring a controlled
+signal plan; existing schema-v3 sessions remain readable.
 
 The active-run surface reads one verified checkpoint revision and derives its
 phase/countdown from a Rust-owned clock plus durable readiness actions. Each
@@ -203,12 +205,12 @@ fails without overwrite. Opening a session left running records one durable
 recovery-system interruption before resume/end actions are offered. Ended and
 abandoned sessions are terminal, and schema-v1 sources remain read-only.
 
-The routine presentation shows one prominent next action: switch to the named
-antenna, then press that antenna's ready button after the physical change is
-complete. While a WSPR transmission is active, the prompt instead keeps the
-current antenna connected until completion and offers no early-switch timing
-action. Skipping an unarmed cycle is a durable, correctable missed-cycle fact
-that advances the intended order. Notes and corrections are task-level
+The routine presentation shows one prominent next action. It says whether to
+keep or switch the named antenna and, independently, whether to turn WSJT-X
+Enable Tx on or off before pressing ready. While a WSPR period is active, the
+prompt keeps the current antenna connected until completion and offers no
+early-switch timing action. Skipping an unarmed cycle is a durable, correctable
+missed-cycle fact that advances the intended order. Notes and corrections are task-level
 shortcuts. The secondary run surface shows operator-useful lifecycle and current
 antenna state without checkpoint revisions, backend clock values, or opaque
 identifiers. Public-spot status uses short waiting, collecting, collected,
@@ -225,13 +227,15 @@ layout reflow. Help remains presentation-only: validation, consent, safety,
 active instructions, and recovery errors always stay visible without opening a
 disclosure.
 
-The active-run surface can start or stop one optional WSJT-X receiver while the
-session is running. Rust owns the socket, expected-client filter, bounded
+The active-run surface can start or stop one WSJT-X receiver while the session
+is ready or running. It must be running before a receive-capable schema-v4
+session starts. Rust owns the socket, expected-client filter, bounded
 adapter state, raw hex preservation, conservative actual-cycle annotation,
 retry identity, and checkpoint append. Interruption, terminal lifecycle, active-session
 replacement, adapter resource exhaustion, or an unrecordable persistence error
-stops affected intake. Receiver absence or failure never blocks operator
-evidence, lifecycle actions, or lossless export.
+stops affected intake. Receiver absence blocks only the initial start of a
+receive-capable schema-v4 run; it does not block other operator evidence,
+lifecycle actions, or lossless export.
 
 All mutation, adapter, clock/identity, filesystem, and network authority stays
 behind focused Rust-owned commands. JavaScript presents typed drafts, actions,

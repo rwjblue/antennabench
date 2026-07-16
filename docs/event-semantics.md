@@ -4,7 +4,7 @@ This technical reference defines how AntennaBench records session lifecycle,
 operator actions, corrections, and observation eligibility. For the user-facing
 workflow, start with the [Product Overview](product.md).
 
-Schema-v2 and schema-v3 operator events are append-only evidence. The schedule
+Schema-v2, schema-v3, and schema-v4 operator events are append-only evidence. The schedule
 says what was planned; only explicit effective operator evidence says what
 actually happened. The pure reducers are implemented independently of storage,
 Tauri, sockets, and hardware. The checkpoint writer, shipped manual conductor,
@@ -133,3 +133,7 @@ Schema v3 retains the same lifecycle, append-order, correction, retry, and
 actual-antenna rules while adding correctable signal-state confirmation. V1 or
 v2 upgrade to v3 never invents a signal confirmation, and no schema downgrade
 is supported.
+
+Schema v4 retains the v3 event family and adds required WSPR intent direction.
+Existing schema-v3 intentions remain readable with unknown direction; readers
+and upgrades do not infer receive or transmit from surrounding evidence.

@@ -1,6 +1,8 @@
 use std::{fs, path::Path};
 
-use antennabench_core::{SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3};
+use antennabench_core::{
+    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+};
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
 };
@@ -179,7 +181,7 @@ pub(crate) fn commit_wspr_live_response(
             &parsed,
             &store,
         ),
-        SCHEMA_VERSION_V3 => commit_v3_wspr_live_response(
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => commit_v3_wspr_live_response(
             state,
             bundle_path,
             bytes,

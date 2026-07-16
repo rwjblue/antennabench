@@ -121,6 +121,15 @@ Readers project actual armed cycles when a slot-oriented analysis path is
 required. Attribution requires one antenna occupancy interval to cover the
 complete 110.592-second transmission.
 
+[Decision 0018](decisions/0018-use-directed-counterbalanced-wspr-cycles.md)
+selects schema v4 for newly authored sessions. V4 reuses the checkpointed v3
+envelope and requires every WSPR cycle intention to carry `direction` as
+`receive` or `transmit`. Validation requires transmit-only and receive-only
+modes to contain only their named direction, while BOTH and single-antenna
+profiling schedules contain both. Existing schema-v3 cycles deserialize with
+unknown direction and remain readable; no migration guesses whether a past
+period transmitted or received.
+
 ## Provider-Neutral Evidence
 
 Every v2 provenance contains `provider_id`, `source_id`,

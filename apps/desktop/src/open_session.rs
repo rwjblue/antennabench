@@ -11,7 +11,7 @@ use antennabench_core::{
     normalize_bundle, project_wspr_run_v3, AdapterDisposition, AdapterInput, AdapterRecordV2, Band,
     BundleContents, BundleV3Contents, BundleValidationError, BundleValidationReport,
     OperatorEventPayloadV2, OperatorEventPayloadV3, SessionLifecycleV2, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V3, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence, ReportCompleteness,
@@ -486,7 +486,7 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
                         intended_cycle_count,
                     )
                 }
-                SCHEMA_VERSION_V3 => {
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
                     let bundle = store.read_v3_checkpointed()?;
                     let revision = bundle.session_state.revision;
                     let lifecycle = bundle.session_state.lifecycle;
@@ -636,6 +636,7 @@ fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
                 intent_id: intent.intent_id.clone(),
                 sequence_number: intent.sequence_number,
                 band: intent.band,
+                direction: intent.direction,
                 planned_antenna: intent.antenna_label.clone(),
                 actual_antenna: observed.map(|cycle| cycle.antenna_label.clone()),
                 ready_at: observed.map(|cycle| cycle.ready_at),
@@ -811,7 +812,7 @@ fn export_bundle(
                 let exported = store.export_v2_checkpointed_to(destination)?;
                 Some(exported.read_v2_checkpointed()?.session_state.revision)
             }
-            SCHEMA_VERSION_V3 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
                 let exported = store.export_v3_checkpointed_to(destination)?;
                 Some(exported.read_v3_checkpointed()?.session_state.revision)
             }

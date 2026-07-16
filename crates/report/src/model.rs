@@ -6,6 +6,7 @@ use antennabench_analysis::{
 };
 use antennabench_core::{
     AlignedSlotStatus, Antenna, Band, ExperimentMode, SessionGoal, SessionLifecycleV2,
+    WsprCycleDirection,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -54,6 +55,7 @@ pub struct ReportWsprCycle {
     pub intent_id: String,
     pub sequence_number: u32,
     pub band: Band,
+    pub direction: Option<WsprCycleDirection>,
     pub planned_antenna: String,
     pub actual_antenna: Option<String>,
     pub ready_at: Option<DateTime<Utc>>,

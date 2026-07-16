@@ -19,7 +19,7 @@ export const CONTEXT_HELP = Object.freeze({
   },
   rounds: {
     title: "Rounds and cycles",
-    text: "One cycle is one antenna's two-minute WSPR period. One complete round visits every configured antenna once, and the estimate shows only ideal cycle time.",
+    text: "One repetition tests every configured antenna in the selected direction. Both mode includes one receive and one transmit period per antenna; the estimate shows ideal WSPR time only.",
   },
   public_spots: {
     title: "Automatic WSPR spots",
@@ -58,8 +58,8 @@ export const CONTEXT_HELP = Object.freeze({
     text: "This status says whether AntennaBench is waiting, collecting, finished, off, or needs a retry. It never blocks manual operator actions or bundle export.",
   },
   wsjtx_receiver: {
-    title: "Optional WSJT-X receiver",
-    text: "Connect a local WSJT-X UDP feed to add receiver evidence while the session runs. Manual operation still works when the receiver is stopped or unavailable.",
+    title: "WSJT-X UDP receiver",
+    text: "Connect the local WSJT-X UDP feed before starting a receive-capable session. It is required for Both and RX-focused WSPR runs and optional for TX-only runs.",
   },
 });
 
@@ -213,7 +213,7 @@ export function locationLookupMessage(outcome) {
   }
 }
 
-export function wsprRunPlanSummary(roundsValue, antennaCount) {
+export function wsprRunPlanSummary(roundsValue, antennaCount, mode = "whole_station_ab") {
   const normalizedRounds = typeof roundsValue === "number"
     ? roundsValue
     : Number(String(roundsValue).trim());
@@ -226,12 +226,15 @@ export function wsprRunPlanSummary(roundsValue, antennaCount) {
   ) {
     return null;
   }
-  const cycles = normalizedRounds * antennaCount;
+  const scheduledAntennaCount = mode === "single_antenna_profiling" ? 1 : antennaCount;
+  const directionCount = ["whole_station_ab", "single_antenna_profiling"].includes(mode) ? 2 : 1;
+  const cycles = normalizedRounds * scheduledAntennaCount * directionCount;
   const minimumMinutes = cycles * 2;
   if (!Number.isSafeInteger(cycles) || !Number.isSafeInteger(minimumMinutes)) return null;
   return {
     rounds: normalizedRounds,
-    antennaCount,
+    antennaCount: scheduledAntennaCount,
+    directionCount,
     cycles,
     minimumMinutes,
     text: `${cycles} WSPR ${cycles === 1 ? "cycle" : "cycles"} · at least ${minimumMinutes} ${minimumMinutes === 1 ? "minute" : "minutes"}`,
@@ -915,6 +918,7 @@ function mount(root, browserWindow) {
   const wsjtxStart = root.querySelector("[data-wsjtx-start]");
   const wsjtxStop = root.querySelector("[data-wsjtx-stop]");
   const wsjtxPhase = root.querySelector("[data-wsjtx-phase]");
+  const wsjtxRequirement = root.querySelector("[data-wsjtx-requirement]");
   const wsjtxCounts = root.querySelector("[data-wsjtx-counts]");
   const wsjtxDiagnostic = root.querySelector("[data-wsjtx-diagnostic]");
   const openButton = root.querySelector("[data-open-session]");
@@ -1018,6 +1022,7 @@ function mount(root, browserWindow) {
           for (const value of [
             slot.sequenceNumber,
             slot.antennaLabel,
+            slot.direction ? humanizeIdentifier(slot.direction) : "—",
             slot.band,
             slot.signal
               ? `${slot.signal.frequencyHz} Hz · ${slot.signal.frequencyVariantId} · ${slot.signal.counterbalanceBlockId}/${slot.signal.counterbalancePosition}`
@@ -1086,16 +1091,24 @@ function mount(root, browserWindow) {
 
       const evidenceAllowed = ["running", "interrupted"].includes(view.lifecycle);
       evidenceForm.querySelector("button[type=submit]").disabled = conductorBusy || !evidenceAllowed;
+      const wsjtxBusy = ["refreshing", "starting", "stopping"].includes(state.wsjtxStatus);
+      const wsjtxRunning = state.wsjtx?.phase === "running";
       lifecycleButtons.forEach((button) => {
         const action = button.dataset.conductorAction;
         const isArmAction = action === "arm_wspr_cycle";
         if (isArmAction && view.nextIntent) {
-          button.textContent = `${view.nextIntent.antennaLabel} ready`;
+          const direction = view.nextIntent.direction
+            ? humanizeIdentifier(view.nextIntent.direction)
+            : null;
+          button.textContent = direction
+            ? `${direction} on ${view.nextIntent.antennaLabel} ready`
+            : `${view.nextIntent.antennaLabel} ready`;
         }
         const available = conductorActionAvailable(view, action);
         button.hidden = !available;
         button.disabled = conductorBusy
-          || !available;
+          || !available
+          || (action === "start" && view.wsjtxRequired && !wsjtxRunning);
       });
       conductorDiagnostics.replaceChildren(
         ...view.diagnostics.map((diagnostic) => {
@@ -1118,17 +1131,20 @@ function mount(root, browserWindow) {
           conductorBusy || !evidenceAllowed,
         )),
       );
-      const wsjtxBusy = ["refreshing", "starting", "stopping"].includes(state.wsjtxStatus);
-      const wsjtxRunning = ["running", "stale"].includes(state.wsjtx?.phase);
       wsjtxForm.setAttribute("aria-busy", String(wsjtxBusy));
-      wsjtxStart.disabled = conductorBusy || wsjtxBusy || wsjtxRunning || view.lifecycle !== "running";
+      wsjtxStart.disabled = conductorBusy || wsjtxBusy || wsjtxRunning || !["ready", "running"].includes(view.lifecycle);
       wsjtxStop.disabled = conductorBusy || wsjtxBusy || !wsjtxRunning;
+      wsjtxRequirement.textContent = view.wsjtxRequired
+        ? "Required WSJT-X receiver"
+        : "Optional WSJT-X receiver";
       wsjtxPhase.textContent = state.wsjtx
         ? `${humanizeIdentifier(state.wsjtx.phase)}${state.wsjtx.bindAddress ? ` · ${state.wsjtx.bindAddress}` : ""}`
         : "Not started";
       wsjtxCounts.textContent = state.wsjtx
         ? `${state.wsjtx.receivedDatagrams} received · ${state.wsjtx.committedMutations} committed · ${state.wsjtx.ignoredDatagrams} explicit non-observation disposition(s)`
-        : "Manual operation remains available without WSJT-X.";
+        : view.wsjtxRequired
+          ? "Start this UDP receiver before starting the session."
+          : "TX-only manual operation remains available without WSJT-X.";
       const adapterDiagnostic = state.wsjtxError ?? state.wsjtx?.diagnostic ?? null;
       wsjtxDiagnostic.hidden = adapterDiagnostic === null;
       if (adapterDiagnostic) {
@@ -2000,13 +2016,16 @@ function renderSlot(container, slot, root, now) {
   const timing = root.createElement("div");
   timing.className = "slot-timing";
   for (const value of [
+    slot.direction ? humanizeIdentifier(slot.direction) : null,
     slot.band,
     slot.plannedAntenna,
     formatActiveRunTime(slot.startsAt, { now }),
   ]) {
     const item = root.createElement("span");
-    item.textContent = value;
-    timing.append(item);
+    if (value !== null) {
+      item.textContent = value;
+      timing.append(item);
+    }
   }
   const actual = root.createElement("p");
   actual.className = "slot-evidence";
@@ -2035,7 +2054,7 @@ function renderIntent(container, intent, root) {
     return;
   }
   const title = root.createElement("strong");
-  title.textContent = `#${intent.sequenceNumber} · ${intent.antennaLabel}`;
+  title.textContent = `#${intent.sequenceNumber} · ${intent.direction ? `${humanizeIdentifier(intent.direction)} on ` : ""}${intent.antennaLabel}`;
   const band = root.createElement("p");
   band.textContent = intent.band;
   const timing = root.createElement("p");
@@ -2295,14 +2314,15 @@ export function applyStationPreferences(form, preferences) {
 
 function syncSignalPlanFields(form) {
   const enabled = form.querySelector('[data-setup-field="signalPlanEnabled"]').checked;
+  const receiveOnly = form.querySelector('[data-setup-field="mode"]').value === "rx_focused";
   const fields = form.querySelector("[data-signal-plan-fields]");
   fields.hidden = !enabled;
   for (const control of fields.querySelectorAll("input, select, textarea")) {
     control.disabled = !enabled;
   }
   const wsprLive = form.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]');
-  if (enabled) wsprLive.checked = false;
-  wsprLive.disabled = enabled;
+  if (enabled || receiveOnly) wsprLive.checked = false;
+  wsprLive.disabled = enabled || receiveOnly;
 }
 
 function refreshAntennaRows(form) {
@@ -2317,6 +2337,7 @@ function updateWsprRunPlanSummary(form, output) {
   const summary = wsprRunPlanSummary(
     form.querySelector('[data-setup-field="rounds"]').value,
     form.querySelectorAll("[data-antenna-row]").length,
+    form.querySelector('[data-setup-field="mode"]').value,
   );
   output.textContent = summary?.text ?? "Enter complete rounds to estimate the run length.";
 }

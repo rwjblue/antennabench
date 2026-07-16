@@ -15,7 +15,7 @@ use antennabench_core::{
     AdapterReasonId, AdapterRecordV2, BundleContents, BundleV2Contents, BundleV3Contents,
     MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecord,
     ObservationRecordV2, Provenance, RecordMetaV2, RecordSource, SessionLifecycleV2,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
@@ -193,6 +193,16 @@ impl WsjtxSnapshot {
         match self {
             Self::V2(bundle) => bundle.clone().into_current().bundle,
             Self::V3(bundle) => {
+                let receive_intents = bundle
+                    .schedule
+                    .wspr_cycle_intents
+                    .iter()
+                    .filter(|intent| {
+                        intent.direction.is_none()
+                            || intent.direction == Some(WsprCycleDirection::Receive)
+                    })
+                    .map(|intent| intent.intent_id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>();
                 let projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
                 let attributable = projection
                     .cycles
@@ -200,6 +210,7 @@ impl WsjtxSnapshot {
                     .filter(|cycle| {
                         cycle.occupancy_fully_covers_transmission
                             && cycle.window.transmission_ends_at <= observed_at
+                            && receive_intents.contains(cycle.intent_id.as_str())
                     })
                     .map(|cycle| cycle.intent_id.as_str())
                     .collect::<std::collections::BTreeSet<_>>();
@@ -225,7 +236,9 @@ struct PendingWsjtxMutation {
 fn read_wsjtx_snapshot(store: &BundleStore) -> Result<WsjtxSnapshot, LivePersistenceError> {
     match store.schema_version()? {
         SCHEMA_VERSION_V2 => store.read_v2_checkpointed().map(WsjtxSnapshot::V2),
-        SCHEMA_VERSION_V3 => store.read_v3_checkpointed().map(WsjtxSnapshot::V3),
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+            store.read_v3_checkpointed().map(WsjtxSnapshot::V3)
+        }
         actual => {
             Err(antennabench_storage::BundleStoreError::UnsupportedSchemaVersion { actual }.into())
         }
@@ -238,6 +251,13 @@ enum IntakeDecision {
 }
 
 impl WsjtxSessionState {
+    pub(crate) fn is_running_for_source(&self, source: &Path, now: DateTime<Utc>) -> bool {
+        matches!(
+            self.status_for_source(source, now).phase,
+            WsjtxReceiverPhase::Running
+        )
+    }
+
     pub(crate) fn stop_all(&self, reason: &str) {
         let handle = self
             .0
@@ -377,10 +397,13 @@ fn start_receiver(
         .schema_version()
         .map_err(crate::open_session::storage_error_payload)?;
     let bundle = read_wsjtx_snapshot(&store).map_err(live_error_payload)?;
-    if bundle.lifecycle() != SessionLifecycleV2::Running {
+    if !matches!(
+        bundle.lifecycle(),
+        SessionLifecycleV2::Ready | SessionLifecycleV2::Running
+    ) {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Conflict,
-            "Start the durable session before starting WSJT-X reception.",
+            "WSJT-X reception can start only while the session is ready or running.",
             format!("current lifecycle is {:?}", bundle.lifecycle()),
         ));
     }
@@ -541,9 +564,36 @@ impl WsjtxOrchestrator {
                 return IntakeDecision::Stop;
             }
         };
-        if snapshot.session_id() != self.session_id
-            || snapshot.lifecycle() != SessionLifecycleV2::Running
-        {
+        if snapshot.session_id() != self.session_id {
+            set_failed(
+                status,
+                "wsjtx.receiver.lifecycle_stopped",
+                "intake stopped because the active session changed".into(),
+                true,
+            );
+            return IntakeDecision::Stop;
+        }
+
+        if snapshot.lifecycle() == SessionLifecycleV2::Ready {
+            let Ok(parsed) = parse_wsjtx_datagram(&datagram.bytes) else {
+                update_status(status, |status| status.ignored_datagrams += 1);
+                return IntakeDecision::Continue;
+            };
+            if parsed.message.client_id() != self.expected_client_id {
+                update_status(status, |status| status.ignored_datagrams += 1);
+                return IntakeDecision::Continue;
+            }
+            update_status(status, |status| {
+                status.last_seen_at = Some(datagram.received_at);
+                status.phase = WsjtxReceiverPhase::Running;
+                status.diagnostic = None;
+            });
+            let _ = self
+                .ingest
+                .ingest_datagram(&datagram.bytes, datagram.received_at);
+            return IntakeDecision::Continue;
+        }
+        if snapshot.lifecycle() != SessionLifecycleV2::Running {
             set_failed(
                 status,
                 "wsjtx.receiver.lifecycle_stopped",
@@ -798,7 +848,7 @@ impl WsjtxOrchestrator {
                             members,
                         })
                     }),
-                SCHEMA_VERSION_V3 => self
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => self
                     .store
                     .open_v3_writer_with_hooks(self.hooks.clone())
                     .and_then(|mut writer| {
@@ -1162,7 +1212,7 @@ pub(crate) fn inject_e2e_wsjtx_sequence(
     limits.udp_rate_per_second = 3;
     let mut orchestrator = WsjtxOrchestrator {
         store: store.clone(),
-        schema_version: SCHEMA_VERSION_V3,
+        schema_version: bundle.manifest.schema_version,
         ingest: LiveWsjtxIngest::new_with_limits(config, limits).expect("bounded live ingest"),
         session_id: bundle.manifest.session_id,
         receiver_id: "e2e-fixture-receiver".into(),
@@ -1231,8 +1281,8 @@ mod tests {
     use antennabench_core::{
         EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
         OperatorEventV2, OperatorEventV3, Provenance, RecordMetaV3, RecordSource,
-        SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
-        WSPR_TRANSMISSION_MILLISECONDS,
+        SessionLifecycleV2, WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+        V2_BUNDLE_SUFFIX, WSPR_TRANSMISSION_MILLISECONDS,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -1329,7 +1379,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_v3_wsjt_x_attribution_requires_completed_full_antenna_occupancy() {
+    fn directed_wsjt_x_attribution_requires_receive_and_full_antenna_occupancy() {
         let temp = TempDir::new().unwrap();
         let active = ActiveSessionState::default();
         let created = create_e2e_session(temp.path(), &active);
@@ -1357,16 +1407,58 @@ mod tests {
         let attributable = WsjtxSnapshot::V3(bundle.clone()).current_bundle(transmission_ends_at);
         assert_eq!(attributable.schedule.slots.len(), 1);
 
-        bundle.events.push(v3_event(
-            &bundle.manifest.session_id,
+        let mut early_switched_bundle = bundle.clone();
+        early_switched_bundle.events.push(v3_event(
+            &early_switched_bundle.manifest.session_id,
             "switch-early",
             cycle_starts_at + chrono::Duration::seconds(30),
             None,
             OperatorEventPayloadV3::AntennaSwitchStarted { note: None },
         ));
-        let unknown = WsjtxSnapshot::V3(bundle)
+        let unknown = WsjtxSnapshot::V3(early_switched_bundle)
             .current_bundle(transmission_ends_at + chrono::Duration::seconds(30));
         assert!(unknown.schedule.slots.is_empty());
+
+        let second_receive_intent = bundle.schedule.wspr_cycle_intents[1].clone();
+        let second_receive_starts_at = cycle_starts_at + chrono::Duration::minutes(2);
+        bundle.events.push(v3_event(
+            &bundle.manifest.session_id,
+            "second-receive-ready",
+            second_receive_starts_at - chrono::Duration::seconds(1),
+            Some(second_receive_intent.intent_id),
+            OperatorEventPayloadV3::WsprCycleArmed {
+                antenna_label: second_receive_intent.antenna_label,
+                cycle_starts_at: second_receive_starts_at,
+            },
+        ));
+        let after_second_receive = WsjtxSnapshot::V3(bundle.clone()).current_bundle(
+            second_receive_starts_at
+                + chrono::Duration::milliseconds(WSPR_TRANSMISSION_MILLISECONDS),
+        );
+        assert_eq!(after_second_receive.schedule.slots.len(), 2);
+
+        let transmit_intent = bundle
+            .schedule
+            .wspr_cycle_intents
+            .iter()
+            .find(|intent| intent.direction == Some(WsprCycleDirection::Transmit))
+            .unwrap()
+            .clone();
+        let transmit_starts_at = cycle_starts_at + chrono::Duration::minutes(4);
+        bundle.events.push(v3_event(
+            &bundle.manifest.session_id,
+            "transmit-ready",
+            transmit_starts_at - chrono::Duration::seconds(1),
+            Some(transmit_intent.intent_id),
+            OperatorEventPayloadV3::WsprCycleArmed {
+                antenna_label: transmit_intent.antenna_label,
+                cycle_starts_at: transmit_starts_at,
+            },
+        ));
+        let after_transmit = WsjtxSnapshot::V3(bundle.clone()).current_bundle(
+            transmit_starts_at + chrono::Duration::milliseconds(WSPR_TRANSMISSION_MILLISECONDS),
+        );
+        assert_eq!(after_transmit.schedule.slots.len(), 2);
     }
 
     fn running_store(temp: &TempDir) -> BundleStore {

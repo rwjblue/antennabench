@@ -47,11 +47,13 @@ rewriting earlier evidence.
 
 ## Versions
 
-New AntennaBench sessions use schema v3. Signal plans are optional within that
-format, so routine WSPR sessions and controlled CW/RTTY sessions share the same
-durable envelope. The storage boundary dispatches explicitly by schema version
-so compatibility readers can be retained once released user formats exist;
-pre-release v1/v2 fixtures are not a compatibility promise.
+New AntennaBench sessions use schema v4. It adds an explicit receive or transmit
+direction to every WSPR cycle intention. Signal plans remain optional, so
+routine WSPR sessions and controlled CW/RTTY sessions share the same durable
+envelope. Schema-v3 bundles remain readable without inventing a direction. The
+storage boundary dispatches explicitly by schema version so compatibility
+readers can be retained once released user formats exist; pre-release v1/v2
+fixtures are not a compatibility promise.
 
 ## Working With Bundles Safely
 

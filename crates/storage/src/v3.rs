@@ -5,8 +5,8 @@ use antennabench_core::{
     validate_signal_plan_schedule_v3, validate_signal_state_confirmation_v3,
     validate_signal_state_event_v3, AdapterInput, BundleManifestV3, BundleV3Contents,
     BundleValidationProfile, BundleValidationReport, CorrectableOperatorEventPayloadV3,
-    OperatorEventPayloadV3, SessionLifecycleV2, SessionStateV3, SCHEMA_VERSION_V3,
-    V2_BUNDLE_SUFFIX,
+    ExperimentMode, OperatorEventPayloadV3, SessionLifecycleV2, SessionStateV3, WsprCycleDirection,
+    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
 };
 
 use super::{
@@ -30,7 +30,7 @@ impl BundleStore {
         report.extend(modeled_duplicate_member_diagnostics(
             self,
             &paths,
-            SCHEMA_VERSION_V3,
+            bundle.manifest.schema_version,
         ));
         let intent_native = !bundle.schedule.wspr_cycle_intents.is_empty();
         let current = bundle.into_current();
@@ -173,7 +173,10 @@ impl BundleStore {
         let mut budget = ModeledBudget::default();
         let manifest: BundleManifestV3 =
             self.read_json_bounded(&self.bundle_path("manifest.json")?, &mut budget)?;
-        if manifest.schema_version != SCHEMA_VERSION_V3 {
+        if !matches!(
+            manifest.schema_version,
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4
+        ) {
             return Err(BundleStoreError::UnsupportedSchemaVersion {
                 actual: manifest.schema_version,
             });
@@ -310,6 +313,12 @@ impl BundleStore {
 
 pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
     let session_id = bundle.manifest.session_id.as_str();
+    let schema_version = bundle.manifest.schema_version;
+    if !matches!(schema_version, SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4) {
+        return Err(BundleStoreError::UnsupportedSchemaVersion {
+            actual: schema_version,
+        });
+    }
     for (schema, actual_session, name) in [
         (
             bundle.manifest.schema_version,
@@ -342,7 +351,7 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
             "analysis",
         ),
     ] {
-        if schema != SCHEMA_VERSION_V3 || actual_session != session_id {
+        if schema != schema_version || actual_session != session_id {
             return Err(invalid_v3(format!(
                 "{name} schema/session identity does not match the v3 manifest"
             )));
@@ -365,6 +374,11 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
         .map(|antenna| antenna.label.as_str())
         .collect::<std::collections::BTreeSet<_>>();
     for (index, intent) in bundle.schedule.wspr_cycle_intents.iter().enumerate() {
+        if schema_version >= SCHEMA_VERSION_V4 && intent.direction.is_none() {
+            return Err(invalid_v3(
+                "schema-v4 WSPR cycle intentions require an explicit direction",
+            ));
+        }
         if intent.intent_id.trim().is_empty()
             || intent.intent_id.trim() != intent.intent_id
             || !intent.intent_id.is_ascii()
@@ -386,6 +400,39 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
                 "WSPR cycle intent {} references unknown antenna {:?}",
                 intent.intent_id, intent.antenna_label
             )));
+        }
+        if intent.signal.is_some() && intent.direction == Some(WsprCycleDirection::Receive) {
+            return Err(invalid_v3(
+                "controlled signal intentions must have transmit direction",
+            ));
+        }
+    }
+    if schema_version >= SCHEMA_VERSION_V4 && bundle.schedule.signal_plans.is_empty() {
+        let directions = bundle
+            .schedule
+            .wspr_cycle_intents
+            .iter()
+            .filter_map(|intent| intent.direction)
+            .collect::<std::collections::BTreeSet<_>>();
+        let valid = match bundle.schedule.mode {
+            ExperimentMode::TxFocused => {
+                directions == std::collections::BTreeSet::from([WsprCycleDirection::Transmit])
+            }
+            ExperimentMode::RxFocused => {
+                directions == std::collections::BTreeSet::from([WsprCycleDirection::Receive])
+            }
+            ExperimentMode::WholeStationAb | ExperimentMode::SingleAntennaProfiling => {
+                directions
+                    == std::collections::BTreeSet::from([
+                        WsprCycleDirection::Receive,
+                        WsprCycleDirection::Transmit,
+                    ])
+            }
+        };
+        if !valid {
+            return Err(invalid_v3(
+                "schema-v4 WSPR directions do not match the experiment mode",
+            ));
         }
     }
     let run_projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
@@ -446,7 +493,7 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
         }
     }
     for event in &bundle.events {
-        if event.meta.schema_version != SCHEMA_VERSION_V3 || event.meta.session_id != session_id {
+        if event.meta.schema_version != schema_version || event.meta.session_id != session_id {
             return Err(invalid_v3(
                 "event schema/session identity does not match manifest",
             ));
@@ -503,7 +550,7 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
             )
         }))
     {
-        if schema != SCHEMA_VERSION_V3 || actual_session != session_id {
+        if schema != schema_version || actual_session != session_id {
             return Err(invalid_v3(format!(
                 "{name} schema/session identity does not match manifest"
             )));

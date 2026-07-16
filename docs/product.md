@@ -11,10 +11,12 @@ experiment and makes its limitations visible.
 
 ## What You Do
 
-Before transmitting, describe the station and antennas and choose their
-repeatable order. Setup explains that one round visits every configured antenna
-once and shows the resulting number of two-minute WSPR cycles plus the ideal
-minimum cycle time. It also identifies automatic public spots as coming from
+Before starting, describe the station and antennas and choose whether to test
+transmit, receive, or both. BOTH is the default. One repetition visits every
+configured antenna once in each selected direction, and setup shows the
+resulting number of two-minute WSPR periods plus the ideal minimum time. Four
+default BOTH repetitions with two antennas are 16 periods, or 32 ideal minutes.
+Setup also identifies automatic transmit-path public spots as coming from
 WSPR.live, with an offline opt-out available as a secondary choice. There are
 no setup-time timestamps or manual-switch deadlines. During the session, begin
 the physical antenna change and press the named antenna's ready button once the
@@ -29,10 +31,12 @@ step. Short contextual help is available beside selected unfamiliar concepts;
 required instructions, validation, safety, and recovery guidance remain visible
 without opening it.
 
-Local WSJT-X reception is optional. WSPR.live public spots are gathered
-automatically by default after completed cycles, with source and completeness
-disclosed in the report. A network or adapter failure does not prevent you from
-recording operator actions or exporting the session.
+Local WSJT-X UDP reception is required when the plan includes receive periods
+and optional for transmit-only runs. Before each period, Active Run separately
+identifies any antenna change and whether WSJT-X Enable Tx must be turned on or
+off. WSPR.live public spots are gathered automatically by default for plans
+that transmit, with source and completeness disclosed in the report. A network
+or adapter failure does not prevent exporting already recorded session evidence.
 
 When the run is over, AntennaBench builds a local report and can export:
 

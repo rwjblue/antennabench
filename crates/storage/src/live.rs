@@ -14,7 +14,7 @@ use antennabench_core::{
     ObservationRecordV2, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
     OperatorEventV3, PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RecordMetaV3,
     RecordSource, RigRecordV2, Schedule, SessionLifecycleV2, SessionStateV2, Station,
-    StreamCheckpointV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    StreamCheckpointV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -563,7 +563,7 @@ impl BundleStore {
         result
     }
 
-    /// Creates and durably publishes a new checkpointed schema-v3 bundle.
+    /// Creates and durably publishes a new checkpointed schema-v3/v4-family bundle.
     pub fn create_v3_checkpointed(
         &self,
         bundle: &BundleV3Contents,
@@ -605,7 +605,8 @@ impl BundleStore {
             drop(staging_store.open_v3_writer()?);
             if staging_store.read_v3_checkpointed()? != *bundle {
                 return Err(LivePersistenceError::CheckpointVerification {
-                    message: "new schema-v3 bundle differs after checkpointed reopen".into(),
+                    message: "new schema-v3/v4-family bundle differs after checkpointed reopen"
+                        .into(),
                 });
             }
             let lock_path = staging.join(LOCK_FILE);
@@ -741,7 +742,10 @@ impl BundleStore {
 
         let manifest_path = self.root().join("manifest.json");
         let manifest: BundleManifestV2 = read_json_file(self, &manifest_path, "manifest")?;
-        if manifest.schema_version != SCHEMA_VERSION_V3 {
+        if !matches!(
+            manifest.schema_version,
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4
+        ) {
             return Err(LivePersistenceError::Store(
                 BundleStoreError::UnsupportedSchemaVersion {
                     actual: manifest.schema_version,
@@ -764,7 +768,7 @@ impl BundleStore {
         let mut artifacts = if has_tails {
             preserve_tails_for(
                 self,
-                SCHEMA_VERSION_V3,
+                manifest.schema_version,
                 &bundle.manifest.session_id,
                 &paths,
                 &tails,
@@ -776,7 +780,7 @@ impl BundleStore {
         };
         recover_checkpoint_temp_for(
             self,
-            SCHEMA_VERSION_V3,
+            manifest.schema_version,
             &bundle.manifest.session_id,
             &paths,
             &mut artifacts,
@@ -809,7 +813,7 @@ impl BundleStore {
                 mutation_id: mutation_id.clone(),
                 event: OperatorEventV3 {
                     meta: RecordMetaV3 {
-                        schema_version: SCHEMA_VERSION_V3,
+                        schema_version: manifest.schema_version,
                         session_id: session.bundle.manifest.session_id.clone(),
                         recorded_at: occurred_at,
                         provenance: Provenance::from_legacy(
@@ -1553,6 +1557,7 @@ impl LiveSessionV3 {
         prepare_v3_evidence(
             &mut mutation,
             &self.bundle.manifest.session_id,
+            self.bundle.manifest.schema_version,
             self.hooks.now(),
         )?;
         validate_v3_evidence(&self.bundle, &mutation)?;
@@ -1746,7 +1751,7 @@ impl LiveSessionV3 {
                 message: "event identity must be bounded nonempty ASCII".into(),
             });
         }
-        mutation.event.meta.schema_version = SCHEMA_VERSION_V3;
+        mutation.event.meta.schema_version = self.bundle.manifest.schema_version;
         mutation.event.meta.session_id = self.bundle.manifest.session_id.clone();
         mutation.event.meta.recorded_at = self.hooks.now();
         mutation.event.meta.mutation = MutationMember {
@@ -1856,6 +1861,7 @@ impl LiveSessionV3 {
 fn prepare_v3_evidence(
     mutation: &mut LiveEvidenceMutationV3,
     session_id: &str,
+    schema_version: u16,
     recorded_at: DateTime<Utc>,
 ) -> Result<(), LivePersistenceError> {
     if validate_machine_identity(&mutation.mutation_id).is_err()
@@ -1874,6 +1880,7 @@ fn prepare_v3_evidence(
             &mut record.meta,
             &record.record_id,
             session_id,
+            schema_version,
             &mutation.mutation_id,
             u32::try_from(index).expect("member count fits u32"),
             member_count,
@@ -1885,6 +1892,7 @@ fn prepare_v3_evidence(
             &mut record.meta,
             &record.observation_id,
             session_id,
+            schema_version,
             &mutation.mutation_id,
             u32::try_from(mutation.adapter_records.len() + offset).expect("member count fits u32"),
             member_count,
@@ -1899,6 +1907,7 @@ fn prepare_v3_evidence_meta(
     meta: &mut RecordMetaV2,
     record_id: &str,
     session_id: &str,
+    schema_version: u16,
     mutation_id: &str,
     member_index: u32,
     member_count: u32,
@@ -1909,7 +1918,7 @@ fn prepare_v3_evidence_meta(
             message: "evidence record identities must be bounded nonempty ASCII".into(),
         });
     }
-    meta.schema_version = SCHEMA_VERSION_V3;
+    meta.schema_version = schema_version;
     meta.session_id = session_id.into();
     meta.recorded_at = recorded_at;
     meta.mutation = MutationMember {

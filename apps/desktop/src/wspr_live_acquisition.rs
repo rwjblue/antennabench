@@ -9,7 +9,8 @@ use antennabench_core::{
     BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2, EventTimeBasisV2,
     MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
     OperatorEventV3, PlannedSlot, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
-    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SessionLifecycleV2, WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -75,10 +76,23 @@ impl AcquisitionSnapshot {
         match self {
             Self::V2(bundle) => bundle.schedule.slots.clone(),
             Self::V3(bundle) => {
+                let transmit_intents = bundle
+                    .schedule
+                    .wspr_cycle_intents
+                    .iter()
+                    .filter(|intent| {
+                        intent.direction.is_none()
+                            || intent.direction == Some(WsprCycleDirection::Transmit)
+                    })
+                    .map(|intent| intent.intent_id.as_str())
+                    .collect::<BTreeSet<_>>();
                 let attributable = project_wspr_run_v3(&bundle.schedule, &bundle.events)
                     .cycles
                     .into_iter()
-                    .filter(|cycle| cycle.occupancy_fully_covers_transmission)
+                    .filter(|cycle| {
+                        cycle.occupancy_fully_covers_transmission
+                            && transmit_intents.contains(cycle.intent_id.as_str())
+                    })
                     .map(|cycle| cycle.intent_id)
                     .collect::<BTreeSet<_>>();
                 bundle
@@ -110,7 +124,15 @@ impl AcquisitionSnapshot {
                             .cycles
                             .iter()
                             .rev()
-                            .find(|cycle| cycle.occupancy_fully_covers_transmission)
+                            .find(|cycle| {
+                                cycle.occupancy_fully_covers_transmission
+                                    && bundle.schedule.wspr_cycle_intents.iter().any(|intent| {
+                                        intent.intent_id == cycle.intent_id
+                                            && (intent.direction.is_none()
+                                                || intent.direction
+                                                    == Some(WsprCycleDirection::Transmit))
+                                    })
+                            })
                             .map(|cycle| cycle.intent_id.clone())
                     })
                     .flatten()
@@ -259,7 +281,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                     .read_v2_checkpointed()
                     .map_err(crate::conductor::live_error_payload)?,
             ),
-            SCHEMA_VERSION_V3 => AcquisitionSnapshot::V3(
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => AcquisitionSnapshot::V3(
                 store
                     .read_v3_checkpointed()
                     .map_err(crate::conductor::live_error_payload)?,
@@ -482,7 +504,7 @@ fn end_after_final_capture(
         SCHEMA_VERSION_V2 => {
             end_v2_after_final_capture(active_state, source, occurred_at, captured_through, &store)
         }
-        SCHEMA_VERSION_V3 => {
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
             end_v3_after_final_capture(active_state, source, occurred_at, captured_through, &store)
         }
         actual => Err(SessionErrorPayload::new(
@@ -591,7 +613,7 @@ fn end_v3_after_final_capture(
     let mutation_id = writer.allocate_id("mutation");
     let event = OperatorEventV3 {
         meta: RecordMetaV3 {
-            schema_version: SCHEMA_VERSION_V3,
+            schema_version: writer.snapshot().manifest.schema_version,
             session_id: writer.snapshot().manifest.session_id.clone(),
             recorded_at: occurred_at,
             provenance: Provenance::from_legacy(RecordSource::Derived, env!("CARGO_PKG_VERSION")),
@@ -714,7 +736,7 @@ mod tests {
 
     use antennabench_core::{
         EventTimeBasisV2, MutationMember, OperatorEventPayloadV3, OperatorEventV3, Provenance,
-        RecordMetaV3, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V3,
+        RecordMetaV3, RecordSource, SessionLifecycleV2,
     };
     use antennabench_storage::{BundleStore, LiveEventMutationV3};
     use antennabench_wsjtx::{
@@ -809,7 +831,7 @@ mod tests {
             let mutation_id = format!("automatic-test-mutation-{index}");
             let event = OperatorEventV3 {
                 meta: RecordMetaV3 {
-                    schema_version: SCHEMA_VERSION_V3,
+                    schema_version: snapshot.manifest.schema_version,
                     session_id: snapshot.manifest.session_id.clone(),
                     recorded_at: occurred_at,
                     provenance: Provenance::from_legacy(
@@ -879,13 +901,26 @@ mod tests {
                     )
                 }),
         );
-        actions.push((
-            Some(bundle.schedule.wspr_cycle_intents[3].intent_id.clone()),
-            first_cycle + chrono::Duration::seconds(6 * 60),
-            OperatorEventPayloadV3::SlotMissed {
-                reason: Some("operator ended after three cycles".into()),
-            },
-        ));
+        actions.extend(
+            bundle
+                .schedule
+                .wspr_cycle_intents
+                .iter()
+                .skip(3)
+                .enumerate()
+                .map(|(index, intent)| {
+                    (
+                        Some(intent.intent_id.clone()),
+                        first_cycle
+                            + chrono::Duration::seconds(
+                                6 * 60 + 120 * i64::try_from(index).unwrap(),
+                            ),
+                        OperatorEventPayloadV3::SlotMissed {
+                            reason: Some("operator ended after three cycles".into()),
+                        },
+                    )
+                }),
+        );
         bundle.events = actions
             .into_iter()
             .enumerate()
@@ -893,7 +928,7 @@ mod tests {
                 let mutation_id = format!("skip-final-mutation-{index}");
                 OperatorEventV3 {
                     meta: RecordMetaV3 {
-                        schema_version: SCHEMA_VERSION_V3,
+                        schema_version: bundle.manifest.schema_version,
                         session_id: bundle.manifest.session_id.clone(),
                         recorded_at: occurred_at,
                         provenance: Provenance::from_legacy(
@@ -920,6 +955,14 @@ mod tests {
         assert_eq!(
             snapshot.final_completed_slot_id().as_deref(),
             Some(created.slot_ids[2].as_str())
+        );
+        assert_eq!(
+            snapshot
+                .projected_slots()
+                .into_iter()
+                .map(|slot| slot.slot_id)
+                .collect::<Vec<_>>(),
+            vec![created.slot_ids[2].clone()]
         );
         let plans = authorized_plans(&snapshot).unwrap();
         assert_eq!(plans.last().unwrap().completed_slot_id, created.slot_ids[2]);

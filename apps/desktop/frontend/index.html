@@ -128,17 +128,17 @@
                 <legend><span>03</span> Run plan <button class="context-help" type="button" data-help-trigger="run_plan">?</button></legend>
                 <p class="field-help">Choose the intended antenna order. Actual WSPR cycle times are set during the run after each antenna is ready.</p>
                 <div class="field-grid">
-                  <label>Experiment mode<select data-setup-field="mode"><option value="whole_station_ab">Whole-station A/B</option><option value="tx_focused">TX focused</option><option value="rx_focused">RX focused</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
+                  <label>Experiment mode<select data-setup-field="mode"><option value="whole_station_ab">Both (TX + RX)</option><option value="tx_focused">TX focused</option><option value="rx_focused">RX focused</option><option value="single_antenna_profiling">Single-antenna profiling (TX + RX)</option></select></label>
                   <label>Goal<select data-setup-field="goal"><option value="general_coverage">General coverage</option><option value="dx">DX</option><option value="regional">Regional</option><option value="nvis_local">NVIS / local</option><option value="weak_signal_reliability">Weak-signal reliability</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
                   <label>Band<select data-setup-field="band"><option value="160m">160 m</option><option value="80m">80 m</option><option value="60m">60 m</option><option value="40m">40 m</option><option value="30m">30 m</option><option value="20m" selected>20 m</option><option value="17m">17 m</option><option value="15m">15 m</option><option value="12m">12 m</option><option value="10m">10 m</option><option value="6m">6 m</option><option value="2m">2 m</option></select></label>
                   <div class="field-control">
                     <span class="field-label">Complete rounds <button class="context-help" type="button" data-help-trigger="rounds">?</button></span>
-                    <input data-setup-field="rounds" inputmode="numeric" value="5" />
-                    <small>One round visits each configured antenna once.</small>
+                    <input data-setup-field="rounds" inputmode="numeric" value="4" />
+                    <small>One repetition tests every antenna in each direction selected by the mode.</small>
                   </div>
                 </div>
-                <p class="run-plan-summary" data-run-plan-summary aria-live="polite">10 WSPR cycles · at least 20 minutes</p>
-                <p class="field-help">One WSPR cycle is one antenna's two-minute WSPR period. This minimum excludes switching time and the wait for the next cycle.</p>
+                <p class="run-plan-summary" data-run-plan-summary aria-live="polite">16 WSPR cycles · at least 32 minutes</p>
+                <p class="field-help">Both mode schedules one full receive and one full transmit period per antenna in each repetition. This minimum excludes switching time and waits for cycle boundaries.</p>
               </fieldset>
 
               <fieldset class="setup-section">
@@ -184,7 +184,7 @@
             <section class="setup-review" data-setup-review hidden aria-labelledby="review-title">
               <div><p class="eyebrow">Run guidance</p><h2 id="review-title">Normalized plan review</h2></div>
               <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div></dl>
-              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Band</th><th>Signal</th></tr></thead><tbody data-review-slots></tbody></table></div>
+              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Direction</th><th>Band</th><th>Signal</th></tr></thead><tbody data-review-slots></tbody></table></div>
             </section>
 
           </section>
@@ -194,7 +194,7 @@
               <div><p class="eyebrow">Collect local evidence</p><h1 id="run-title">Active run</h1></div>
               <span class="status-chip muted" data-conductor-status>No active session</span>
             </div>
-            <p class="lede">Follow one next action at a time. Actual timing and antenna use come from each readiness action; no rig or network is required.</p>
+            <p class="lede">Follow one next action at a time. AntennaBench will call out antenna changes and the WSJT-X transmit/receive setting required for each WSPR period.</p>
 
             <div class="empty-state" data-conductor-empty>
               <span class="empty-icon" aria-hidden="true">◌</span>
@@ -254,9 +254,9 @@
               </details>
 
               <details class="receiver-panel">
-                <summary>Optional WSJT-X receiver · <strong data-wsjtx-phase>Not started</strong> <button class="context-help" type="button" data-help-trigger="wsjtx_receiver">?</button></summary>
+                <summary><span data-wsjtx-requirement>Required WSJT-X receiver</span> · <strong data-wsjtx-phase>Not started</strong> <button class="context-help" type="button" data-help-trigger="wsjtx_receiver">?</button></summary>
                 <form data-wsjtx-form>
-                  <p class="field-help" data-wsjtx-counts>Manual operation remains available without WSJT-X.</p>
+                  <p class="field-help" data-wsjtx-counts>Start this UDP receiver before starting a Both or RX-focused session.</p>
                   <div class="field-grid receiver-fields">
                     <label>Loopback address<input type="text" value="127.0.0.1" data-wsjtx-bind-address></label>
                     <label>UDP port<input type="number" min="1" max="65535" value="2237" data-wsjtx-port></label>

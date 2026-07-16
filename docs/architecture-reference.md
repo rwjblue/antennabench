@@ -11,11 +11,11 @@ source of truth; everything else is derived from it.
 
 Current crates:
 
-- `crates/core`: distinct schema-v1, schema-v2, and schema-v3 wire types, a shared current
+- `crates/core`: versioned schema-v1 through schema-v4 wire types, a shared current
   projection, schedule alignment, normalization, and validation.
 - `crates/storage`: dispatched read/write, non-destructive upgrade, verified
   attachment, and lossless-copy APIs for `.session.wsprabundle` v1 and
-  `.session.antennabundle` v2/v3 directories.
+  `.session.antennabundle` v2/v3/v4 directories.
 - `crates/wsjtx`: offline WSPR `ALL_WSPR.TXT` import plus a live WSJT-X UDP
   companion boundary, producing preserved adapter records and eligible local
   decode observations.
@@ -469,6 +469,9 @@ commits attachment-backed adapter records and observations as one deterministic
 cross-stream mutation. Exact mutation replay is idempotent, conflicting reuse
 fails, and a pre-checkpoint failure rolls all affected tails and a new
 attachment back together.
+[Decision 0018](decisions/0018-use-directed-counterbalanced-wspr-cycles.md)
+adds schema-v4 directed WSPR intentions, receive-capable WSJT-X preflight, and
+counterbalanced RX/TX authoring while retaining schema-v3 reads.
 The first optional rig-control milestone is tracked by
 [#14](https://github.com/rwjblue/antennabench/issues/14).
 

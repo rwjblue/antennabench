@@ -370,6 +370,7 @@ mod tests {
                     sequence_number: 1,
                     band: Band::M20,
                     antenna_label: "A".into(),
+                    direction: None,
                     signal: None,
                 },
                 WsprCycleIntentV3 {
@@ -377,6 +378,7 @@ mod tests {
                     sequence_number: 2,
                     band: Band::M20,
                     antenna_label: "B".into(),
+                    direction: None,
                     signal: None,
                 },
             ],

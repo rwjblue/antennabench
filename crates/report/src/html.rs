@@ -11,7 +11,7 @@ use antennabench_analysis::{
 };
 use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
-    SessionLifecycleV2,
+    SessionLifecycleV2, WsprCycleDirection,
 };
 use chrono::{SecondsFormat, Utc};
 
@@ -190,8 +190,13 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         out.push_str("</tbody></table></div>");
     }
     if !snapshot.wspr_cycles.is_empty() {
-        out.push_str("<div class=\"table-wrap\"><table><caption>Intended WSPR order and observed antenna use</caption><thead><tr><th scope=\"col\">Sequence</th><th scope=\"col\">Band</th><th scope=\"col\">Intended antenna</th><th scope=\"col\">Observed antenna</th><th scope=\"col\">Ready</th><th scope=\"col\">Cycle start</th><th scope=\"col\">Transmission end</th><th scope=\"col\">Attribution</th></tr></thead><tbody>");
+        out.push_str("<div class=\"table-wrap\"><table><caption>Intended WSPR order and observed antenna use</caption><thead><tr><th scope=\"col\">Sequence</th><th scope=\"col\">Band</th><th scope=\"col\">Direction</th><th scope=\"col\">Intended antenna</th><th scope=\"col\">Observed antenna</th><th scope=\"col\">Ready</th><th scope=\"col\">Period start</th><th scope=\"col\">Period end</th><th scope=\"col\">Attribution</th></tr></thead><tbody>");
         for cycle in &snapshot.wspr_cycles {
+            let direction = match cycle.direction {
+                Some(WsprCycleDirection::Receive) => "Receive",
+                Some(WsprCycleDirection::Transmit) => "Transmit",
+                None => "Not recorded",
+            };
             let attribution = match cycle.attribution {
                 crate::ReportWsprAttribution::Pending => "Not yet run",
                 crate::ReportWsprAttribution::Skipped => "Skipped by operator",
@@ -200,7 +205,7 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
                     "Unknown — antenna changed during transmission"
                 }
             };
-            write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", cycle.sequence_number, band(cycle.band), escape_html(&cycle.planned_antenna), escape_html(cycle.actual_antenna.as_deref().unwrap_or("Not recorded")), cycle.ready_at.map_or_else(|| "—".into(), timestamp), cycle.starts_at.map_or_else(|| "—".into(), timestamp), cycle.transmission_ends_at.map_or_else(|| "—".into(), timestamp), attribution);
+            write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", cycle.sequence_number, band(cycle.band), direction, escape_html(&cycle.planned_antenna), escape_html(cycle.actual_antenna.as_deref().unwrap_or("Not recorded")), cycle.ready_at.map_or_else(|| "—".into(), timestamp), cycle.starts_at.map_or_else(|| "—".into(), timestamp), cycle.transmission_ends_at.map_or_else(|| "—".into(), timestamp), attribution);
         }
         out.push_str("</tbody></table></div>");
     }

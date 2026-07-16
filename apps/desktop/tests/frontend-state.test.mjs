@@ -267,8 +267,8 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.match(setupPanel, /Optional antenna details/);
   assert.match(setupPanel, /Advanced: controlled CW or RTTY signal/);
   assert.ok(setupPanel.indexOf("WSPR Spots") < setupPanel.indexOf("Advanced: controlled CW or RTTY signal"));
-  assert.match(setupPanel, /One round visits each configured antenna once/);
-  assert.match(setupPanel, /One WSPR cycle is one antenna's two-minute WSPR period/);
+  assert.match(setupPanel, /One repetition tests every antenna in each direction selected by the mode/);
+  assert.match(setupPanel, /Both mode schedules one full receive and one full transmit period per antenna/);
 
   const values = new Map([
     ["callsign", "n1rwj"],
@@ -302,12 +302,18 @@ test("WSPR run summaries derive cycles and ideal minimum time", () => {
   assert.deepEqual(wsprRunPlanSummary("5", 2), {
     rounds: 5,
     antennaCount: 2,
-    cycles: 10,
-    minimumMinutes: 20,
-    text: "10 WSPR cycles · at least 20 minutes",
+    directionCount: 2,
+    cycles: 20,
+    minimumMinutes: 40,
+    text: "20 WSPR cycles · at least 40 minutes",
   });
-  assert.equal(wsprRunPlanSummary("3", 4)?.text, "12 WSPR cycles · at least 24 minutes");
-  assert.equal(wsprRunPlanSummary("1", 1)?.text, "1 WSPR cycle · at least 2 minutes");
+  assert.equal(wsprRunPlanSummary("3", 4)?.text, "24 WSPR cycles · at least 48 minutes");
+  assert.equal(wsprRunPlanSummary("1", 1)?.text, "2 WSPR cycles · at least 4 minutes");
+  assert.equal(wsprRunPlanSummary("4", 2, "tx_focused")?.text, "8 WSPR cycles · at least 16 minutes");
+  assert.equal(
+    wsprRunPlanSummary("4", 2, "single_antenna_profiling")?.text,
+    "8 WSPR cycles · at least 16 minutes",
+  );
   for (const invalid of ["", " ", "0", "-1", "1.5", "not-a-number"]) {
     assert.equal(wsprRunPlanSummary(invalid, 2), null);
   }
@@ -324,7 +330,7 @@ test("active run leads with task actions and hides implementation-oriented tools
   assert.match(runPanel, /Skip this cycle/);
   assert.match(runPanel, /Add note/);
   assert.match(runPanel, /Correct last action/);
-  assert.match(runPanel, /<details[^>]*>\s*<summary>Optional WSJT-X receiver/u);
+  assert.match(runPanel, /<details[^>]*>\s*<summary><span data-wsjtx-requirement>Required WSJT-X receiver/u);
   assert.match(runPanel, /<details[^>]*data-corrections-panel/u);
   assert.doesNotMatch(runPanel, /Explicit operator evidence|Trusted boundary|Trusted time/);
 });

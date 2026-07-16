@@ -1,6 +1,8 @@
 use std::{fs, io::Cursor, path::Path};
 
-use antennabench_core::{Band, BundleV3Contents, SessionLifecycleV2, SCHEMA_VERSION_V3};
+use antennabench_core::{
+    Band, BundleV3Contents, SessionLifecycleV2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+};
 use antennabench_rbn::{
     parse_rbn_zip, prepare_rbn_import, RbnImportConfig, RbnImportPreparationConfig,
     RbnPreparedSummary, RBN_ARCHIVE_LIMITS,
@@ -97,15 +99,14 @@ fn import_file(
     }
     let (bundle_path, _) = active_session_source(state)?;
     let store = BundleStore::new(&bundle_path);
-    if store
+    let schema_version = store
         .schema_version()
-        .map_err(|error| crate::conductor::live_error_payload(error.into()))?
-        != SCHEMA_VERSION_V3
-    {
+        .map_err(|error| crate::conductor::live_error_payload(error.into()))?;
+    if !matches!(schema_version, SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4) {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Unsupported,
-            "RBN archive import requires a schema-v3 signal session.",
-            "open or create a schema-v3 session with an explicit signal plan",
+            "RBN archive import requires a current signal session.",
+            "open or create a schema-v3 or schema-v4 session with an explicit signal plan",
         ));
     }
     let current = store
