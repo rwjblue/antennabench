@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  CONTEXT_HELP,
   WORKFLOWS,
   applyStationPreferences,
   beginConductorLoad,
@@ -27,6 +28,7 @@ import {
   exportSessionSucceeded,
   formatActiveRunTime,
   initialState,
+  installContextualHelp,
   invokeActiveSessionReport,
   invokeActiveSessionConductor,
   invokeCreateSessionFromReview,
@@ -80,6 +82,114 @@ import {
   wsprLiveImportSucceeded,
   wsprLiveAcquisitionModel,
 } from "../frontend/app.mjs";
+
+test("contextual help is centralized, keyboard accessible, and fully inventoried", () => {
+  class FakeElement {
+    constructor(helpTrigger = null) {
+      this.dataset = helpTrigger ? { helpTrigger } : {};
+      this.attributes = new Map();
+      this.listeners = new Map();
+      this.hidden = false;
+      this.focusCount = 0;
+      this.afterNode = null;
+    }
+
+    setAttribute(name, value) {
+      this.attributes.set(name, value);
+    }
+
+    getAttribute(name) {
+      return this.attributes.get(name);
+    }
+
+    removeAttribute(name) {
+      this.attributes.delete(name);
+    }
+
+    addEventListener(name, listener) {
+      this.listeners.set(name, listener);
+    }
+
+    after(node) {
+      this.afterNode = node;
+    }
+
+    contains(target) {
+      return target === this;
+    }
+
+    focus() {
+      this.focusCount += 1;
+    }
+  }
+
+  const trigger = new FakeElement("countdown");
+  const documentListeners = new Map();
+  const document = {
+    createElement() {
+      return new FakeElement();
+    },
+    addEventListener(name, listener) {
+      documentListeners.set(name, listener);
+    },
+  };
+  const root = {
+    ownerDocument: document,
+    querySelectorAll() {
+      return [trigger];
+    },
+  };
+
+  installContextualHelp(root);
+
+  assert.equal(trigger.getAttribute("aria-label"), "Help: Countdown");
+  assert.equal(trigger.getAttribute("aria-controls"), trigger.afterNode.id);
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(trigger.afterNode.getAttribute("role"), "note");
+  assert.match(trigger.afterNode.textContent, /time until the current transmission ends/);
+  assert.equal(trigger.afterNode.hidden, true);
+
+  const click = {
+    preventDefault() {},
+    stopPropagation() {},
+  };
+  trigger.listeners.get("click")(click);
+
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  assert.equal(trigger.getAttribute("aria-describedby"), trigger.afterNode.id);
+  assert.equal(trigger.afterNode.hidden, false);
+
+  documentListeners.get("keydown")({ key: "Escape" });
+
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(trigger.focusCount, 1);
+
+  trigger.listeners.get("click")(click);
+  documentListeners.get("click")({ target: new FakeElement() });
+
+  assert.equal(trigger.afterNode.hidden, true);
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+
+  for (const help of Object.values(CONTEXT_HELP)) {
+    const sentences = help.text.match(/[.!?](?:\s|$)/g) ?? [];
+    assert.ok(sentences.length <= 2, `${help.title} is longer than two sentences`);
+  }
+
+  const html = readFileSync(
+    new URL("../frontend/index.html", import.meta.url),
+    "utf8",
+  );
+  const inventory = new Set(
+    [...html.matchAll(/data-help-trigger="([^"]+)"/g)].map((match) => match[1]),
+  );
+
+  assert.deepEqual([...inventory].sort(), Object.keys(CONTEXT_HELP).sort());
+  assert.equal(
+    [...html.matchAll(/<button[^>]+data-help-trigger="[^"]+"/g)].length,
+    Object.keys(CONTEXT_HELP).length,
+  );
+  assert.doesNotMatch(html, /title="[^"]*help/i);
+});
 
 test("the shell starts in session setup", () => {
   assert.deepEqual(initialState(), {

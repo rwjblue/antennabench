@@ -63,7 +63,7 @@
 
             <form class="setup-form" data-setup-form novalidate>
               <fieldset class="setup-section">
-                <legend><span>01</span> Station</legend>
+                <legend><span>01</span> Station <button class="context-help" type="button" data-help-trigger="station_location">?</button></legend>
                 <div class="field-grid">
                   <label>Callsign<input data-setup-field="callsign" autocomplete="off" autocapitalize="characters" spellcheck="false" /></label>
                   <label>Grid
@@ -77,14 +77,17 @@
                 <details class="advanced-fields">
                   <summary>Optional station details</summary>
                   <div class="field-grid">
-                    <label>Transmit power (W)<input data-setup-field="powerWatts" inputmode="decimal" /></label>
+                    <div class="field-control">
+                      <span class="field-label">Transmit power (W) <button class="context-help" type="button" data-help-trigger="transmit_power">?</button></span>
+                      <input data-setup-field="powerWatts" inputmode="decimal" />
+                    </div>
                     <label class="field-wide">Operator notes<textarea data-setup-field="operatorNotes" rows="2"></textarea></label>
                   </div>
                 </details>
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>02</span> Antennas and explicit order</legend>
+                <legend><span>02</span> Antennas and explicit order <button class="context-help" type="button" data-help-trigger="antennas">?</button></legend>
                 <p class="field-help">Rows are persisted and scheduled in A/B order. Add more rows for a larger comparison.</p>
                 <div class="antenna-editor" data-antenna-row>
                   <div class="antenna-heading"><strong data-antenna-title>Antenna A</strong><button type="button" data-remove-antenna>Remove</button></div>
@@ -122,23 +125,24 @@
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>03</span> Run plan</legend>
+                <legend><span>03</span> Run plan <button class="context-help" type="button" data-help-trigger="run_plan">?</button></legend>
                 <p class="field-help">Choose the intended antenna order. Actual WSPR cycle times are set during the run after each antenna is ready.</p>
                 <div class="field-grid">
                   <label>Experiment mode<select data-setup-field="mode"><option value="whole_station_ab">Whole-station A/B</option><option value="tx_focused">TX focused</option><option value="rx_focused">RX focused</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
                   <label>Goal<select data-setup-field="goal"><option value="general_coverage">General coverage</option><option value="dx">DX</option><option value="regional">Regional</option><option value="nvis_local">NVIS / local</option><option value="weak_signal_reliability">Weak-signal reliability</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
                   <label>Band<select data-setup-field="band"><option value="160m">160 m</option><option value="80m">80 m</option><option value="60m">60 m</option><option value="40m">40 m</option><option value="30m">30 m</option><option value="20m" selected>20 m</option><option value="17m">17 m</option><option value="15m">15 m</option><option value="12m">12 m</option><option value="10m">10 m</option><option value="6m">6 m</option><option value="2m">2 m</option></select></label>
-                  <label>Complete rounds
+                  <div class="field-control">
+                    <span class="field-label">Complete rounds <button class="context-help" type="button" data-help-trigger="rounds">?</button></span>
                     <input data-setup-field="rounds" inputmode="numeric" value="5" />
                     <small>One round visits each configured antenna once.</small>
-                  </label>
+                  </div>
                 </div>
                 <p class="run-plan-summary" data-run-plan-summary aria-live="polite">10 WSPR cycles · at least 20 minutes</p>
                 <p class="field-help">One WSPR cycle is one antenna's two-minute WSPR period. This minimum excludes switching time and the wait for the next cycle.</p>
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>04</span> WSPR Spots</legend>
+                <legend><span>04</span> WSPR Spots <button class="context-help" type="button" data-help-trigger="public_spots">?</button></legend>
                 <p class="field-help">Public WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror.</p>
                 <details class="advanced-fields">
                   <summary>Offline option</summary>
@@ -147,7 +151,7 @@
               </fieldset>
 
               <details class="setup-section advanced-section">
-                <summary>Advanced: controlled CW or RTTY signal</summary>
+                <summary>Advanced: controlled CW or RTTY signal <button class="context-help" type="button" data-help-trigger="controlled_signal">?</button></summary>
                 <label class="authority-confirmation"><input type="checkbox" data-setup-field="signalPlanEnabled"> Add a manually conducted CW or RTTY signal plan</label>
                 <p class="field-help">AntennaBench will guide antenna and frequency changes, but will not key the transmitter or infer that planned settings were used. Enter every exact frequency in hertz; Rust expands them into complete, order-balanced antenna × frequency blocks.</p>
                 <div class="field-grid" data-signal-plan-fields hidden>
@@ -207,7 +211,7 @@
             <div class="conductor" data-conductor hidden>
               <section class="conductor-prompt" aria-live="polite">
                 <div><p class="eyebrow" data-conductor-phase></p><h2 data-conductor-guidance></h2></div>
-                <strong class="countdown" data-conductor-countdown></strong>
+                <span class="countdown-help"><button class="context-help" type="button" data-help-trigger="countdown">?</button><strong class="countdown" data-conductor-countdown></strong></span>
               </section>
 
               <div class="conductor-actions run-primary-actions" data-primary-run-actions>
@@ -216,19 +220,20 @@
                 <button type="button" class="primary-action" data-conductor-action="arm_wspr_cycle">Antenna ready</button>
               </div>
 
-              <button type="button" class="text-action skip-cycle-action" data-conductor-action="skip_wspr_cycle">Skip this cycle</button>
+              <div class="inline-help-action"><button type="button" class="text-action skip-cycle-action" data-conductor-action="skip_wspr_cycle">Skip this cycle</button><button class="context-help" type="button" data-help-trigger="skip_cycle">?</button></div>
               <div class="conductor-actions run-task-actions">
                 <button type="button" data-add-run-note>Add note</button>
                 <button type="button" data-open-corrections>Correct last action</button>
+                <button class="context-help" type="button" data-help-trigger="notes_corrections">?</button>
               </div>
 
               <div class="slot-focus">
-                <article><span>Current / last cycle</span><div data-current-slot></div></article>
-                <article><span>Next cycle</span><div data-next-slot></div></article>
+                <article><span>Current / last cycle <button class="context-help" type="button" data-help-trigger="current_cycle">?</button></span><div data-current-slot></div></article>
+                <article><span>Next cycle <button class="context-help" type="button" data-help-trigger="next_cycle">?</button></span><div data-next-slot></div></article>
               </div>
 
               <details class="run-details">
-                <summary>Run details and session controls</summary>
+                <summary>Run details and session controls <button class="context-help" type="button" data-help-trigger="session_controls">?</button></summary>
                 <div class="conductor-context">
                   <div><span>Session state</span><strong data-conductor-lifecycle></strong></div>
                   <div><span>Antenna in use</span><strong data-conductor-antenna-in-use></strong></div>
@@ -242,14 +247,14 @@
               </details>
 
               <details class="receiver-panel" data-wspr-live-panel>
-                <summary>Public spot collection · <strong data-wspr-live-phase>Waiting for antenna confirmation</strong></summary>
+                <summary>Public spot collection · <strong data-wspr-live-phase>Waiting for antenna confirmation</strong> <button class="context-help" type="button" data-help-trigger="wspr_live_status">?</button></summary>
                 <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror after the ingestion grace period. No separate fetch action is required.</p>
                 <p class="receiver-diagnostic" data-wspr-live-diagnostic hidden></p>
                 <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry acquisition</button><button type="button" class="danger-action" data-wspr-live-end-without hidden>End without public spots</button></div>
               </details>
 
               <details class="receiver-panel">
-                <summary>Optional WSJT-X receiver · <strong data-wsjtx-phase>Not started</strong></summary>
+                <summary>Optional WSJT-X receiver · <strong data-wsjtx-phase>Not started</strong> <button class="context-help" type="button" data-help-trigger="wsjtx_receiver">?</button></summary>
                 <form data-wsjtx-form>
                   <p class="field-help" data-wsjtx-counts>Manual operation remains available without WSJT-X.</p>
                   <div class="field-grid receiver-fields">

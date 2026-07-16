@@ -217,6 +217,14 @@ durable evidence and reports. Receiver configuration, diagnostics, and action
 history use progressive disclosure. Every mutation shows a pending state
 followed by explicit success or typed failure.
 
+Selected setup and Active Run concepts use one restrained contextual-help
+pattern. A real `?` button exposes at most two short operator-facing sentences,
+advertises its controlled description to assistive technology, and supports
+keyboard activation, Escape with focus return, outside-click close, and narrow
+layout reflow. Help remains presentation-only: validation, consent, safety,
+active instructions, and recovery errors always stay visible without opening a
+disclosure.
+
 The active-run surface can start or stop one optional WSJT-X receiver while the
 session is running. Rust owns the socket, expected-client filter, bounded
 adapter state, raw hex preservation, conservative actual-cycle annotation,

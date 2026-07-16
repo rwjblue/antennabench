@@ -25,7 +25,9 @@ cycle and closes the prior antenna-occupancy interval at that recorded time.
 Active Run leads with one current instruction and one primary action. Notes,
 cycle skipping, corrections, receiver configuration, public-spot status, and
 session internals remain available without competing with the next physical
-step.
+step. Short contextual help is available beside selected unfamiliar concepts;
+required instructions, validation, safety, and recovery guidance remain visible
+without opening it.
 
 Local WSJT-X reception is optional. WSPR.live public spots are gathered
 automatically by default after completed cycles, with source and completeness

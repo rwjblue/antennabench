@@ -1,5 +1,124 @@
 export const WORKFLOWS = Object.freeze(["setup", "run", "transfer", "report"]);
 
+export const CONTEXT_HELP = Object.freeze({
+  station_location: {
+    title: "Grid and current location",
+    text: "A Maidenhead grid is a short code for your station area. Use current location asks macOS for one location estimate; you can always type the grid instead.",
+  },
+  transmit_power: {
+    title: "Transmit power",
+    text: "Enter the transmitter power used for the session in watts. It gives the report useful context but does not control your radio.",
+  },
+  antennas: {
+    title: "Antenna descriptions",
+    text: "Use a clear label and short description so the antennas stay recognizable in prompts and reports. Optional height, orientation, feedline, tuner, radial, and installation details add context without changing the schedule.",
+  },
+  run_plan: {
+    title: "Experiment plan",
+    text: "Mode describes what part of the station you are comparing, goal describes the kind of coverage you care about, and band selects the WSPR band. These choices organize the evidence; they do not declare a winner.",
+  },
+  rounds: {
+    title: "Rounds and cycles",
+    text: "One cycle is one antenna's two-minute WSPR period. One complete round visits every configured antenna once, and the estimate shows only ideal cycle time.",
+  },
+  public_spots: {
+    title: "Automatic WSPR spots",
+    text: "AntennaBench normally gathers public reports of your transmissions from WSPR.live after completed cycles. Turn this off for an offline run; you can import saved data later.",
+  },
+  controlled_signal: {
+    title: "Controlled CW or RTTY plan",
+    text: "Use this advanced plan when you will manually transmit an exact callsign, message, cadence, power, and frequency list for CW or RTTY. The evidence profile says how observations will be collected, while repetitions and interval fields define the balanced sequence.",
+  },
+  countdown: {
+    title: "Countdown",
+    text: "The countdown shows time until the current transmission ends or the armed cycle starts. Rust owns the actual timing; this display refreshes locally between checks.",
+  },
+  current_cycle: {
+    title: "Current or last cycle",
+    text: "This card shows the cycle that is transmitting now, or the most recently completed cycle between actions. The evidence line says what antenna state is actually supported.",
+  },
+  next_cycle: {
+    title: "Next cycle",
+    text: "This card shows the next planned antenna and band. Its exact start time appears only after you switch antennas and press the named ready button.",
+  },
+  skip_cycle: {
+    title: "Skip cycle",
+    text: "Skip records that this planned cycle was missed and moves to the next antenna. Use it when you cannot conduct the cycle; the record can be corrected later.",
+  },
+  notes_corrections: {
+    title: "Notes and corrections",
+    text: "Add note records useful context, usually on the current or last cycle. Corrections append a visible replacement or retraction instead of erasing history.",
+  },
+  session_controls: {
+    title: "Pause, end, and abandon",
+    text: "Pause keeps the session available to resume, while End closes it normally. Abandon is terminal and marks the run as intentionally discontinued; existing evidence remains.",
+  },
+  wspr_live_status: {
+    title: "Public spot collection",
+    text: "This status says whether AntennaBench is waiting, collecting, finished, off, or needs a retry. It never blocks manual operator actions or bundle export.",
+  },
+  wsjtx_receiver: {
+    title: "Optional WSJT-X receiver",
+    text: "Connect a local WSJT-X UDP feed to add receiver evidence while the session runs. Manual operation still works when the receiver is stopped or unavailable.",
+  },
+});
+
+export function installContextualHelp(root) {
+  const document = root.ownerDocument;
+  let openDisclosure = null;
+
+  const close = (restoreFocus = false) => {
+    if (!openDisclosure) return;
+    const { trigger, popover } = openDisclosure;
+    popover.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.removeAttribute("aria-describedby");
+    openDisclosure = null;
+    if (restoreFocus) trigger.focus();
+  };
+
+  [...root.querySelectorAll("[data-help-trigger]")].forEach((trigger, index) => {
+    const help = CONTEXT_HELP[trigger.dataset.helpTrigger];
+    if (!help) return;
+    const popover = document.createElement("span");
+    popover.id = `context-help-${index + 1}`;
+    popover.className = "context-help-popover";
+    popover.setAttribute("role", "note");
+    popover.textContent = help.text;
+    popover.hidden = true;
+    trigger.setAttribute("aria-label", `Help: ${help.title}`);
+    trigger.setAttribute("aria-controls", popover.id);
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.after(popover);
+    trigger.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const wasOpen = openDisclosure?.trigger === trigger;
+      close();
+      if (wasOpen) return;
+      popover.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      trigger.setAttribute("aria-describedby", popover.id);
+      openDisclosure = { trigger, popover };
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close(true);
+  });
+  document.addEventListener("click", (event) => {
+    if (
+      openDisclosure
+      && event.target !== openDisclosure.trigger
+      && !openDisclosure.popover.contains(event.target)
+    ) {
+      close();
+    }
+  });
+
+  return { close };
+}
+
 export function initialState(workflow = "setup") {
   return selectWorkflow(
     {
@@ -824,6 +943,7 @@ function mount(root, browserWindow) {
   const reportFeedback = root.querySelector("[data-report-feedback]");
   const reportFeedbackMessage = root.querySelector("[data-report-feedback-message]");
   const reportFeedbackDetail = root.querySelector("[data-report-feedback-detail]");
+  installContextualHelp(root);
 
   const render = () => {
     for (const item of viewModel(state)) {
