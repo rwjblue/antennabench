@@ -323,6 +323,7 @@ export function writeReleaseNotes({ filename, root, tag }) {
     "```\n\n" +
     "Known limitations: macOS 15 or later is required; Windows, Linux, automatic updates, the Mac App Store, and package-manager installation are not included.\n\n" +
     "This is a private draft verification candidate. Stable publication requires explicit owner promotion after clean-system install, launch, and canonical open/report/export/reopen verification.\n";
+  fs.mkdirSync(path.dirname(filename), { recursive: true });
   fs.writeFileSync(filename, text);
 }
 

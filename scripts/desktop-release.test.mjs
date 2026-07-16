@@ -11,6 +11,7 @@ import {
   assertVersionTag,
   canonicalJson,
   checksumLines,
+  readCompleteArtifactSet,
   targetContract,
   validateStagedEntries,
   withAtomicDirectory,
@@ -165,6 +166,60 @@ test("assembly does not trust a forged publishable flag", async () => {
       assembleArtifacts({ root, inputs: [directory, directory] }),
       /publishable state disagrees/,
     );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("complete-set verification rechecks exact publishable bytes and trust evidence", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "desktop-release-complete-"));
+  try {
+    const crypto = await import("node:crypto").then(({ default: value }) => value);
+    const inputs = [];
+    for (const target of ["aarch64-apple-darwin", "x86_64-apple-darwin"]) {
+      const directory = path.join(root, "inputs", target);
+      fs.mkdirSync(directory, { recursive: true });
+      const filename = archiveName("0.1.0", target);
+      fs.writeFileSync(path.join(directory, filename), target);
+      fs.writeFileSync(
+        path.join(directory, "artifact-manifest.json"),
+        canonicalJson({
+          app: {
+            metadata: { build_version: "0.1.0", short_version: "0.1.0" },
+            signature: {
+              authorities: ["Developer ID Application: Example (TEAMID)"],
+              classification: "developer-id",
+              gatekeeper: "accepted",
+              hardened_runtime: true,
+              notarization: "stapled-and-validated",
+              publishable: true,
+              secure_timestamp: true,
+            },
+          },
+          artifact: {
+            filename,
+            sha256: crypto.createHash("sha256").update(target).digest("hex"),
+            size: Buffer.byteLength(target),
+          },
+          build_inputs: { target },
+          contract: { target },
+          publishable: true,
+          schema_version: 1,
+          source: {
+            commit: "0123456789abcdef0123456789abcdef01234567",
+            dirty: false,
+          },
+          state: "complete",
+          tag: "v0.1.0",
+          version: "0.1.0",
+        }),
+      );
+      inputs.push(directory);
+    }
+    const output = await assembleArtifacts({ root, inputs, requirePublishable: true });
+    assert.equal(readCompleteArtifactSet(output).entries.length, 4);
+    fs.appendFileSync(path.join(output, "AntennaBench-0.1.0-SHA256SUMS"), "unexpected\n");
+    assert.throws(() => readCompleteArtifactSet(output), /does not exactly match/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

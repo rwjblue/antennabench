@@ -275,6 +275,7 @@ function inspectSignature(app, trustMode) {
   }
 
   return {
+    authorities: [...details.output.matchAll(/^Authority=(.+)$/gm)].map((match) => match[1]),
     classification,
     gatekeeper: trustMode === "release" ? "accepted" : "not-checked-non-publishable",
     hardened_runtime: trustMode === "release",
@@ -282,6 +283,25 @@ function inspectSignature(app, trustMode) {
     publishable: trustMode === "release",
     secure_timestamp: trustMode === "release",
   };
+}
+
+function assertPublishableSignature(signature, source) {
+  const requiredTrust = {
+    classification: "developer-id",
+    gatekeeper: "accepted",
+    hardened_runtime: true,
+    notarization: "stapled-and-validated",
+    publishable: true,
+    secure_timestamp: true,
+  };
+  for (const [field, expected] of Object.entries(requiredTrust)) {
+    if (signature?.[field] !== expected) {
+      throw new Error(`${source} publishable signature evidence has invalid ${field}`);
+    }
+  }
+  if (!Array.isArray(signature.authorities) || !signature.authorities[0]?.startsWith("Developer ID Application:")) {
+    throw new Error(`${source} publishable signature evidence is missing its Developer ID authority`);
+  }
 }
 
 function inspectApp(app, { target, version, trustMode }) {
@@ -515,19 +535,7 @@ export function readTargetManifest(directory) {
     throw new Error(`${filename} publishable state disagrees with its signature evidence`);
   }
   if (manifest.publishable) {
-    const requiredTrust = {
-      classification: "developer-id",
-      gatekeeper: "accepted",
-      hardened_runtime: true,
-      notarization: "stapled-and-validated",
-      publishable: true,
-      secure_timestamp: true,
-    };
-    for (const [field, expected] of Object.entries(requiredTrust)) {
-      if (signature[field] !== expected) {
-        throw new Error(`${filename} publishable signature evidence has invalid ${field}`);
-      }
-    }
+    assertPublishableSignature(signature, filename);
     if (manifest.source?.dirty !== false || manifest.tag === null) {
       throw new Error(`${filename} publishable input requires a clean tagged source`);
     }
@@ -581,6 +589,13 @@ export function readCompleteArtifactSet(directory) {
     if (!fs.existsSync(filename)) throw new Error(`${artifact.filename} is missing`);
     if (fs.statSync(filename).size !== artifact.size || sha256File(filename) !== artifact.sha256) {
       throw new Error(`${artifact.filename} does not match the release manifest`);
+    }
+    assertPublishableSignature(artifact.app?.signature, releaseManifestName);
+    if (
+      artifact.app?.metadata?.short_version !== manifest.version ||
+      artifact.app?.metadata?.build_version !== manifest.version
+    ) {
+      throw new Error(`${releaseManifestName} artifact version evidence does not match the release`);
     }
   }
   validateStagedEntries(directory, [...expectedArchives, releaseManifestName, checksumName]);
