@@ -66,7 +66,13 @@
                 <legend><span>01</span> Station</legend>
                 <div class="field-grid">
                   <label>Callsign<input data-setup-field="callsign" autocomplete="off" autocapitalize="characters" spellcheck="false" /></label>
-                  <label>Grid<input data-setup-field="grid" autocomplete="off" /></label>
+                  <label>Grid
+                    <span class="grid-location-field">
+                      <input data-setup-field="grid" autocomplete="off" />
+                      <button type="button" data-use-current-location>Use current location</button>
+                    </span>
+                    <small class="location-status" data-location-status aria-live="polite"></small>
+                  </label>
                 </div>
                 <details class="advanced-fields">
                   <summary>Optional station details</summary>

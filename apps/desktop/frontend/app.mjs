@@ -57,6 +57,49 @@ export function workflowFromHash(hash) {
   return WORKFLOWS.includes(workflow) ? workflow : "setup";
 }
 
+export function maidenheadGrid(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new TypeError("Location coordinates must be finite numbers.");
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    throw new RangeError("Location coordinates are outside the supported range.");
+  }
+
+  const boundedLatitude = latitude === 90 ? 90 - 1e-9 : latitude;
+  const boundedLongitude = longitude === 180 ? 180 - 1e-9 : longitude;
+  const shiftedLatitude = boundedLatitude + 90;
+  const shiftedLongitude = boundedLongitude + 180;
+  const fieldLongitude = Math.floor(shiftedLongitude / 20);
+  const fieldLatitude = Math.floor(shiftedLatitude / 10);
+  const squareLongitude = Math.floor((shiftedLongitude % 20) / 2);
+  const squareLatitude = Math.floor(shiftedLatitude % 10);
+
+  return `${String.fromCharCode(65 + fieldLongitude)}${String.fromCharCode(65 + fieldLatitude)}${squareLongitude}${squareLatitude}`;
+}
+
+export function currentPosition(geolocation) {
+  return new Promise((resolve, reject) => {
+    if (typeof geolocation?.getCurrentPosition !== "function") {
+      reject(new Error("System location is unavailable in this desktop environment."));
+      return;
+    }
+    geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: false,
+      timeout: 10_000,
+      maximumAge: 300_000,
+    });
+  });
+}
+
+export function locationErrorMessage(error) {
+  switch (error?.code) {
+    case 1: return "Location permission was not granted. Enter the grid manually instead.";
+    case 2: return "The system could not determine a location. Enter the grid manually instead.";
+    case 3: return "The location request timed out. Enter the grid manually or try again.";
+    default: return error?.message || "Location is unavailable. Enter the grid manually instead.";
+  }
+}
+
 export function viewModel(state) {
   return WORKFLOWS.map((workflow) => ({
     workflow,
@@ -572,6 +615,9 @@ function mount(root, browserWindow) {
   const setupReviewButton = root.querySelector("[data-review-setup]");
   const setupCreateButton = root.querySelector("[data-create-session]");
   const setupAddAntennaButton = root.querySelector("[data-add-antenna]");
+  const useCurrentLocationButton = root.querySelector("[data-use-current-location]");
+  const locationStatus = root.querySelector("[data-location-status]");
+  const stationGrid = root.querySelector('[data-setup-field="grid"]');
   const setupAntennaTemplate = root.querySelector("[data-antenna-template]");
   const setupFeedback = root.querySelector("[data-setup-feedback]");
   const setupFeedbackMessage = root.querySelector("[data-setup-feedback-message]");
@@ -1192,6 +1238,27 @@ function mount(root, browserWindow) {
     if (!setupBusyState(state)) {
       state = editSessionSetup(state);
       render();
+    }
+  });
+
+  useCurrentLocationButton.addEventListener("click", async () => {
+    useCurrentLocationButton.disabled = true;
+    useCurrentLocationButton.textContent = "Locating…";
+    locationStatus.textContent = "Requesting system location…";
+    try {
+      const position = await currentPosition(browserWindow.navigator?.geolocation);
+      stationGrid.value = maidenheadGrid(
+        position.coords.latitude,
+        position.coords.longitude,
+      );
+      state = editSessionSetup(state);
+      render();
+      locationStatus.textContent = `Estimated ${stationGrid.value}; raw coordinates were not saved.`;
+    } catch (error) {
+      locationStatus.textContent = locationErrorMessage(error);
+    } finally {
+      useCurrentLocationButton.disabled = false;
+      useCurrentLocationButton.textContent = "Use current location";
     }
   });
 

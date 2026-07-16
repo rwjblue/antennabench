@@ -19,6 +19,7 @@ import {
   beginWsprLiveImport,
   conductorLoadSucceeded,
   conductorMutationFailed,
+  currentPosition,
   editSessionSetup,
   exportSessionCancelled,
   exportSessionFailed,
@@ -40,6 +41,8 @@ import {
   invokeStartSessionWsjtx,
   invokeStopSessionWsjtx,
   invokeAdvanceSessionWsprLive,
+  locationErrorMessage,
+  maidenheadGrid,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
@@ -204,6 +207,38 @@ test("saved station details fill only an untouched setup form", () => {
     grid: "FN31",
   }), false);
   assert.equal(controls.get("grid").value, "EM10");
+});
+
+test("system coordinates produce a coarse Maidenhead grid without retaining coordinates", async () => {
+  assert.equal(maidenheadGrid(42.3601, -71.0589), "FN42");
+  assert.equal(maidenheadGrid(-33.8688, 151.2093), "QF56");
+  assert.equal(maidenheadGrid(-90, -180), "AA00");
+  assert.equal(maidenheadGrid(90, 180), "RR99");
+  assert.throws(() => maidenheadGrid(91, 0), RangeError);
+  assert.throws(() => maidenheadGrid(Number.NaN, 0), TypeError);
+
+  let requestedOptions;
+  const position = await currentPosition({
+    getCurrentPosition(success, _failure, options) {
+      requestedOptions = options;
+      success({ coords: { latitude: 42.3601, longitude: -71.0589 } });
+    },
+  });
+  assert.deepEqual(position, {
+    coords: { latitude: 42.3601, longitude: -71.0589 },
+  });
+  assert.deepEqual(requestedOptions, {
+    enableHighAccuracy: false,
+    timeout: 10_000,
+    maximumAge: 300_000,
+  });
+  await assert.rejects(currentPosition(undefined), /unavailable/);
+  assert.match(locationErrorMessage({ code: 1 }), /permission/);
+  assert.match(locationErrorMessage({ code: 3 }), /timed out/);
+
+  const setupHtml = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  assert.match(setupHtml, /data-use-current-location/);
+  assert.match(setupHtml, /data-location-status aria-live="polite"/);
 });
 
 test("setup serializes an explicit typed signal plan without WSPR.live", () => {
