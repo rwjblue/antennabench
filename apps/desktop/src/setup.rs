@@ -336,7 +336,7 @@ fn parse_signal_plan(
         "Cadence interval",
         diagnostics,
     );
-    let transmitted_callsign = draft.transmitted_callsign.trim().to_string();
+    let transmitted_callsign = draft.transmitted_callsign.trim().to_uppercase();
     if transmitted_callsign.is_empty() {
         diagnostics.push(field_diagnostic(
             "setup.wire.required",
@@ -632,7 +632,7 @@ fn build_review(
     let station = Station {
         schema_version: SCHEMA_VERSION_V2,
         session_id: session_id.clone(),
-        callsign: draft.station.callsign.trim().to_string(),
+        callsign: draft.station.callsign.trim().to_uppercase(),
         grid: draft.station.grid.trim().to_string(),
         power_watts,
         operator_notes: optional_text(&draft.station.operator_notes),
@@ -1331,7 +1331,7 @@ fn create_e2e_session_with_signal(
     let setup_state = SetupSessionState::default();
     let draft = SetupDraft {
         station: SetupStationDraft {
-            callsign: " N1RWJ ".into(),
+            callsign: " n1rwj ".into(),
             grid: " FN42 ".into(),
             power_watts: "5".into(),
             operator_notes: "deterministic complete workflow".into(),
@@ -1374,7 +1374,7 @@ fn create_e2e_session_with_signal(
             mode: SignalModeV3::Cw,
             collection_profile: SignalCollectionProfileV3::ManualObservation,
             planned_power_watts: "5".into(),
-            transmitted_callsign: "N1RWJ".into(),
+            transmitted_callsign: "n1rwj".into(),
             differing_identity_validated: false,
             message: "CQ CQ N1RWJ N1RWJ TEST".into(),
             repetition_count: "2".into(),
@@ -1448,7 +1448,7 @@ mod tests {
     fn valid_draft() -> SetupDraft {
         SetupDraft {
             station: SetupStationDraft {
-                callsign: " N1RWJ ".into(),
+                callsign: " n1rwj ".into(),
                 grid: " FN42 ".into(),
                 power_watts: "5".into(),
                 operator_notes: " backyard comparison ".into(),
@@ -1523,7 +1523,7 @@ mod tests {
             mode: SignalModeV3::Cw,
             collection_profile: SignalCollectionProfileV3::ManualObservation,
             planned_power_watts: "5".into(),
-            transmitted_callsign: "N1RWJ".into(),
+            transmitted_callsign: "n1rwj".into(),
             differing_identity_validated: false,
             message: "CQ CQ N1RWJ N1RWJ TEST".into(),
             repetition_count: "2".into(),
@@ -1541,10 +1541,9 @@ mod tests {
         assert_eq!(plan.schema_version, SCHEMA_VERSION_V3);
         assert!(!plan.wspr_live_acquisition_enabled);
         assert_eq!(plan.slots.len(), 8);
-        assert_eq!(
-            plan.signal_plan.unwrap().frequencies_hz,
-            vec![14_050_000, 14_050_300]
-        );
+        let signal_plan = plan.signal_plan.unwrap();
+        assert_eq!(signal_plan.transmitted_callsign, "N1RWJ");
+        assert_eq!(signal_plan.frequencies_hz, vec![14_050_000, 14_050_300]);
         assert_eq!(
             plan.slots[0].signal.as_ref().unwrap().frequency_hz,
             14_050_000

@@ -119,6 +119,10 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .setup-section { min-width: 0; margin: 0; padding: 22px; border: 1px solid #d7ddd5; border-radius: 18px; background: #fff; box-shadow: 0 8px 24px rgba(40, 63, 59, 0.04); }
 .setup-section legend { padding: 0 8px; color: #1c403d; font-family: Georgia, "Times New Roman", serif; font-size: 1.2rem; }
 .setup-section legend span { margin-right: 8px; color: #9b6a2b; font-family: Inter, ui-sans-serif, sans-serif; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; }
+.advanced-fields { margin-top: 14px; border-top: 1px solid #e1e5df; padding-top: 12px; }
+.advanced-fields summary, .advanced-section > summary { color: #315d57; font-size: 0.76rem; font-weight: 800; cursor: pointer; }
+.advanced-fields[open] summary, .advanced-section[open] > summary { margin-bottom: 14px; }
+.advanced-section > summary { font-family: Georgia, "Times New Roman", serif; font-size: 1.05rem; font-weight: 500; }
 .field-help { margin: 0 0 16px; color: #697873; font-size: 0.8rem; line-height: 1.55; }
 .field-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .field-grid label { display: grid; align-content: start; gap: 7px; color: #315d57; font-size: 0.74rem; font-weight: 750; }

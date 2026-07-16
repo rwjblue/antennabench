@@ -137,9 +137,13 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.doesNotMatch(setupHtml, /Optional public spots/);
   assert.match(setupHtml, /Public WSPR spots are gathered automatically/);
   assert.doesNotMatch(setupHtml, /data-import-authority|Confirm source authority/);
+  const setupPanel = setupHtml.match(/data-panel="setup"[\s\S]*?data-panel="run"/)?.[0] ?? "";
+  assert.doesNotMatch(setupPanel, /Facets|placeholder=|Trusted boundary|trusted Rust/);
+  assert.match(setupPanel, /Optional antenna details/);
+  assert.match(setupPanel, /Advanced: controlled CW or RTTY signal/);
 
   const values = new Map([
-    ["callsign", "N1RWJ"],
+    ["callsign", "n1rwj"],
     ["grid", "FN42"],
     ["powerWatts", "5"],
     ["operatorNotes", ""],
@@ -164,6 +168,7 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   };
 
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, true);
+  assert.equal(readSetupDraft(form).station.callsign, "N1RWJ");
   publicSpots.checked = false;
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
 });
@@ -175,7 +180,7 @@ test("setup serializes an explicit typed signal plan without WSPR.live", () => {
     ["startsAt", ""], ["band", "20m"], ["durationSeconds", "120"],
     ["guardSeconds", "10"], ["rounds", "2"], ["signalMode", "cw"],
     ["signalCollectionProfile", "rbn_cw_v1"], ["signalPlannedPowerWatts", "5"],
-    ["signalTransmittedCallsign", "N1RWJ"], ["signalMessage", "CQ N1RWJ TEST"],
+    ["signalTransmittedCallsign", "n1rwj"], ["signalMessage", "CQ N1RWJ TEST"],
     ["signalRepetitionCount", "2"], ["signalKeySpeedWpm", "20"],
     ["signalTransmitSeconds", "20"], ["signalIntervalSeconds", "30"],
     ["signalFrequenciesHz", "14050000, 14050300"],
@@ -300,7 +305,7 @@ test("signal confirmations preserve explicit actual facts for append and correct
     frequencyHz: 14050000,
     mode: "cw",
     powerWatts: 5,
-    transmittedCallsign: "K1ABC/B",
+    transmittedCallsign: "k1abc/b",
     cadenceFollowed: false,
   };
 
@@ -310,6 +315,7 @@ test("signal confirmations preserve explicit actual facts for append and correct
       kind: "confirm_signal",
       slotId: "slot-3",
       ...signal,
+      transmittedCallsign: "K1ABC/B",
       note: "slower than planned",
     },
   );
@@ -318,6 +324,7 @@ test("signal confirmations preserve explicit actual facts for append and correct
     {
       kind: "confirm_signal",
       ...signal,
+      transmittedCallsign: "K1ABC/B",
       note: "corrected",
     },
   );

@@ -59,17 +59,22 @@
               <div><p class="eyebrow">Prepare an experiment</p><h1 id="setup-title">Session setup</h1></div>
               <span class="status-chip muted" data-setup-status>Draft</span>
             </div>
-            <p class="lede">Enter the experiment once, review the exact normalized UTC-backed plan, then create a new checkpointed local session. Validation and persistence remain inside trusted Rust.</p>
+            <p class="lede">Add your station and antennas, review the session, then start the comparison.</p>
 
             <form class="setup-form" data-setup-form novalidate>
               <fieldset class="setup-section">
                 <legend><span>01</span> Station</legend>
                 <div class="field-grid">
-                  <label>Callsign<input data-setup-field="callsign" autocomplete="off" placeholder="N1RWJ" /></label>
-                  <label>Grid<input data-setup-field="grid" autocomplete="off" placeholder="FN42" /></label>
-                  <label>Transmit power (W)<input data-setup-field="powerWatts" inputmode="decimal" placeholder="5" /></label>
-                  <label class="field-wide">Operator notes<textarea data-setup-field="operatorNotes" rows="2" placeholder="Optional setup context"></textarea></label>
+                  <label>Callsign<input data-setup-field="callsign" autocomplete="off" autocapitalize="characters" spellcheck="false" /></label>
+                  <label>Grid<input data-setup-field="grid" autocomplete="off" /></label>
                 </div>
+                <details class="advanced-fields">
+                  <summary>Optional station details</summary>
+                  <div class="field-grid">
+                    <label>Transmit power (W)<input data-setup-field="powerWatts" inputmode="decimal" /></label>
+                    <label class="field-wide">Operator notes<textarea data-setup-field="operatorNotes" rows="2"></textarea></label>
+                  </div>
+                </details>
               </fieldset>
 
               <fieldset class="setup-section">
@@ -78,46 +83,34 @@
                 <div class="antenna-editor" data-antenna-row>
                   <div class="antenna-heading"><strong data-antenna-title>Antenna A</strong><button type="button" data-remove-antenna>Remove</button></div>
                   <div class="field-grid">
-                    <label>Unambiguous label<input data-antenna-field="label" placeholder="Vertical" /></label>
-                    <label>Facets<input data-antenna-field="facets" placeholder="omnidirectional, ground mounted" /></label>
-                    <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label>
-                    <label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label>
-                    <label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label>
-                    <label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label>
-                    <label>Tuner<input data-antenna-field="tuner" /></label>
-                    <label>Feedline<input data-antenna-field="feedline" /></label>
-                    <label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                    <label>Antenna label<input data-antenna-field="label" /></label>
+                    <label>Description<input data-antenna-field="facets" /></label>
                   </div>
+                  <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
+                    <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                  </div></details>
                 </div>
                 <div class="antenna-editor" data-antenna-row>
                   <div class="antenna-heading"><strong data-antenna-title>Antenna B</strong><button type="button" data-remove-antenna>Remove</button></div>
                   <div class="field-grid">
-                    <label>Unambiguous label<input data-antenna-field="label" placeholder="Dipole" /></label>
-                    <label>Facets<input data-antenna-field="facets" placeholder="broadside east-west" /></label>
-                    <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label>
-                    <label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label>
-                    <label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label>
-                    <label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label>
-                    <label>Tuner<input data-antenna-field="tuner" /></label>
-                    <label>Feedline<input data-antenna-field="feedline" /></label>
-                    <label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                    <label>Antenna label<input data-antenna-field="label" /></label>
+                    <label>Description<input data-antenna-field="facets" /></label>
                   </div>
+                  <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
+                    <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                  </div></details>
                 </div>
                 <button class="text-action" type="button" data-add-antenna>+ Add antenna</button>
                 <template data-antenna-template>
                   <div class="antenna-editor" data-antenna-row>
                     <div class="antenna-heading"><strong data-antenna-title>Antenna</strong><button type="button" data-remove-antenna>Remove</button></div>
                     <div class="field-grid">
-                      <label>Unambiguous label<input data-antenna-field="label" /></label>
-                      <label>Facets<input data-antenna-field="facets" /></label>
-                      <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label>
-                      <label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label>
-                      <label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label>
-                      <label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label>
-                      <label>Tuner<input data-antenna-field="tuner" /></label>
-                      <label>Feedline<input data-antenna-field="feedline" /></label>
-                      <label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                      <label>Antenna label<input data-antenna-field="label" /></label>
+                      <label>Description<input data-antenna-field="facets" /></label>
                     </div>
+                    <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
+                      <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
+                    </div></details>
                   </div>
                 </template>
               </fieldset>
@@ -135,24 +128,24 @@
                 </div>
               </fieldset>
 
-              <fieldset class="setup-section">
-                <legend><span>04</span> Controlled transmit signal</legend>
+              <details class="setup-section advanced-section">
+                <summary>Advanced: controlled CW or RTTY signal</summary>
                 <label class="authority-confirmation"><input type="checkbox" data-setup-field="signalPlanEnabled"> Add a manually conducted CW or RTTY signal plan (schema v3)</label>
                 <p class="field-help">AntennaBench will guide antenna and frequency changes, but will not key the transmitter or infer that planned settings were used. Enter every exact frequency in hertz; Rust expands them into complete, order-balanced antenna × frequency blocks.</p>
                 <div class="field-grid" data-signal-plan-fields hidden>
                   <label>Mode<select data-setup-field="signalMode"><option value="cw">CW</option><option value="rtty">RTTY</option></select></label>
                   <label>Evidence profile<select data-setup-field="signalCollectionProfile"><option value="manual_observation">Manual observation</option><option value="rbn_cw_v1">Reverse Beacon Network CW</option></select></label>
-                  <label>Planned power (W)<input data-setup-field="signalPlannedPowerWatts" inputmode="decimal" placeholder="5" /></label>
-                  <label>Exact transmitted callsign<input data-setup-field="signalTransmittedCallsign" autocomplete="off" placeholder="N1RWJ" /></label>
+                  <label>Planned power (W)<input data-setup-field="signalPlannedPowerWatts" inputmode="decimal" /></label>
+                  <label>Exact transmitted callsign<input data-setup-field="signalTransmittedCallsign" autocomplete="off" autocapitalize="characters" spellcheck="false" /></label>
                   <label class="authority-confirmation field-wide"><input type="checkbox" data-setup-field="signalDifferingIdentityValidated"> I verified that this transmitted identity is permitted when it differs from the station callsign</label>
-                  <label class="field-wide">Exact message<textarea data-setup-field="signalMessage" rows="2" placeholder="CQ CQ N1RWJ N1RWJ TEST"></textarea></label>
+                  <label class="field-wide">Exact message<textarea data-setup-field="signalMessage" rows="2"></textarea></label>
                   <label>Repetitions<input data-setup-field="signalRepetitionCount" inputmode="numeric" value="2" /></label>
                   <label>CW speed (WPM)<input data-setup-field="signalKeySpeedWpm" inputmode="numeric" value="20" /></label>
                   <label>Transmit seconds<input data-setup-field="signalTransmitSeconds" inputmode="numeric" value="20" /></label>
                   <label>Cadence interval (seconds)<input data-setup-field="signalIntervalSeconds" inputmode="numeric" value="30" /></label>
-                  <label class="field-wide">Exact frequencies (Hz, comma-separated)<input data-setup-field="signalFrequenciesHz" inputmode="numeric" placeholder="14050000, 14050300" /></label>
+                  <label class="field-wide">Exact frequencies (Hz, comma-separated)<input data-setup-field="signalFrequenciesHz" inputmode="numeric" /></label>
                 </div>
-              </fieldset>
+              </details>
 
               <div class="setup-section setup-source-note">
                 <p>Public WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Source completeness is unknown.</p>
@@ -180,7 +173,6 @@
               <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Band</th><th>Signal</th><th>Local time · UTC</th><th>Window</th></tr></thead><tbody data-review-slots></tbody></table></div>
             </section>
 
-            <div class="boundary-note"><strong>Trusted boundary</strong><p>The webview submits typed draft values and a review ID only. Rust owns validation, normalized timestamps, collision-resistant IDs, the native destination picker, checkpointed creation, and active-session state.</p></div>
           </section>
 
           <section class="workflow-panel" data-panel="run" aria-labelledby="run-title" hidden>
@@ -256,7 +248,7 @@
                   <label>Actual frequency (Hz)<input type="number" min="1" step="1" data-evidence-frequency></label>
                   <label>Actual mode<select data-evidence-mode><option value="">Not confirmed</option><option value="cw">CW</option><option value="rtty">RTTY</option></select></label>
                   <label>Actual power (W)<input type="number" min="0.001" step="any" data-evidence-power></label>
-                  <label>Transmitted callsign<input type="text" maxlength="32" data-evidence-callsign></label>
+                  <label>Transmitted callsign<input type="text" maxlength="32" autocapitalize="characters" spellcheck="false" data-evidence-callsign></label>
                   <label>Cadence followed<select data-evidence-cadence><option value="">Not confirmed</option><option value="true">Yes</option><option value="false">No</option></select></label>
                   <label class="field-wide">Note or reason<textarea rows="2" data-evidence-detail placeholder="Optional for confirmations/missed slots; required for bad slots and notes"></textarea></label>
                 </div>

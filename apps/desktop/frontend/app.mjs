@@ -1094,6 +1094,10 @@ function mount(root, browserWindow) {
     });
   });
 
+  evidenceCallsign.addEventListener("input", () => {
+    evidenceCallsign.value = evidenceCallsign.value.toUpperCase();
+  });
+
   evidenceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await submitConductorAction(readEvidenceAction(
@@ -1176,7 +1180,10 @@ function mount(root, browserWindow) {
     render();
   });
 
-  setupForm.addEventListener("input", () => {
+  setupForm.addEventListener("input", (event) => {
+    if (event.target.matches?.('[data-setup-field="callsign"], [data-setup-field="signalTransmittedCallsign"]')) {
+      event.target.value = event.target.value.toUpperCase();
+    }
     syncSignalPlanFields(setupForm);
     if (!setupBusyState(state)) {
       state = editSessionSetup(state);
@@ -1592,7 +1599,7 @@ function readSignalEvidenceFields(frequency, mode, power, callsign, cadence) {
     frequencyHz: optionalNumber(frequency.value),
     mode: mode.value || null,
     powerWatts: optionalNumber(power.value),
-    transmittedCallsign: callsign.value,
+    transmittedCallsign: callsign.value.toUpperCase(),
     cadenceFollowed: cadence.value === "" ? null : cadence.value === "true",
   };
 }
@@ -1611,7 +1618,7 @@ export function readEvidenceAction(kind, slotId, antennaLabel, detail, signal = 
       frequencyHz: signal.frequencyHz ?? null,
       mode: signal.mode ?? null,
       powerWatts: signal.powerWatts ?? null,
-      transmittedCallsign: signal.transmittedCallsign ?? "",
+      transmittedCallsign: (signal.transmittedCallsign ?? "").toUpperCase(),
       cadenceFollowed: signal.cadenceFollowed ?? null,
       note: detail,
     };
@@ -1630,7 +1637,7 @@ export function readEvidenceReplacement(kind, antennaLabel, detail, signal = {})
       frequencyHz: signal.frequencyHz ?? null,
       mode: signal.mode ?? null,
       powerWatts: signal.powerWatts ?? null,
-      transmittedCallsign: signal.transmittedCallsign ?? "",
+      transmittedCallsign: (signal.transmittedCallsign ?? "").toUpperCase(),
       cadenceFollowed: signal.cadenceFollowed ?? null,
       note: detail,
     };
@@ -1736,7 +1743,7 @@ export function readSetupDraft(form) {
   const signalPlanEnabled = form.querySelector('[data-setup-field="signalPlanEnabled"]').checked;
   return {
     station: {
-      callsign: value("callsign"),
+      callsign: value("callsign").toUpperCase(),
       grid: value("grid"),
       powerWatts: value("powerWatts"),
       operatorNotes: value("operatorNotes"),
@@ -1766,7 +1773,7 @@ export function readSetupDraft(form) {
       mode: value("signalMode"),
       collectionProfile: value("signalCollectionProfile"),
       plannedPowerWatts: value("signalPlannedPowerWatts"),
-      transmittedCallsign: value("signalTransmittedCallsign"),
+      transmittedCallsign: value("signalTransmittedCallsign").toUpperCase(),
       differingIdentityValidated: form.querySelector('[data-setup-field="signalDifferingIdentityValidated"]').checked,
       message: value("signalMessage"),
       repetitionCount: value("signalRepetitionCount"),
