@@ -147,8 +147,8 @@ the UI could not outrun the durable, validation, and resource boundaries:
 Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
 antenna definitions, and schedule timing. The routine form keeps station
 identity plus antenna labels/descriptions visible and places optional metadata
-behind disclosure. A user-triggered system-location request can fill a coarse
-four-character Maidenhead grid; permission denial or lookup failure leaves
+behind disclosure. A user-triggered system-location request can fill a
+six-character Maidenhead grid; permission denial or lookup failure leaves
 manual entry available, and raw coordinates are never persisted. Rust trims and
 types values, uppercases callsigns,
 constructs stable schedule slots, applies strict-creation diagnostics, and

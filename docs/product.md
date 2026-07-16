@@ -51,7 +51,7 @@ The desktop app keeps working sessions in its platform-standard application
 data directory and remembers the last station details for the next setup.
 Those preferences are convenience state, not session evidence. Export creates
 the portable bundle you choose to archive or move elsewhere. Setup can ask the
-system for location to estimate a coarse station grid; it stores the resulting
+system for location to estimate a six-character station grid; it stores the resulting
 grid, never the raw coordinates, and manual entry remains available.
 
 Optional data services receive only the inputs disclosed for that integration.

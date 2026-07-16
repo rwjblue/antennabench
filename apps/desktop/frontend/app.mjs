@@ -73,8 +73,10 @@ export function maidenheadGrid(latitude, longitude) {
   const fieldLatitude = Math.floor(shiftedLatitude / 10);
   const squareLongitude = Math.floor((shiftedLongitude % 20) / 2);
   const squareLatitude = Math.floor(shiftedLatitude % 10);
+  const subsquareLongitude = Math.floor((shiftedLongitude % 2) * 12);
+  const subsquareLatitude = Math.floor((shiftedLatitude % 1) * 24);
 
-  return `${String.fromCharCode(65 + fieldLongitude)}${String.fromCharCode(65 + fieldLatitude)}${squareLongitude}${squareLatitude}`;
+  return `${String.fromCharCode(65 + fieldLongitude)}${String.fromCharCode(65 + fieldLatitude)}${squareLongitude}${squareLatitude}${String.fromCharCode(65 + subsquareLongitude)}${String.fromCharCode(65 + subsquareLatitude)}`;
 }
 
 export function currentPosition(geolocation) {

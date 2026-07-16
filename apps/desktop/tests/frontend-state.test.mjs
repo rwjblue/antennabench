@@ -209,11 +209,11 @@ test("saved station details fill only an untouched setup form", () => {
   assert.equal(controls.get("grid").value, "EM10");
 });
 
-test("system coordinates produce a coarse Maidenhead grid without retaining coordinates", async () => {
-  assert.equal(maidenheadGrid(42.3601, -71.0589), "FN42");
-  assert.equal(maidenheadGrid(-33.8688, 151.2093), "QF56");
-  assert.equal(maidenheadGrid(-90, -180), "AA00");
-  assert.equal(maidenheadGrid(90, 180), "RR99");
+test("system coordinates produce a six-character Maidenhead grid without retaining coordinates", async () => {
+  assert.equal(maidenheadGrid(42.3601, -71.0589), "FN42LI");
+  assert.equal(maidenheadGrid(-33.8688, 151.2093), "QF56OD");
+  assert.equal(maidenheadGrid(-90, -180), "AA00AA");
+  assert.equal(maidenheadGrid(90, 180), "RR99XX");
   assert.throws(() => maidenheadGrid(91, 0), RangeError);
   assert.throws(() => maidenheadGrid(Number.NaN, 0), TypeError);
 
