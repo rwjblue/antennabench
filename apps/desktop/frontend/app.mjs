@@ -142,6 +142,53 @@ export function conductorActionAvailable(view, action) {
     && !(view.phase === "finalizing" && action === "end");
 }
 
+export function createCountdownAnchor(view, sampledAtMilliseconds) {
+  if (view?.secondsToTransition === null || view?.secondsToTransition === undefined) return null;
+  const seconds = Math.max(0, Math.floor(Number(view.secondsToTransition)));
+  const sampledAt = Number(sampledAtMilliseconds);
+  if (!Number.isFinite(seconds) || !Number.isFinite(sampledAt)) return null;
+  return {
+    key: [
+      view.sessionId,
+      view.revision,
+      view.actionToken,
+      view.lifecycle,
+      view.phase,
+      view.currentSlot?.slotId ?? "",
+      view.nextSlot?.slotId ?? "",
+      seconds,
+    ].join(":"),
+    seconds,
+    sampledAtMilliseconds: sampledAt,
+  };
+}
+
+export function projectCountdown(anchor, nowMilliseconds) {
+  if (!anchor) return null;
+  const now = Number(nowMilliseconds);
+  if (!Number.isFinite(now)) return anchor.seconds;
+  const elapsedSeconds = Math.floor(Math.max(0, now - anchor.sampledAtMilliseconds) / 1000);
+  return Math.max(0, anchor.seconds - elapsedSeconds);
+}
+
+export function formatActiveRunTime(value, options = {}) {
+  const instant = new Date(value);
+  const now = new Date(options.now ?? Date.now());
+  const locale = options.locale;
+  const timeZone = options.timeZone;
+  const dayFormatter = new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    timeZone,
+  });
+  const sameDay = dayFormatter.format(instant) === dayFormatter.format(now);
+  return new Intl.DateTimeFormat(locale, sameDay
+    ? { hour: "numeric", minute: "2-digit", timeZone }
+    : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone }
+  ).format(instant);
+}
+
 export function viewModel(state) {
   return WORKFLOWS.map((workflow) => ({
     workflow,
@@ -665,6 +712,10 @@ export function reportExportFailed(state, error) {
 
 function mount(root, browserWindow) {
   let state = initialState(workflowFromHash(browserWindow.location.hash));
+  let countdownAnchor = null;
+  let countdownAnchorKey = null;
+  let transitionRefreshKey = null;
+  const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const navigation = [...root.querySelectorAll("[data-workflow]")];
   const panels = [...root.querySelectorAll("[data-panel]")];
   const setupForm = root.querySelector("[data-setup-form]");
@@ -868,17 +919,26 @@ function mount(root, browserWindow) {
 
     if (hasConductor) {
       const view = state.conductor;
+      const nextAnchor = createCountdownAnchor(view, monotonicNow());
+      if (nextAnchor?.key !== countdownAnchorKey) {
+        countdownAnchor = nextAnchor;
+        countdownAnchorKey = nextAnchor?.key ?? null;
+        transitionRefreshKey = null;
+      }
       conductorRevision.textContent = `${view.bundleName} · revision ${view.revision}`;
       conductorLifecycle.textContent = humanizeIdentifier(view.lifecycle);
       conductorNow.textContent = formatReviewTime(view.now);
       conductorAntennaInUse.textContent = view.antennaInUse ?? "None";
       conductorPhase.textContent = humanizeIdentifier(view.phase);
       conductorGuidance.textContent = view.guidance;
-      conductorCountdown.textContent = view.secondsToTransition === null
+      const projectedSeconds = state.conductorStatus === "ready"
+        ? projectCountdown(countdownAnchor, monotonicNow())
+        : view.secondsToTransition;
+      conductorCountdown.textContent = projectedSeconds === null
         ? ""
-        : formatCountdown(view.secondsToTransition);
-      renderSlot(currentSlot, view.currentSlot, root);
-      if (view.nextSlot) renderSlot(nextSlot, view.nextSlot, root);
+        : formatCountdown(projectedSeconds);
+      renderSlot(currentSlot, view.currentSlot, root, view.now);
+      if (view.nextSlot) renderSlot(nextSlot, view.nextSlot, root, view.now);
       else renderIntent(nextSlot, view.nextIntent, root);
       replaceSelectOptions(evidenceSlot, [
         { value: "", label: "No slot / session note" },
@@ -1186,6 +1246,18 @@ function mount(root, browserWindow) {
     if (state.activeWorkflow === "run" && state.session) await refreshConductor();
     if (state.activeWorkflow === "report" && state.session) await refreshReport();
   });
+
+  const refreshConductorOnReturn = () => {
+    if (
+      root.ownerDocument.visibilityState !== "hidden"
+      && state.activeWorkflow === "run"
+      && state.session
+    ) {
+      void refreshConductor();
+    }
+  };
+  browserWindow.addEventListener("focus", refreshConductorOnReturn);
+  root.ownerDocument.addEventListener?.("visibilitychange", refreshConductorOnReturn);
 
   conductorRefreshButtons.forEach((button) => {
     button.addEventListener("click", refreshConductor);
@@ -1568,6 +1640,25 @@ function mount(root, browserWindow) {
     }
     if (state.activeWorkflow === "report" && state.session) void refreshReport();
   }, 5000);
+  browserWindow.setInterval?.(() => {
+    if (
+      state.activeWorkflow !== "run"
+      || state.conductorStatus !== "ready"
+      || state.conductor?.lifecycle !== "running"
+    ) return;
+    const projectedSeconds = projectCountdown(countdownAnchor, monotonicNow());
+    conductorCountdown.textContent = projectedSeconds === null
+      ? ""
+      : formatCountdown(projectedSeconds);
+    if (
+      projectedSeconds === 0
+      && countdownAnchor?.seconds > 0
+      && transitionRefreshKey !== countdownAnchor.key
+    ) {
+      transitionRefreshKey = countdownAnchor.key;
+      void refreshConductor();
+    }
+  }, 1000);
 }
 
 function conductorStatusText(state) {
@@ -1741,7 +1832,7 @@ function formatCountdown(seconds) {
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-function renderSlot(container, slot, root) {
+function renderSlot(container, slot, root, now) {
   container.replaceChildren();
   if (!slot) {
     const empty = root.createElement("p");
@@ -1751,10 +1842,20 @@ function renderSlot(container, slot, root) {
     return;
   }
   const title = root.createElement("strong");
-  title.textContent = `#${slot.sequenceNumber} · ${slot.plannedAntenna}`;
-  const timing = root.createElement("p");
-  timing.textContent = `${slot.band} · ${formatReviewTime(slot.startsAt)}`;
+  title.textContent = `Cycle ${slot.sequenceNumber}`;
+  const timing = root.createElement("div");
+  timing.className = "slot-timing";
+  for (const value of [
+    slot.band,
+    slot.plannedAntenna,
+    formatActiveRunTime(slot.startsAt, { now }),
+  ]) {
+    const item = root.createElement("span");
+    item.textContent = value;
+    timing.append(item);
+  }
   const actual = root.createElement("p");
+  actual.className = "slot-evidence";
   actual.textContent = slot.actualAntenna
     ? `Actual: ${slot.actualAntenna}`
     : `Actual: not confirmed · ${humanizeIdentifier(slot.evidenceStatus)}`;

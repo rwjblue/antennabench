@@ -20,11 +20,13 @@ import {
   conductorLoadSucceeded,
   conductorMutationFailed,
   conductorActionAvailable,
+  createCountdownAnchor,
   currentPosition,
   editSessionSetup,
   exportSessionCancelled,
   exportSessionFailed,
   exportSessionSucceeded,
+  formatActiveRunTime,
   initialState,
   invokeActiveSessionReport,
   invokeActiveSessionConductor,
@@ -47,6 +49,7 @@ import {
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
+  projectCountdown,
   reportExportCancelled,
   reportExportSucceeded,
   reportRefreshFailed,
@@ -391,6 +394,42 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
   assert.equal(failed.conductorStatus, "error");
   assert.equal(failed.conductor, saved.conductor);
   assert.equal(failed.conductorError.kind, "stale_revision");
+});
+
+test("active countdown projects from a disposable Rust anchor", () => {
+  const anchor = createCountdownAnchor({
+    sessionId: "session-1",
+    revision: 4,
+    actionToken: "action-4",
+    lifecycle: "running",
+    phase: "active",
+    secondsToTransition: 5,
+    currentSlot: { slotId: "intent-1" },
+    nextSlot: null,
+  }, 10_000);
+  assert.equal(projectCountdown(anchor, 10_000), 5);
+  assert.equal(projectCountdown(anchor, 10_999), 5);
+  assert.equal(projectCountdown(anchor, 11_000), 4);
+  assert.equal(projectCountdown(anchor, 15_900), 0);
+  assert.equal(projectCountdown(anchor, 9_000), 5);
+  assert.equal(projectCountdown(anchor, 99_000), 0);
+  assert.equal(createCountdownAnchor({ secondsToTransition: null }, 0), null);
+});
+
+test("active cycle times are concise local labels without ISO repetition", () => {
+  const today = formatActiveRunTime("2026-07-16T13:34:01Z", {
+    now: "2026-07-16T15:00:00Z",
+    locale: "en-US",
+    timeZone: "UTC",
+  });
+  const priorDay = formatActiveRunTime("2026-07-15T13:34:01Z", {
+    now: "2026-07-16T15:00:00Z",
+    locale: "en-US",
+    timeZone: "UTC",
+  });
+  assert.equal(today, "1:34 PM");
+  assert.equal(priorDay, "Jul 15, 1:34 PM");
+  assert.doesNotMatch(today, /2026|T|Z/);
 });
 
 test("the conductor bridge exposes only bounded read and focused mutation commands", async () => {

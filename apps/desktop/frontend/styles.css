@@ -183,6 +183,9 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .slot-focus article > div { display: grid; gap: 6px; margin-top: 12px; }
 .slot-focus strong { color: #315d57; font-size: 0.95rem; }
 .slot-focus p { margin: 0; color: #62736f; font-size: 0.72rem; line-height: 1.45; }
+.slot-timing { display: flex !important; flex-wrap: wrap; gap: 6px !important; margin-top: 0 !important; }
+.slot-timing span { padding: 4px 7px; border-radius: 999px; color: #315d57; background: #eef4ef; font-size: 0.68rem; font-weight: 750; }
+.slot-evidence { padding-top: 2px; }
 .muted-copy { color: #89918c !important; }
 .conductor-actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .run-primary-actions { justify-content: center; }

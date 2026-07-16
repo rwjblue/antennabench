@@ -184,7 +184,11 @@ and the WSJT-X execution path use the same v3 envelope without requiring a
 controlled signal plan.
 
 The active-run surface reads one verified checkpoint revision and derives its
-phase/countdown from a Rust-owned clock plus durable readiness actions. Routine
+phase/countdown from a Rust-owned clock plus durable readiness actions. Each
+Rust response anchors a disposable frontend countdown that advances once per
+second, resynchronizes on refresh/mutation/focus, and requests a new conductor
+view at zero; it never timestamps evidence or selects a cycle. Active cycle
+cards use concise local time, adding a short date only for another day. Routine
 operation tells the operator to switch to the named antenna and press that
 antenna's ready button once afterward; it neither requests nor persists a
 switch-start time. Each readiness action closes the prior occupancy at the
