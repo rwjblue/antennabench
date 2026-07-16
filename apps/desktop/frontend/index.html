@@ -184,7 +184,7 @@
               <div><p class="eyebrow">Collect local evidence</p><h1 id="run-title">Active run</h1></div>
               <span class="status-chip muted" data-conductor-status>No active session</span>
             </div>
-            <p class="lede">Conduct the complete experiment without a rig or network. Planned labels are guidance; actual antenna state is recorded only when you confirm it.</p>
+            <p class="lede">Follow one next action at a time. Actual timing and antenna use come from your switch and readiness actions; no rig or network is required.</p>
 
             <div class="empty-state" data-conductor-empty>
               <span class="empty-icon" aria-hidden="true">◌</span>
@@ -199,55 +199,69 @@
             </div>
 
             <div class="conductor" data-conductor hidden>
-              <div class="conductor-context">
-                <div><span>Checkpoint</span><strong data-conductor-revision></strong></div>
-                <div><span>Durable lifecycle</span><strong data-conductor-lifecycle></strong></div>
-                <div><span>Current time</span><strong data-conductor-now></strong></div>
-                <div><span>Antenna in use</span><strong data-conductor-antenna-in-use></strong></div>
-              </div>
-
               <section class="conductor-prompt" aria-live="polite">
                 <div><p class="eyebrow" data-conductor-phase></p><h2 data-conductor-guidance></h2></div>
                 <strong class="countdown" data-conductor-countdown></strong>
               </section>
+
+              <div class="conductor-actions run-primary-actions" data-primary-run-actions>
+                <button type="button" class="primary-action" data-conductor-action="start">Start session</button>
+                <button type="button" class="primary-action" data-conductor-action="resume">Resume session</button>
+                <button type="button" class="primary-action" data-conductor-action="begin_antenna_switch">Begin antenna switch</button>
+                <button type="button" class="primary-action" data-conductor-action="arm_wspr_cycle">Antenna ready</button>
+              </div>
+
+              <button type="button" class="text-action skip-cycle-action" data-conductor-action="skip_wspr_cycle">Skip this cycle</button>
+              <div class="conductor-actions run-task-actions">
+                <button type="button" data-add-run-note>Add note</button>
+                <button type="button" data-open-corrections>Correct last action</button>
+              </div>
 
               <div class="slot-focus">
                 <article><span>Current / last cycle</span><div data-current-slot></div></article>
                 <article><span>Next cycle</span><div data-next-slot></div></article>
               </div>
 
-              <div class="conductor-actions" data-lifecycle-actions>
-                <button type="button" data-conductor-action="start">Start</button>
-                <button type="button" data-conductor-action="resume">Resume</button>
-                <button type="button" data-conductor-action="begin_antenna_switch">Begin antenna switch</button>
-                <button type="button" class="primary-action" data-conductor-action="arm_wspr_cycle">Antenna ready</button>
-                <button type="button" data-conductor-action="interrupt">Interrupt</button>
-                <button type="button" data-conductor-action="end">End</button>
-                <button type="button" class="danger-action" data-conductor-action="abandon">Abandon</button>
-                <button type="button" class="text-action" data-conductor-refresh>Refresh</button>
-              </div>
+              <details class="run-details">
+                <summary>Run details and session controls</summary>
+                <div class="conductor-context">
+                  <div><span>Checkpoint</span><strong data-conductor-revision></strong></div>
+                  <div><span>Session state</span><strong data-conductor-lifecycle></strong></div>
+                  <div><span>Current time</span><strong data-conductor-now></strong></div>
+                  <div><span>Antenna in use</span><strong data-conductor-antenna-in-use></strong></div>
+                </div>
+                <div class="conductor-actions" data-session-controls>
+                  <button type="button" data-conductor-action="interrupt">Pause session</button>
+                  <button type="button" data-conductor-action="end">End session</button>
+                  <button type="button" class="danger-action" data-conductor-action="abandon">Abandon session</button>
+                  <button type="button" class="text-action" data-conductor-refresh>Refresh</button>
+                </div>
+              </details>
 
-              <section class="receiver-panel" data-wspr-live-panel>
-                <div class="receiver-heading"><div><p class="eyebrow">Automatic public evidence</p><h2>WSPR.live spots</h2></div><strong data-wspr-live-phase>Waiting for antenna confirmation</strong></div>
+              <details class="receiver-panel" data-wspr-live-panel>
+                <summary>Public spot collection · <strong data-wspr-live-phase>Waiting for antenna confirmation</strong></summary>
                 <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror after the ingestion grace period. No separate fetch action is required.</p>
                 <p class="receiver-diagnostic" data-wspr-live-diagnostic hidden></p>
                 <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry acquisition</button><button type="button" class="danger-action" data-wspr-live-end-without hidden>End without public spots</button></div>
-              </section>
+              </details>
 
-              <form class="receiver-panel" data-wsjtx-form>
-                <div class="receiver-heading"><div><p class="eyebrow">Optional bounded adapter</p><h2>Live WSJT-X reception</h2></div><strong data-wsjtx-phase>Not started</strong></div>
-                <p class="field-help" data-wsjtx-counts>Manual operation remains available without WSJT-X.</p>
-                <div class="field-grid receiver-fields">
-                  <label>Loopback address<input type="text" value="127.0.0.1" data-wsjtx-bind-address></label>
-                  <label>UDP port<input type="number" min="1" max="65535" value="2237" data-wsjtx-port></label>
-                  <label>Expected client identity<input type="text" maxlength="128" value="WSJT-X" data-wsjtx-client-id></label>
-                </div>
-                <p class="receiver-diagnostic" data-wsjtx-diagnostic hidden></p>
-                <div class="conductor-actions"><button type="button" data-wsjtx-start>Start receiver</button><button type="button" data-wsjtx-stop disabled>Stop receiver</button></div>
-              </form>
+              <details class="receiver-panel">
+                <summary>Optional WSJT-X receiver · <strong data-wsjtx-phase>Not started</strong></summary>
+                <form data-wsjtx-form>
+                  <p class="field-help" data-wsjtx-counts>Manual operation remains available without WSJT-X.</p>
+                  <div class="field-grid receiver-fields">
+                    <label>Loopback address<input type="text" value="127.0.0.1" data-wsjtx-bind-address></label>
+                    <label>UDP port<input type="number" min="1" max="65535" value="2237" data-wsjtx-port></label>
+                    <label>Expected client identity<input type="text" maxlength="128" value="WSJT-X" data-wsjtx-client-id></label>
+                  </div>
+                  <p class="receiver-diagnostic" data-wsjtx-diagnostic hidden></p>
+                  <div class="conductor-actions"><button type="button" data-wsjtx-start>Start receiver</button><button type="button" data-wsjtx-stop disabled>Stop receiver</button></div>
+                </form>
+              </details>
 
-              <form class="evidence-form" data-evidence-form>
-                <div><p class="eyebrow">Explicit operator evidence</p><h2>Record what actually happened</h2></div>
+              <details class="evidence-form" data-entry-panel>
+                <summary>Add a note or correct a past action</summary>
+                <form data-evidence-form>
                 <div class="field-grid">
                   <label>Evidence type<select data-evidence-kind><option value="confirm_antenna">Confirm actual antenna</option><option value="confirm_signal">Confirm actual signal</option><option value="mark_missed">Mark slot missed</option><option value="mark_bad">Mark slot bad</option><option value="add_note">Add note</option></select></label>
                   <label>Planned slot<select data-evidence-slot></select></label>
@@ -259,16 +273,17 @@
                   <label>Cadence followed<select data-evidence-cadence><option value="">Not confirmed</option><option value="true">Yes</option><option value="false">No</option></select></label>
                   <label class="field-wide">Note or reason<textarea rows="2" data-evidence-detail placeholder="Optional for confirmations/missed slots; required for bad slots and notes"></textarea></label>
                 </div>
-                <div class="setup-actions"><button class="primary-action" type="submit">Commit operator evidence</button></div>
-              </form>
+                <div class="setup-actions"><button class="primary-action" type="submit">Save entry</button></div>
+                </form>
+              </details>
 
               <ul class="setup-diagnostics" data-conductor-diagnostics hidden></ul>
 
-              <section class="event-history" aria-labelledby="event-history-title">
-                <div><p class="eyebrow">Append-only audit trail</p><h2 id="event-history-title">Effective operator evidence</h2></div>
-                <p class="field-help">Retract an entry, or replace it with the values currently selected in the evidence form. The original and correction remain durable.</p>
+              <details class="event-history" data-corrections-panel>
+                <summary>Action history and corrections</summary>
+                <p class="field-help">Retract an entry, or replace it with the values selected above. The original and correction remain in the session history.</p>
                 <div data-conductor-events></div>
-              </section>
+              </details>
 
             </div>
           </section>

@@ -641,13 +641,26 @@ fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
                 ready_at: observed.map(|cycle| cycle.ready_at),
                 starts_at: observed.map(|cycle| cycle.window.starts_at),
                 transmission_ends_at: observed.map(|cycle| cycle.window.transmission_ends_at),
-                attribution: observed.map_or(ReportWsprAttribution::Pending, |cycle| {
-                    if cycle.occupancy_fully_covers_transmission {
-                        ReportWsprAttribution::Attributable
-                    } else {
-                        ReportWsprAttribution::UnknownAntennaOccupancy
-                    }
-                }),
+                attribution: observed.map_or_else(
+                    || {
+                        if projection
+                            .skipped_intent_ids
+                            .iter()
+                            .any(|intent_id| intent_id == &intent.intent_id)
+                        {
+                            ReportWsprAttribution::Skipped
+                        } else {
+                            ReportWsprAttribution::Pending
+                        }
+                    },
+                    |cycle| {
+                        if cycle.occupancy_fully_covers_transmission {
+                            ReportWsprAttribution::Attributable
+                        } else {
+                            ReportWsprAttribution::UnknownAntennaOccupancy
+                        }
+                    },
+                ),
             }
         })
         .collect();

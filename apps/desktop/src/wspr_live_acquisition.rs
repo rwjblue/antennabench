@@ -94,18 +94,27 @@ impl AcquisitionSnapshot {
         }
     }
 
-    fn final_intent_id(&self) -> Option<&str> {
+    fn final_completed_slot_id(&self) -> Option<String> {
         match self {
             Self::V2(bundle) => bundle
                 .schedule
                 .slots
                 .last()
-                .map(|slot| slot.slot_id.as_str()),
-            Self::V3(bundle) => bundle
-                .schedule
-                .wspr_cycle_intents
-                .last()
-                .map(|intent| intent.intent_id.as_str()),
+                .map(|slot| slot.slot_id.clone()),
+            Self::V3(bundle) => {
+                let projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
+                let consumed = projection.cycles.len() + projection.skipped_intent_ids.len();
+                (consumed == bundle.schedule.wspr_cycle_intents.len())
+                    .then(|| {
+                        projection
+                            .cycles
+                            .iter()
+                            .rev()
+                            .find(|cycle| cycle.occupancy_fully_covers_transmission)
+                            .map(|cycle| cycle.intent_id.clone())
+                    })
+                    .flatten()
+            }
         }
     }
 
@@ -443,11 +452,11 @@ fn final_capture_is_complete(
     authorized_plans: &[WsprLiveAcquisitionPlan],
     captured_through: DateTime<Utc>,
 ) -> bool {
-    let Some(final_intent_id) = bundle.final_intent_id() else {
+    let Some(final_completed_slot_id) = bundle.final_completed_slot_id() else {
         return false;
     };
     bundle.projected_slots().last().is_some_and(|final_slot| {
-        final_slot.slot_id == final_intent_id
+        final_slot.slot_id == final_completed_slot_id
             && authorized_plans
                 .iter()
                 .any(|plan| plan.completed_slot_id == final_slot.slot_id)
@@ -658,11 +667,11 @@ fn authorized_plans(
                 .collect::<BTreeSet<_>>(),
         ),
     };
-    plan_wspr_live_acquisitions_for_confirmed_slots(
-        callsign,
-        &bundle.projected_slots(),
-        &confirmed_slot_ids,
-    )
+    let slots = bundle.projected_slots();
+    if slots.is_empty() {
+        return Ok(Vec::new());
+    }
+    plan_wspr_live_acquisitions_for_confirmed_slots(callsign, &slots, &confirmed_slot_ids)
 }
 
 fn captured_through(bundle: &AcquisitionSnapshot) -> Option<DateTime<Utc>> {
@@ -717,8 +726,8 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        advance_with_transport, WsprLiveAcquisitionOutcome, WsprLiveAcquisitionRequest,
-        WsprLiveAcquisitionState,
+        advance_with_transport, authorized_plans, AcquisitionSnapshot, WsprLiveAcquisitionOutcome,
+        WsprLiveAcquisitionRequest, WsprLiveAcquisitionState,
     };
     use crate::{open_session::ActiveSessionState, setup::create_e2e_session};
 
@@ -834,6 +843,86 @@ mod tests {
             created.path,
             final_end + chrono::Duration::minutes(5),
         )
+    }
+
+    #[test]
+    fn final_public_capture_uses_the_last_attributable_cycle_when_later_intentions_are_skipped() {
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let created = create_e2e_session(temp.path(), &active);
+        let mut bundle = BundleStore::new(created.path)
+            .read_v3_checkpointed()
+            .unwrap();
+        let first_cycle: DateTime<Utc> = "2026-07-15T20:00:01Z".parse().unwrap();
+        let mut actions = vec![(
+            None,
+            first_cycle - chrono::Duration::seconds(30),
+            OperatorEventPayloadV3::SessionStarted { note: None },
+        )];
+        actions.extend(
+            bundle
+                .schedule
+                .wspr_cycle_intents
+                .iter()
+                .take(3)
+                .enumerate()
+                .map(|(index, intent)| {
+                    let cycle_starts_at = first_cycle
+                        + chrono::Duration::seconds(120 * i64::try_from(index).unwrap());
+                    (
+                        Some(intent.intent_id.clone()),
+                        cycle_starts_at - chrono::Duration::seconds(1),
+                        OperatorEventPayloadV3::WsprCycleArmed {
+                            antenna_label: intent.antenna_label.clone(),
+                            cycle_starts_at,
+                        },
+                    )
+                }),
+        );
+        actions.push((
+            Some(bundle.schedule.wspr_cycle_intents[3].intent_id.clone()),
+            first_cycle + chrono::Duration::seconds(6 * 60),
+            OperatorEventPayloadV3::SlotMissed {
+                reason: Some("operator ended after three cycles".into()),
+            },
+        ));
+        bundle.events = actions
+            .into_iter()
+            .enumerate()
+            .map(|(index, (slot_id, occurred_at, payload))| {
+                let mutation_id = format!("skip-final-mutation-{index}");
+                OperatorEventV3 {
+                    meta: RecordMetaV3 {
+                        schema_version: SCHEMA_VERSION_V3,
+                        session_id: bundle.manifest.session_id.clone(),
+                        recorded_at: occurred_at,
+                        provenance: Provenance::from_legacy(
+                            RecordSource::Operator,
+                            env!("CARGO_PKG_VERSION"),
+                        ),
+                        mutation: MutationMember {
+                            mutation_id,
+                            member_index: 0,
+                            member_count: 1,
+                        },
+                    },
+                    event_id: format!("skip-final-event-{index}"),
+                    occurred_at,
+                    time_basis: EventTimeBasisV2::ObservedNow,
+                    uncertainty_seconds: None,
+                    slot_id,
+                    payload,
+                }
+            })
+            .collect();
+        let snapshot = AcquisitionSnapshot::V3(bundle);
+
+        assert_eq!(
+            snapshot.final_completed_slot_id().as_deref(),
+            Some(created.slot_ids[2].as_str())
+        );
+        let plans = authorized_plans(&snapshot).unwrap();
+        assert_eq!(plans.last().unwrap().completed_slot_id, created.slot_ids[2]);
     }
 
     #[test]

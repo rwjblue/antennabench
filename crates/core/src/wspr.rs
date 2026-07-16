@@ -2,7 +2,10 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{Band, OperatorEventPayloadV3, OperatorEventV3, ScheduleV3};
+use crate::{
+    reduce_operator_events_v3, Band, CorrectableOperatorEventPayloadV3, OperatorEventPayloadV3,
+    OperatorEventV3, ScheduleV3, SessionLifecycleV2,
+};
 
 pub const WSPR_CYCLE_SECONDS: i64 = 120;
 pub const WSPR_NOMINAL_START_OFFSET_SECONDS: i64 = 1;
@@ -63,6 +66,7 @@ pub struct WsprRunDiagnosticV3 {
 pub struct WsprRunProjectionV3 {
     pub occupancies: Vec<AntennaOccupancyIntervalV3>,
     pub cycles: Vec<ArmedWsprCycleV3>,
+    pub skipped_intent_ids: Vec<String>,
     pub diagnostics: Vec<WsprRunDiagnosticV3>,
 }
 
@@ -134,6 +138,30 @@ pub fn project_wspr_run_v3(
     events: &[OperatorEventV3],
 ) -> WsprRunProjectionV3 {
     let mut projection = WsprRunProjectionV3::default();
+    let skipped_intents = reduce_operator_events_v3(SessionLifecycleV2::Ready, events)
+        .effective_events
+        .into_iter()
+        .filter_map(|event| {
+            matches!(
+                event.payload,
+                CorrectableOperatorEventPayloadV3::SlotMissed { .. }
+            )
+            .then_some(event.slot_id)
+            .flatten()
+        })
+        .filter(|intent_id| {
+            schedule
+                .wspr_cycle_intents
+                .iter()
+                .any(|intent| intent.intent_id == *intent_id)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    projection.skipped_intent_ids = schedule
+        .wspr_cycle_intents
+        .iter()
+        .filter(|intent| skipped_intents.contains(&intent.intent_id))
+        .map(|intent| intent.intent_id.clone())
+        .collect();
     let mut open_occupancy: Option<AntennaOccupancyIntervalV3> = None;
     let mut seen_intents = std::collections::BTreeSet::new();
 
@@ -204,11 +232,11 @@ pub fn project_wspr_run_v3(
             });
             continue;
         }
-        if schedule
-            .wspr_cycle_intents
-            .get(projection.cycles.len())
-            .is_some_and(|expected| expected.intent_id != intent_id)
-        {
+        let expected_intent = schedule.wspr_cycle_intents.iter().find(|expected| {
+            !seen_intents.contains(expected.intent_id.as_str())
+                && !skipped_intents.contains(&expected.intent_id)
+        });
+        if expected_intent.is_some_and(|expected| expected.intent_id != intent_id) {
             projection.diagnostics.push(WsprRunDiagnosticV3 {
                 code: "wspr_run.intent_out_of_order",
                 event_id: event.event_id.clone(),

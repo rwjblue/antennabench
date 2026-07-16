@@ -186,6 +186,13 @@ fails without overwrite. Opening a session left running records one durable
 recovery-system interruption before resume/end actions are offered. Ended and
 abandoned sessions are terminal, and schema-v1 sources remain read-only.
 
+The routine presentation shows one prominent next action. Skipping an unarmed
+cycle is a durable, correctable missed-cycle fact that advances the intended
+order. Notes and corrections are task-level shortcuts; checkpoint details,
+receiver configuration, diagnostics, and action history use progressive
+disclosure. Every mutation shows a pending state followed by explicit success
+or typed failure.
+
 The active-run surface can start or stop one optional WSJT-X receiver while the
 session is running. Rust owns the socket, expected-client filter, bounded
 adapter state, raw hex preservation, conservative actual-cycle annotation,

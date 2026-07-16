@@ -194,6 +194,7 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         for cycle in &snapshot.wspr_cycles {
             let attribution = match cycle.attribution {
                 crate::ReportWsprAttribution::Pending => "Not yet run",
+                crate::ReportWsprAttribution::Skipped => "Skipped by operator",
                 crate::ReportWsprAttribution::Attributable => "Full antenna occupancy recorded",
                 crate::ReportWsprAttribution::UnknownAntennaOccupancy => {
                     "Unknown — antenna changed during transmission"

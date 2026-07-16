@@ -17,6 +17,11 @@ deadlines. During the session, begin the antenna switch and confirm when the
 next antenna is ready. AntennaBench then selects the next eligible even-minute
 WSPR cycle and records the actual antenna-occupancy interval.
 
+Active Run leads with one current instruction and one primary action. Notes,
+cycle skipping, corrections, receiver configuration, public-spot status, and
+session internals remain available without competing with the next physical
+step.
+
 Local WSJT-X reception is optional. WSPR.live public spots are gathered
 automatically by default after completed cycles, with source and completeness
 disclosed in the report. A network or adapter failure does not prevent you from

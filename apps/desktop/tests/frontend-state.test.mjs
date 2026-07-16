@@ -177,6 +177,19 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
 });
 
+test("active run leads with task actions and hides implementation-oriented tools", () => {
+  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  const runPanel = html.match(/<section class="workflow-panel" data-panel="run"[\s\S]*?<section class="workflow-panel" data-panel="transfer"/u)?.[0] ?? "";
+  assert.match(runPanel, /Start session/);
+  assert.match(runPanel, /Antenna ready/);
+  assert.match(runPanel, /Skip this cycle/);
+  assert.match(runPanel, /Add note/);
+  assert.match(runPanel, /Correct last action/);
+  assert.match(runPanel, /<details[^>]*>\s*<summary>Optional WSJT-X receiver/u);
+  assert.match(runPanel, /<details[^>]*data-corrections-panel/u);
+  assert.doesNotMatch(runPanel, /Explicit operator evidence|Trusted boundary|Trusted time/);
+});
+
 test("saved station details fill only an untouched setup form", () => {
   const controls = new Map([
     ["callsign", { value: "" }],
@@ -322,8 +335,9 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
     actionToken: "mutation-4",
   };
   const ready = conductorLoadSucceeded(loading, conductor);
-  const mutating = beginConductorMutation(ready);
-  const failed = conductorMutationFailed(mutating, {
+  const mutating = beginConductorMutation(ready, "start");
+  const saved = conductorLoadSucceeded(mutating, { ...conductor, revision: 5 });
+  const failed = conductorMutationFailed(beginConductorMutation(saved, "arm_wspr_cycle"), {
     kind: "stale_revision",
     message: "The session changed.",
     detail: "expected 4, actual 5",
@@ -333,8 +347,11 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
   assert.equal(ready.conductorStatus, "ready");
   assert.equal(ready.conductor, conductor);
   assert.equal(mutating.conductorStatus, "mutating");
+  assert.equal(mutating.conductorPendingAction, "start");
+  assert.equal(saved.conductorStatus, "ready");
+  assert.equal(saved.conductorNotice, "Session started.");
   assert.equal(failed.conductorStatus, "error");
-  assert.equal(failed.conductor, conductor);
+  assert.equal(failed.conductor, saved.conductor);
   assert.equal(failed.conductorError.kind, "stale_revision");
 });
 

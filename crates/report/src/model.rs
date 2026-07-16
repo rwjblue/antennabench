@@ -66,6 +66,7 @@ pub struct ReportWsprCycle {
 #[serde(rename_all = "snake_case")]
 pub enum ReportWsprAttribution {
     Pending,
+    Skipped,
     Attributable,
     UnknownAntennaOccupancy,
 }

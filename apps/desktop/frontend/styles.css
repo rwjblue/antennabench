@@ -167,10 +167,6 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .action-list button.secondary-action:not(:disabled):hover { color: #fff; background: #245451; }
 .action-list button.secondary-action:disabled { cursor: not-allowed; }
 
-.boundary-note { display: grid; grid-template-columns: 140px 1fr; gap: 22px; margin-top: 26px; padding: 18px 20px; border-left: 3px solid #70c5b8; border-radius: 0 12px 12px 0; background: #eef4ef; }
-.boundary-note strong { color: #315d57; font-size: 0.82rem; }
-.boundary-note p { margin: 0; color: #62736f; font-size: 0.8rem; line-height: 1.6; }
-
 .conductor { display: grid; gap: 18px; }
 .conductor-context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .conductor-context > div { display: grid; gap: 5px; min-width: 0; padding: 13px 15px; border: 1px solid #d7ddd5; border-radius: 11px; background: #fff; }
@@ -186,12 +182,22 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .slot-focus p { margin: 0; color: #62736f; font-size: 0.72rem; line-height: 1.45; }
 .muted-copy { color: #89918c !important; }
 .conductor-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.run-primary-actions { justify-content: center; }
+.run-primary-actions button { min-width: min(100%, 280px); padding: 14px 22px; font-size: 0.9rem; }
+.skip-cycle-action { justify-self: center; }
+.run-task-actions { justify-content: center; }
 .conductor-actions button, .event-history button { border: 1px solid #245451; border-radius: 9px; padding: 9px 12px; color: #245451; background: #fff; font-size: 0.73rem; font-weight: 800; cursor: pointer; }
 .conductor-actions button:hover:not(:disabled), .event-history button:hover:not(:disabled) { color: #fff; background: #245451; }
 .conductor-actions button:disabled, .event-history button:disabled { border-color: #c2cbc6; color: #9aa49f; background: #f0f2ee; cursor: not-allowed; }
 .conductor-actions .danger-action { border-color: #a24b39; color: #8d3c2d; }
 .conductor-actions .danger-action:hover:not(:disabled) { background: #8d3c2d; }
 .receiver-panel { display: grid; gap: 14px; padding: 20px; border: 1px solid #c8d5d0; border-radius: 14px; background: #f7f9f5; }
+.receiver-panel > form, .evidence-form > form { display: grid; gap: 14px; }
+.run-details { padding: 16px 18px; border: 1px solid #d7ddd5; border-radius: 14px; background: #f7f9f5; }
+.run-details[open], .receiver-panel[open], .evidence-form[open], .event-history[open] { gap: 16px; }
+.run-details > summary, .receiver-panel > summary, .evidence-form > summary, .event-history > summary { color: #315d57; font-size: 0.82rem; font-weight: 800; cursor: pointer; }
+.run-details > summary { margin-bottom: 0; }
+.run-details[open] > summary, .receiver-panel[open] > summary, .evidence-form[open] > summary, .event-history[open] > summary { margin-bottom: 16px; }
 .receiver-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .receiver-heading h2 { margin: 0; color: #1c403d; font-family: Georgia, "Times New Roman", serif; font-size: 1.25rem; font-weight: 500; }
 .receiver-heading > strong { color: #315d57; font-size: 0.76rem; overflow-wrap: anywhere; text-align: right; }

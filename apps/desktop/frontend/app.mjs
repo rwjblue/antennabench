@@ -201,6 +201,8 @@ export function setupCreationSucceeded(state, session) {
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
+    conductorPendingAction: null,
+    conductorNotice: null,
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
@@ -403,16 +405,27 @@ export function beginConductorLoad(state) {
 }
 
 export function conductorLoadSucceeded(state, conductor) {
+  const completedAction = state.conductorPendingAction;
   return {
     ...state,
     conductorStatus: "ready",
     conductor,
     conductorError: null,
+    conductorPendingAction: null,
+    conductorNotice: completedAction
+      ? conductorActionCompletedLabel(completedAction)
+      : state.conductorNotice,
   };
 }
 
-export function beginConductorMutation(state) {
-  return { ...state, conductorStatus: "mutating", conductorError: null };
+export function beginConductorMutation(state, action = "operator_action") {
+  return {
+    ...state,
+    conductorStatus: "mutating",
+    conductorError: null,
+    conductorPendingAction: action,
+    conductorNotice: null,
+  };
 }
 
 export function conductorMutationFailed(state, error) {
@@ -420,6 +433,8 @@ export function conductorMutationFailed(state, error) {
     ...state,
     conductorStatus: "error",
     conductorError: normalizeOpenError(error),
+    conductorPendingAction: null,
+    conductorNotice: null,
   };
 }
 
@@ -645,6 +660,10 @@ function mount(root, browserWindow) {
   const conductorRefreshButtons = [...root.querySelectorAll("[data-conductor-refresh]")];
   const lifecycleButtons = [...root.querySelectorAll("[data-conductor-action]")];
   const evidenceForm = root.querySelector("[data-evidence-form]");
+  const entryPanel = root.querySelector("[data-entry-panel]");
+  const correctionsPanel = root.querySelector("[data-corrections-panel]");
+  const addRunNote = root.querySelector("[data-add-run-note]");
+  const openCorrections = root.querySelector("[data-open-corrections]");
   const evidenceKind = root.querySelector("[data-evidence-kind]");
   const evidenceSlot = root.querySelector("[data-evidence-slot]");
   const evidenceAntenna = root.querySelector("[data-evidence-antenna]");
@@ -836,14 +855,20 @@ function mount(root, browserWindow) {
         const action = button.dataset.conductorAction;
         const isSwitchAction = action === "begin_antenna_switch";
         const isArmAction = action === "arm_wspr_cycle";
+        const isSkipAction = action === "skip_wspr_cycle";
         if (isArmAction && view.nextIntent) {
           button.textContent = `${view.nextIntent.antennaLabel} ready`;
         }
+        const available = isSwitchAction
+          ? view.lifecycle === "running" && view.nextIntent !== null && view.phase !== "switching"
+          : isArmAction
+            ? view.lifecycle === "running" && view.nextIntent !== null && view.phase === "switching"
+            : isSkipAction
+              ? view.lifecycle === "running" && view.nextIntent !== null && ["between_slots", "switching"].includes(view.phase)
+              : allowed.has(action) && !(view.phase === "finalizing" && action === "end");
+        button.hidden = !available;
         button.disabled = conductorBusy
-          || (isSwitchAction && (view.lifecycle !== "running" || view.nextIntent === null || view.phase === "switching"))
-          || (isArmAction && (view.lifecycle !== "running" || view.nextIntent === null || view.phase !== "switching"))
-          || (!isSwitchAction && !isArmAction && !allowed.has(action))
-          || (view.phase === "finalizing" && action === "end");
+          || !available;
       });
       conductorDiagnostics.replaceChildren(
         ...view.diagnostics.map((diagnostic) => {
@@ -1084,7 +1109,7 @@ function mount(root, browserWindow) {
       expectedRevision: state.conductor.revision,
       action,
     };
-    state = beginConductorMutation(state);
+    state = beginConductorMutation(state, action.kind);
     render();
     try {
       const invoke = browserWindow.__TAURI__?.core?.invoke;
@@ -1159,6 +1184,18 @@ function mount(root, browserWindow) {
         });
         return;
       }
+      if (kind === "skip_wspr_cycle") {
+        const intent = state.conductor?.nextIntent;
+        if (!intent) return;
+        const reason = browserWindow.prompt(`Optional reason for skipping cycle ${intent.sequenceNumber}:`, "");
+        if (reason === null) return;
+        await submitConductorAction({
+          kind,
+          intentId: intent.intentId,
+          reason,
+        });
+        return;
+      }
       if (kind === "start" || kind === "resume") {
         await submitConductorAction({ kind, note: null });
         return;
@@ -1172,6 +1209,18 @@ function mount(root, browserWindow) {
 
   evidenceCallsign.addEventListener("input", () => {
     evidenceCallsign.value = evidenceCallsign.value.toUpperCase();
+  });
+
+  addRunNote.addEventListener("click", () => {
+    entryPanel.open = true;
+    evidenceKind.value = "add_note";
+    evidenceDetail.focus();
+  });
+
+  openCorrections.addEventListener("click", () => {
+    entryPanel.open = true;
+    correctionsPanel.open = true;
+    correctionsPanel.scrollIntoView?.({ behavior: "smooth", block: "start" });
   });
 
   evidenceForm.addEventListener("submit", async (event) => {
@@ -1508,11 +1557,18 @@ function conductorFeedbackModel(state) {
   if (state.conductorStatus === "mutating") {
     return {
       kind: "loading",
-      message: "Committing operator evidence…",
-      detail: "The UI updates only after the checkpoint is synchronized and verified.",
+      message: `${conductorActionLabel(state.conductorPendingAction)}…`,
+      detail: "Saving this action to the session.",
     };
   }
   if (state.conductorError) return { kind: "error", ...state.conductorError };
+  if (state.conductorNotice) {
+    return {
+      kind: "ready",
+      message: state.conductorNotice,
+      detail: "The active run now reflects the saved action.",
+    };
+  }
   const recovery = state.conductor?.recovery;
   if (recovery?.interruptionRecorded) {
     return {
@@ -1529,6 +1585,37 @@ function conductorFeedbackModel(state) {
     };
   }
   return null;
+}
+
+function conductorActionLabel(action) {
+  switch (action) {
+    case "start": return "Starting the session";
+    case "resume": return "Resuming the session";
+    case "begin_antenna_switch": return "Recording the antenna switch";
+    case "arm_wspr_cycle": return "Scheduling the next WSPR cycle";
+    case "skip_wspr_cycle": return "Skipping this cycle";
+    case "interrupt": return "Pausing the session";
+    case "end": return "Ending the session";
+    case "abandon": return "Abandoning the session";
+    case "operator_action":
+    case null:
+    case undefined: return "Saving the action";
+    default: return "Saving the entry";
+  }
+}
+
+function conductorActionCompletedLabel(action) {
+  switch (action) {
+    case "start": return "Session started.";
+    case "resume": return "Session resumed.";
+    case "begin_antenna_switch": return "Antenna switch started.";
+    case "arm_wspr_cycle": return "Next WSPR cycle scheduled.";
+    case "skip_wspr_cycle": return "Cycle skipped.";
+    case "interrupt": return "Session paused.";
+    case "end": return "Session ended.";
+    case "abandon": return "Session abandoned.";
+    default: return "Entry saved.";
+  }
 }
 
 function wsprLiveAcquisitionModel(state) {

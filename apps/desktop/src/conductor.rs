@@ -215,6 +215,10 @@ enum ConductorAction {
         intent_id: String,
         antenna_label: String,
     },
+    SkipWsprCycle {
+        intent_id: String,
+        reason: Option<String>,
+    },
     ConfirmAntenna {
         slot_id: String,
         antenna_label: String,
@@ -466,7 +470,9 @@ fn action_payload(
                 reason: optional_text(reason),
             },
         ),
-        ConductorAction::BeginAntennaSwitch { .. } | ConductorAction::ArmWsprCycle { .. } => {
+        ConductorAction::BeginAntennaSwitch { .. }
+        | ConductorAction::ArmWsprCycle { .. }
+        | ConductorAction::SkipWsprCycle { .. } => {
             return Err(SessionErrorPayload::new(
                 SessionErrorKind::Validation,
                 "Operator-paced WSPR actions require a current session.",
@@ -694,6 +700,12 @@ fn action_payload_v3(
                 },
             )
         }
+        ConductorAction::SkipWsprCycle { intent_id, reason } => (
+            Some(required_text(intent_id, "intentId")?),
+            OperatorEventPayloadV3::SlotMissed {
+                reason: optional_text(reason),
+            },
+        ),
         ConductorAction::ConfirmAntenna {
             slot_id,
             antenna_label,
@@ -1146,6 +1158,10 @@ fn build_view_v3(
             .cycles
             .iter()
             .any(|cycle| cycle.intent_id == intent.intent_id)
+            && !run_projection
+                .skipped_intent_ids
+                .iter()
+                .any(|intent_id| intent_id == &intent.intent_id)
     });
     let switching = bundle
         .events
@@ -2147,6 +2163,68 @@ mod tests {
         let persisted = store.read_v3_checkpointed().unwrap();
         assert_eq!(persisted.events.len(), 4);
         assert_eq!(persisted.session_state.revision, 4);
+    }
+
+    #[test]
+    fn schema_v3_unarmed_cycle_can_be_skipped_and_corrected() {
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let created = create_e2e_session(temp.path(), &active);
+        let hooks = Arc::new(TestHooks::new(
+            Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 20).unwrap(),
+        ));
+        let conductor = ConductorSessionState::default();
+
+        let ready = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+        let started = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(&ready, ConductorAction::Start { note: None }),
+            hooks.clone(),
+        )
+        .unwrap();
+        let skipped = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &started,
+                ConductorAction::SkipWsprCycle {
+                    intent_id: created.slot_ids[0].clone(),
+                    reason: Some("operator chose to wait".into()),
+                },
+            ),
+            hooks.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            skipped.next_intent.as_ref().unwrap().intent_id,
+            created.slot_ids[1]
+        );
+        let skipped_event = skipped
+            .effective_events
+            .iter()
+            .find(|event| event.kind == "slot_missed")
+            .unwrap()
+            .source_event_id
+            .clone();
+
+        let corrected = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(
+                &skipped,
+                ConductorAction::RetractEvent {
+                    target_event_id: skipped_event,
+                    reason: "operator had not intended to skip".into(),
+                },
+            ),
+            hooks,
+        )
+        .unwrap();
+        assert_eq!(
+            corrected.next_intent.as_ref().unwrap().intent_id,
+            created.slot_ids[0]
+        );
     }
 
     struct FailureArtifacts {
