@@ -1,22 +1,4 @@
-import {
-  invokeActiveSessionConductor,
-  invokeActiveSessionReport,
-  invokeActiveSessionWsjtxStatus,
-  invokeAdvanceSessionWsprLive,
-  invokeCreateSessionFromReview,
-  invokeExportActiveSessionReport,
-  invokeExportSession,
-  invokeImportActiveSessionRbn,
-  invokeImportActiveSessionWsprLive,
-  invokeLoadStationPreferences,
-  invokeMutateSessionConductor,
-  invokeOpenSession,
-  invokeRefreshActiveSessionReport,
-  invokeReviewSessionSetup,
-  invokeStartSessionWsjtx,
-  invokeStationLocation,
-  invokeStopSessionWsjtx,
-} from "./bridge.mjs";
+import { createDesktopController } from "./controller.mjs";
 import {
   applyStationPreferences,
   readEvidenceAction,
@@ -31,7 +13,6 @@ import {
   installContextualHelp,
   locationLookupMessage,
   maidenheadGrid,
-  projectCountdown,
   recommendedNoteTarget,
   updateReportFrame,
   viewModel,
@@ -39,57 +20,12 @@ import {
   wsprLiveAcquisitionModel,
   wsprRunPlanSummary,
 } from "./models.mjs";
-import {
-  beginConductorLoad,
-  beginConductorMutation,
-  beginExportSession,
-  beginOpenSession,
-  beginReportExport,
-  beginReportRefresh,
-  beginRbnImport,
-  beginSetupCreation,
-  beginSetupReview,
-  beginWsjtxAction,
-  beginWsprLiveAcquisition,
-  beginWsprLiveImport,
-  conductorLoadSucceeded,
-  conductorMutationFailed,
-  editSessionSetup,
-  exportSessionCancelled,
-  exportSessionFailed,
-  exportSessionSucceeded,
-  initialState,
-  openSessionCancelled,
-  openSessionFailed,
-  openSessionSucceeded,
-  rbnImportCancelled,
-  rbnImportFailed,
-  rbnImportSucceeded,
-  reportExportCancelled,
-  reportExportFailed,
-  reportExportSucceeded,
-  reportRefreshFailed,
-  reportRefreshSucceeded,
-  selectWorkflow,
-  setupCreationCancelled,
-  setupCreationFailed,
-  setupCreationSucceeded,
-  setupReviewFailed,
-  setupReviewSucceeded,
-  wsjtxActionFailed,
-  wsjtxActionSucceeded,
-  wsprLiveAcquisitionFailed,
-  wsprLiveAcquisitionSucceeded,
-  wsprLiveImportCancelled,
-  wsprLiveImportFailed,
-  wsprLiveImportSucceeded,
-} from "./state.mjs";
+import { initialState } from "./state.mjs";
 
 function mount(root, browserWindow) {
   let state = initialState(workflowFromHash(browserWindow.location.hash));
   let countdownAnchor = null;
   let countdownAnchorKey = null;
-  let transitionRefreshKey = null;
   let noteShortcutInitialized = false;
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const navigation = [...root.querySelectorAll("[data-workflow]")];
@@ -300,7 +236,6 @@ function mount(root, browserWindow) {
       if (nextAnchor?.key !== countdownAnchorKey) {
         countdownAnchor = nextAnchor;
         countdownAnchorKey = nextAnchor?.key ?? null;
-        transitionRefreshKey = null;
       }
       conductorLifecycle.textContent = humanizeIdentifier(view.lifecycle);
       conductorAntennaInUse.textContent = view.antennaInUse ?? "None";
@@ -500,159 +435,57 @@ function mount(root, browserWindow) {
     }
   };
 
-  const advanceWsprLive = async (retry = false) => {
-    if (
-      state.conductor?.lifecycle !== "running"
-      || state.wsprLiveAcquisitionStatus === "fetching"
-    ) return;
-    state = beginWsprLiveAcquisition(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      const outcome = await invokeAdvanceSessionWsprLive(invoke, retry);
-      state = wsprLiveAcquisitionSucceeded(state, outcome);
+  const controller = createDesktopController({
+    state,
+    invoke: browserWindow.__TAURI__?.core?.invoke,
+    render(nextState) {
+      state = nextState;
       render();
-      if (["captured", "completed"].includes(outcome.status)) {
-        await refreshConductor(false);
-        await refreshReport();
-      }
-    } catch (error) {
-      state = wsprLiveAcquisitionFailed(state, error);
-      render();
-    }
-  };
+    },
+    navigate(workflow) {
+      browserWindow.history.replaceState(null, "", `#${workflow}`);
+    },
+    monotonicNow,
+    setInterval: (callback, milliseconds) => browserWindow.setInterval?.(callback, milliseconds),
+    clearInterval: (timer) => browserWindow.clearInterval?.(timer),
+    onFocus(callback) {
+      browserWindow.addEventListener("focus", callback);
+      return () => browserWindow.removeEventListener?.("focus", callback);
+    },
+    onVisibilityChange(callback) {
+      root.ownerDocument.addEventListener?.("visibilitychange", callback);
+      return () => root.ownerDocument.removeEventListener?.("visibilitychange", callback);
+    },
+    onHashChange(callback) {
+      const listener = () => callback(workflowFromHash(browserWindow.location.hash));
+      browserWindow.addEventListener("hashchange", listener);
+      return () => browserWindow.removeEventListener?.("hashchange", listener);
+    },
+    isVisible: () => root.ownerDocument.visibilityState !== "hidden",
+    prompt: (message, initial) => browserWindow.prompt(message, initial),
+    confirm: (message) => browserWindow.confirm(message),
+    getCountdownAnchor: () => countdownAnchor,
+    renderCountdown(seconds) {
+      conductorCountdown.textContent = seconds === null ? "" : formatCountdown(seconds);
+    },
+  });
 
-  const refreshConductor = async (advanceAcquisition = true) => {
-    if (["loading", "refreshing", "mutating"].includes(state.conductorStatus)) return;
-    state = beginConductorLoad(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("The native desktop bridge is unavailable.");
-      }
-      state = conductorLoadSucceeded(
-        state,
-        await invokeActiveSessionConductor(invoke),
-      );
-    } catch (error) {
-      state = conductorMutationFailed(state, error);
-    }
-    render();
-    if (state.conductor) {
-      await refreshWsjtxStatus();
-      if (advanceAcquisition && state.conductor.lifecycle === "running") {
-        await advanceWsprLive();
-      }
-    }
-  };
-
-  const refreshWsjtxStatus = async () => {
-    if (["starting", "stopping"].includes(state.wsjtxStatus)) return;
-    state = beginWsjtxAction(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      state = wsjtxActionSucceeded(state, await invokeActiveSessionWsjtxStatus(invoke));
-    } catch (error) {
-      state = wsjtxActionFailed(state, error);
-    }
-    render();
-  };
-
-  const refreshReport = async () => {
-    if (
-      !state.session
-      || state.reportStatus === "refreshing"
-      || state.reportExportStatus === "loading"
-    ) return;
-    state = beginReportRefresh(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      state = reportRefreshSucceeded(
-        state,
-        await invokeRefreshActiveSessionReport(invoke),
-      );
-    } catch (error) {
-      state = reportRefreshFailed(state, error);
-    }
-    render();
-  };
-
-  const submitConductorAction = async (action) => {
-    if (!state.conductor || state.conductorStatus === "mutating") return;
-    const request = {
-      actionToken: state.conductor.actionToken,
-      expectedRevision: state.conductor.revision,
-      action,
-    };
-    state = beginConductorMutation(state, action.kind);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("The native desktop bridge is unavailable.");
-      }
-      state = conductorLoadSucceeded(
-        state,
-        await invokeMutateSessionConductor(invoke, request),
-      );
-    } catch (error) {
-      state = conductorMutationFailed(state, error);
-    }
-    render();
-    if (state.conductorStatus === "ready") {
-      await refreshWsjtxStatus();
-      await advanceWsprLive();
-      await refreshReport();
-    }
-  };
 
   for (const button of navigation) {
     button.addEventListener("click", async () => {
-      state = selectWorkflow(state, button.dataset.workflow);
-      browserWindow.history.replaceState(null, "", `#${state.activeWorkflow}`);
-      render();
+      await controller.selectWorkflow(button.dataset.workflow);
       root.querySelector("main").focus({ preventScroll: true });
-      if (state.activeWorkflow === "run" && state.session) await refreshConductor();
-      if (state.activeWorkflow === "report" && state.session) await refreshReport();
     });
   }
 
-  browserWindow.addEventListener("hashchange", async () => {
-    state = selectWorkflow(
-      state,
-      workflowFromHash(browserWindow.location.hash),
-    );
-    render();
-    if (state.activeWorkflow === "run" && state.session) await refreshConductor();
-    if (state.activeWorkflow === "report" && state.session) await refreshReport();
-  });
-
-  const refreshConductorOnReturn = () => {
-    if (
-      root.ownerDocument.visibilityState !== "hidden"
-      && state.activeWorkflow === "run"
-      && state.session
-    ) {
-      void refreshConductor();
-    }
-  };
-  browserWindow.addEventListener("focus", refreshConductorOnReturn);
-  root.ownerDocument.addEventListener?.("visibilitychange", refreshConductorOnReturn);
-
   conductorRefreshButtons.forEach((button) => {
-    button.addEventListener("click", refreshConductor);
+    button.addEventListener("click", () => controller.refreshConductor());
   });
 
-  wsprLiveRetry.addEventListener("click", () => advanceWsprLive(true));
+  wsprLiveRetry.addEventListener("click", () => controller.advanceWsprLive(true));
   wsprLiveEndWithout.addEventListener("click", async () => {
-    if (!browserWindow.confirm("End this session without the final automatic WSPR.live capture? Existing evidence will remain.")) return;
-    await submitConductorAction({
+    if (!controller.confirm("End this session without the final automatic WSPR.live capture? Existing evidence will remain.")) return;
+    await controller.submitConductorAction({
       kind: "end",
       reason: "Operator ended finalization without automatic WSPR.live public spots.",
     });
@@ -664,7 +497,7 @@ function mount(root, browserWindow) {
       if (kind === "arm_wspr_cycle") {
         const intent = state.conductor?.nextIntent;
         if (!intent) return;
-        await submitConductorAction({
+        await controller.submitConductorAction({
           kind,
           intentId: intent.intentId,
           antennaLabel: intent.antennaLabel,
@@ -674,9 +507,9 @@ function mount(root, browserWindow) {
       if (kind === "skip_wspr_cycle") {
         const intent = state.conductor?.nextIntent;
         if (!intent) return;
-        const reason = browserWindow.prompt(`Optional reason for skipping cycle ${intent.sequenceNumber}:`, "");
+        const reason = controller.prompt(`Optional reason for skipping cycle ${intent.sequenceNumber}:`, "");
         if (reason === null) return;
-        await submitConductorAction({
+        await controller.submitConductorAction({
           kind,
           intentId: intent.intentId,
           reason,
@@ -684,13 +517,13 @@ function mount(root, browserWindow) {
         return;
       }
       if (kind === "start" || kind === "resume") {
-        await submitConductorAction({ kind, note: null });
+        await controller.submitConductorAction({ kind, note: null });
         return;
       }
-      if (kind === "abandon" && !browserWindow.confirm("Abandon this session? Existing evidence will remain, but the lifecycle is terminal.")) return;
-      const detail = browserWindow.prompt(`Optional ${kind} reason:`, "");
+      if (kind === "abandon" && !controller.confirm("Abandon this session? Existing evidence will remain, but the lifecycle is terminal.")) return;
+      const detail = controller.prompt(`Optional ${kind} reason:`, "");
       if (detail === null) return;
-      await submitConductorAction({ kind, reason: detail });
+      await controller.submitConductorAction({ kind, reason: detail });
     });
   });
 
@@ -735,7 +568,7 @@ function mount(root, browserWindow) {
         evidenceCadence,
       ),
     );
-    await submitConductorAction(action);
+    await controller.submitConductorAction(action);
     if (action.kind === "add_note" && state.conductorStatus === "ready") {
       noteShortcutInitialized = false;
       evidenceForm.reset();
@@ -747,10 +580,10 @@ function mount(root, browserWindow) {
     const button = event.target.closest("button[data-event-action]");
     if (!button) return;
     const targetEventId = button.dataset.eventId;
-    const reason = browserWindow.prompt("Correction reason (required):", "");
+    const reason = controller.prompt("Correction reason (required):", "");
     if (reason === null || reason.trim().length === 0) return;
     if (button.dataset.eventAction === "retract") {
-      await submitConductorAction({
+      await controller.submitConductorAction({
         kind: "retract_event",
         targetEventId,
         reason,
@@ -769,7 +602,7 @@ function mount(root, browserWindow) {
         evidenceCadence,
       ),
     );
-    await submitConductorAction({
+    await controller.submitConductorAction({
       kind: "replace_event",
       targetEventId,
       slotId: evidenceSlot.value || null,
@@ -779,33 +612,15 @@ function mount(root, browserWindow) {
   });
 
   wsjtxStart.addEventListener("click", async () => {
-    state = beginWsjtxAction(state, "starting");
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      state = wsjtxActionSucceeded(state, await invokeStartSessionWsjtx(invoke, {
+    await controller.startWsjtx({
         bindAddress: wsjtxBindAddress.value,
         port: Number(wsjtxPort.value),
         expectedClientId: wsjtxClientId.value,
-      }));
-    } catch (error) {
-      state = wsjtxActionFailed(state, error);
-    }
-    render();
+    });
   });
 
   wsjtxStop.addEventListener("click", async () => {
-    state = beginWsjtxAction(state, "stopping");
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      state = wsjtxActionSucceeded(state, await invokeStopSessionWsjtx(invoke));
-    } catch (error) {
-      state = wsjtxActionFailed(state, error);
-    }
-    render();
+    await controller.stopWsjtx();
   });
 
   setupForm.addEventListener("input", (event) => {
@@ -815,8 +630,7 @@ function mount(root, browserWindow) {
     syncSignalPlanFields(setupForm);
     updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     if (!setupBusyState(state)) {
-      state = editSessionSetup(state);
-      render();
+      controller.editSetup();
     }
   });
 
@@ -825,16 +639,13 @@ function mount(root, browserWindow) {
     useCurrentLocationButton.textContent = "Requesting…";
     locationStatus.textContent = "Requesting macOS location permission or a one-time location…";
     try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      const outcome = await invokeStationLocation(invoke);
+      const outcome = await controller.requestStationLocation();
       if (outcome.status !== "success") {
         locationStatus.textContent = locationLookupMessage(outcome);
         return;
       }
       stationGrid.value = maidenheadGrid(outcome.latitude, outcome.longitude);
-      state = editSessionSetup(state);
-      render();
+      controller.editSetup();
       locationStatus.textContent = `Estimated ${stationGrid.value}; raw coordinates were not saved.`;
     } catch (error) {
       locationStatus.textContent = error?.message || locationLookupMessage(null);
@@ -846,48 +657,11 @@ function mount(root, browserWindow) {
 
   setupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    state = beginSetupReview(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("The native desktop bridge is unavailable.");
-      }
-      const review = await invokeReviewSessionSetup(invoke, readSetupDraft(setupForm));
-      state = setupReviewSucceeded(state, review);
-    } catch (error) {
-      state = setupReviewFailed(state, error);
-    }
-    render();
+    await controller.reviewSetup(readSetupDraft(setupForm));
   });
 
   setupCreateButton.addEventListener("click", async () => {
-    const reviewId = state.setupReview?.reviewId;
-    if (!reviewId) return;
-    state = beginSetupCreation(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("The native desktop bridge is unavailable.");
-      }
-      const outcome = await invokeCreateSessionFromReview(invoke, reviewId);
-      if (outcome.status === "cancelled") {
-        state = setupCreationCancelled(state);
-      } else if (outcome.status === "created" && outcome.session) {
-        state = setupCreationSucceeded(state, outcome.session);
-      } else {
-        throw new Error("The desktop command returned an unexpected response.");
-      }
-    } catch (error) {
-      state = setupCreationFailed(state, error);
-    }
-    render();
-    if (state.setupStatus === "created") {
-      browserWindow.history.replaceState(null, "", "#run");
-      await refreshReport();
-      await refreshConductor();
-    }
+    await controller.createSession();
   });
 
   setupAddAntennaButton.addEventListener("click", () => {
@@ -895,8 +669,7 @@ function mount(root, browserWindow) {
     setupAddAntennaButton.before(fragment);
     refreshAntennaRows(setupForm);
     updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
-    state = editSessionSetup(state);
-    render();
+    controller.editSetup();
   });
 
   setupForm.addEventListener("click", (event) => {
@@ -907,163 +680,39 @@ function mount(root, browserWindow) {
     removeButton.closest("[data-antenna-row]").remove();
     refreshAntennaRows(setupForm);
     updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
-    state = editSessionSetup(state);
-    render();
+    controller.editSetup();
   });
 
   openButton.addEventListener("click", async () => {
-    state = beginOpenSession(state);
-    render();
-
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("The native desktop bridge is unavailable.");
-      }
-
-      const outcome = await invokeOpenSession(invoke);
-      if (outcome.status === "cancelled") {
-        state = openSessionCancelled(state);
-      } else if (outcome.status === "opened" && outcome.session) {
-        state = openSessionSucceeded(state, outcome.session);
-        browserWindow.history.replaceState(null, "", "#report");
-      } else {
-        throw new Error("The desktop command returned an unexpected response.");
-      }
-    } catch (error) {
-      state = openSessionFailed(state, error);
-    }
-
-    render();
-    if (state.openStatus === "ready") await refreshReport();
+    await controller.openSession();
   });
 
   exportButton.addEventListener("click", async () => {
-    state = beginExportSession(state);
-    render();
-
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("The native desktop bridge is unavailable.");
-      }
-
-      const outcome = await invokeExportSession(invoke);
-      if (outcome.status === "cancelled") {
-        state = exportSessionCancelled(state);
-      } else if (outcome.status === "exported" && outcome.bundleName) {
-        state = exportSessionSucceeded(state, outcome.bundleName);
-      } else {
-        throw new Error("The desktop command returned an unexpected response.");
-      }
-    } catch (error) {
-      state = exportSessionFailed(state, error);
-    }
-
-    render();
+    await controller.exportSession();
   });
 
   importWsprLiveButton.addEventListener("click", async () => {
-    if (state.session?.lifecycle !== "running" || state.importStatus === "loading") return;
-    state = beginWsprLiveImport(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      const outcome = await invokeImportActiveSessionWsprLive(invoke);
-      if (outcome.status === "cancelled") {
-        state = wsprLiveImportCancelled(state);
-      } else if (outcome.status === "imported" && outcome.session) {
-        state = wsprLiveImportSucceeded(state, outcome);
-      } else {
-        throw new Error("The desktop command returned an unexpected response.");
-      }
-    } catch (error) {
-      state = wsprLiveImportFailed(state, error);
-    }
-    render();
-    if (state.importStatus === "ready") await refreshReport();
+    await controller.importWsprLive();
   });
   importRbnButton.addEventListener("click", async () => {
-    const eligible = state.session?.schemaVersion === 3
-      && !["draft", "ready"].includes(state.session?.lifecycle);
-    if (!eligible || state.importStatus === "loading") return;
-    state = beginRbnImport(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      const outcome = await invokeImportActiveSessionRbn(invoke);
-      if (outcome.status === "cancelled") {
-        state = rbnImportCancelled(state);
-      } else if (outcome.status === "imported" && outcome.session) {
-        state = rbnImportSucceeded(state, outcome);
-      } else {
-        throw new Error("The desktop command returned an unexpected response.");
-      }
-    } catch (error) {
-      state = rbnImportFailed(state, error);
-    }
-    render();
-    if (state.importStatus === "ready") await refreshReport();
+    await controller.importRbn();
   });
 
-  reportRefreshButton.addEventListener("click", refreshReport);
+  reportRefreshButton.addEventListener("click", () => controller.refreshReport());
   reportExportButton.addEventListener("click", async () => {
-    if (!state.session?.reportHtml || state.reportExportStatus === "loading") return;
-    state = beginReportExport(state);
-    render();
-    try {
-      const invoke = browserWindow.__TAURI__?.core?.invoke;
-      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
-      const outcome = await invokeExportActiveSessionReport(invoke);
-      state = outcome.status === "cancelled"
-        ? reportExportCancelled(state)
-        : reportExportSucceeded(state, outcome);
-    } catch (error) {
-      state = reportExportFailed(state, error);
-    }
-    render();
+    await controller.exportReport();
   });
 
   syncSignalPlanFields(setupForm);
   updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
   render();
-  const invoke = browserWindow.__TAURI__?.core?.invoke;
-  if (typeof invoke === "function") {
-    void invokeLoadStationPreferences(invoke)
+  if (typeof browserWindow.__TAURI__?.core?.invoke === "function") {
+    void controller.loadStationPreferences()
       .then((preferences) => applyStationPreferences(setupForm, preferences))
       .catch(() => {});
   }
-  browserWindow.setInterval?.(() => {
-    if (
-      state.activeWorkflow === "run" &&
-      state.conductorStatus === "ready" &&
-      state.conductor?.lifecycle === "running"
-    ) {
-      void refreshConductor();
-    }
-    if (state.activeWorkflow === "report" && state.session) void refreshReport();
-  }, 5000);
-  browserWindow.setInterval?.(() => {
-    if (
-      state.activeWorkflow !== "run"
-      || state.conductorStatus !== "ready"
-      || state.conductor?.lifecycle !== "running"
-    ) return;
-    const projectedSeconds = projectCountdown(countdownAnchor, monotonicNow());
-    conductorCountdown.textContent = projectedSeconds === null
-      ? ""
-      : formatCountdown(projectedSeconds);
-    if (
-      projectedSeconds === 0
-      && countdownAnchor?.seconds > 0
-      && transitionRefreshKey !== countdownAnchor.key
-    ) {
-      transitionRefreshKey = countdownAnchor.key;
-      void refreshConductor();
-    }
-  }, 1000);
+  controller.start();
+  return controller;
 }
 
 function conductorStatusText(state) {

@@ -335,8 +335,13 @@ responsibility. `state.mjs` owns workflow state and transitions, `bridge.mjs`
 owns the fixed Tauri command names and payload construction, `models.mjs` owns
 pure formatting and derived presentation models plus contextual-help behavior,
 and `forms.mjs` owns setup and evidence input normalization. `app.mjs` remains
-the browser entry module and owns `mount()` orchestration; importing any of the
-four core modules performs no bootstrap and requires no browser globals.
+the browser entry module and owns DOM lookup, rendering, and event binding.
+`controller.mjs` owns mutable application state and asynchronous command
+sequencing through injected invoke, navigation, clock, timer, focus/visibility,
+prompt/confirmation, countdown, and render ports. The browser entry binds those
+ports to Tauri and the webview; the controller can be constructed and disposed
+under Node without browser or Tauri globals. Importing any non-bootstrap module
+performs no bootstrap and requires no ambient platform state.
 
 The allowlisted `review_session_setup` command maps disposable station,
 antenna, and schedule input to stable field diagnostics and an exact normalized

@@ -1,0 +1,295 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { createDesktopController } from "../frontend/controller.mjs";
+import { initialState, openSessionSucceeded } from "../frontend/state.mjs";
+
+const session = (overrides = {}) => ({
+  bundleName: "test.session.antennabundle",
+  lifecycle: "running",
+  schemaVersion: 4,
+  reportHtml: "<p>prior</p>",
+  revision: 3,
+  ...overrides,
+});
+
+const conductor = (overrides = {}) => ({
+  actionToken: "action-1",
+  revision: 3,
+  lifecycle: "running",
+  phase: "between_slots",
+  ...overrides,
+});
+
+function harness(responses = {}, options = {}) {
+  const calls = [];
+  const renders = [];
+  const navigations = [];
+  const invoke = async (command, payload) => {
+    calls.push([command, payload]);
+    const response = responses[command];
+    if (response instanceof Error) throw response;
+    return typeof response === "function" ? response(payload, calls) : response;
+  };
+  const controller = createDesktopController({
+    state: options.state,
+    invoke,
+    render: (state) => renders.push(state),
+    navigate: (workflow) => navigations.push(workflow),
+    ...options.effects,
+  });
+  return { controller, calls, renders, navigations };
+}
+
+test("the controller composes setup review outcomes and reviewed creation", async () => {
+  const invalid = harness({
+    review_session_setup: { valid: false, reviewId: "review-invalid" },
+  });
+  await invalid.controller.reviewSetup({ station: {} });
+  assert.equal(invalid.controller.state.setupStatus, "invalid");
+
+  const failed = harness({ review_session_setup: new Error("review failed") });
+  await failed.controller.reviewSetup({ station: {} });
+  assert.equal(failed.controller.state.setupStatus, "error");
+  assert.match(failed.controller.state.setupError.detail, /review failed/);
+
+  const cancelled = harness({
+    review_session_setup: { valid: true, reviewId: "review-1" },
+    create_session_from_review: { status: "cancelled" },
+  });
+  await cancelled.controller.reviewSetup({ station: {} });
+  await cancelled.controller.createSession();
+  assert.equal(cancelled.controller.state.setupStatus, "reviewed");
+  assert.equal(cancelled.controller.state.setupNotice, "cancelled");
+
+  const creationFailed = harness({
+    review_session_setup: { valid: true, reviewId: "review-2" },
+    create_session_from_review: new Error("creation failed"),
+  });
+  await creationFailed.controller.reviewSetup({ station: {} });
+  await creationFailed.controller.createSession();
+  assert.equal(creationFailed.controller.state.setupStatus, "reviewed");
+  assert.match(creationFailed.controller.state.setupError.detail, /creation failed/);
+
+  const created = harness({
+    review_session_setup: { valid: true, reviewId: "review-3" },
+    create_session_from_review: { status: "created", session: session() },
+    refresh_active_session_report: {
+      presentationId: 4,
+      reportHtml: "<p>fresh</p>",
+      revision: 4,
+      lifecycle: "running",
+      completeness: "full_detail",
+    },
+    active_session_conductor: conductor({ revision: 4 }),
+    active_session_wsjtx_status: { phase: "stopped" },
+    advance_active_session_wspr_live: { status: "disabled" },
+  });
+  await created.controller.reviewSetup({ station: {} });
+  await created.controller.createSession();
+  assert.equal(created.controller.state.setupStatus, "created");
+  assert.deepEqual(created.navigations, ["run"]);
+  assert.deepEqual(created.calls.map(([command]) => command), [
+    "review_session_setup",
+    "create_session_from_review",
+    "refresh_active_session_report",
+    "active_session_conductor",
+    "active_session_wsjtx_status",
+    "advance_active_session_wspr_live",
+  ]);
+});
+
+test("open cancellation, failure, and success retain focused state and refresh reports", async () => {
+  const cancelled = harness({ open_session_bundle: { status: "cancelled" } });
+  await cancelled.controller.openSession();
+  assert.equal(cancelled.controller.state.openStatus, "idle");
+  assert.equal(cancelled.controller.state.notice, "cancelled");
+
+  const failed = harness({ open_session_bundle: new Error("cannot open") });
+  await failed.controller.openSession();
+  assert.equal(failed.controller.state.openStatus, "error");
+  assert.match(failed.controller.state.error.detail, /cannot open/);
+
+  const opened = harness({
+    open_session_bundle: { status: "opened", session: session() },
+    refresh_active_session_report: {
+      presentationId: 5,
+      reportHtml: "<p>opened</p>",
+      revision: 5,
+      lifecycle: "running",
+      completeness: "full_detail",
+    },
+  });
+  await opened.controller.openSession();
+  assert.deepEqual(opened.navigations, ["report"]);
+  assert.deepEqual(opened.calls.map(([command]) => command), [
+    "open_session_bundle",
+    "refresh_active_session_report",
+  ]);
+  assert.equal(opened.controller.state.session.reportHtml, "<p>opened</p>");
+});
+
+test("conductor mutations serialize follow-up adapter, acquisition, and report refreshes", async () => {
+  const state = openSessionSucceeded(initialState("run"), session());
+  state.activeWorkflow = "run";
+  state.conductorStatus = "ready";
+  state.conductor = conductor();
+  const run = harness({
+    mutate_active_session_conductor: conductor({ revision: 4 }),
+    active_session_wsjtx_status: { phase: "running" },
+    advance_active_session_wspr_live: { status: "up_to_date", capturedThrough: "2026-07-16T23:00:00Z" },
+    refresh_active_session_report: {
+      presentationId: 4,
+      reportHtml: "<p>revision 4</p>",
+      revision: 4,
+      lifecycle: "running",
+      completeness: "full_detail",
+    },
+  }, { state });
+
+  await run.controller.submitConductorAction({ kind: "add_note", slotId: null, note: "test" });
+  assert.deepEqual(run.calls.map(([command]) => command), [
+    "mutate_active_session_conductor",
+    "active_session_wsjtx_status",
+    "advance_active_session_wspr_live",
+    "refresh_active_session_report",
+  ]);
+  assert.deepEqual(run.calls[0][1].request, {
+    actionToken: "action-1",
+    expectedRevision: 3,
+    action: { kind: "add_note", slotId: null, note: "test" },
+  });
+
+  let resolveMutation;
+  const pending = harness({
+    mutate_active_session_conductor: () => new Promise((resolve) => { resolveMutation = resolve; }),
+  }, { state });
+  const first = pending.controller.submitConductorAction({ kind: "start", note: null });
+  const second = pending.controller.submitConductorAction({ kind: "start", note: null });
+  assert.equal(pending.calls.length, 1);
+  resolveMutation(conductor());
+  await Promise.all([first, second]);
+
+  const mutationFailed = harness({
+    mutate_active_session_conductor: new Error("stale action"),
+  }, { state });
+  await mutationFailed.controller.submitConductorAction({ kind: "start", note: null });
+  assert.equal(mutationFailed.controller.state.conductorStatus, "error");
+  assert.match(mutationFailed.controller.state.conductorError.detail, /stale action/);
+  assert.equal(mutationFailed.calls.length, 1);
+
+  const loadFailed = harness({ active_session_conductor: new Error("cannot recover") }, { state });
+  await loadFailed.controller.refreshConductor();
+  assert.equal(loadFailed.controller.state.conductorStatus, "error");
+  assert.match(loadFailed.controller.state.conductorError.detail, /cannot recover/);
+});
+
+test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () => {
+  const state = openSessionSucceeded(initialState("run"), session());
+  state.activeWorkflow = "run";
+  state.conductorStatus = "ready";
+  state.conductor = conductor({ phase: "finalizing" });
+  const run = harness({
+    advance_active_session_wspr_live: new Error("mirror unavailable"),
+    start_active_session_wsjtx: { phase: "running" },
+    stop_active_session_wsjtx: { phase: "stopped" },
+    refresh_active_session_report: new Error("render failed"),
+    export_active_session_report: new Error("export failed"),
+  }, { state });
+
+  await run.controller.advanceWsprLive(true);
+  assert.equal(run.calls[0][1].request.retry, true);
+  assert.equal(run.controller.state.wsprLiveAcquisitionStatus, "error");
+  await run.controller.startWsjtx({ bindAddress: "127.0.0.1", port: 2237, expectedClientId: "WSJT-X" });
+  await run.controller.stopWsjtx();
+  assert.equal(run.controller.state.wsjtx.phase, "stopped");
+  await run.controller.refreshReport();
+  assert.equal(run.controller.state.session.reportHtml, "<p>prior</p>");
+  assert.equal(run.controller.state.reportStatus, "ready");
+  await run.controller.exportReport();
+  assert.equal(run.controller.state.reportExportStatus, "error");
+
+  const completed = harness({
+    advance_active_session_wspr_live: { status: "completed", session: session({ lifecycle: "ended" }) },
+    active_session_conductor: conductor({ lifecycle: "ended", phase: "complete" }),
+    active_session_wsjtx_status: { phase: "stopped" },
+    refresh_active_session_report: {
+      presentationId: 6,
+      reportHtml: "<p>complete</p>",
+      revision: 6,
+      lifecycle: "ended",
+      completeness: "full_detail",
+    },
+  }, { state });
+  await completed.controller.advanceWsprLive(true);
+  assert.deepEqual(completed.calls.map(([command]) => command), [
+    "advance_active_session_wspr_live",
+    "active_session_conductor",
+    "active_session_wsjtx_status",
+    "refresh_active_session_report",
+  ]);
+  assert.equal(completed.controller.state.session.reportHtml, "<p>complete</p>");
+});
+
+test("focus, visibility, periodic, countdown, and disposal use injected lifecycle ports", async () => {
+  const intervals = [];
+  const cleared = [];
+  const listeners = {};
+  const countdowns = [];
+  let now = 2000;
+  let visible = true;
+  const state = openSessionSucceeded(initialState("run"), session());
+  state.activeWorkflow = "run";
+  state.conductorStatus = "ready";
+  state.conductor = conductor();
+  const run = harness({
+    active_session_conductor: conductor(),
+    active_session_wsjtx_status: { phase: "running" },
+    advance_active_session_wspr_live: { status: "disabled" },
+  }, {
+    state,
+    effects: {
+      setInterval(callback, milliseconds) {
+        const timer = { callback, milliseconds };
+        intervals.push(timer);
+        return timer;
+      },
+      clearInterval: (timer) => cleared.push(timer),
+      onFocus(callback) { listeners.focus = callback; return () => { listeners.focus = null; }; },
+      onVisibilityChange(callback) { listeners.visibility = callback; return () => { listeners.visibility = null; }; },
+      onHashChange(callback) { listeners.hash = callback; return () => { listeners.hash = null; }; },
+      isVisible: () => visible,
+      monotonicNow: () => now,
+      getCountdownAnchor: () => ({ key: "cycle-1", seconds: 1, sampledAtMilliseconds: 1000 }),
+      renderCountdown: (seconds) => countdowns.push(seconds),
+    },
+  });
+
+  run.controller.start();
+  run.controller.start();
+  assert.deepEqual(intervals.map(({ milliseconds }) => milliseconds), [5000, 1000]);
+  run.controller.tickCountdown();
+  run.controller.tickCountdown();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(countdowns, [0]);
+  assert.equal(run.calls.filter(([command]) => command === "active_session_conductor").length, 1);
+
+  visible = false;
+  listeners.visibility();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(run.calls.filter(([command]) => command === "active_session_conductor").length, 1);
+  visible = true;
+  listeners.focus();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(run.calls.filter(([command]) => command === "active_session_conductor").length, 2);
+
+  now = 2500;
+  intervals[0].callback();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(run.calls.some(([command]) => command === "active_session_conductor"));
+  run.controller.dispose();
+  assert.equal(cleared.length, 2);
+  assert.equal(listeners.focus, null);
+  assert.equal(listeners.visibility, null);
+  assert.equal(listeners.hash, null);
+});

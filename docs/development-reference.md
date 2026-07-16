@@ -388,6 +388,15 @@ bootstrap. The checked-in `index.html` continues to load `app.mjs` as a native
 ES module from Tauri's static `frontendDist`; there is no frontend install,
 compile, bundle, or generated-artifact step.
 
+`controller.mjs` is the headless asynchronous workflow boundary. Its Node tests
+inject command results, render notifications, navigation, monotonic time,
+interval registration, focus/visibility/hash listeners, prompts, confirmations,
+and countdown presentation. They assert setup, open, conductor, WSJT-X,
+WSPR.live, report, refresh, duplicate-operation, transition-timer, and disposal
+behavior without a window, native picker, live timer, or Tauri runtime. DOM
+lookup and workflow-specific rendering remain in `app.mjs` pending their
+separate renderer-contract extraction.
+
 ## Desktop Release Artifact Construction
 
 The initial release contract supports macOS 15 and later with separate native
