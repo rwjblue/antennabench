@@ -189,6 +189,25 @@ export function formatActiveRunTime(value, options = {}) {
   ).format(instant);
 }
 
+export function recommendedNoteTarget(view) {
+  if (!view) return "";
+  if (view.phase === "awaiting_slot" && view.nextSlot) return view.nextSlot.slotId;
+  if (["active", "guard"].includes(view.phase) && view.currentSlot) {
+    return view.currentSlot.slotId;
+  }
+  if (
+    ["between_slots", "switching", "interrupted", "finalizing", "complete", "ended", "abandoned"]
+      .includes(view.phase)
+  ) {
+    const now = new Date(view.now).getTime();
+    const completed = (view.slots ?? [])
+      .filter((slot) => new Date(slot.endsAt).getTime() <= now)
+      .sort((left, right) => new Date(right.endsAt) - new Date(left.endsAt))[0];
+    return completed?.slotId ?? view.currentSlot?.slotId ?? "";
+  }
+  return "";
+}
+
 export function viewModel(state) {
   return WORKFLOWS.map((workflow) => ({
     workflow,
@@ -715,6 +734,7 @@ function mount(root, browserWindow) {
   let countdownAnchor = null;
   let countdownAnchorKey = null;
   let transitionRefreshKey = null;
+  let noteShortcutInitialized = false;
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const navigation = [...root.querySelectorAll("[data-workflow]")];
   const panels = [...root.querySelectorAll("[data-panel]")];
@@ -1309,9 +1329,19 @@ function mount(root, browserWindow) {
   });
 
   addRunNote.addEventListener("click", () => {
+    if (!noteShortcutInitialized) {
+      evidenceSlot.value = recommendedNoteTarget(state.conductor);
+      noteShortcutInitialized = true;
+    }
     entryPanel.open = true;
     evidenceKind.value = "add_note";
     evidenceDetail.focus();
+  });
+
+  entryPanel.addEventListener("toggle", () => {
+    if (entryPanel.open) return;
+    noteShortcutInitialized = false;
+    evidenceForm.reset();
   });
 
   openCorrections.addEventListener("click", () => {
@@ -1322,7 +1352,7 @@ function mount(root, browserWindow) {
 
   evidenceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await submitConductorAction(readEvidenceAction(
+    const action = readEvidenceAction(
       evidenceKind.value,
       evidenceSlot.value,
       evidenceAntenna.value,
@@ -1334,7 +1364,13 @@ function mount(root, browserWindow) {
         evidenceCallsign,
         evidenceCadence,
       ),
-    ));
+    );
+    await submitConductorAction(action);
+    if (action.kind === "add_note" && state.conductorStatus === "ready") {
+      noteShortcutInitialized = false;
+      evidenceForm.reset();
+      entryPanel.open = false;
+    }
   });
 
   conductorEvents.addEventListener("click", async (event) => {

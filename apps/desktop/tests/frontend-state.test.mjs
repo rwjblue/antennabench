@@ -50,6 +50,7 @@ import {
   openSessionFailed,
   openSessionSucceeded,
   projectCountdown,
+  recommendedNoteTarget,
   reportExportCancelled,
   reportExportSucceeded,
   reportRefreshFailed,
@@ -431,6 +432,39 @@ test("active cycle times are concise local labels without ISO repetition", () =>
   assert.equal(today, "1:34 PM");
   assert.equal(priorDay, "Jul 15, 1:34 PM");
   assert.doesNotMatch(today, /2026|T|Z/);
+});
+
+test("run notes recommend the current or most recently completed cycle", () => {
+  const slot1 = {
+    slotId: "cycle-1",
+    startsAt: "2026-07-16T13:34:01Z",
+    endsAt: "2026-07-16T13:35:51.592Z",
+  };
+  const slot2 = {
+    slotId: "cycle-2",
+    startsAt: "2026-07-16T13:36:01Z",
+    endsAt: "2026-07-16T13:37:51.592Z",
+  };
+  const base = {
+    now: "2026-07-16T13:36:30Z",
+    slots: [slot1, slot2],
+    currentSlot: slot1,
+    nextSlot: slot2,
+  };
+  assert.equal(recommendedNoteTarget({ ...base, phase: "ready", currentSlot: null, nextSlot: null, slots: [] }), "");
+  assert.equal(recommendedNoteTarget({ ...base, phase: "awaiting_slot" }), "cycle-2");
+  assert.equal(recommendedNoteTarget({ ...base, phase: "active", currentSlot: slot2 }), "cycle-2");
+  for (const phase of ["between_slots", "switching", "interrupted", "finalizing", "complete", "ended", "abandoned"]) {
+    assert.equal(recommendedNoteTarget({ ...base, phase }), "cycle-1");
+  }
+  assert.equal(recommendedNoteTarget({
+    ...base,
+    phase: "interrupted",
+    now: "2026-07-16T13:34:30Z",
+    slots: [slot1],
+    currentSlot: slot1,
+  }), "cycle-1");
+  assert.equal(recommendedNoteTarget(null), "");
 });
 
 test("the conductor bridge exposes only bounded read and focused mutation commands", async () => {
