@@ -1,11 +1,50 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  invokeActiveSessionConductor,
+  invokeActiveSessionReport,
+  invokeActiveSessionWsjtxStatus,
+  invokeAdvanceSessionWsprLive,
+  invokeCreateSessionFromReview,
+  invokeExportActiveSessionReport,
+  invokeExportSession,
+  invokeImportActiveSessionRbn,
+  invokeImportActiveSessionWsprLive,
+  invokeLoadStationPreferences,
+  invokeMutateSessionConductor,
+  invokeOpenSession,
+  invokeRefreshActiveSessionReport,
+  invokeReviewSessionSetup,
+  invokeStartSessionWsjtx,
+  invokeStationLocation,
+  invokeStopSessionWsjtx,
+} from "../frontend/bridge.mjs";
+import {
+  applyStationPreferences,
+  readEvidenceAction,
+  readEvidenceReplacement,
+  readSetupDraft,
+} from "../frontend/forms.mjs";
+import {
   CONTEXT_HELP,
   WORKFLOWS,
-  applyStationPreferences,
+  conductorActionAvailable,
+  createCountdownAnchor,
+  formatActiveRunTime,
+  installContextualHelp,
+  locationLookupMessage,
+  maidenheadGrid,
+  projectCountdown,
+  recommendedNoteTarget,
+  updateReportFrame,
+  viewModel,
+  workflowFromHash,
+  wsprLiveAcquisitionModel,
+  wsprRunPlanSummary,
+} from "../frontend/models.mjs";
+import {
   beginConductorLoad,
   beginConductorMutation,
   beginExportSession,
@@ -20,39 +59,14 @@ import {
   beginWsprLiveImport,
   conductorLoadSucceeded,
   conductorMutationFailed,
-  conductorActionAvailable,
-  createCountdownAnchor,
   editSessionSetup,
   exportSessionCancelled,
   exportSessionFailed,
   exportSessionSucceeded,
-  formatActiveRunTime,
   initialState,
-  installContextualHelp,
-  invokeActiveSessionReport,
-  invokeActiveSessionConductor,
-  invokeCreateSessionFromReview,
-  invokeExportSession,
-  invokeExportActiveSessionReport,
-  invokeImportActiveSessionWsprLive,
-  invokeImportActiveSessionRbn,
-  invokeLoadStationPreferences,
-  invokeOpenSession,
-  invokeRefreshActiveSessionReport,
-  invokeReviewSessionSetup,
-  invokeStationLocation,
-  invokeMutateSessionConductor,
-  invokeActiveSessionWsjtxStatus,
-  invokeStartSessionWsjtx,
-  invokeStopSessionWsjtx,
-  invokeAdvanceSessionWsprLive,
-  locationLookupMessage,
-  maidenheadGrid,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
-  projectCountdown,
-  recommendedNoteTarget,
   reportExportCancelled,
   reportExportSucceeded,
   reportRefreshFailed,
@@ -60,19 +74,12 @@ import {
   rbnImportCancelled,
   rbnImportFailed,
   rbnImportSucceeded,
-  readSetupDraft,
-  readEvidenceAction,
-  readEvidenceReplacement,
   selectWorkflow,
   setupCreationCancelled,
   setupCreationFailed,
   setupCreationSucceeded,
   setupReviewFailed,
   setupReviewSucceeded,
-  updateReportFrame,
-  viewModel,
-  workflowFromHash,
-  wsprRunPlanSummary,
   wsjtxActionFailed,
   wsjtxActionSucceeded,
   wsprLiveAcquisitionFailed,
@@ -80,8 +87,19 @@ import {
   wsprLiveImportCancelled,
   wsprLiveImportFailed,
   wsprLiveImportSucceeded,
-  wsprLiveAcquisitionModel,
-} from "../frontend/app.mjs";
+} from "../frontend/state.mjs";
+
+test("the desktop serves checked-in native modules without frontend tooling", () => {
+  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  const tauri = JSON.parse(readFileSync(
+    new URL("../tauri.conf.json", import.meta.url),
+    "utf8",
+  ));
+  assert.match(html, /<script type="module" src="app\.mjs"><\/script>/);
+  assert.equal(tauri.build.frontendDist, "frontend");
+  assert.equal(existsSync(new URL("../package.json", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../package-lock.json", import.meta.url)), false);
+});
 
 test("contextual help is centralized, keyboard accessible, and fully inventoried", () => {
   class FakeElement {

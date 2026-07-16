@@ -380,6 +380,14 @@ deterministically.
 `desktop:build` builds a debug application without producing installer bundles,
 and `desktop:dev` launches the static shell with Tauri's development server.
 
+The dependency-free frontend tests import state transitions from `state.mjs`,
+command contracts from `bridge.mjs`, formatting and derived view models from
+`models.mjs`, and input normalization from `forms.mjs`. Node imports those core
+modules directly without constructing a document or triggering `app.mjs`
+bootstrap. The checked-in `index.html` continues to load `app.mjs` as a native
+ES module from Tauri's static `frontendDist`; there is no frontend install,
+compile, bundle, or generated-artifact step.
+
 ## Desktop Release Artifact Construction
 
 The initial release contract supports macOS 15 and later with separate native

@@ -330,6 +330,14 @@ summary returned for an active session. It does not model bundle contents,
 normalize evidence, analyze observations, render report markup, or persist UI
 state.
 
+The checked-in native ES modules divide that disposable frontend boundary by
+responsibility. `state.mjs` owns workflow state and transitions, `bridge.mjs`
+owns the fixed Tauri command names and payload construction, `models.mjs` owns
+pure formatting and derived presentation models plus contextual-help behavior,
+and `forms.mjs` owns setup and evidence input normalization. `app.mjs` remains
+the browser entry module and owns `mount()` orchestration; importing any of the
+four core modules performs no bootstrap and requires no browser globals.
+
 The allowlisted `review_session_setup` command maps disposable station,
 antenna, and schedule input to stable field diagnostics and an exact normalized
 plan. `load_station_preferences` returns only the small reusable station form
