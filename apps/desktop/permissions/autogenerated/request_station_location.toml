@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-request-station-location"
+description = "Enables the request_station_location command without any pre-configured scope."
+commands.allow = ["request_station_location"]
+
+[[permission]]
+identifier = "deny-request-station-location"
+description = "Denies the request_station_location command without any pre-configured scope."
+commands.deny = ["request_station_location"]

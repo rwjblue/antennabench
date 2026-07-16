@@ -1,6 +1,7 @@
 fn main() {
     let app_manifest = tauri_build::AppManifest::new().commands(&[
         "review_session_setup",
+        "request_station_location",
         "load_station_preferences",
         "create_session_from_review",
         "open_session_bundle",

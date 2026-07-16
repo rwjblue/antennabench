@@ -340,6 +340,17 @@ updates those preferences after successful creation, and makes the reopened
 bundle active. The webview sees no path, only a review identity, preferences,
 and the active-session summary.
 
+The allowlisted `request_station_location` command owns the macOS Core Location
+boundary. It is invoked only from the explicit setup button, requests
+foreground/when-in-use authorization only while status is not determined, and
+performs one bounded `requestLocation` lookup. The webview receives either a
+typed denied, restricted, unavailable, or timeout outcome, or one transient
+latitude/longitude pair used immediately for Maidenhead conversion. Raw
+coordinates are not written to preferences, bundles, diagnostics, or logs.
+Manual grid entry remains independent of this command. The private provider
+seam supplies deterministic authorization and lookup outcomes in tests without
+granting general native or network location authority.
+
 The allowlisted `active_session_conductor` and
 `mutate_active_session_conductor` commands expose the manual conductor. The
 read projection is bounded to 512 KiB and includes a Rust-issued action token,

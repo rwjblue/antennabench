@@ -79,26 +79,18 @@ export function maidenheadGrid(latitude, longitude) {
   return `${String.fromCharCode(65 + fieldLongitude)}${String.fromCharCode(65 + fieldLatitude)}${squareLongitude}${squareLatitude}${String.fromCharCode(65 + subsquareLongitude)}${String.fromCharCode(65 + subsquareLatitude)}`;
 }
 
-export function currentPosition(geolocation) {
-  return new Promise((resolve, reject) => {
-    if (typeof geolocation?.getCurrentPosition !== "function") {
-      reject(new Error("System location is unavailable in this desktop environment."));
-      return;
-    }
-    geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: false,
-      timeout: 10_000,
-      maximumAge: 300_000,
-    });
-  });
-}
-
-export function locationErrorMessage(error) {
-  switch (error?.code) {
-    case 1: return "Location permission was not granted. Enter the grid manually instead.";
-    case 2: return "The system could not determine a location. Enter the grid manually instead.";
-    case 3: return "The location request timed out. Enter the grid manually or try again.";
-    default: return error?.message || "Location is unavailable. Enter the grid manually instead.";
+export function locationLookupMessage(outcome) {
+  switch (outcome?.status) {
+    case "denied":
+      return "Location access is off for AntennaBench. Allow it in System Settings > Privacy & Security > Location Services, or enter the grid manually.";
+    case "restricted":
+      return "Location access is restricted by macOS settings. Enter the grid manually instead.";
+    case "timeout":
+      return "The macOS location request timed out. Enter the grid manually or try again.";
+    case "unavailable":
+      return "macOS location services are unavailable. Enter the grid manually instead.";
+    default:
+      return "The station location could not be determined. Enter the grid manually instead.";
   }
 }
 
@@ -594,6 +586,10 @@ export function invokeOpenSession(invoke) {
 
 export function invokeReviewSessionSetup(invoke, draft) {
   return invoke("review_session_setup", { draft });
+}
+
+export function invokeStationLocation(invoke) {
+  return invoke("request_station_location");
 }
 
 export function invokeLoadStationPreferences(invoke) {
@@ -1452,19 +1448,22 @@ function mount(root, browserWindow) {
 
   useCurrentLocationButton.addEventListener("click", async () => {
     useCurrentLocationButton.disabled = true;
-    useCurrentLocationButton.textContent = "Locating…";
-    locationStatus.textContent = "Requesting system location…";
+    useCurrentLocationButton.textContent = "Requesting…";
+    locationStatus.textContent = "Requesting macOS location permission or a one-time location…";
     try {
-      const position = await currentPosition(browserWindow.navigator?.geolocation);
-      stationGrid.value = maidenheadGrid(
-        position.coords.latitude,
-        position.coords.longitude,
-      );
+      const invoke = browserWindow.__TAURI__?.core?.invoke;
+      if (typeof invoke !== "function") throw new Error("The native desktop bridge is unavailable.");
+      const outcome = await invokeStationLocation(invoke);
+      if (outcome.status !== "success") {
+        locationStatus.textContent = locationLookupMessage(outcome);
+        return;
+      }
+      stationGrid.value = maidenheadGrid(outcome.latitude, outcome.longitude);
       state = editSessionSetup(state);
       render();
       locationStatus.textContent = `Estimated ${stationGrid.value}; raw coordinates were not saved.`;
     } catch (error) {
-      locationStatus.textContent = locationErrorMessage(error);
+      locationStatus.textContent = error?.message || locationLookupMessage(null);
     } finally {
       useCurrentLocationButton.disabled = false;
       useCurrentLocationButton.textContent = "Use current location";

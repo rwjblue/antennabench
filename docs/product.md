@@ -63,8 +63,11 @@ The desktop app keeps working sessions in its platform-standard application
 data directory and remembers the last station details for the next setup.
 Those preferences are convenience state, not session evidence. Export creates
 the portable bundle you choose to archive or move elsewhere. Setup can ask the
-system for location to estimate a six-character station grid; it stores the resulting
-grid, never the raw coordinates, and manual entry remains available.
+macOS system for one foreground location to estimate a six-character station
+grid. The request occurs only after pressing **Use current location** and may
+show the system permission prompt. AntennaBench stores the resulting grid,
+never the raw coordinates, and manual entry remains available after denial,
+restriction, timeout, or another lookup failure.
 
 Optional data services receive only the inputs disclosed for that integration.
 Hosted sharing is planned as an explicit copy for convenience, not as a new

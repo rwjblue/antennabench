@@ -1,4 +1,5 @@
 mod conductor;
+mod location;
 mod open_session;
 mod rbn_import;
 mod setup;
@@ -7,6 +8,7 @@ mod wspr_live_acquisition;
 mod wspr_live_import;
 
 use conductor::{active_session_conductor, mutate_active_session_conductor, ConductorSessionState};
+use location::{request_station_location, LocationState};
 use open_session::{
     active_session_report, export_active_session, export_active_session_report,
     open_session_bundle, refresh_active_session_report, ActiveSessionState,
@@ -28,11 +30,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(ActiveSessionState::default())
         .manage(ConductorSessionState::default())
+        .manage(LocationState::default())
         .manage(SetupSessionState::default())
         .manage(WsjtxSessionState::default())
         .manage(WsprLiveAcquisitionState::default())
         .invoke_handler(tauri::generate_handler![
             review_session_setup,
+            request_station_location,
             load_station_preferences,
             create_session_from_review,
             open_session_bundle,

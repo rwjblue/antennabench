@@ -155,10 +155,12 @@ automatic WSPR.live public spots as a normal attributed section before advanced
 controlled-signal setup. The offline opt-out remains available as secondary
 behavior; setup leaves evidence-completeness disclosure to reports. The routine
 form keeps station identity plus antenna labels/descriptions visible and places
-optional metadata behind disclosure. A user-triggered system-location request can fill a
-six-character Maidenhead grid; permission denial or lookup failure leaves
-manual entry available, and raw coordinates are never persisted. Rust trims and
-types values, uppercases callsigns, constructs stable ordered cycle intentions,
+optional metadata behind disclosure. A user-triggered native macOS Core
+Location request can prompt for foreground permission and fill a six-character
+Maidenhead grid from one transient coordinate pair. Denied, restricted,
+unavailable, and timeout outcomes leave manual entry available; raw coordinates
+are never persisted or logged. Rust trims and types values, uppercases
+callsigns, constructs stable ordered cycle intentions,
 applies strict-creation diagnostics, and returns the exact normalized review
 without touching a destination. Creation
 accepts only that review identity, allocates a collision-safe callsign/time name

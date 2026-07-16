@@ -25,3 +25,18 @@ tempfile = "3.10.1"
 thiserror = "2.0.18"
 uuid = { version = "1.23.5", features = ["v4"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[workspace.dependencies.objc2]
+version = "0.6.4"
+default-features = false
+features = ["std"]
+
+[workspace.dependencies.objc2-core-location]
+version = "0.3.2"
+default-features = false
+features = ["CLLocation", "CLLocationManager", "CLLocationManagerDelegate", "CLError"]
+
+[workspace.dependencies.objc2-foundation]
+version = "0.3.2"
+default-features = false
+features = ["NSArray", "NSDate", "NSError", "NSObject", "NSRunLoop"]
