@@ -130,6 +130,9 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .field-grid input, .field-grid select, .field-grid textarea { width: 100%; min-width: 0; border: 1px solid #c7d1ca; border-radius: 9px; padding: 10px 11px; color: #173131; background: #fbfcf9; font: inherit; font-weight: 500; }
 .field-grid textarea { resize: vertical; }
 .field-grid input:focus, .field-grid select:focus, .field-grid textarea:focus { border-color: #3d9889; outline: 3px solid rgba(61, 152, 137, 0.14); }
+.field-grid label > small { color: #697873; font-size: 0.68rem; font-weight: 500; line-height: 1.4; }
+.run-plan-summary { margin: 16px 0 6px; color: #1d6d62; font-size: 0.9rem; font-weight: 800; }
+.run-plan-summary + .field-help { margin-bottom: 0; }
 .grid-location-field { display: flex; gap: 8px; }
 .grid-location-field input { flex: 1 1 auto; }
 .grid-location-field button { flex: 0 0 auto; border: 1px solid #8ab3aa; border-radius: 9px; padding: 8px 10px; color: #245451; background: #f2f8f4; font: inherit; font-size: 0.7rem; font-weight: 800; cursor: pointer; }

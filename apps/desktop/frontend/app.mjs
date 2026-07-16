@@ -102,6 +102,31 @@ export function locationErrorMessage(error) {
   }
 }
 
+export function wsprRunPlanSummary(roundsValue, antennaCount) {
+  const normalizedRounds = typeof roundsValue === "number"
+    ? roundsValue
+    : Number(String(roundsValue).trim());
+  if (
+    String(roundsValue).trim().length === 0
+    || !Number.isSafeInteger(normalizedRounds)
+    || normalizedRounds <= 0
+    || !Number.isSafeInteger(antennaCount)
+    || antennaCount <= 0
+  ) {
+    return null;
+  }
+  const cycles = normalizedRounds * antennaCount;
+  const minimumMinutes = cycles * 2;
+  if (!Number.isSafeInteger(cycles) || !Number.isSafeInteger(minimumMinutes)) return null;
+  return {
+    rounds: normalizedRounds,
+    antennaCount,
+    cycles,
+    minimumMinutes,
+    text: `${cycles} WSPR ${cycles === 1 ? "cycle" : "cycles"} · at least ${minimumMinutes} ${minimumMinutes === 1 ? "minute" : "minutes"}`,
+  };
+}
+
 export function viewModel(state) {
   return WORKFLOWS.map((workflow) => ({
     workflow,
@@ -645,6 +670,7 @@ function mount(root, browserWindow) {
   const setupReviewAntennas = root.querySelector("[data-review-antennas]");
   const setupReviewShape = root.querySelector("[data-review-shape]");
   const setupReviewSlots = root.querySelector("[data-review-slots]");
+  const setupRunPlanSummary = root.querySelector("[data-run-plan-summary]");
   const conductorPanel = root.querySelector("[data-conductor]");
   const conductorEmpty = root.querySelector("[data-conductor-empty]");
   const conductorStatus = root.querySelector("[data-conductor-status]");
@@ -782,7 +808,10 @@ function mount(root, browserWindow) {
       const signalSummary = plan.signalPlan
         ? `${humanizeIdentifier(plan.signalPlan.mode)} · ${humanizeIdentifier(plan.signalPlan.collectionProfile)} · ${plan.signalPlan.frequenciesHz.length} frequencies`
         : `WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
-      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} operator-paced cycles · ${signalSummary}`;
+      const runLength = plan.signalPlan
+        ? `${plan.slots.length} planned signal slots`
+        : `${plan.slots.length} WSPR cycles · at least ${plan.slots.length * 2} minutes`;
+      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${runLength} · ${signalSummary}`;
       setupReviewSlots.replaceChildren(
         ...plan.slots.map((slot) => {
           const row = root.createElement("tr");
@@ -1310,6 +1339,7 @@ function mount(root, browserWindow) {
       event.target.value = event.target.value.toUpperCase();
     }
     syncSignalPlanFields(setupForm);
+    updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     if (!setupBusyState(state)) {
       state = editSessionSetup(state);
       render();
@@ -1387,6 +1417,7 @@ function mount(root, browserWindow) {
     const fragment = setupAntennaTemplate.content.cloneNode(true);
     setupAddAntennaButton.before(fragment);
     refreshAntennaRows(setupForm);
+    updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     state = editSessionSetup(state);
     render();
   });
@@ -1398,6 +1429,7 @@ function mount(root, browserWindow) {
     if (rows.length <= 1) return;
     removeButton.closest("[data-antenna-row]").remove();
     refreshAntennaRows(setupForm);
+    updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     state = editSessionSetup(state);
     render();
   });
@@ -1518,6 +1550,7 @@ function mount(root, browserWindow) {
   });
 
   syncSignalPlanFields(setupForm);
+  updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
   render();
   const invoke = browserWindow.__TAURI__?.core?.invoke;
   if (typeof invoke === "function") {
@@ -2025,6 +2058,14 @@ function refreshAntennaRows(form) {
     row.querySelector("[data-antenna-title]").textContent = `Antenna ${String.fromCharCode(65 + index)}`;
     row.querySelector("[data-remove-antenna]").disabled = rows.length <= 1;
   });
+}
+
+function updateWsprRunPlanSummary(form, output) {
+  const summary = wsprRunPlanSummary(
+    form.querySelector('[data-setup-field="rounds"]').value,
+    form.querySelectorAll("[data-antenna-row]").length,
+  );
+  output.textContent = summary?.text ?? "Enter complete rounds to estimate the run length.";
 }
 
 function openFeedbackModel(state) {

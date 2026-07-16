@@ -148,9 +148,14 @@ the UI could not outrun the durable, validation, and resource boundaries:
    recovery, completion, reporting, export, and reopen (#65).
 
 Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
-antenna definitions, and cycle repetitions. The routine form keeps station
-identity plus antenna labels/descriptions visible and places optional metadata
-behind disclosure. A user-triggered system-location request can fill a
+antenna definitions, and complete-round repetitions. The routine form explains
+that each round visits every configured antenna, derives the number of
+individual two-minute WSPR cycles and ideal minimum cycle time, and presents
+automatic WSPR.live public spots as a normal attributed section before advanced
+controlled-signal setup. The offline opt-out remains available as secondary
+behavior; setup leaves evidence-completeness disclosure to reports. The routine
+form keeps station identity plus antenna labels/descriptions visible and places
+optional metadata behind disclosure. A user-triggered system-location request can fill a
 six-character Maidenhead grid; permission denial or lookup failure leaves
 manual entry available, and raw coordinates are never persisted. Rust trims and
 types values, uppercases callsigns, constructs stable ordered cycle intentions,

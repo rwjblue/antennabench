@@ -12,10 +12,14 @@ experiment and makes its limitations visible.
 ## What You Do
 
 Before transmitting, describe the station and antennas and choose their
-repeatable order. There are no setup-time timestamps or manual-switch
-deadlines. During the session, begin the antenna switch and confirm when the
-next antenna is ready. AntennaBench then selects the next eligible even-minute
-WSPR cycle and records the actual antenna-occupancy interval.
+repeatable order. Setup explains that one round visits every configured antenna
+once and shows the resulting number of two-minute WSPR cycles plus the ideal
+minimum cycle time. It also identifies automatic public spots as coming from
+WSPR.live, with an offline opt-out available as a secondary choice. There are
+no setup-time timestamps or manual-switch deadlines. During the session, begin
+the antenna switch and confirm when the next antenna is ready. AntennaBench then
+selects the next eligible even-minute WSPR cycle and records the actual
+antenna-occupancy interval.
 
 Active Run leads with one current instruction and one primary action. Notes,
 cycle skipping, corrections, receiver configuration, public-spot status, and

@@ -65,6 +65,7 @@ import {
   updateReportFrame,
   viewModel,
   workflowFromHash,
+  wsprRunPlanSummary,
   wsjtxActionFailed,
   wsjtxActionSucceeded,
   wsprLiveAcquisitionFailed,
@@ -141,6 +142,7 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   );
   assert.doesNotMatch(setupHtml, /Optional public spots/);
   assert.match(setupHtml, /Public WSPR spots are gathered automatically/);
+  assert.doesNotMatch(setupHtml, /Source completeness is unknown/);
   assert.doesNotMatch(setupHtml, /data-import-authority|Confirm source authority/);
   const setupPanel = setupHtml.match(/data-panel="setup"[\s\S]*?data-panel="run"/)?.[0] ?? "";
   assert.doesNotMatch(setupPanel, /Facets|placeholder=|Trusted boundary|trusted Rust/);
@@ -148,6 +150,9 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.match(setupPanel, /Actual WSPR cycle times are set during the run/);
   assert.match(setupPanel, /Optional antenna details/);
   assert.match(setupPanel, /Advanced: controlled CW or RTTY signal/);
+  assert.ok(setupPanel.indexOf("WSPR Spots") < setupPanel.indexOf("Advanced: controlled CW or RTTY signal"));
+  assert.match(setupPanel, /One round visits each configured antenna once/);
+  assert.match(setupPanel, /One WSPR cycle is one antenna's two-minute WSPR period/);
 
   const values = new Map([
     ["callsign", "n1rwj"],
@@ -175,6 +180,23 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.equal(readSetupDraft(form).station.callsign, "N1RWJ");
   publicSpots.checked = false;
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
+});
+
+test("WSPR run summaries derive cycles and ideal minimum time", () => {
+  assert.deepEqual(wsprRunPlanSummary("5", 2), {
+    rounds: 5,
+    antennaCount: 2,
+    cycles: 10,
+    minimumMinutes: 20,
+    text: "10 WSPR cycles · at least 20 minutes",
+  });
+  assert.equal(wsprRunPlanSummary("3", 4)?.text, "12 WSPR cycles · at least 24 minutes");
+  assert.equal(wsprRunPlanSummary("1", 1)?.text, "1 WSPR cycle · at least 2 minutes");
+  for (const invalid of ["", " ", "0", "-1", "1.5", "not-a-number"]) {
+    assert.equal(wsprRunPlanSummary(invalid, 2), null);
+  }
+  assert.equal(wsprRunPlanSummary("5", 0), null);
+  assert.equal(wsprRunPlanSummary("5", -1), null);
 });
 
 test("active run leads with task actions and hides implementation-oriented tools", () => {

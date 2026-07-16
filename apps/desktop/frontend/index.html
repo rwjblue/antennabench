@@ -128,8 +128,22 @@
                   <label>Experiment mode<select data-setup-field="mode"><option value="whole_station_ab">Whole-station A/B</option><option value="tx_focused">TX focused</option><option value="rx_focused">RX focused</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
                   <label>Goal<select data-setup-field="goal"><option value="general_coverage">General coverage</option><option value="dx">DX</option><option value="regional">Regional</option><option value="nvis_local">NVIS / local</option><option value="weak_signal_reliability">Weak-signal reliability</option><option value="single_antenna_profiling">Single-antenna profiling</option></select></label>
                   <label>Band<select data-setup-field="band"><option value="160m">160 m</option><option value="80m">80 m</option><option value="60m">60 m</option><option value="40m">40 m</option><option value="30m">30 m</option><option value="20m" selected>20 m</option><option value="17m">17 m</option><option value="15m">15 m</option><option value="12m">12 m</option><option value="10m">10 m</option><option value="6m">6 m</option><option value="2m">2 m</option></select></label>
-                  <label>Complete A/B rounds<input data-setup-field="rounds" inputmode="numeric" value="5" /></label>
+                  <label>Complete rounds
+                    <input data-setup-field="rounds" inputmode="numeric" value="5" />
+                    <small>One round visits each configured antenna once.</small>
+                  </label>
                 </div>
+                <p class="run-plan-summary" data-run-plan-summary aria-live="polite">10 WSPR cycles · at least 20 minutes</p>
+                <p class="field-help">One WSPR cycle is one antenna's two-minute WSPR period. This minimum excludes switching time and the wait for the next cycle.</p>
+              </fieldset>
+
+              <fieldset class="setup-section">
+                <legend><span>04</span> WSPR Spots</legend>
+                <p class="field-help">Public WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror.</p>
+                <details class="advanced-fields">
+                  <summary>Offline option</summary>
+                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Gather WSPR.live spots automatically for this session</label>
+                </details>
               </fieldset>
 
               <details class="setup-section advanced-section">
@@ -150,14 +164,6 @@
                   <label class="field-wide">Exact frequencies (Hz, comma-separated)<input data-setup-field="signalFrequenciesHz" inputmode="numeric" /></label>
                 </div>
               </details>
-
-              <div class="setup-section setup-source-note">
-                <p>Public WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Source completeness is unknown.</p>
-                <details>
-                  <summary>Offline option</summary>
-                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Gather WSPR.live spots automatically for this session</label>
-                </details>
-              </div>
 
               <div class="setup-actions">
                 <button class="primary-action" type="submit" data-review-setup>Review normalized plan</button>
