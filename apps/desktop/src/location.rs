@@ -4,6 +4,13 @@ use serde::Serialize;
 use tauri::State;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[cfg_attr(
+    all(not(target_os = "macos"), not(test)),
+    expect(
+        dead_code,
+        reason = "the complete typed result is produced by the macOS provider and consumed by the shared frontend"
+    )
+)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum LocationLookup {
     Success { latitude: f64, longitude: f64 },
