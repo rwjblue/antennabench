@@ -12,13 +12,13 @@ use std::{
 
 use antennabench_core::{
     annotate_bundle_observations, AdapterDisposition, AdapterInput, AdapterReasonId,
-    AdapterRecordV2, BundleV2Contents, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
-    ObservationRecord, ObservationRecordV2, Provenance, RecordMetaV2, RecordSource,
-    SessionLifecycleV2, SCHEMA_VERSION_V2,
+    AdapterRecordV2, BundleContents, BundleV2Contents, BundleV3Contents, MutationMember,
+    NormalizedRecordKind, NormalizedRecordLink, ObservationRecord, ObservationRecordV2, Provenance,
+    RecordMetaV2, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
 };
 use antennabench_storage::{
-    BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError, LivePersistenceHooks,
-    SystemLivePersistenceHooks,
+    BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
+    LivePersistenceError, LivePersistenceHooks, SystemLivePersistenceHooks,
 };
 use antennabench_wsjtx::{
     parse_wsjtx_datagram, LiveIngestConfig, LiveIngestError, LiveIngestOutcome,
@@ -119,11 +119,96 @@ pub(crate) struct StartWsjtxRequest {
 
 struct WsjtxOrchestrator {
     store: BundleStore,
+    schema_version: u16,
     ingest: LiveWsjtxIngest,
     session_id: String,
     receiver_id: String,
     expected_client_id: String,
     hooks: Arc<dyn LivePersistenceHooks>,
+}
+
+enum WsjtxSnapshot {
+    V2(BundleV2Contents),
+    V3(BundleV3Contents),
+}
+
+impl WsjtxSnapshot {
+    fn lifecycle(&self) -> SessionLifecycleV2 {
+        match self {
+            Self::V2(bundle) => bundle.session_state.lifecycle,
+            Self::V3(bundle) => bundle.session_state.lifecycle,
+        }
+    }
+
+    fn session_id(&self) -> &str {
+        match self {
+            Self::V2(bundle) => &bundle.manifest.session_id,
+            Self::V3(bundle) => &bundle.manifest.session_id,
+        }
+    }
+
+    fn revision(&self) -> u64 {
+        match self {
+            Self::V2(bundle) => bundle.session_state.revision,
+            Self::V3(bundle) => bundle.session_state.revision,
+        }
+    }
+
+    fn last_committed_mutation_id(&self) -> Option<&str> {
+        match self {
+            Self::V2(bundle) => bundle.session_state.last_committed_mutation_id.as_deref(),
+            Self::V3(bundle) => bundle.session_state.last_committed_mutation_id.as_deref(),
+        }
+    }
+
+    fn station(&self) -> (&str, &str) {
+        match self {
+            Self::V2(bundle) => (&bundle.station.callsign, &bundle.station.grid),
+            Self::V3(bundle) => (&bundle.station.callsign, &bundle.station.grid),
+        }
+    }
+
+    fn earliest_slot_start(&self) -> Option<DateTime<Utc>> {
+        match self {
+            Self::V2(bundle) => bundle
+                .schedule
+                .slots
+                .iter()
+                .map(|slot| slot.starts_at)
+                .min(),
+            Self::V3(bundle) => bundle
+                .schedule
+                .slots
+                .iter()
+                .map(|slot| slot.starts_at)
+                .min(),
+        }
+    }
+
+    fn current_bundle(&self) -> BundleContents {
+        match self {
+            Self::V2(bundle) => bundle.clone().into_current().bundle,
+            Self::V3(bundle) => bundle.clone().into_current().bundle,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct PendingWsjtxMutation {
+    expected_revision: u64,
+    mutation_id: String,
+    adapter_records: Vec<AdapterRecordV2>,
+    observations: Vec<ObservationRecordV2>,
+}
+
+fn read_wsjtx_snapshot(store: &BundleStore) -> Result<WsjtxSnapshot, LivePersistenceError> {
+    match store.schema_version()? {
+        SCHEMA_VERSION_V2 => store.read_v2_checkpointed().map(WsjtxSnapshot::V2),
+        SCHEMA_VERSION_V3 => store.read_v3_checkpointed().map(WsjtxSnapshot::V3),
+        actual => {
+            Err(antennabench_storage::BundleStoreError::UnsupportedSchemaVersion { actual }.into())
+        }
+    }
 }
 
 enum IntakeDecision {
@@ -267,12 +352,15 @@ fn start_receiver(
 ) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
     let (bind, expected_client_id) = validate_start_request(request)?;
     let store = BundleStore::new(&source);
-    let bundle = store.read_v2_checkpointed().map_err(live_error_payload)?;
-    if bundle.session_state.lifecycle != SessionLifecycleV2::Running {
+    let schema_version = store
+        .schema_version()
+        .map_err(crate::open_session::storage_error_payload)?;
+    let bundle = read_wsjtx_snapshot(&store).map_err(live_error_payload)?;
+    if bundle.lifecycle() != SessionLifecycleV2::Running {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Conflict,
             "Start the durable session before starting WSJT-X reception.",
-            format!("current lifecycle is {:?}", bundle.session_state.lifecycle),
+            format!("current lifecycle is {:?}", bundle.lifecycle()),
         ));
     }
     if state
@@ -313,18 +401,13 @@ fn start_receiver(
         )
     })?;
     let receiver_id = hooks.new_id("wsjtx-receiver");
-    let session_started_at = bundle
-        .schedule
-        .slots
-        .iter()
-        .map(|slot| slot.starts_at)
-        .min()
-        .unwrap_or_else(|| hooks.now());
+    let session_started_at = bundle.earliest_slot_start().unwrap_or_else(|| hooks.now());
+    let (station_callsign, station_grid) = bundle.station();
     let ingest = LiveWsjtxIngest::new(LiveIngestConfig {
-        session_id: bundle.manifest.session_id.clone(),
+        session_id: bundle.session_id().to_string(),
         receiver_id: receiver_id.clone(),
-        station_callsign: bundle.station.callsign.clone(),
-        station_grid: bundle.station.grid.clone(),
+        station_callsign: station_callsign.to_string(),
+        station_grid: station_grid.to_string(),
         session_started_at,
     })
     .map_err(|error| {
@@ -351,8 +434,9 @@ fn start_receiver(
         .spawn(move || {
             let mut orchestrator = WsjtxOrchestrator {
                 store,
+                schema_version,
                 ingest,
-                session_id: bundle.manifest.session_id,
+                session_id: bundle.session_id().to_string(),
                 receiver_id,
                 expected_client_id,
                 hooks,
@@ -424,7 +508,7 @@ impl WsjtxOrchestrator {
         status: &Mutex<WsjtxReceiverStatus>,
     ) -> IntakeDecision {
         update_status(status, |status| status.received_datagrams += 1);
-        let snapshot = match self.store.read_v2_checkpointed() {
+        let snapshot = match read_wsjtx_snapshot(&self.store) {
             Ok(snapshot) => snapshot,
             Err(error) => {
                 set_failed(
@@ -436,16 +520,13 @@ impl WsjtxOrchestrator {
                 return IntakeDecision::Stop;
             }
         };
-        if snapshot.manifest.session_id != self.session_id
-            || snapshot.session_state.lifecycle != SessionLifecycleV2::Running
+        if snapshot.session_id() != self.session_id
+            || snapshot.lifecycle() != SessionLifecycleV2::Running
         {
             set_failed(
                 status,
                 "wsjtx.receiver.lifecycle_stopped",
-                format!(
-                    "intake stopped at lifecycle {:?}",
-                    snapshot.session_state.lifecycle
-                ),
+                format!("intake stopped at lifecycle {:?}", snapshot.lifecycle()),
                 true,
             );
             return IntakeDecision::Stop;
@@ -546,7 +627,7 @@ impl WsjtxOrchestrator {
 
     fn stop_for_resource_gap(
         &self,
-        snapshot: &BundleV2Contents,
+        snapshot: &WsjtxSnapshot,
         datagram: &ReceivedUdpDatagram,
         status: &Mutex<WsjtxReceiverStatus>,
         diagnostic: antennabench_wsjtx::AdapterResourceDiagnostic,
@@ -575,17 +656,17 @@ impl WsjtxOrchestrator {
 
     fn recorded_mutation(
         &self,
-        snapshot: &BundleV2Contents,
+        snapshot: &WsjtxSnapshot,
         datagram: &ReceivedUdpDatagram,
         recorded: LiveRecordedMessage,
-    ) -> LiveMutationV2 {
+    ) -> PendingWsjtxMutation {
         let mutation_id = self.hooks.new_id("wsjtx-mutation");
         let adapter_id = recorded.wsjtx_record.record_id;
         let disposition = disposition(&recorded.disposition);
         let reason = reason(&recorded.disposition);
         let has_observation = recorded.observation.is_some();
         let observation = recorded.observation.map(|observation| {
-            let mut current = snapshot.clone().into_current().bundle;
+            let mut current = snapshot.current_bundle();
             current.observations.push(observation);
             annotate_bundle_observations(&mut current);
             let observation = current
@@ -624,33 +705,30 @@ impl WsjtxOrchestrator {
             reason,
             normalized_records,
         );
-        let mut members = vec![LiveMutationMemberV2::AdapterRecord(adapter)];
-        if let Some(observation) = observation {
-            members.push(LiveMutationMemberV2::Observation(observation));
-        }
-        LiveMutationV2 {
-            expected_revision: snapshot.session_state.revision,
+        PendingWsjtxMutation {
+            expected_revision: snapshot.revision(),
             mutation_id,
-            members,
+            adapter_records: vec![adapter],
+            observations: observation.into_iter().collect(),
         }
     }
 
     #[allow(clippy::too_many_arguments)]
     fn adapter_only_mutation(
         &self,
-        snapshot: &BundleV2Contents,
+        snapshot: &WsjtxSnapshot,
         datagram: &ReceivedUdpDatagram,
         record_type: &str,
         disposition: AdapterDisposition,
         reason_value: &str,
         source_time: Option<DateTime<Utc>>,
-    ) -> LiveMutationV2 {
+    ) -> PendingWsjtxMutation {
         let mutation_id = self.hooks.new_id("wsjtx-mutation");
         let record_id = self.hooks.new_id("wsjtx-record");
-        LiveMutationV2 {
-            expected_revision: snapshot.session_state.revision,
+        PendingWsjtxMutation {
+            expected_revision: snapshot.revision(),
             mutation_id: mutation_id.clone(),
-            members: vec![LiveMutationMemberV2::AdapterRecord(adapter_record(
+            adapter_records: vec![adapter_record(
                 &self.session_id,
                 &self.receiver_id,
                 &mutation_id,
@@ -663,21 +741,58 @@ impl WsjtxOrchestrator {
                 disposition,
                 reason_value.into(),
                 vec![],
-            ))],
+            )],
+            observations: vec![],
         }
     }
 
     fn commit_or_stop(
         &self,
-        mut mutation: LiveMutationV2,
+        mut mutation: PendingWsjtxMutation,
         status: &Mutex<WsjtxReceiverStatus>,
         diagnostic: Option<(&str, String, bool)>,
     ) -> IntakeDecision {
         for _ in 0..3 {
-            let result = self
-                .store
-                .open_v2_writer_with_hooks(self.hooks.clone())
-                .and_then(|mut writer| writer.append(mutation.clone()));
+            let result = match self.schema_version {
+                SCHEMA_VERSION_V2 => self
+                    .store
+                    .open_v2_writer_with_hooks(self.hooks.clone())
+                    .and_then(|mut writer| {
+                        let mut members = mutation
+                            .adapter_records
+                            .clone()
+                            .into_iter()
+                            .map(LiveMutationMemberV2::AdapterRecord)
+                            .collect::<Vec<_>>();
+                        members.extend(
+                            mutation
+                                .observations
+                                .clone()
+                                .into_iter()
+                                .map(LiveMutationMemberV2::Observation),
+                        );
+                        writer.append(LiveMutationV2 {
+                            expected_revision: mutation.expected_revision,
+                            mutation_id: mutation.mutation_id.clone(),
+                            members,
+                        })
+                    }),
+                SCHEMA_VERSION_V3 => self
+                    .store
+                    .open_v3_writer_with_hooks(self.hooks.clone())
+                    .and_then(|mut writer| {
+                        writer.append_evidence(LiveEvidenceMutationV3 {
+                            expected_revision: mutation.expected_revision,
+                            mutation_id: mutation.mutation_id.clone(),
+                            adapter_records: mutation.adapter_records.clone(),
+                            observations: mutation.observations.clone(),
+                        })
+                    }),
+                actual => Err(
+                    antennabench_storage::BundleStoreError::UnsupportedSchemaVersion { actual }
+                        .into(),
+                ),
+            };
             match result {
                 Ok(_) => {
                     update_status(status, |status| {
@@ -698,14 +813,9 @@ impl WsjtxOrchestrator {
                     mutation.expected_revision = actual;
                 }
                 Err(error) => {
-                    let committed = self
-                        .store
-                        .read_v2_checkpointed()
-                        .ok()
-                        .is_some_and(|bundle| {
-                            bundle.session_state.last_committed_mutation_id.as_deref()
-                                == Some(mutation.mutation_id.as_str())
-                        });
+                    let committed = read_wsjtx_snapshot(&self.store).ok().is_some_and(|bundle| {
+                        bundle.last_committed_mutation_id() == Some(mutation.mutation_id.as_str())
+                    });
                     if committed {
                         update_status(status, |status| status.committed_mutations += 1);
                         return IntakeDecision::Continue;
@@ -735,9 +845,9 @@ impl WsjtxOrchestrator {
         message: String,
         status: &Mutex<WsjtxReceiverStatus>,
     ) {
-        let snapshot = self.store.read_v2_checkpointed();
+        let snapshot = read_wsjtx_snapshot(&self.store);
         if let Ok(snapshot) = snapshot {
-            if snapshot.session_state.lifecycle == SessionLifecycleV2::Running {
+            if snapshot.lifecycle() == SessionLifecycleV2::Running {
                 let at = self.hooks.now();
                 let datagram = ReceivedUdpDatagram {
                     bytes: Vec::new(),
@@ -1017,7 +1127,7 @@ pub(crate) fn inject_e2e_wsjtx_sequence(
     }
 
     let store = BundleStore::new(source);
-    let bundle = store.read_v2_checkpointed().expect("running checkpoint");
+    let bundle = store.read_v3_checkpointed().expect("running checkpoint");
     let hooks = Arc::new(DeterministicHooks(Mutex::new(1), received_at));
     let config = LiveIngestConfig {
         session_id: bundle.manifest.session_id.clone(),
@@ -1031,6 +1141,7 @@ pub(crate) fn inject_e2e_wsjtx_sequence(
     limits.udp_rate_per_second = 3;
     let mut orchestrator = WsjtxOrchestrator {
         store: store.clone(),
+        schema_version: SCHEMA_VERSION_V3,
         ingest: LiveWsjtxIngest::new_with_limits(config, limits).expect("bounded live ingest"),
         session_id: bundle.manifest.session_id,
         receiver_id: "e2e-fixture-receiver".into(),
@@ -1075,7 +1186,7 @@ pub(crate) fn inject_e2e_wsjtx_sequence(
         ),
         IntakeDecision::Stop
     ));
-    let bundle = store.read_v2_checkpointed().expect("ingested checkpoint");
+    let bundle = store.read_v3_checkpointed().expect("ingested checkpoint");
     E2eWsjtxResult {
         revision: bundle.session_state.revision,
         adapter_records: bundle.adapter_records.len(),
@@ -1098,7 +1209,7 @@ mod tests {
 
     use antennabench_core::{
         EventTimeBasisV2, OperatorEventPayloadV2, OperatorEventV2, SessionLifecycleV2,
-        V2_BUNDLE_SUFFIX,
+        SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -1232,6 +1343,7 @@ mod tests {
         };
         WsjtxOrchestrator {
             store,
+            schema_version: SCHEMA_VERSION_V2,
             ingest,
             session_id: bundle.manifest.session_id,
             receiver_id: "fixture-receiver".into(),

@@ -1,11 +1,20 @@
-use std::{collections::BTreeSet, path::PathBuf, sync::Mutex};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use antennabench_core::{
-    reduce_operator_events_v2, AdapterInput, BundleV2Contents, CorrectableOperatorEventPayloadV2,
-    EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventV2, Provenance,
-    RecordMetaV2, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2,
+    reduce_operator_events_v2, reduce_operator_events_v3, AdapterInput, AdapterRecordV2,
+    BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2,
+    CorrectableOperatorEventPayloadV3, EventTimeBasisV2, MutationMember, OperatorEventPayloadV2,
+    OperatorEventPayloadV3, OperatorEventV2, OperatorEventV3, PlannedSlot, Provenance,
+    RecordMetaV2, RecordMetaV3, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2,
+    SCHEMA_VERSION_V3,
 };
-use antennabench_storage::{BundleStore, LiveMutationMemberV2, LiveMutationV2};
+use antennabench_storage::{
+    BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
+};
 use antennabench_wsjtx::{
     latest_due_wspr_live_acquisition, plan_wspr_live_acquisitions_for_confirmed_slots,
     AdapterCancellationToken, ReqwestWsprLiveTransport, WsprLiveAcquirer,
@@ -41,6 +50,41 @@ struct WsprLiveFailure {
     completed_slot_id: String,
     message: String,
     detail: String,
+}
+
+enum AcquisitionSnapshot {
+    V2(BundleV2Contents),
+    V3(BundleV3Contents),
+}
+
+impl AcquisitionSnapshot {
+    fn lifecycle(&self) -> SessionLifecycleV2 {
+        match self {
+            Self::V2(bundle) => bundle.session_state.lifecycle,
+            Self::V3(bundle) => bundle.session_state.lifecycle,
+        }
+    }
+
+    fn wspr_live_acquisition_enabled(&self) -> bool {
+        match self {
+            Self::V2(bundle) => bundle.session_state.wspr_live_acquisition_enabled,
+            Self::V3(bundle) => bundle.session_state.wspr_live_acquisition_enabled,
+        }
+    }
+
+    fn projected_slots(&self) -> Vec<PlannedSlot> {
+        match self {
+            Self::V2(bundle) => bundle.schedule.slots.clone(),
+            Self::V3(bundle) => bundle.clone().into_current().bundle.schedule.slots,
+        }
+    }
+
+    fn adapter_records(&self) -> &[AdapterRecordV2] {
+        match self {
+            Self::V2(bundle) => &bundle.adapter_records,
+            Self::V3(bundle) => &bundle.adapter_records,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -101,10 +145,10 @@ pub(crate) enum WsprLiveAcquisitionOutcome {
 }
 
 impl WsprLiveAcquisitionRuntime {
-    fn reset_for_source(&mut self, source: &PathBuf) {
-        if self.source.as_ref() != Some(source) {
+    fn reset_for_source(&mut self, source: &Path) {
+        if self.source.as_deref() != Some(source) {
             *self = Self {
-                source: Some(source.clone()),
+                source: Some(source.to_path_buf()),
                 ..Self::default()
             };
         }
@@ -166,15 +210,35 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
     with_foreground_operation(active_state, || {
         let (source, _) = active_session_source(active_state)?;
         let store = BundleStore::new(&source);
-        let snapshot = store
-            .read_v2_checkpointed()
+        let schema_version = store
+            .schema_version()
+            .map_err(LivePersistenceError::from)
             .map_err(crate::conductor::live_error_payload)?;
-        if snapshot.session_state.lifecycle != SessionLifecycleV2::Running {
+        let snapshot = match schema_version {
+            SCHEMA_VERSION_V2 => AcquisitionSnapshot::V2(
+                store
+                    .read_v2_checkpointed()
+                    .map_err(crate::conductor::live_error_payload)?,
+            ),
+            SCHEMA_VERSION_V3 => AcquisitionSnapshot::V3(
+                store
+                    .read_v3_checkpointed()
+                    .map_err(crate::conductor::live_error_payload)?,
+            ),
+            actual => {
+                return Err(SessionErrorPayload::new(
+                    SessionErrorKind::Validation,
+                    "This session format cannot acquire WSPR.live spots.",
+                    format!("unsupported schema version {actual}"),
+                ))
+            }
+        };
+        if snapshot.lifecycle() != SessionLifecycleV2::Running {
             return Ok(WsprLiveAcquisitionOutcome::Dormant {
                 captured_through: captured_through(&snapshot),
             });
         }
-        if !snapshot.session_state.wspr_live_acquisition_enabled {
+        if !snapshot.wspr_live_acquisition_enabled() {
             return Ok(WsprLiveAcquisitionOutcome::Disabled);
         }
 
@@ -280,8 +344,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             window_start: plan.query.window_start,
             window_end: plan.query.window_end,
             selected_bands: snapshot
-                .schedule
-                .slots
+                .projected_slots()
                 .iter()
                 .filter(|slot| {
                     slot.starts_at
@@ -346,11 +409,11 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
 }
 
 fn final_capture_is_complete(
-    bundle: &BundleV2Contents,
+    bundle: &AcquisitionSnapshot,
     authorized_plans: &[WsprLiveAcquisitionPlan],
     captured_through: DateTime<Utc>,
 ) -> bool {
-    bundle.schedule.slots.last().is_some_and(|final_slot| {
+    bundle.projected_slots().last().is_some_and(|final_slot| {
         authorized_plans
             .iter()
             .any(|plan| plan.completed_slot_id == final_slot.slot_id)
@@ -363,11 +426,37 @@ fn final_capture_is_complete(
 
 fn end_after_final_capture(
     active_state: &ActiveSessionState,
-    source: &PathBuf,
+    source: &Path,
     occurred_at: DateTime<Utc>,
     captured_through: DateTime<Utc>,
 ) -> Result<(OpenedSession, u64), SessionErrorPayload> {
     let store = BundleStore::new(source);
+    match store
+        .schema_version()
+        .map_err(LivePersistenceError::from)
+        .map_err(crate::conductor::live_error_payload)?
+    {
+        SCHEMA_VERSION_V2 => {
+            end_v2_after_final_capture(active_state, source, occurred_at, captured_through, &store)
+        }
+        SCHEMA_VERSION_V3 => {
+            end_v3_after_final_capture(active_state, source, occurred_at, captured_through, &store)
+        }
+        actual => Err(SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "This session format cannot be finalized automatically.",
+            format!("unsupported schema version {actual}"),
+        )),
+    }
+}
+
+fn end_v2_after_final_capture(
+    active_state: &ActiveSessionState,
+    source: &Path,
+    occurred_at: DateTime<Utc>,
+    captured_through: DateTime<Utc>,
+    store: &BundleStore,
+) -> Result<(OpenedSession, u64), SessionErrorPayload> {
     let mut writer = store
         .open_v2_writer()
         .map_err(crate::conductor::live_error_payload)?;
@@ -428,6 +517,72 @@ fn end_after_final_capture(
     ))
 }
 
+fn end_v3_after_final_capture(
+    active_state: &ActiveSessionState,
+    source: &Path,
+    occurred_at: DateTime<Utc>,
+    captured_through: DateTime<Utc>,
+    store: &BundleStore,
+) -> Result<(OpenedSession, u64), SessionErrorPayload> {
+    let mut writer = store
+        .open_v3_writer()
+        .map_err(crate::conductor::live_error_payload)?;
+    if writer.snapshot().session_state.lifecycle == SessionLifecycleV2::Ended {
+        let revision = writer.checkpoint().revision;
+        drop(writer);
+        return Ok((
+            crate::open_session::reload_active_session(active_state, source)?,
+            revision,
+        ));
+    }
+    if writer.snapshot().session_state.lifecycle != SessionLifecycleV2::Running {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The session changed before automatic finalization could commit.",
+            format!(
+                "current lifecycle: {:?}",
+                writer.snapshot().session_state.lifecycle
+            ),
+        ));
+    }
+    let mutation_id = writer.allocate_id("mutation");
+    let event = OperatorEventV3 {
+        meta: RecordMetaV3 {
+            schema_version: SCHEMA_VERSION_V3,
+            session_id: writer.snapshot().manifest.session_id.clone(),
+            recorded_at: occurred_at,
+            provenance: Provenance::from_legacy(RecordSource::Derived, env!("CARGO_PKG_VERSION")),
+            mutation: MutationMember {
+                mutation_id: mutation_id.clone(),
+                member_index: 0,
+                member_count: 1,
+            },
+        },
+        event_id: writer.allocate_id("event"),
+        occurred_at,
+        time_basis: EventTimeBasisV2::ObservedNow,
+        uncertainty_seconds: None,
+        slot_id: None,
+        payload: OperatorEventPayloadV3::SessionEnded {
+            reason: Some(format!(
+                "Automatically ended after cumulative WSPR.live capture through {captured_through}."
+            )),
+        },
+    };
+    let receipt = writer
+        .append_event(LiveEventMutationV3 {
+            expected_revision: writer.checkpoint().revision,
+            mutation_id,
+            event,
+        })
+        .map_err(crate::conductor::live_error_payload)?;
+    drop(writer);
+    Ok((
+        crate::open_session::reload_active_session(active_state, source)?,
+        receipt.revision,
+    ))
+}
+
 fn failed_outcome(
     plan: &WsprLiveAcquisitionPlan,
     error: SessionErrorPayload,
@@ -441,30 +596,50 @@ fn failed_outcome(
 }
 
 fn authorized_plans(
-    bundle: &BundleV2Contents,
+    bundle: &AcquisitionSnapshot,
 ) -> Result<Vec<WsprLiveAcquisitionPlan>, antennabench_wsjtx::WsprLiveImportError> {
-    let confirmed_slot_ids = reduce_operator_events_v2(SessionLifecycleV2::Ready, &bundle.events)
-        .effective_events
-        .into_iter()
-        .filter_map(|event| {
-            matches!(
-                event.payload,
-                CorrectableOperatorEventPayloadV2::AntennaStateConfirmed { .. }
-            )
-            .then_some(event.slot_id)
-            .flatten()
-        })
-        .collect::<BTreeSet<_>>();
+    let (callsign, confirmed_slot_ids) = match bundle {
+        AcquisitionSnapshot::V2(bundle) => (
+            bundle.station.callsign.as_str(),
+            reduce_operator_events_v2(SessionLifecycleV2::Ready, &bundle.events)
+                .effective_events
+                .into_iter()
+                .filter_map(|event| {
+                    matches!(
+                        event.payload,
+                        CorrectableOperatorEventPayloadV2::AntennaStateConfirmed { .. }
+                    )
+                    .then_some(event.slot_id)
+                    .flatten()
+                })
+                .collect::<BTreeSet<_>>(),
+        ),
+        AcquisitionSnapshot::V3(bundle) => (
+            bundle.station.callsign.as_str(),
+            reduce_operator_events_v3(SessionLifecycleV2::Ready, &bundle.events)
+                .effective_events
+                .into_iter()
+                .filter_map(|event| {
+                    matches!(
+                        event.payload,
+                        CorrectableOperatorEventPayloadV3::AntennaStateConfirmed { .. }
+                    )
+                    .then_some(event.slot_id)
+                    .flatten()
+                })
+                .collect::<BTreeSet<_>>(),
+        ),
+    };
     plan_wspr_live_acquisitions_for_confirmed_slots(
-        &bundle.station.callsign,
-        &bundle.schedule.slots,
+        callsign,
+        &bundle.projected_slots(),
         &confirmed_slot_ids,
     )
 }
 
-fn captured_through(bundle: &BundleV2Contents) -> Option<DateTime<Utc>> {
+fn captured_through(bundle: &AcquisitionSnapshot) -> Option<DateTime<Utc>> {
     bundle
-        .adapter_records
+        .adapter_records()
         .iter()
         .filter(|record| record.record_type == "wspr_live_import_summary")
         .filter_map(|record| {
@@ -501,10 +676,10 @@ mod tests {
     use std::{cell::Cell, fs, path::Path};
 
     use antennabench_core::{
-        EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventV2, Provenance,
-        RecordMetaV2, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V2,
+        EventTimeBasisV2, MutationMember, OperatorEventPayloadV3, OperatorEventV3, Provenance,
+        RecordMetaV3, RecordSource, SessionLifecycleV2, SCHEMA_VERSION_V3,
     };
-    use antennabench_storage::{BundleStore, LiveMutationMemberV2, LiveMutationV2};
+    use antennabench_storage::{BundleStore, LiveEventMutationV3};
     use antennabench_wsjtx::{
         AdapterCancellationToken, WsprLiveAcquisitionError, WsprLiveHttpResponse,
         WsprLiveHttpTransport, WSPR_LIVE_COLUMNS,
@@ -559,14 +734,14 @@ mod tests {
         let active = ActiveSessionState::default();
         let created = create_e2e_session(root, &active);
         let store = BundleStore::new(&created.path);
-        let mut bundle = store.read_v2().unwrap();
+        let mut bundle = store.read_v3().unwrap();
         bundle.session_state.wspr_live_acquisition_enabled = wspr_live_acquisition_enabled;
         fs::write(
             store.root().join("session-state.json"),
             serde_json::to_vec_pretty(&bundle.session_state).unwrap(),
         )
         .unwrap();
-        let mut writer = store.open_v2_writer().unwrap();
+        let mut writer = store.open_v3_writer().unwrap();
         let snapshot = writer.snapshot().clone();
         let final_end = snapshot
             .schedule
@@ -580,13 +755,13 @@ mod tests {
         let mut actions = vec![(
             None,
             snapshot.schedule.slots[0].starts_at,
-            OperatorEventPayloadV2::SessionStarted { note: None },
+            OperatorEventPayloadV3::SessionStarted { note: None },
         )];
         actions.extend(snapshot.schedule.slots.iter().map(|slot| {
             (
                 Some(slot.slot_id.clone()),
                 slot.starts_at,
-                OperatorEventPayloadV2::AntennaStateConfirmed {
+                OperatorEventPayloadV3::AntennaStateConfirmed {
                     antenna_label: slot.antenna_label.clone(),
                     note: None,
                 },
@@ -594,9 +769,9 @@ mod tests {
         }));
         for (index, (slot_id, occurred_at, payload)) in actions.into_iter().enumerate() {
             let mutation_id = format!("automatic-test-mutation-{index}");
-            let event = OperatorEventV2 {
-                meta: RecordMetaV2 {
-                    schema_version: SCHEMA_VERSION_V2,
+            let event = OperatorEventV3 {
+                meta: RecordMetaV3 {
+                    schema_version: SCHEMA_VERSION_V3,
                     session_id: snapshot.manifest.session_id.clone(),
                     recorded_at: occurred_at,
                     provenance: Provenance::from_legacy(
@@ -617,10 +792,10 @@ mod tests {
                 payload,
             };
             writer
-                .append(LiveMutationV2 {
+                .append_event(LiveEventMutationV3 {
                     expected_revision: writer.checkpoint().revision,
                     mutation_id,
-                    members: vec![LiveMutationMemberV2::Event(event)],
+                    event,
                 })
                 .unwrap();
         }
@@ -636,7 +811,7 @@ mod tests {
     fn due_confirmations_fetch_once_and_atomically_commit_through_the_importer() {
         let temp = TempDir::new().unwrap();
         let (active, path, now) = running_confirmed_session(temp.path(), true);
-        let before = BundleStore::new(&path).read_v2_checkpointed().unwrap();
+        let before = BundleStore::new(&path).read_v3_checkpointed().unwrap();
         let transport = FakeTransport {
             calls: Cell::new(0),
             response: Ok(empty_response(now)),
@@ -659,12 +834,12 @@ mod tests {
             ..
         } = outcome
         else {
-            panic!("due acquisition must capture")
+            panic!("due acquisition must capture: {outcome:?}")
         };
         assert_eq!(captured_through, now - chrono::Duration::minutes(5));
         assert_eq!(total, 0);
         assert_eq!(revision, before.session_state.revision + 2);
-        let after = BundleStore::new(&path).read_v2_checkpointed().unwrap();
+        let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
         assert_eq!(after.session_state.lifecycle, SessionLifecycleV2::Ended);
         let summary = after
             .adapter_records
@@ -685,7 +860,7 @@ mod tests {
     fn explicit_opt_out_never_contacts_the_transport() {
         let temp = TempDir::new().unwrap();
         let (active, path, now) = running_confirmed_session(temp.path(), false);
-        let before = BundleStore::new(&path).read_v2_checkpointed().unwrap();
+        let before = BundleStore::new(&path).read_v3_checkpointed().unwrap();
         let transport = FakeTransport {
             calls: Cell::new(0),
             response: Err(WsprLiveAcquisitionError::Transport(
@@ -705,7 +880,7 @@ mod tests {
         assert_eq!(outcome, WsprLiveAcquisitionOutcome::Disabled);
         assert_eq!(transport.calls.get(), 0);
         assert_eq!(
-            BundleStore::new(&path).read_v2_checkpointed().unwrap(),
+            BundleStore::new(&path).read_v3_checkpointed().unwrap(),
             before
         );
     }
@@ -714,7 +889,7 @@ mod tests {
     fn failures_do_not_mutate_or_automatically_retry_but_restart_may_resume() {
         let temp = TempDir::new().unwrap();
         let (active, path, now) = running_confirmed_session(temp.path(), true);
-        let before = BundleStore::new(&path).read_v2_checkpointed().unwrap();
+        let before = BundleStore::new(&path).read_v3_checkpointed().unwrap();
         let runtime = WsprLiveAcquisitionState::default();
         let offline = FakeTransport {
             calls: Cell::new(0),
@@ -745,7 +920,7 @@ mod tests {
         ));
         assert_eq!(offline.calls.get(), 1);
         assert_eq!(
-            BundleStore::new(&path).read_v2_checkpointed().unwrap(),
+            BundleStore::new(&path).read_v3_checkpointed().unwrap(),
             before
         );
 

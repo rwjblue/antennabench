@@ -11,10 +11,10 @@ use antennabench_core::{
     validate_machine_identity, validate_operator_event_append_v2, AdapterRecordV2, AnalysisFile,
     AntennasFile, AttachmentReference, BundleManifestV2, BundleV2Contents, BundleV3Contents,
     BundleValidationProfile, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
-    ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2, OperatorEventV3,
-    PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RecordSource, RigRecordV2,
-    Schedule, SessionLifecycleV2, SessionStateV2, Station, StreamCheckpointV2, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V3,
+    ObservationRecordV2, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
+    OperatorEventV3, PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RecordMetaV3,
+    RecordSource, RigRecordV2, Schedule, SessionLifecycleV2, SessionStateV2, Station,
+    StreamCheckpointV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -701,6 +701,148 @@ impl BundleStore {
             bundle,
             paths,
             frozen: false,
+        })
+    }
+
+    pub fn recover_v3(&self) -> Result<RecoveryReportV2, LivePersistenceError> {
+        self.recover_v3_with_hooks(Arc::new(SystemLivePersistenceHooks))
+    }
+
+    pub fn recover_v3_with_hooks(
+        &self,
+        hooks: Arc<dyn LivePersistenceHooks>,
+    ) -> Result<RecoveryReportV2, LivePersistenceError> {
+        if !self.root().is_dir() {
+            return Err(LivePersistenceError::Capability {
+                message: "bundle root is not a regular local directory".into(),
+            });
+        }
+        let lock_path = self.root().join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|source| live_io("open recovery lock", &lock_path, source))?;
+        match lock.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
+            Err(fs::TryLockError::Error(source)) => {
+                return Err(LivePersistenceError::Capability {
+                    message: format!("OS file locking failed during recovery: {source}"),
+                })
+            }
+        }
+
+        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
+            message: format!("live persistence durability probe failed: {source}"),
+        })?;
+
+        let manifest_path = self.root().join("manifest.json");
+        let manifest: BundleManifestV2 = read_json_file(self, &manifest_path, "manifest")?;
+        if manifest.schema_version != SCHEMA_VERSION_V3 {
+            return Err(LivePersistenceError::Store(
+                BundleStoreError::UnsupportedSchemaVersion {
+                    actual: manifest.schema_version,
+                },
+            ));
+        }
+        let bootstrap = self.v2_paths(&manifest.files)?;
+        let checkpoint: SessionStateV2 =
+            read_json_file(self, &bootstrap.session_state, "checkpoint")?;
+        let starting_revision = checkpoint.revision;
+        let paths = self.v2_paths_for_state(&manifest.files, &checkpoint)?;
+        verify_committed_prefixes(self, &checkpoint, &paths)?;
+        let tails = read_stream_tails(self, &checkpoint, &paths)?;
+        let has_tails = tails.iter().any(|tail| !tail.bytes.is_empty());
+        if has_tails {
+            truncate_tails(&checkpoint, &paths)?;
+        }
+
+        let bundle = self.read_v3()?;
+        let mut artifacts = if has_tails {
+            preserve_tails_for(
+                self,
+                SCHEMA_VERSION_V3,
+                &bundle.manifest.session_id,
+                &paths,
+                &tails,
+                "schema-v3 recovery conservatively rolled back uncommitted stream data",
+                hooks.now(),
+            )?
+        } else {
+            Vec::new()
+        };
+        recover_checkpoint_temp_for(
+            self,
+            SCHEMA_VERSION_V3,
+            &bundle.manifest.session_id,
+            &paths,
+            &mut artifacts,
+            hooks.now(),
+        )?;
+        verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
+
+        let recovered_revision = bundle.session_state.revision;
+        let disposition = if has_tails {
+            RecoveryDispositionV2::RolledBack
+        } else {
+            RecoveryDispositionV2::Clean
+        };
+        let mut session = LiveSessionV3 {
+            store: self.clone(),
+            _lock: lock,
+            hooks,
+            bundle,
+            paths,
+            frozen: false,
+        };
+        let interruption = if session.bundle.session_state.lifecycle == SessionLifecycleV2::Running
+        {
+            let revision = session.bundle.session_state.revision;
+            let event_id = session.allocate_id("event");
+            let mutation_id = session.allocate_id("mutation");
+            let occurred_at = session.hooks.now();
+            Some(session.append_event(LiveEventMutationV3 {
+                expected_revision: revision,
+                mutation_id: mutation_id.clone(),
+                event: OperatorEventV3 {
+                    meta: RecordMetaV3 {
+                        schema_version: SCHEMA_VERSION_V3,
+                        session_id: session.bundle.manifest.session_id.clone(),
+                        recorded_at: occurred_at,
+                        provenance: Provenance::from_legacy(
+                            RecordSource::Derived,
+                            env!("CARGO_PKG_VERSION"),
+                        ),
+                        mutation: MutationMember {
+                            mutation_id,
+                            member_index: 0,
+                            member_count: 1,
+                        },
+                    },
+                    event_id,
+                    occurred_at,
+                    time_basis: EventTimeBasisV2::RecoverySystem,
+                    uncertainty_seconds: None,
+                    slot_id: None,
+                    payload: OperatorEventPayloadV3::InterruptionDetected {
+                        reason: Some("recovery opened a session left running".into()),
+                    },
+                },
+            })?)
+        } else {
+            None
+        };
+        let final_revision = session.bundle.session_state.revision;
+        Ok(RecoveryReportV2 {
+            starting_revision,
+            recovered_revision,
+            final_revision,
+            disposition,
+            artifacts,
+            interruption,
         })
     }
 
@@ -2209,7 +2351,8 @@ fn preserve_plan_generation(
         );
         artifacts.push(preserve_recovery_bytes(
             store,
-            bundle,
+            SCHEMA_VERSION_V2,
+            &bundle.manifest.session_id,
             paths,
             RecoveryBytes {
                 source: &source,
@@ -2251,7 +2394,8 @@ fn preserve_plan_generation(
         );
         artifacts.push(preserve_recovery_bytes(
             store,
-            bundle,
+            SCHEMA_VERSION_V2,
+            &bundle.manifest.session_id,
             paths,
             RecoveryBytes {
                 source: &source,
@@ -2603,12 +2747,33 @@ fn preserve_tails(
     diagnosis: &str,
     detected_at: DateTime<Utc>,
 ) -> Result<Vec<RecoveryArtifactV2>, LivePersistenceError> {
+    preserve_tails_for(
+        store,
+        SCHEMA_VERSION_V2,
+        &bundle.manifest.session_id,
+        paths,
+        tails,
+        diagnosis,
+        detected_at,
+    )
+}
+
+fn preserve_tails_for(
+    store: &BundleStore,
+    schema_version: u16,
+    session_id: &str,
+    paths: &ResolvedBundlePathsV2,
+    tails: &[StreamTail],
+    diagnosis: &str,
+    detected_at: DateTime<Utc>,
+) -> Result<Vec<RecoveryArtifactV2>, LivePersistenceError> {
     let mut artifacts = Vec::new();
     for tail in tails.iter().filter(|tail| !tail.bytes.is_empty()) {
         let source = tail.stream.checkpoint_name().to_string();
         artifacts.push(preserve_recovery_bytes(
             store,
-            bundle,
+            schema_version,
+            session_id,
             paths,
             RecoveryBytes {
                 source: &source,
@@ -2624,7 +2789,8 @@ fn preserve_tails(
 
 fn preserve_recovery_bytes(
     store: &BundleStore,
-    bundle: &BundleV2Contents,
+    schema_version: u16,
+    session_id: &str,
     paths: &ResolvedBundlePathsV2,
     evidence: RecoveryBytes<'_>,
     diagnosis: &str,
@@ -2643,8 +2809,8 @@ fn preserve_recovery_bytes(
         Some(format!("recovery:{source}:{committed_offset}")),
     )?;
     let metadata = RecoveryArtifactMetadataV2 {
-        schema_version: SCHEMA_VERSION_V2,
-        session_id: &bundle.manifest.session_id,
+        schema_version,
+        session_id,
         source,
         committed_offset,
         detected_at,
@@ -2851,6 +3017,24 @@ fn recover_checkpoint_temp(
     artifacts: &mut Vec<RecoveryArtifactV2>,
     detected_at: DateTime<Utc>,
 ) -> Result<(), LivePersistenceError> {
+    recover_checkpoint_temp_for(
+        store,
+        SCHEMA_VERSION_V2,
+        &bundle.manifest.session_id,
+        paths,
+        artifacts,
+        detected_at,
+    )
+}
+
+fn recover_checkpoint_temp_for(
+    store: &BundleStore,
+    schema_version: u16,
+    session_id: &str,
+    paths: &ResolvedBundlePathsV2,
+    artifacts: &mut Vec<RecoveryArtifactV2>,
+    detected_at: DateTime<Utc>,
+) -> Result<(), LivePersistenceError> {
     let temp = store.root().join(CHECKPOINT_TEMP);
     if !temp.exists() {
         return Ok(());
@@ -2872,8 +3056,8 @@ fn recover_checkpoint_temp(
             Some("recovery:checkpoint-temp".into()),
         )?;
         let metadata = RecoveryArtifactMetadataV2 {
-            schema_version: SCHEMA_VERSION_V2,
-            session_id: &bundle.manifest.session_id,
+            schema_version,
+            session_id,
             source: "checkpoint_temp",
             committed_offset: 0,
             detected_at,

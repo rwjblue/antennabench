@@ -136,7 +136,7 @@
 
               <details class="setup-section advanced-section">
                 <summary>Advanced: controlled CW or RTTY signal</summary>
-                <label class="authority-confirmation"><input type="checkbox" data-setup-field="signalPlanEnabled"> Add a manually conducted CW or RTTY signal plan (schema v3)</label>
+                <label class="authority-confirmation"><input type="checkbox" data-setup-field="signalPlanEnabled"> Add a manually conducted CW or RTTY signal plan</label>
                 <p class="field-help">AntennaBench will guide antenna and frequency changes, but will not key the transmitter or infer that planned settings were used. Enter every exact frequency in hertz; Rust expands them into complete, order-balanced antenna × frequency blocks.</p>
                 <div class="field-grid" data-signal-plan-fields hidden>
                   <label>Mode<select data-setup-field="signalMode"><option value="cw">CW</option><option value="rtty">RTTY</option></select></label>
@@ -191,7 +191,7 @@
             <div class="empty-state" data-conductor-empty>
               <span class="empty-icon" aria-hidden="true">◌</span>
               <h2>No active session</h2>
-              <p>Create a validated schema-v2 session or open one from Import / export, then return here.</p>
+              <p>Create a validated session or open one from Import / export, then return here.</p>
               <button type="button" data-conductor-refresh>Load active session</button>
             </div>
 
@@ -282,7 +282,7 @@
             <div class="action-list">
               <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report without changing the source.</p></div><button class="primary-action" type="button" data-open-session>Choose bundle</button></article>
               <article><div><span>Recovery import</span><h2>Add a saved WSPR.live response</h2><p>If automatic acquisition was interrupted, select a <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> JSON response for the active session. AntennaBench validates it against the session before importing any spots.</p></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Open a running session first</button></article>
-              <article><div><span>Import evidence</span><h2>Add an RBN daily ZIP archive</h2><p>Select an official <a href="https://www.reversebeacon.net/raw_data/" target="_blank" rel="noreferrer">Reverse Beacon Network daily archive</a>. AntennaBench performs no download: it filters the selected local ZIP to the schema-v3 session callsign, half-open schedule window, and bands, then preserves the exact ZIP in the bundle.</p></div><button class="secondary-action" type="button" data-import-rbn disabled>Open a session first</button></article>
+              <article><div><span>Import evidence</span><h2>Add an RBN daily ZIP archive</h2><p>Select an official <a href="https://www.reversebeacon.net/raw_data/" target="_blank" rel="noreferrer">Reverse Beacon Network daily archive</a>. AntennaBench performs no download: it filters the selected local ZIP to the session callsign, experiment window, and bands, then preserves the exact ZIP in the bundle.</p></div><button class="secondary-action" type="button" data-import-rbn disabled>Open a session first</button></article>
               <article><div><span>Export</span><h2>Copy the active bundle</h2><p>Preserve the original durable files and attachments losslessly.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
             </div>
             <div class="open-feedback" data-open-feedback hidden role="status" aria-live="polite">

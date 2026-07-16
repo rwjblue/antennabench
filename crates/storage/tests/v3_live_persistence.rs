@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, io, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    fs::OpenOptions,
+    io::{self, Write},
+    sync::Arc,
+};
 
 use antennabench_core::{
     reduce_operator_events_v3, AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput,
@@ -15,7 +20,7 @@ use antennabench_core::{
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveEvidenceMutationV3, LivePersistenceError,
-    LivePersistenceHooks, LivePersistencePoint, LiveStreamV2,
+    LivePersistenceHooks, LivePersistencePoint, LiveStreamV2, RecoveryDispositionV2,
 };
 use chrono::{DateTime, TimeZone, Utc};
 
@@ -434,6 +439,69 @@ fn v3_checkpoint_failure_rolls_back_the_uncommitted_event() {
 
         assert_eq!(store.read_v3_checkpointed().unwrap(), initial);
     }
+}
+
+#[test]
+fn v3_recovery_preserves_and_rolls_back_an_uncommitted_torn_event() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join(format!("recovery{V2_BUNDLE_SUFFIX}"));
+    let store = BundleStore::new(&path);
+    let mut initial = bundle();
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+    {
+        let mut writer = store.open_v3_writer().unwrap();
+        writer
+            .append_event(mutation(
+                0,
+                "mutation-start",
+                event(
+                    initial.manifest.created_at,
+                    "event-start",
+                    None,
+                    OperatorEventPayloadV3::SessionStarted { note: None },
+                ),
+            ))
+            .unwrap();
+    }
+
+    OpenOptions::new()
+        .append(true)
+        .open(path.join("events.jsonl"))
+        .unwrap()
+        .write_all(b"{\"torn\":true")
+        .unwrap();
+    assert!(store.read_v3_checkpointed().is_err());
+
+    let hooks = Arc::new(Hooks {
+        now: initial.manifest.created_at,
+        fail_at: None,
+    });
+    let report = store.recover_v3_with_hooks(hooks).unwrap();
+    assert_eq!(report.starting_revision, 1);
+    assert_eq!(report.recovered_revision, 1);
+    assert_eq!(report.final_revision, 2);
+    assert_eq!(report.disposition, RecoveryDispositionV2::RolledBack);
+    assert_eq!(report.artifacts.len(), 1);
+    assert!(report.interruption.is_some());
+    assert_eq!(
+        store
+            .read_attachment(&report.artifacts[0].raw_attachment)
+            .unwrap(),
+        b"{\"torn\":true"
+    );
+
+    let recovered = store.read_v3_checkpointed().unwrap();
+    assert_eq!(recovered.session_state.revision, 2);
+    assert_eq!(
+        recovered.session_state.lifecycle,
+        SessionLifecycleV2::Interrupted
+    );
+    assert_eq!(recovered.events.len(), 2);
+    assert!(matches!(
+        recovered.events[1].payload,
+        OperatorEventPayloadV3::InterruptionDetected { .. }
+    ));
 }
 
 #[test]

@@ -8,9 +8,10 @@ use std::{
 
 use antennabench_analysis::AnalysisError;
 use antennabench_core::{
-    normalize_bundle, AdapterDisposition, AdapterInput, Band, BundleContents,
-    BundleValidationError, BundleValidationReport, OperatorEventPayloadV2, SessionLifecycleV2,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+    normalize_bundle, AdapterDisposition, AdapterInput, AdapterRecordV2, Band, BundleContents,
+    BundleV3Contents, BundleValidationError, BundleValidationReport, OperatorEventPayloadV2,
+    OperatorEventPayloadV3, SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence, ReportCompleteness,
@@ -480,12 +481,8 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
                 let bundle = store.read_v3_checkpointed()?;
                 let revision = bundle.session_state.revision;
                 let lifecycle = bundle.session_state.lifecycle;
-                (
-                    bundle.into_current(),
-                    revision,
-                    lifecycle,
-                    ReportSnapshotContext::default(),
-                )
+                let report_snapshot = report_snapshot_v3(&bundle);
+                (bundle.into_current(), revision, lifecycle, report_snapshot)
             }
             actual => {
                 return Err(OpenSessionError::Storage(
@@ -525,36 +522,7 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
 }
 
 fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapshotContext {
-    let mut adapter = ReportAdapterEvidence {
-        record_count: bundle.adapter_records.len(),
-        ..ReportAdapterEvidence::default()
-    };
-    for record in &bundle.adapter_records {
-        match record.disposition {
-            AdapterDisposition::Accepted => adapter.accepted_count += 1,
-            AdapterDisposition::Malformed => adapter.malformed_count += 1,
-            AdapterDisposition::Unsupported => adapter.unsupported_count += 1,
-            AdapterDisposition::Filtered => adapter.filtered_count += 1,
-            AdapterDisposition::Duplicate => adapter.duplicate_count += 1,
-            AdapterDisposition::Conflict => adapter.conflict_count += 1,
-            AdapterDisposition::PartiallyNormalized => adapter.partially_normalized_count += 1,
-        }
-        if record.record_type == "acquisition_gap" {
-            adapter.gap_count += 1;
-        }
-        if record.record_type == "wspr_live_import_summary" {
-            if let AdapterInput::Inline { data, .. } = &record.input {
-                if let Ok(import) = serde_json::from_str::<WsprLiveReportImport>(data) {
-                    adapter.imports.push(import.into_report());
-                }
-            }
-        }
-    }
-    adapter.evidence_complete = adapter.gap_count == 0
-        && adapter
-            .imports
-            .iter()
-            .all(|import| import.completeness_known);
+    let adapter = report_adapter_evidence(&bundle.adapter_records);
     let lifecycle_events = bundle
         .events
         .iter()
@@ -594,6 +562,83 @@ fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapsh
         lifecycle_events,
         adapter_evidence: adapter,
     }
+}
+
+fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
+    let adapter = report_adapter_evidence(&bundle.adapter_records);
+    let lifecycle_events = bundle
+        .events
+        .iter()
+        .filter_map(|event| {
+            let (kind, detail) = match &event.payload {
+                OperatorEventPayloadV3::SessionStarted { note } => {
+                    (ReportLifecycleEventKind::Started, note.clone())
+                }
+                OperatorEventPayloadV3::SessionInterrupted { reason } => {
+                    (ReportLifecycleEventKind::Interrupted, reason.clone())
+                }
+                OperatorEventPayloadV3::InterruptionDetected { reason } => (
+                    ReportLifecycleEventKind::InterruptionDetected,
+                    reason.clone(),
+                ),
+                OperatorEventPayloadV3::SessionResumed { note } => {
+                    (ReportLifecycleEventKind::Resumed, note.clone())
+                }
+                OperatorEventPayloadV3::SessionEnded { reason } => {
+                    (ReportLifecycleEventKind::Ended, reason.clone())
+                }
+                OperatorEventPayloadV3::SessionAbandoned { reason } => {
+                    (ReportLifecycleEventKind::Abandoned, reason.clone())
+                }
+                _ => return None,
+            };
+            Some(ReportLifecycleEvent {
+                kind,
+                occurred_at: event.occurred_at,
+                detail,
+            })
+        })
+        .collect();
+    ReportSnapshotContext {
+        checkpoint_revision: Some(bundle.session_state.revision),
+        lifecycle: Some(bundle.session_state.lifecycle),
+        lifecycle_events,
+        adapter_evidence: adapter,
+    }
+}
+
+fn report_adapter_evidence(records: &[AdapterRecordV2]) -> ReportAdapterEvidence {
+    let mut adapter = ReportAdapterEvidence {
+        record_count: records.len(),
+        ..ReportAdapterEvidence::default()
+    };
+    for record in records {
+        match record.disposition {
+            AdapterDisposition::Accepted => adapter.accepted_count += 1,
+            AdapterDisposition::Malformed => adapter.malformed_count += 1,
+            AdapterDisposition::Unsupported => adapter.unsupported_count += 1,
+            AdapterDisposition::Filtered => adapter.filtered_count += 1,
+            AdapterDisposition::Duplicate => adapter.duplicate_count += 1,
+            AdapterDisposition::Conflict => adapter.conflict_count += 1,
+            AdapterDisposition::PartiallyNormalized => adapter.partially_normalized_count += 1,
+        }
+        if record.record_type == "acquisition_gap" {
+            adapter.gap_count += 1;
+        }
+        if record.record_type == "wspr_live_import_summary" {
+            if let AdapterInput::Inline { data, .. } = &record.input {
+                if let Ok(import) = serde_json::from_str::<WsprLiveReportImport>(data) {
+                    adapter.imports.push(import.into_report());
+                }
+            }
+        }
+    }
+    adapter.evidence_complete = adapter.gap_count == 0
+        && adapter
+            .imports
+            .iter()
+            .all(|import| import.completeness_known);
+    adapter
 }
 
 #[derive(Debug, Deserialize)]

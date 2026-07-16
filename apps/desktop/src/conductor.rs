@@ -315,7 +315,7 @@ pub(crate) fn live_error_payload(error: LivePersistenceError) -> SessionErrorPay
         LivePersistenceError::WriterBusy => SessionErrorPayload::new(
             SessionErrorKind::Busy,
             "Another local operation is updating this session.",
-            "schema-v2 writer lock is busy",
+            "session writer lock is busy",
         ),
         LivePersistenceError::StaleRevision { expected, actual } => SessionErrorPayload::new(
             SessionErrorKind::StaleRevision,
@@ -881,6 +881,7 @@ fn build_view_v3(
     bundle: &BundleV3Contents,
     now: DateTime<Utc>,
     action_token: String,
+    recovery: Option<ConductorRecoveryView>,
 ) -> ConductorView {
     let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &bundle.events);
     let mut evidence = BTreeMap::<String, Vec<&CorrectableOperatorEventPayloadV3>>::new();
@@ -1037,7 +1038,7 @@ fn build_view_v3(
         slots,
         effective_events,
         diagnostics,
-        recovery: None,
+        recovery,
     }
 }
 
@@ -1335,10 +1336,19 @@ fn read_conductor_with_hooks(
             .lock()
             .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?
             .is_initialized(&source);
-        let recovery = if !initialized && schema_version == SCHEMA_VERSION_V2 {
-            let report = store
-                .recover_v2_with_hooks(hooks.clone())
-                .map_err(live_error_payload)?;
+        let recovery = if !initialized {
+            let report = match schema_version {
+                SCHEMA_VERSION_V2 => store.recover_v2_with_hooks(hooks.clone()),
+                SCHEMA_VERSION_V3 => store.recover_v3_with_hooks(hooks.clone()),
+                actual => {
+                    return Err(SessionErrorPayload::new(
+                        SessionErrorKind::Unsupported,
+                        "This session schema cannot be conducted by this AntennaBench version.",
+                        format!("unsupported schema version {actual}"),
+                    ));
+                }
+            }
+            .map_err(live_error_payload)?;
             conductor_state
                 .0
                 .lock()
@@ -1348,15 +1358,6 @@ fn read_conductor_with_hooks(
                 .mark_initialized(source.clone());
             Some(recovery_view(&report))
         } else {
-            if !initialized {
-                conductor_state
-                    .0
-                    .lock()
-                    .map_err(|_| {
-                        SessionErrorPayload::report_pipeline("conductor state is unavailable")
-                    })?
-                    .mark_initialized(source.clone());
-            }
             None
         };
         let now = hooks.now();
@@ -1380,7 +1381,7 @@ fn read_conductor_with_hooks(
                     bundle.session_state.revision,
                     action_token.clone(),
                 )?;
-                build_view_v3(bundle_name, &bundle, now, action_token)
+                build_view_v3(bundle_name, &bundle, now, action_token, recovery)
             }
             actual => {
                 return Err(SessionErrorPayload::new(
@@ -1545,7 +1546,7 @@ fn mutate_conductor_v3(
         bundle.session_state.revision,
         action_token.clone(),
     )?;
-    let view = build_view_v3(bundle_name, &bundle, now, action_token);
+    let view = build_view_v3(bundle_name, &bundle, now, action_token, None);
     check_ipc_payload(&view, CONDUCTOR_VIEW_IPC_BYTES, "conductor_view")?;
     Ok(view)
 }
@@ -1594,7 +1595,7 @@ mod tests {
     };
 
     use antennabench_core::{
-        reduce_operator_events_v2, AdapterInput, Band, CorrectableOperatorEventPayloadV2,
+        reduce_operator_events_v3, AdapterInput, Band, CorrectableOperatorEventPayloadV3,
         PlannedSlot, SessionLifecycleV2, SignalModeV3, V2_BUNDLE_SUFFIX,
     };
     use antennabench_storage::{
@@ -2121,7 +2122,7 @@ mod tests {
         assert_eq!(created.slot_ids.len(), 4);
         assert_eq!(created.antenna_labels, ["Vertical", "Dipole"]);
         let store = BundleStore::new(&created.path);
-        let initial = store.read_v2_checkpointed().unwrap();
+        let initial = store.read_v3_checkpointed().unwrap();
         assert_eq!(initial.manifest.session_id, created.session_id);
         assert_eq!(initial.session_state.revision, 0);
         assert_eq!(initial.session_state.lifecycle, SessionLifecycleV2::Ready);
@@ -2144,7 +2145,7 @@ mod tests {
             mutate_conductor_with_hooks(&active, &conductor, start_request, hooks.clone()).unwrap();
         assert_eq!(started.revision, 1);
         assert_eq!(retried.revision, 1);
-        assert_eq!(store.read_v2_checkpointed().unwrap().events.len(), 1);
+        assert_eq!(store.read_v3_checkpointed().unwrap().events.len(), 1);
 
         let confirmed = mutate_conductor_with_hooks(
             &active,
@@ -2276,11 +2277,11 @@ mod tests {
         .unwrap_err();
         assert_eq!(crash.kind, SessionErrorKind::Filesystem);
         assert_eq!(
-            store.read_v2_checkpointed().unwrap().session_state.revision,
+            store.read_v3_checkpointed().unwrap().session_state.revision,
             intake.revision
         );
 
-        let crash_recovery = store.recover_v2_with_hooks(hooks.clone()).unwrap();
+        let crash_recovery = store.recover_v3_with_hooks(hooks.clone()).unwrap();
         assert_eq!(crash_recovery.disposition, RecoveryDispositionV2::Clean);
         assert_eq!(crash_recovery.starting_revision, intake.revision);
         assert_eq!(crash_recovery.recovered_revision, intake.revision);
@@ -2328,7 +2329,7 @@ mod tests {
         .unwrap();
         assert_eq!(ended.lifecycle, SessionLifecycleV2::Ended);
 
-        let final_bundle = store.read_v2_checkpointed().unwrap();
+        let final_bundle = store.read_v3_checkpointed().unwrap();
         assert_eq!(
             final_bundle.session_state.lifecycle,
             SessionLifecycleV2::Ended
@@ -2349,16 +2350,16 @@ mod tests {
         assert!(!final_bundle.events.iter().any(|event| {
             matches!(
                 &event.payload,
-                antennabench_core::OperatorEventPayloadV2::NoteAdded { note }
+                antennabench_core::OperatorEventPayloadV3::NoteAdded { note }
                     if note.contains("torn crash mutation")
             )
         }));
-        let reduction = reduce_operator_events_v2(SessionLifecycleV2::Ready, &final_bundle.events);
+        let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &final_bundle.events);
         assert_eq!(reduction.lifecycle, SessionLifecycleV2::Ended);
         assert!(reduction.diagnostics.is_empty());
         assert!(reduction.effective_events.iter().any(|event| {
             event.payload
-                == CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
+                == CorrectableOperatorEventPayloadV3::AntennaStateConfirmed {
                     antenna_label: created.antenna_labels[0].clone(),
                     note: Some("corrected after inspecting the switch".into()),
                 }
@@ -2381,7 +2382,7 @@ mod tests {
             .contains("Lifecycle and interruption history"));
 
         let exported_store = BundleStore::new(&exported.bundle_path);
-        let reopened_bundle = exported_store.read_v2_checkpointed().unwrap();
+        let reopened_bundle = exported_store.read_v3_checkpointed().unwrap();
         assert_eq!(reopened_bundle, final_bundle);
         let final_active = ActiveSessionState::default();
         activate_created_bundle(&final_active, exported.bundle_path.clone()).unwrap();

@@ -47,18 +47,11 @@ rewriting earlier evidence.
 
 ## Versions
 
-Current AntennaBench sessions use one of two closely related formats:
-
-- Schema v2 is used for WSPR and general antenna sessions.
-- Schema v3 adds controlled CW and RTTY signal plans and their confirmed
-  settings.
-
-Older `.session.wsprabundle` sessions use schema v1. AntennaBench can open and
-copy them without changing the source. Features that need durable live updates
-require an explicit upgrade to a new `.session.antennabundle` directory.
-
-An upgrade never overwrites the original bundle, and there is no automatic
-downgrade.
+New AntennaBench sessions use schema v3. Signal plans are optional within that
+format, so routine WSPR sessions and controlled CW/RTTY sessions share the same
+durable envelope. The storage boundary dispatches explicitly by schema version
+so compatibility readers can be retained once released user formats exist;
+pre-release v1/v2 fixtures are not a compatibility promise.
 
 ## Working With Bundles Safely
 

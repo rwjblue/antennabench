@@ -123,7 +123,7 @@ the UI could not outrun the durable, validation, and resource boundaries:
    lifecycle, correction, explicit-actual-state, conflict-exclusion, durable
    append, plan-generation, locking, snapshot, export, and recovery layers are
    implemented.
-3. Validated setup creates and opens a new checkpointed schema-v2 bundle from
+3. Validated setup creates and opens a new checkpointed schema-v3 bundle from
    an exact normalized review (#61). The manual/no-rig conductor runs it without
    depending on any optional adapter, with current/next slot guidance, explicit
    actual-antenna confirmation, missed/bad/note facts, append-only correction,
@@ -172,7 +172,8 @@ network acquisition. The boundary and RBN collection constraints are selected by
 [Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md)
 and tracked in
 [#86](https://github.com/rwjblue/antennabench/issues/86). Existing WSPR sessions
-and the WSJT-X execution path remain unchanged.
+and the WSJT-X execution path use the same v3 envelope without requiring a
+controlled signal plan.
 
 The active-run surface reads one verified checkpoint revision and derives its
 phase/countdown from a Rust-owned clock plus the durable schedule. A Rust-issued

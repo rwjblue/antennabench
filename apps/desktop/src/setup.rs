@@ -41,49 +41,15 @@ pub(crate) struct SetupSessionState(Mutex<Option<PendingSetup>>);
 #[derive(Clone)]
 struct PendingSetup {
     review_id: String,
-    bundle: PendingBundle,
+    bundle: BundleV3Contents,
 }
 
-#[derive(Clone)]
-enum PendingBundle {
-    V2(BundleV2Contents),
-    V3(BundleV3Contents),
-}
-
-impl PendingBundle {
-    fn callsign(&self) -> &str {
-        match self {
-            Self::V2(bundle) => &bundle.station.callsign,
-            Self::V3(bundle) => &bundle.station.callsign,
-        }
-    }
-
-    fn created_at(&self) -> DateTime<Utc> {
-        match self {
-            Self::V2(bundle) => bundle.manifest.created_at,
-            Self::V3(bundle) => bundle.manifest.created_at,
-        }
-    }
-
-    fn station_preferences(&self) -> StationPreferences {
-        let station = match self {
-            Self::V2(bundle) => &bundle.station,
-            Self::V3(bundle) => &bundle.station,
-        };
-        StationPreferences {
-            callsign: station.callsign.clone(),
-            grid: station.grid.clone(),
-            power_watts: station.power_watts.map(|value| value.to_string()),
-            operator_notes: station.operator_notes.clone(),
-        }
-    }
-
-    #[cfg(test)]
-    fn wspr_live_acquisition_enabled(&self) -> bool {
-        match self {
-            Self::V2(bundle) => bundle.session_state.wspr_live_acquisition_enabled,
-            Self::V3(bundle) => bundle.session_state.wspr_live_acquisition_enabled,
-        }
+fn station_preferences(bundle: &BundleV3Contents) -> StationPreferences {
+    StationPreferences {
+        callsign: bundle.station.callsign.clone(),
+        grid: bundle.station.grid.clone(),
+        power_watts: bundle.station.power_watts.map(|value| value.to_string()),
+        operator_notes: bundle.station.operator_notes.clone(),
     }
 }
 
@@ -726,8 +692,8 @@ fn build_review(
         )
     })?;
 
-    if let Some(signal_plan) = signal_plan {
-        let mut bundle = build_v3_setup_bundle(
+    let mut bundle = if let Some(signal_plan) = signal_plan {
+        build_v3_setup_bundle(
             bundle,
             signal_plan,
             &scheduled_label_values,
@@ -737,73 +703,43 @@ fn build_review(
             rounds,
             draft.schedule.band,
             hooks,
-        )?;
-        BundleStore::refresh_v3_checkpoint(&mut bundle).map_err(|error| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Validation,
-                "The normalized schema-v3 setup plan could not be prepared.",
-                error.to_string(),
-            )
-        })?;
-        let report = validate_bundle_report(&bundle.clone().into_current().bundle);
-        let mut core_diagnostics = report
-            .diagnostics()
-            .iter()
-            .map(setup_diagnostic_from_core)
-            .collect::<Vec<_>>();
-        core_diagnostics.extend(
-            validate_signal_plan_schedule_v3(&bundle.station.callsign, &bundle.schedule)
-                .into_iter()
-                .map(|diagnostic| SetupDiagnostic {
-                    code: diagnostic.code.into(),
-                    field: if diagnostic.path.starts_with("/signal_plans") {
-                        "signalPlan".into()
-                    } else {
-                        "schedule".into()
-                    },
-                    message: diagnostic.message,
-                    severity: "error",
-                }),
-        );
-        if !report.allows(BundleValidationProfile::StrictCreation)
-            || core_diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.severity == "error")
-        {
-            *state.0.lock().map_err(|_| {
-                SessionErrorPayload::report_pipeline("setup review state is unavailable")
-            })? = None;
-            return Ok(SetupReview {
-                review_id: None,
-                valid: false,
-                diagnostics: core_diagnostics,
-                plan: None,
-            });
-        }
-        let plan = setup_plan_review_v3(&bundle);
-        *state.0.lock().map_err(|_| {
-            SessionErrorPayload::report_pipeline("setup review state is unavailable")
-        })? = Some(PendingSetup {
-            review_id: review_id.clone(),
-            bundle: PendingBundle::V3(bundle),
-        });
-        let review = SetupReview {
-            review_id: Some(review_id),
-            valid: true,
-            diagnostics: core_diagnostics,
-            plan: Some(plan),
-        };
-        check_review_ipc(&review)?;
-        return Ok(review);
-    }
+        )?
+    } else {
+        upgrade_v2_bundle_model(bundle)
+    };
+    BundleStore::refresh_v3_checkpoint(&mut bundle).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "The normalized schema-v3 setup plan could not be prepared.",
+            error.to_string(),
+        )
+    })?;
 
     let report = validate_bundle_report(&bundle.clone().into_current().bundle);
-    let core_diagnostics = report
+    let mut core_diagnostics = report
         .diagnostics()
         .iter()
         .map(setup_diagnostic_from_core)
         .collect::<Vec<_>>();
-    if !report.allows(BundleValidationProfile::StrictCreation) {
+    core_diagnostics.extend(
+        validate_signal_plan_schedule_v3(&bundle.station.callsign, &bundle.schedule)
+            .into_iter()
+            .map(|diagnostic| SetupDiagnostic {
+                code: diagnostic.code.into(),
+                field: if diagnostic.path.starts_with("/signal_plans") {
+                    "signalPlan".into()
+                } else {
+                    "schedule".into()
+                },
+                message: diagnostic.message,
+                severity: "error",
+            }),
+    );
+    if !report.allows(BundleValidationProfile::StrictCreation)
+        || core_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == "error")
+    {
         *state.0.lock().map_err(|_| {
             SessionErrorPayload::report_pipeline("setup review state is unavailable")
         })? = None;
@@ -815,14 +751,14 @@ fn build_review(
         });
     }
 
-    let plan = setup_plan_review(&bundle);
+    let plan = setup_plan_review_v3(&bundle);
     *state
         .0
         .lock()
         .map_err(|_| SessionErrorPayload::report_pipeline("setup review state is unavailable"))? =
         Some(PendingSetup {
             review_id: review_id.clone(),
-            bundle: PendingBundle::V2(bundle),
+            bundle,
         });
     let review = SetupReview {
         review_id: Some(review_id),
@@ -1004,51 +940,8 @@ fn build_v3_setup_bundle(
     Ok(bundle)
 }
 
-fn setup_plan_review(bundle: &BundleV2Contents) -> SetupPlanReview {
-    SetupPlanReview {
-        schema_version: SCHEMA_VERSION_V2,
-        session_id: bundle.manifest.session_id.clone(),
-        created_at: bundle.manifest.created_at,
-        station: SetupStationReview {
-            callsign: bundle.station.callsign.clone(),
-            grid: bundle.station.grid.clone(),
-            power_watts: bundle.station.power_watts,
-            operator_notes: bundle.station.operator_notes.clone(),
-        },
-        antennas: bundle
-            .antennas
-            .antennas
-            .iter()
-            .map(|antenna| SetupAntennaReview {
-                label: antenna.label.clone(),
-                context: antenna_context(antenna),
-            })
-            .collect(),
-        mode: bundle.schedule.mode,
-        goal: bundle.schedule.goal,
-        wspr_live_acquisition_enabled: bundle.session_state.wspr_live_acquisition_enabled,
-        signal_plan: None,
-        slots: bundle
-            .schedule
-            .slots
-            .iter()
-            .map(|slot| SetupSlotReview {
-                slot_id: slot.slot_id.clone(),
-                sequence_number: slot.sequence_number,
-                starts_at: slot.starts_at,
-                ends_at: slot.starts_at + Duration::seconds(i64::from(slot.duration_seconds)),
-                duration_seconds: slot.duration_seconds,
-                guard_seconds: slot.guard_seconds,
-                band: slot.band,
-                antenna_label: slot.antenna_label.clone(),
-                signal: None,
-            })
-            .collect(),
-    }
-}
-
 fn setup_plan_review_v3(bundle: &BundleV3Contents) -> SetupPlanReview {
-    let plan = &bundle.schedule.signal_plans[0];
+    let signal_plan = bundle.schedule.signal_plans.first();
     SetupPlanReview {
         schema_version: SCHEMA_VERSION_V3,
         session_id: bundle.manifest.session_id.clone(),
@@ -1070,8 +963,8 @@ fn setup_plan_review_v3(bundle: &BundleV3Contents) -> SetupPlanReview {
             .collect(),
         mode: bundle.schedule.mode,
         goal: bundle.schedule.goal,
-        wspr_live_acquisition_enabled: false,
-        signal_plan: Some(SetupSignalPlanReview {
+        wspr_live_acquisition_enabled: bundle.session_state.wspr_live_acquisition_enabled,
+        signal_plan: signal_plan.map(|plan| SetupSignalPlanReview {
             mode: plan.mode,
             collection_profile: plan.collection_profile,
             planned_power_watts: plan.planned_power_watts,
@@ -1152,9 +1045,10 @@ fn check_review_ipc(review: &SetupReview) -> Result<(), SessionErrorPayload> {
     }
 }
 
-fn safe_callsign(bundle: &PendingBundle) -> String {
+fn safe_callsign(bundle: &BundleV3Contents) -> String {
     let callsign = bundle
-        .callsign()
+        .station
+        .callsign
         .chars()
         .map(|character| {
             if character.is_ascii_alphanumeric() {
@@ -1169,7 +1063,7 @@ fn safe_callsign(bundle: &PendingBundle) -> String {
 
 fn automatic_session_destination(
     app_data_dir: &Path,
-    bundle: &PendingBundle,
+    bundle: &BundleV3Contents,
 ) -> Result<PathBuf, SessionErrorPayload> {
     let sessions_dir = app_data_dir.join("sessions");
     fs::create_dir_all(&sessions_dir).map_err(|error| {
@@ -1179,7 +1073,7 @@ fn automatic_session_destination(
             format!("{}: {error}", sessions_dir.display()),
         )
     })?;
-    let timestamp = bundle.created_at().format("%Y%m%dT%H%M%SZ");
+    let timestamp = bundle.manifest.created_at.format("%Y%m%dT%H%M%SZ");
     let base = format!("{}-{timestamp}", safe_callsign(bundle));
     for attempt in 1..=10_000 {
         let suffix = if attempt == 1 {
@@ -1273,7 +1167,7 @@ fn reviewed_station_preferences(
         .map_err(|_| SessionErrorPayload::report_pipeline("setup review state is unavailable"))?
         .as_ref()
         .filter(|pending| pending.review_id == review_id)
-        .map(|pending| pending.bundle.station_preferences())
+        .map(|pending| station_preferences(&pending.bundle))
         .ok_or_else(|| {
             SessionErrorPayload::new(
                 SessionErrorKind::Validation,
@@ -1337,7 +1231,7 @@ fn create_with_selection(
     setup_state: &SetupSessionState,
     active_state: &ActiveSessionState,
     review_id: &str,
-    select: impl FnOnce(&PendingBundle) -> Result<Option<PathBuf>, SessionErrorPayload>,
+    select: impl FnOnce(&BundleV3Contents) -> Result<Option<PathBuf>, SessionErrorPayload>,
 ) -> Result<CreateSessionOutcome, SessionErrorPayload> {
     with_foreground_operation(active_state, || {
         let pending = setup_state
@@ -1358,11 +1252,9 @@ fn create_with_selection(
         };
         validate_destination(&destination)?;
         let store = BundleStore::new(&destination);
-        match &pending.bundle {
-            PendingBundle::V2(bundle) => store.create_v2_checkpointed(bundle),
-            PendingBundle::V3(bundle) => store.create_v3_checkpointed(bundle),
-        }
-        .map_err(creation_error)?;
+        store
+            .create_v3_checkpointed(&pending.bundle)
+            .map_err(creation_error)?;
         let session = activate_created_bundle(active_state, destination)?;
         let mut reviewed = setup_state.0.lock().map_err(|_| {
             SessionErrorPayload::report_pipeline("setup review state is unavailable")
@@ -1639,6 +1531,7 @@ mod tests {
         assert_eq!(review.review_id.as_deref(), Some("review-0003"));
         let plan = review.plan.unwrap();
         assert_eq!(plan.session_id, "session-0001");
+        assert_eq!(plan.schema_version, SCHEMA_VERSION_V3);
         assert_eq!(plan.station.callsign, "N1RWJ");
         assert_eq!(plan.station.grid, "FN42");
         assert!(!plan.wspr_live_acquisition_enabled);
@@ -1712,14 +1605,17 @@ mod tests {
 
         assert!(review.valid);
         assert!(review.plan.unwrap().wspr_live_acquisition_enabled);
-        assert!(state
-            .0
-            .lock()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .bundle
-            .wspr_live_acquisition_enabled());
+        assert!(
+            state
+                .0
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .bundle
+                .session_state
+                .wspr_live_acquisition_enabled
+        );
     }
 
     #[test]
@@ -1776,7 +1672,7 @@ mod tests {
         assert_eq!(session.slot_count, 4);
         assert!(setup_state.0.lock().unwrap().is_none());
         let persisted = BundleStore::new(destination)
-            .read_v2_checkpointed()
+            .read_v3_checkpointed()
             .unwrap();
         assert_eq!(persisted.manifest.session_id, session.session_id);
         assert_eq!(persisted.session_state.lifecycle, SessionLifecycleV2::Ready);

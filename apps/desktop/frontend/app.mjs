@@ -762,7 +762,7 @@ function mount(root, browserWindow) {
       const signalSummary = plan.signalPlan
         ? `${humanizeIdentifier(plan.signalPlan.mode)} · ${humanizeIdentifier(plan.signalPlan.collectionProfile)} · ${plan.signalPlan.frequenciesHz.length} frequencies`
         : `WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
-      setupReviewShape.textContent = `Schema v${plan.schemaVersion} · ${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} slots · ${signalSummary}`;
+      setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${plan.slots.length} slots · ${signalSummary}`;
       setupReviewSlots.replaceChildren(
         ...plan.slots.map((slot) => {
           const row = root.createElement("tr");
@@ -913,7 +913,7 @@ function mount(root, browserWindow) {
     importRbnButton.textContent = state.session === null
       ? "Open a session first"
       : state.session.schemaVersion !== 3
-        ? "Schema v3 required"
+        ? "This older session cannot import RBN evidence"
         : !rbnEligible
           ? "Start the session first"
           : importLoading

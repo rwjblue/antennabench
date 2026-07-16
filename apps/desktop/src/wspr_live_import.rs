@@ -1,10 +1,12 @@
 use std::{fs, path::Path};
 
-use antennabench_core::SessionLifecycleV2;
-use antennabench_storage::{BundleStore, LiveMutationMemberV2, LiveMutationV2};
+use antennabench_core::{SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3};
+use antennabench_storage::{
+    BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
+};
 use antennabench_wsjtx::{
     derive_wspr_live_query_scope, parse_wspr_live_json, prepare_wspr_live_acquisition,
-    AdapterCancellationToken, WsprLiveAcquisitionChannel, WsprLiveImportConfig,
+    AdapterCancellationToken, ParsedWsprLiveJson, WsprLiveAcquisitionChannel, WsprLiveImportConfig,
     WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
 };
 use chrono::Utc;
@@ -163,6 +165,46 @@ pub(crate) fn commit_wspr_live_response(
             )
         })?;
     let store = BundleStore::new(bundle_path);
+    match store
+        .schema_version()
+        .map_err(LivePersistenceError::from)
+        .map_err(crate::conductor::live_error_payload)?
+    {
+        SCHEMA_VERSION_V2 => commit_v2_wspr_live_response(
+            state,
+            bundle_path,
+            bytes,
+            &config,
+            channel,
+            &parsed,
+            &store,
+        ),
+        SCHEMA_VERSION_V3 => commit_v3_wspr_live_response(
+            state,
+            bundle_path,
+            bytes,
+            &config,
+            channel,
+            &parsed,
+            &store,
+        ),
+        actual => Err(SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "This session format cannot import WSPR.live evidence.",
+            format!("unsupported schema version {actual}"),
+        )),
+    }
+}
+
+fn commit_v2_wspr_live_response(
+    state: &ActiveSessionState,
+    bundle_path: &Path,
+    bytes: &[u8],
+    config: &WsprLiveImportConfig,
+    channel: WsprLiveAcquisitionChannel,
+    parsed: &ParsedWsprLiveJson,
+    store: &BundleStore,
+) -> Result<CommittedWsprLiveResponse, SessionErrorPayload> {
     let mut writer = store
         .open_v2_writer()
         .map_err(crate::conductor::live_error_payload)?;
@@ -187,8 +229,8 @@ pub(crate) fn commit_wspr_live_response(
             source_locator,
             |attachment| {
                 let prepared = prepare_wspr_live_acquisition(
-                    &parsed,
-                    &config,
+                    parsed,
+                    config,
                     &current.manifest.session_id,
                     &import_id,
                     attachment,
@@ -211,6 +253,65 @@ pub(crate) fn commit_wspr_live_response(
                     expected_revision,
                     mutation_id: prepared.mutation_id,
                     members,
+                }
+            },
+        )
+        .map_err(crate::conductor::live_error_payload)?;
+    drop(writer);
+    Ok(CommittedWsprLiveResponse {
+        session: reload_active_session(state, bundle_path)?,
+        revision: receipt.revision,
+        summary: summary.expect("attachment mutation builder runs before append"),
+    })
+}
+
+fn commit_v3_wspr_live_response(
+    state: &ActiveSessionState,
+    bundle_path: &Path,
+    bytes: &[u8],
+    config: &WsprLiveImportConfig,
+    channel: WsprLiveAcquisitionChannel,
+    parsed: &ParsedWsprLiveJson,
+    store: &BundleStore,
+) -> Result<CommittedWsprLiveResponse, SessionErrorPayload> {
+    let mut writer = store
+        .open_v3_writer()
+        .map_err(crate::conductor::live_error_payload)?;
+    let current = writer.snapshot().clone();
+    if current.session_state.lifecycle != SessionLifecycleV2::Running {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The session stopped before the WSPR.live response could commit.",
+            "no attachment, adapter, or observation records were appended",
+        ));
+    }
+    let import_id = writer.allocate_id("import");
+    let expected_revision = writer.checkpoint().revision;
+    let source_locator = config.source_locator.clone();
+    let mut summary = None::<WsprLiveImportSummary>;
+    let (_, receipt) = writer
+        .append_evidence_with_attachment(
+            bytes,
+            "application/json",
+            None,
+            Some("clickhouse-format-json".into()),
+            source_locator,
+            |attachment| {
+                let prepared = prepare_wspr_live_acquisition(
+                    parsed,
+                    config,
+                    &current.manifest.session_id,
+                    &import_id,
+                    attachment,
+                    &current.adapter_records,
+                    channel,
+                );
+                summary = Some(prepared.summary);
+                LiveEvidenceMutationV3 {
+                    expected_revision,
+                    mutation_id: prepared.mutation_id,
+                    adapter_records: prepared.adapter_records,
+                    observations: prepared.observations,
                 }
             },
         )
