@@ -331,9 +331,13 @@ state.
 
 The allowlisted `review_session_setup` command maps disposable station,
 antenna, and schedule input to stable field diagnostics and an exact normalized
-plan. `create_session_from_review` owns the native save dialog and checkpointed
-new-bundle publication, then makes the reopened bundle active. The webview sees
-only a review identity and the active-session summary.
+plan. `load_station_preferences` returns only the small reusable station form
+projection stored outside session evidence. `create_session_from_review`
+allocates a collision-safe callsign/time bundle name under the resolved platform
+application-data directory, performs checkpointed new-bundle publication,
+updates those preferences after successful creation, and makes the reopened
+bundle active. The webview sees no path, only a review identity, preferences,
+and the active-session summary.
 
 The allowlisted `active_session_conductor` and
 `mutate_active_session_conductor` commands expose the manual conductor. The
@@ -371,14 +375,15 @@ state; schema-v1 export preserves its static source bytes. Existing
 destinations, symbolic links, and unsupported filesystem entries are rejected;
 an incomplete new destination is rolled back safely after copy or verification
 failure. The frontend receives no paths and has no general filesystem or dialog
-command permission. The dialog plugin is registered for native Rust use, but
-its frontend permissions are not granted. Backend state retains at most one
+command permission. The dialog plugin is registered for native Rust
+open/export/import use, but its frontend permissions are not granted. Backend
+state retains at most one
 exact reviewed setup candidate plus the selected source reference and derived
 active-session presentation. Editing or re-reviewing replaces the candidate;
 successful creation consumes it. Opening and exporting do not write to the
 source bundle.
 
-Native open/save pickers are thin path-selection adapters around private Rust
+Native open/export pickers are thin path-selection adapters around private Rust
 orchestration functions. The unattended desktop integration test substitutes
 only that selection result and deterministic setup/conductor hooks, then
 exercises the same review, checkpointed creation, manual lifecycle/evidence,

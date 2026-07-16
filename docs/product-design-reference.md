@@ -145,14 +145,19 @@ the UI could not outrun the durable, validation, and resource boundaries:
    recovery, completion, reporting, export, and reopen (#65).
 
 Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
-antenna definitions, and schedule timing. Rust trims and types the values,
+antenna definitions, and schedule timing. The routine form keeps station
+identity plus antenna labels/descriptions visible and places optional metadata
+behind disclosure. Rust trims and types values, uppercases callsigns,
 constructs stable schedule slots, applies strict-creation diagnostics, and
 returns the exact normalized review without touching a destination. Creation
-accepts only that review identity, owns the native destination picker, writes
-and verifies in a sibling staging directory, probes the live filesystem
-capability, and publishes the complete bundle before opening it as the active
-session. Cancellation, stale review, validation failure, and existing
-destinations do not replace active state or expose a partial destination.
+accepts only that review identity, allocates a collision-safe callsign/time name
+under the platform application-data directory, writes and verifies in a sibling
+staging directory, probes the live filesystem capability, and publishes the
+complete bundle before opening it as the active session. The last station
+details are stored separately as reusable preferences; they are not session
+evidence. Stale review, validation failure, and destination collision do not
+replace active state or expose a partial destination. Portable placement remains
+an explicit lossless export.
 
 Controlled non-WSPR transmit comparisons use the schema-v3 foundation of
 reusable typed signal plans with explicit per-slot frequency variants and

@@ -12,7 +12,9 @@ use open_session::{
     open_session_bundle, refresh_active_session_report, ActiveSessionState,
 };
 use rbn_import::import_active_session_rbn;
-use setup::{create_session_from_review, review_session_setup, SetupSessionState};
+use setup::{
+    create_session_from_review, load_station_preferences, review_session_setup, SetupSessionState,
+};
 use wsjtx_session::{
     active_session_wsjtx_status, start_active_session_wsjtx, stop_active_session_wsjtx,
     WsjtxSessionState,
@@ -31,6 +33,7 @@ pub fn run() {
         .manage(WsprLiveAcquisitionState::default())
         .invoke_handler(tauri::generate_handler![
             review_session_setup,
+            load_station_preferences,
             create_session_from_review,
             open_session_bundle,
             export_active_session,

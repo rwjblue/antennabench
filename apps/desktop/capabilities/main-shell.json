@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "allow-review-session-setup",
+    "allow-load-station-preferences",
     "allow-create-session-from-review",
     "allow-open-session-bundle",
     "allow-export-active-session",

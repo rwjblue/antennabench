@@ -430,6 +430,10 @@ export function invokeReviewSessionSetup(invoke, draft) {
   return invoke("review_session_setup", { draft });
 }
 
+export function invokeLoadStationPreferences(invoke) {
+  return invoke("load_station_preferences");
+}
+
 export function invokeCreateSessionFromReview(invoke, reviewId) {
   return invoke("create_session_from_review", { reviewId });
 }
@@ -670,7 +674,7 @@ function mount(root, browserWindow) {
     setupCreateButton.disabled = state.setupStatus !== "reviewed";
     setupCreateButton.textContent = state.setupStatus === "creating"
       ? "Creating…"
-      : "Choose destination and create";
+      : "Create session";
     setupStatus.textContent = setupStatusText(state);
     setupStatus.classList.toggle(
       "muted",
@@ -1373,6 +1377,12 @@ function mount(root, browserWindow) {
 
   syncSignalPlanFields(setupForm);
   render();
+  const invoke = browserWindow.__TAURI__?.core?.invoke;
+  if (typeof invoke === "function") {
+    void invokeLoadStationPreferences(invoke)
+      .then((preferences) => applyStationPreferences(setupForm, preferences))
+      .catch(() => {});
+  }
   browserWindow.setInterval?.(() => {
     if (
       state.activeWorkflow === "run" &&
@@ -1714,7 +1724,7 @@ function setupFeedbackModel(state) {
     return {
       kind: "ready",
       message: "The normalized plan passed strict creation validation.",
-      detail: "Review the exact UTC-backed schedule, then choose a destination.",
+      detail: "Review the exact UTC-backed schedule, then create the session.",
     };
   }
   return null;
@@ -1783,6 +1793,25 @@ export function readSetupDraft(form) {
       frequenciesHz: value("signalFrequenciesHz"),
     } : null,
   };
+}
+
+export function applyStationPreferences(form, preferences) {
+  if (!preferences) return false;
+  const fields = {
+    callsign: preferences.callsign ?? "",
+    grid: preferences.grid ?? "",
+    powerWatts: preferences.powerWatts ?? "",
+    operatorNotes: preferences.operatorNotes ?? "",
+  };
+  const controls = Object.keys(fields).map((field) =>
+    form.querySelector(`[data-setup-field="${field}"]`)
+  );
+  if (controls.some((control) => control.value.trim().length > 0)) return false;
+  controls.forEach((control, index) => {
+    const field = Object.keys(fields)[index];
+    control.value = field === "callsign" ? fields[field].toUpperCase() : fields[field];
+  });
+  return true;
 }
 
 function syncSignalPlanFields(form) {

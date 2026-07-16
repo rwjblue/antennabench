@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   WORKFLOWS,
+  applyStationPreferences,
   beginConductorLoad,
   beginConductorMutation,
   beginExportSession,
@@ -30,6 +31,7 @@ import {
   invokeExportActiveSessionReport,
   invokeImportActiveSessionWsprLive,
   invokeImportActiveSessionRbn,
+  invokeLoadStationPreferences,
   invokeOpenSession,
   invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
@@ -171,6 +173,37 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.equal(readSetupDraft(form).station.callsign, "N1RWJ");
   publicSpots.checked = false;
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
+});
+
+test("saved station details fill only an untouched setup form", () => {
+  const controls = new Map([
+    ["callsign", { value: "" }],
+    ["grid", { value: "" }],
+    ["powerWatts", { value: "" }],
+    ["operatorNotes", { value: "" }],
+  ]);
+  const form = {
+    querySelector(selector) {
+      return controls.get(selector.match(/data-setup-field="([^"]+)"/)[1]);
+    },
+  };
+
+  assert.equal(applyStationPreferences(form, {
+    callsign: "n1rwj",
+    grid: "FN42",
+    powerWatts: "5",
+    operatorNotes: "backyard",
+  }), true);
+  assert.deepEqual([...controls.values()].map(({ value }) => value), [
+    "N1RWJ", "FN42", "5", "backyard",
+  ]);
+
+  controls.get("grid").value = "EM10";
+  assert.equal(applyStationPreferences(form, {
+    callsign: "K1ABC",
+    grid: "FN31",
+  }), false);
+  assert.equal(controls.get("grid").value, "EM10");
 });
 
 test("setup serializes an explicit typed signal plan without WSPR.live", () => {
@@ -418,10 +451,12 @@ test("setup bridge exposes only review and reviewed-creation commands", async ()
   const draft = { station: {}, antennas: [], schedule: {} };
 
   const review = await invokeReviewSessionSetup(invoke, draft);
+  await invokeLoadStationPreferences(invoke);
   const created = await invokeCreateSessionFromReview(invoke, review.reviewId);
 
   assert.deepEqual(calls, [
     ["review_session_setup", { draft }],
+    ["load_station_preferences"],
     ["create_session_from_review", { reviewId: "review-1" }],
   ]);
   assert.equal(created.status, "created");

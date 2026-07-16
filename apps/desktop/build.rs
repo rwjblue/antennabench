@@ -1,6 +1,7 @@
 fn main() {
     let app_manifest = tauri_build::AppManifest::new().commands(&[
         "review_session_setup",
+        "load_station_preferences",
         "create_session_from_review",
         "open_session_bundle",
         "export_active_session",
@@ -14,6 +15,7 @@ fn main() {
         "stop_active_session_wsjtx",
         "advance_active_session_wspr_live",
         "import_active_session_wspr_live",
+        "import_active_session_rbn",
     ]);
 
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))

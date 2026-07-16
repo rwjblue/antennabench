@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fs,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -20,8 +21,7 @@ use antennabench_storage::{
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
+use tauri::{AppHandle, Manager, State};
 
 use crate::open_session::{
     activate_created_bundle, with_foreground_operation, ActiveSessionState, OpenedSession,
@@ -58,6 +58,26 @@ impl PendingBundle {
         }
     }
 
+    fn created_at(&self) -> DateTime<Utc> {
+        match self {
+            Self::V2(bundle) => bundle.manifest.created_at,
+            Self::V3(bundle) => bundle.manifest.created_at,
+        }
+    }
+
+    fn station_preferences(&self) -> StationPreferences {
+        let station = match self {
+            Self::V2(bundle) => &bundle.station,
+            Self::V3(bundle) => &bundle.station,
+        };
+        StationPreferences {
+            callsign: station.callsign.clone(),
+            grid: station.grid.clone(),
+            power_watts: station.power_watts.map(|value| value.to_string()),
+            operator_notes: station.operator_notes.clone(),
+        }
+    }
+
     #[cfg(test)]
     fn wspr_live_acquisition_enabled(&self) -> bool {
         match self {
@@ -65,6 +85,15 @@ impl PendingBundle {
             Self::V3(bundle) => bundle.session_state.wspr_live_acquisition_enabled,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StationPreferences {
+    callsign: String,
+    grid: String,
+    power_watts: Option<String>,
+    operator_notes: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1123,7 +1152,7 @@ fn check_review_ipc(review: &SetupReview) -> Result<(), SessionErrorPayload> {
     }
 }
 
-fn suggested_bundle_name(bundle: &PendingBundle) -> String {
+fn safe_callsign(bundle: &PendingBundle) -> String {
     let callsign = bundle
         .callsign()
         .chars()
@@ -1135,7 +1164,123 @@ fn suggested_bundle_name(bundle: &PendingBundle) -> String {
             }
         })
         .collect::<String>();
-    format!("{callsign}-session{V2_BUNDLE_SUFFIX}")
+    callsign.trim_matches('-').to_string()
+}
+
+fn automatic_session_destination(
+    app_data_dir: &Path,
+    bundle: &PendingBundle,
+) -> Result<PathBuf, SessionErrorPayload> {
+    let sessions_dir = app_data_dir.join("sessions");
+    fs::create_dir_all(&sessions_dir).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "The AntennaBench sessions directory could not be prepared.",
+            format!("{}: {error}", sessions_dir.display()),
+        )
+    })?;
+    let timestamp = bundle.created_at().format("%Y%m%dT%H%M%SZ");
+    let base = format!("{}-{timestamp}", safe_callsign(bundle));
+    for attempt in 1..=10_000 {
+        let suffix = if attempt == 1 {
+            String::new()
+        } else {
+            format!("-{attempt}")
+        };
+        let destination = sessions_dir.join(format!("{base}{suffix}{V2_BUNDLE_SUFFIX}"));
+        if !destination.exists() {
+            return Ok(destination);
+        }
+    }
+    Err(SessionErrorPayload::new(
+        SessionErrorKind::Destination,
+        "A collision-free session name could not be allocated.",
+        sessions_dir.display().to_string(),
+    ))
+}
+
+fn station_preferences_path(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("station-preferences.json")
+}
+
+fn read_station_preferences(
+    app_data_dir: &Path,
+) -> Result<Option<StationPreferences>, SessionErrorPayload> {
+    let path = station_preferences_path(app_data_dir);
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Filesystem,
+                "Saved station details could not be read.",
+                format!("{}: {error}", path.display()),
+            ))
+        }
+    };
+    serde_json::from_slice(&bytes).map(Some).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "Saved station details are not valid.",
+            format!("{}: {error}", path.display()),
+        )
+    })
+}
+
+fn write_station_preferences(
+    app_data_dir: &Path,
+    preferences: &StationPreferences,
+) -> Result<(), SessionErrorPayload> {
+    fs::create_dir_all(app_data_dir).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "Saved station details could not be prepared.",
+            format!("{}: {error}", app_data_dir.display()),
+        )
+    })?;
+    let path = station_preferences_path(app_data_dir);
+    let bytes = serde_json::to_vec_pretty(preferences).map_err(|error| {
+        SessionErrorPayload::report_pipeline(format!(
+            "station preferences serialization failed: {error}"
+        ))
+    })?;
+    fs::write(&path, bytes).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "Saved station details could not be updated.",
+            format!("{}: {error}", path.display()),
+        )
+    })
+}
+
+fn resolved_app_data_dir(app: &AppHandle) -> Result<PathBuf, SessionErrorPayload> {
+    app.path().app_data_dir().map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "The system application-data directory is unavailable.",
+            error.to_string(),
+        )
+    })
+}
+
+fn reviewed_station_preferences(
+    state: &SetupSessionState,
+    review_id: &str,
+) -> Result<StationPreferences, SessionErrorPayload> {
+    state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("setup review state is unavailable"))?
+        .as_ref()
+        .filter(|pending| pending.review_id == review_id)
+        .map(|pending| pending.bundle.station_preferences())
+        .ok_or_else(|| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Validation,
+                "Review the current setup before creating its bundle.",
+                "the supplied setup review is missing or stale",
+            )
+        })
 }
 
 fn validate_destination(path: &Path) -> Result<(), SessionErrorPayload> {
@@ -1241,6 +1386,13 @@ pub(crate) fn review_session_setup(
 }
 
 #[tauri::command]
+pub(crate) fn load_station_preferences(
+    app: AppHandle,
+) -> Result<Option<StationPreferences>, SessionErrorPayload> {
+    read_station_preferences(&resolved_app_data_dir(&app)?)
+}
+
+#[tauri::command]
 pub(crate) async fn create_session_from_review(
     app: AppHandle,
     setup_state: State<'_, SetupSessionState>,
@@ -1248,32 +1400,18 @@ pub(crate) async fn create_session_from_review(
     wsjtx_state: State<'_, WsjtxSessionState>,
     review_id: String,
 ) -> Result<CreateSessionOutcome, SessionErrorPayload> {
+    let app_data_dir = resolved_app_data_dir(&app)?;
+    let station_preferences = reviewed_station_preferences(setup_state.inner(), &review_id)?;
     let outcome = create_with_selection(
         setup_state.inner(),
         active_state.inner(),
         &review_id,
-        |bundle| {
-            let Some(selection) = app
-                .dialog()
-                .file()
-                .set_title("Create an AntennaBench session bundle")
-                .set_file_name(suggested_bundle_name(bundle))
-                .set_can_create_directories(true)
-                .add_filter("AntennaBench session bundle", &["antennabundle"])
-                .blocking_save_file()
-            else {
-                return Ok(None);
-            };
-            selection.into_path().map(Some).map_err(|error| {
-                SessionErrorPayload::new(
-                    SessionErrorKind::Destination,
-                    "The selected destination is not available as a local path.",
-                    error.to_string(),
-                )
-            })
-        },
+        |bundle| automatic_session_destination(&app_data_dir, bundle).map(Some),
     )?;
     if matches!(outcome, CreateSessionOutcome::Created { .. }) {
+        if let Err(error) = write_station_preferences(&app_data_dir, &station_preferences) {
+            eprintln!("AntennaBench could not remember station details: {error:?}");
+        }
         wsjtx_state.stop_all(
             "WSJT-X reception stopped because a different session was created and activated.",
         );
@@ -1682,5 +1820,43 @@ mod tests {
             b"keep"
         );
         assert!(setup_state.0.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn automatic_destinations_use_app_data_callsign_time_and_collision_suffix() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = SetupSessionState::default();
+        build_review(&state, valid_draft(), &FixedHooks::new()).unwrap();
+        let bundle = state.0.lock().unwrap().as_ref().unwrap().bundle.clone();
+
+        let first = automatic_session_destination(temp.path(), &bundle).unwrap();
+        assert_eq!(
+            first.file_name().unwrap().to_string_lossy(),
+            format!("n1rwj-20260715T010000Z{V2_BUNDLE_SUFFIX}")
+        );
+        std::fs::create_dir_all(&first).unwrap();
+        let second = automatic_session_destination(temp.path(), &bundle).unwrap();
+        assert_eq!(
+            second.file_name().unwrap().to_string_lossy(),
+            format!("n1rwj-20260715T010000Z-2{V2_BUNDLE_SUFFIX}")
+        );
+    }
+
+    #[test]
+    fn station_preferences_round_trip_outside_session_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        let preferences = StationPreferences {
+            callsign: "N1RWJ".into(),
+            grid: "FN42".into(),
+            power_watts: Some("5".into()),
+            operator_notes: Some("backyard".into()),
+        };
+
+        assert_eq!(read_station_preferences(temp.path()).unwrap(), None);
+        write_station_preferences(temp.path(), &preferences).unwrap();
+        assert_eq!(
+            read_station_preferences(temp.path()).unwrap(),
+            Some(preferences)
+        );
     }
 }
