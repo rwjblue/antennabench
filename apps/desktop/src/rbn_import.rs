@@ -2,6 +2,7 @@ use std::{fs, io::Cursor, path::Path};
 
 use antennabench_core::{
     Band, BundleV3Contents, SessionLifecycleV2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    SCHEMA_VERSION_V5,
 };
 use antennabench_rbn::{
     parse_rbn_zip, prepare_rbn_import, RbnImportConfig, RbnImportPreparationConfig,
@@ -102,7 +103,10 @@ fn import_file(
     let schema_version = store
         .schema_version()
         .map_err(|error| crate::conductor::live_error_payload(error.into()))?;
-    if !matches!(schema_version, SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4) {
+    if !matches!(
+        schema_version,
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
+    ) {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Unsupported,
             "RBN archive import requires a current signal session.",

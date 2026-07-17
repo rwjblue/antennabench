@@ -5,7 +5,8 @@ use antennabench_analysis::{
     PairedStratumSummary, PathOverlapRow, SnrStatistics, SolarContextAnalysis,
 };
 use antennabench_core::{
-    AlignedSlotStatus, Antenna, Band, ExperimentMode, SessionGoal, SessionLifecycleV2,
+    AlignedSlotStatus, Antenna, AntennaControlDispositionV5, AntennaControlOutputV5,
+    AntennaControlRoleV5, Band, ExperimentMode, SessionGoal, SessionLifecycleV2,
     WsprCycleDirection,
 };
 use chrono::{DateTime, Utc};
@@ -37,6 +38,8 @@ pub struct ReportSnapshotContext {
     pub lifecycle_events: Vec<ReportLifecycleEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub wspr_cycles: Vec<ReportWsprCycle>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub antenna_control_attempts: Vec<ReportAntennaControlAttempt>,
     pub adapter_evidence: ReportAdapterEvidence,
 }
 
@@ -46,6 +49,7 @@ impl ReportSnapshotContext {
             && self.lifecycle.is_none()
             && self.lifecycle_events.is_empty()
             && self.wspr_cycles.is_empty()
+            && self.antenna_control_attempts.is_empty()
             && self.adapter_evidence.record_count == 0
     }
 }
@@ -62,6 +66,34 @@ pub struct ReportWsprCycle {
     pub starts_at: Option<DateTime<Utc>>,
     pub transmission_ends_at: Option<DateTime<Utc>>,
     pub attribution: ReportWsprAttribution,
+    pub readiness_basis: Option<ReportWsprReadinessBasis>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportWsprReadinessBasis {
+    OperatorConfirmed,
+    CommandVerified,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportAntennaControlAttempt {
+    pub record_id: String,
+    pub role: AntennaControlRoleV5,
+    pub controller_profile_name: String,
+    pub controller_profile_revision: String,
+    pub resolved_program: String,
+    pub resolved_arguments: Vec<String>,
+    pub intent_id: String,
+    pub antenna: String,
+    pub target: String,
+    pub mode: ExperimentMode,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: DateTime<Utc>,
+    pub elapsed_milliseconds: u64,
+    pub disposition: AntennaControlDispositionV5,
+    pub stdout: AntennaControlOutputV5,
+    pub stderr: AntennaControlOutputV5,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

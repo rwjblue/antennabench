@@ -190,7 +190,7 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         out.push_str("</tbody></table></div>");
     }
     if !snapshot.wspr_cycles.is_empty() {
-        out.push_str("<div class=\"table-wrap\"><table><caption>Intended WSPR order and observed antenna use</caption><thead><tr><th scope=\"col\">Sequence</th><th scope=\"col\">Band</th><th scope=\"col\">Direction</th><th scope=\"col\">Intended antenna</th><th scope=\"col\">Observed antenna</th><th scope=\"col\">Ready</th><th scope=\"col\">Period start</th><th scope=\"col\">Period end</th><th scope=\"col\">Attribution</th></tr></thead><tbody>");
+        out.push_str("<div class=\"table-wrap\"><table><caption>Intended WSPR order and observed antenna use</caption><thead><tr><th scope=\"col\">Sequence</th><th scope=\"col\">Band</th><th scope=\"col\">Direction</th><th scope=\"col\">Intended antenna</th><th scope=\"col\">Observed antenna</th><th scope=\"col\">Readiness basis</th><th scope=\"col\">Ready</th><th scope=\"col\">Period start</th><th scope=\"col\">Period end</th><th scope=\"col\">Attribution</th></tr></thead><tbody>");
         for cycle in &snapshot.wspr_cycles {
             let direction = match cycle.direction {
                 Some(WsprCycleDirection::Receive) => "Receive",
@@ -205,7 +205,38 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
                     "Unknown — antenna changed during transmission"
                 }
             };
-            write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", cycle.sequence_number, band(cycle.band), direction, escape_html(&cycle.planned_antenna), escape_html(cycle.actual_antenna.as_deref().unwrap_or("Not recorded")), cycle.ready_at.map_or_else(|| "—".into(), timestamp), cycle.starts_at.map_or_else(|| "—".into(), timestamp), cycle.transmission_ends_at.map_or_else(|| "—".into(), timestamp), attribution);
+            let readiness = match cycle.readiness_basis {
+                Some(crate::ReportWsprReadinessBasis::OperatorConfirmed) => "Operator confirmed",
+                Some(crate::ReportWsprReadinessBasis::CommandVerified) => "Command verified",
+                None => "Not recorded",
+            };
+            write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", cycle.sequence_number, band(cycle.band), direction, escape_html(&cycle.planned_antenna), escape_html(cycle.actual_antenna.as_deref().unwrap_or("Not recorded")), readiness, cycle.ready_at.map_or_else(|| "—".into(), timestamp), cycle.starts_at.map_or_else(|| "—".into(), timestamp), cycle.transmission_ends_at.map_or_else(|| "—".into(), timestamp), attribution);
+        }
+        out.push_str("</tbody></table></div>");
+    }
+    if !snapshot.antenna_control_attempts.is_empty() {
+        out.push_str("<div class=\"table-wrap\"><table><caption>Antenna-control command attempts</caption><thead><tr><th scope=\"col\">Record</th><th scope=\"col\">Role</th><th scope=\"col\">Intent / target / mode</th><th scope=\"col\">Controller</th><th scope=\"col\">Resolved invocation</th><th scope=\"col\">Outcome</th><th scope=\"col\">Stdout</th><th scope=\"col\">Stderr</th></tr></thead><tbody>");
+        for attempt in &snapshot.antenna_control_attempts {
+            let arguments = attempt
+                .resolved_arguments
+                .iter()
+                .enumerate()
+                .map(|(index, value)| format!("[{index}]={value:?}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let outcome = format!(
+                "{:?}; {} ms",
+                attempt.disposition, attempt.elapsed_milliseconds
+            );
+            let stdout = format!(
+                "{:?}; truncated={}; {}",
+                attempt.stdout.encoding, attempt.stdout.truncated, attempt.stdout.data
+            );
+            let stderr = format!(
+                "{:?}; truncated={}; {}",
+                attempt.stderr.encoding, attempt.stderr.truncated, attempt.stderr.data
+            );
+            write_html!(out, "<tr><td><code>{}</code></td><td>{:?}</td><td><code>{}</code><br>{} → {}<br>{}</td><td>{} / {}</td><td><code>{}</code><br>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", escape_html(&attempt.record_id), attempt.role, escape_html(&attempt.intent_id), escape_html(&attempt.antenna), escape_html(&attempt.target), experiment_mode(attempt.mode), escape_html(&attempt.controller_profile_name), escape_html(&attempt.controller_profile_revision), escape_html(&attempt.resolved_program), escape_html(&arguments), escape_html(&outcome), escape_html(&stdout), escape_html(&stderr));
         }
         out.push_str("</tbody></table></div>");
     }

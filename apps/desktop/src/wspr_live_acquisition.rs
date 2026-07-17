@@ -9,7 +9,7 @@ use antennabench_core::{
     BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2, EventTimeBasisV2,
     MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
     OperatorEventV3, PlannedSlot, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
-    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -297,7 +297,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                     .read_v2_checkpointed()
                     .map_err(crate::conductor::live_error_payload)?,
             ),
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => AcquisitionSnapshot::V3(
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => AcquisitionSnapshot::V3(
                 store
                     .read_v3_checkpointed()
                     .map_err(crate::conductor::live_error_payload)?,
@@ -521,7 +521,7 @@ fn end_after_final_capture(
         SCHEMA_VERSION_V2 => {
             end_v2_after_final_capture(active_state, source, occurred_at, captured_through, &store)
         }
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
             end_v3_after_final_capture(active_state, source, occurred_at, captured_through, &store)
         }
         actual => Err(SessionErrorPayload::new(
@@ -840,6 +840,7 @@ mod tests {
                     OperatorEventPayloadV3::WsprCycleArmed {
                         antenna_label: intent.antenna_label.clone(),
                         cycle_starts_at,
+                        readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
                     },
                 )
             },
@@ -914,6 +915,9 @@ mod tests {
                         OperatorEventPayloadV3::WsprCycleArmed {
                             antenna_label: intent.antenna_label.clone(),
                             cycle_starts_at,
+                            readiness: Some(
+                                antennabench_core::WsprReadinessBasisV5::OperatorConfirmed,
+                            ),
                         },
                     )
                 }),

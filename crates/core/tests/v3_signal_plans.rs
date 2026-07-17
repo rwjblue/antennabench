@@ -61,6 +61,7 @@ fn schedule(plan: SignalPlanV3, slots: Vec<PlannedSlotV3>) -> ScheduleV3 {
         session_id: "session-v3".into(),
         mode: ExperimentMode::TxFocused,
         goal: SessionGoal::GeneralCoverage,
+        antenna_control: None,
         signal_plans: vec![plan],
         wspr_cycle_intents: Vec::new(),
         slots,

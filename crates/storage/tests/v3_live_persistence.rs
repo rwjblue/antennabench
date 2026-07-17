@@ -6,21 +6,27 @@ use std::{
 };
 
 use antennabench_core::{
-    reduce_operator_events_v3, AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput,
-    AdapterReasonId, AdapterRecordV3, AnalysisFile, AnalysisStatus, Antenna, AntennasFile,
-    AttachmentReference, Band, BundleFilesV3, BundleManifestV3, BundleV3Contents,
-    CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3, EventCorrectionActionV3,
-    EventTimeBasisV2, ExperimentMode, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
-    ObservationKind, ObservationRecordV3, OperatorEventPayloadV3, OperatorEventV3,
-    PlanGenerationV2, PlannedSlotV3, Provenance, ProviderId, RecordMetaV2, RecordMetaV3,
-    ReplacementOperatorEventV3, ScheduleV3, SessionGoal, SessionLifecycleV2, SessionStateV3,
-    SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3,
-    SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station,
-    SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+    reduce_operator_events_v3, upgrade_v3_bundle_model_to_v5, AcquisitionChannelId,
+    AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId, AdapterRecordV3, AnalysisFile,
+    AnalysisStatus, Antenna, AntennaControlCommandV5, AntennaControlContextV5,
+    AntennaControlDispositionV5, AntennaControlInvocationPolicyV5, AntennaControlInvocationV5,
+    AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlPolicyV5,
+    AntennaControlRoleV5, AntennasFile, AttachmentReference, Band, BundleFilesV3, BundleManifestV3,
+    BundleV3Contents, CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3,
+    EventCorrectionActionV3, EventTimeBasisV2, ExperimentMode, MutationMember,
+    NormalizedRecordKind, NormalizedRecordLink, ObservationKind, ObservationRecordV3,
+    OperatorEventPayloadV3, OperatorEventV3, PlanGenerationV2, PlannedSlotV3, Provenance,
+    ProviderId, RecordMetaV2, RecordMetaV3, ReplacementOperatorEventV3, RigRecordV3, ScheduleV3,
+    SessionGoal, SessionLifecycleV2, SessionStateV3, SignalAllocationV3, SignalCadenceV3,
+    SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3, SignalPlanV3,
+    SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station, WsprCycleDirection,
+    WsprCycleIntentV3, WsprReadinessBasisV5, COMMAND_OUTPUT_MAX_BYTES, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
-    BundleStore, LiveEventMutationV3, LiveEvidenceMutationV3, LivePersistenceError,
-    LivePersistenceHooks, LivePersistencePoint, LiveStreamV2, RecoveryDispositionV2,
+    BundleStore, LiveAntennaControlMutationV5, LiveEventMutationV3, LiveEvidenceMutationV3,
+    LivePersistenceError, LivePersistenceHooks, LivePersistencePoint, LiveStreamV2,
+    RecoveryDispositionV2,
 };
 use chrono::{DateTime, TimeZone, Utc};
 
@@ -208,6 +214,7 @@ fn bundle() -> BundleV3Contents {
             session_id: session_id.clone(),
             mode: ExperimentMode::TxFocused,
             goal: SessionGoal::GeneralCoverage,
+            antenna_control: None,
             signal_plans: vec![SignalPlanV3 {
                 signal_plan_id: plan_id.clone(),
                 mode: SignalModeV3::Cw,
@@ -278,6 +285,461 @@ fn mutation(revision: u64, mutation_id: &str, event: OperatorEventV3) -> LiveEve
         expected_revision: revision,
         mutation_id: mutation_id.into(),
         event,
+    }
+}
+
+fn command_v5_bundle() -> BundleV3Contents {
+    let mut bundle = upgrade_v3_bundle_model_to_v5(bundle());
+    let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 0, 0).unwrap();
+    bundle.schedule.signal_plans.clear();
+    bundle.schedule.slots.clear();
+    bundle.schedule.wspr_cycle_intents = vec![WsprCycleIntentV3 {
+        intent_id: "intent-1".into(),
+        sequence_number: 1,
+        band: Band::M20,
+        antenna_label: "A".into(),
+        direction: Some(WsprCycleDirection::Transmit),
+        signal: None,
+    }];
+    bundle.schedule.antenna_control = Some(AntennaControlPolicyV5::CommandControlled {
+        invocation: AntennaControlInvocationPolicyV5::OperatorTriggered,
+        manual_review_required: false,
+    });
+    bundle.events = vec![OperatorEventV3 {
+        meta: RecordMetaV3 {
+            schema_version: SCHEMA_VERSION_V5,
+            session_id: bundle.manifest.session_id.clone(),
+            recorded_at: now,
+            provenance: meta(now, &bundle.manifest.session_id).provenance,
+            mutation: MutationMember {
+                mutation_id: "start-mutation".into(),
+                member_index: 0,
+                member_count: 1,
+            },
+        },
+        event_id: "start-event".into(),
+        occurred_at: now,
+        time_basis: EventTimeBasisV2::OperatorReported,
+        uncertainty_seconds: None,
+        slot_id: None,
+        payload: OperatorEventPayloadV3::SessionStarted { note: None },
+    }];
+    bundle.session_state.lifecycle = SessionLifecycleV2::Running;
+    bundle
+}
+
+fn invocation_record(
+    record_id: &str,
+    role: AntennaControlRoleV5,
+    started_at: DateTime<Utc>,
+    disposition: AntennaControlDispositionV5,
+) -> RigRecordV3 {
+    RigRecordV3 {
+        meta: meta(started_at, "session-v3-live"),
+        record_id: record_id.into(),
+        adapter_record_ids: Vec::new(),
+        status: "antenna_control_attempt".into(),
+        frequency_hz: None,
+        mode: None,
+        power_watts: None,
+        antenna_control: Some(AntennaControlInvocationV5 {
+            role,
+            controller_profile_name: "bench-switch".into(),
+            controller_profile_revision: "revision-7".into(),
+            command: AntennaControlCommandV5 {
+                program_template: "/opt/bin/switch".into(),
+                argument_templates: vec![
+                    "--target".into(),
+                    "{target}".into(),
+                    "--mode".into(),
+                    "{mode}".into(),
+                ],
+                resolved_program: "/opt/bin/switch".into(),
+                resolved_arguments: vec![
+                    "--target".into(),
+                    "relay-a".into(),
+                    "--mode".into(),
+                    "tx_focused".into(),
+                ],
+            },
+            context: AntennaControlContextV5 {
+                antenna: "A".into(),
+                target: "relay-a".into(),
+                mode: ExperimentMode::TxFocused,
+                direction: WsprCycleDirection::Transmit,
+                band: Band::M20,
+                frequency_hz: None,
+                sequence: 1,
+                intent_id: "intent-1".into(),
+                session_id: "session-v3-live".into(),
+                callsign: "N1RWJ".into(),
+            },
+            started_at,
+            completed_at: started_at + chrono::Duration::milliseconds(25),
+            elapsed_milliseconds: 25,
+            disposition,
+            stdout: AntennaControlOutputV5 {
+                encoding: AntennaControlOutputEncodingV5::Utf8,
+                data: "ok".into(),
+                truncated: false,
+            },
+            stderr: AntennaControlOutputV5 {
+                encoding: AntennaControlOutputEncodingV5::Base64,
+                data: "AAE=".into(),
+                truncated: false,
+            },
+        }),
+        raw: serde_json::Value::Null,
+    }
+}
+
+fn verified_mutation(revision: u64, now: DateTime<Utc>) -> LiveAntennaControlMutationV5 {
+    LiveAntennaControlMutationV5 {
+        expected_revision: revision,
+        mutation_id: "control-mutation".into(),
+        rig_records: vec![
+            invocation_record(
+                "switch-record",
+                AntennaControlRoleV5::Switch,
+                now,
+                AntennaControlDispositionV5::Exit { code: 0 },
+            ),
+            invocation_record(
+                "verify-record",
+                AntennaControlRoleV5::Verification,
+                now + chrono::Duration::milliseconds(25),
+                AntennaControlDispositionV5::Exit { code: 0 },
+            ),
+        ],
+        armed_event: Some(event(
+            now + chrono::Duration::milliseconds(50),
+            "armed-event",
+            Some("intent-1"),
+            OperatorEventPayloadV3::WsprCycleArmed {
+                antenna_label: "A".into(),
+                cycle_starts_at: now + chrono::Duration::minutes(3) + chrono::Duration::seconds(1),
+                readiness: Some(WsprReadinessBasisV5::CommandVerified {
+                    switch_record_id: "switch-record".into(),
+                    verification_record_id: "verify-record".into(),
+                }),
+            },
+        )),
+    }
+}
+
+#[test]
+fn schema_v5_atomically_commits_command_verified_readiness_and_retries_idempotently() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = BundleStore::new(temp.path().join(format!("control{V2_BUNDLE_SUFFIX}")));
+    let mut initial = command_v5_bundle();
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+    let portable_plan = std::fs::read_to_string(store.root().join("schedule.json")).unwrap();
+    assert!(portable_plan.contains("antenna_control"));
+    for local_only in ["program_template", "target", "timeout"] {
+        assert!(!portable_plan.contains(local_only));
+    }
+    let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 1, 0).unwrap();
+    let hooks = Arc::new(Hooks {
+        now: now + chrono::Duration::milliseconds(50),
+        fail_at: None,
+    });
+    let mut writer = store.open_v3_writer_with_hooks(hooks).unwrap();
+    let mutation = verified_mutation(writer.checkpoint().revision, now);
+    let receipt = writer.append_antenna_control(mutation.clone()).unwrap();
+    assert!(!receipt.idempotent);
+    let retry = writer.append_antenna_control(mutation).unwrap();
+    assert!(retry.idempotent);
+    drop(writer);
+
+    let reopened = store.read_v3_checkpointed().unwrap();
+    assert_eq!(reopened.rig.len(), 2);
+    assert_eq!(reopened.events.len(), 2);
+    assert!(matches!(
+        reopened.events[1].payload,
+        OperatorEventPayloadV3::WsprCycleArmed {
+            readiness: Some(WsprReadinessBasisV5::CommandVerified { .. }),
+            ..
+        }
+    ));
+    let exported = store
+        .export_v3_checkpointed_to(
+            temp.path()
+                .join(format!("control-export{V2_BUNDLE_SUFFIX}")),
+        )
+        .unwrap();
+    assert_eq!(exported.read_v3_checkpointed().unwrap(), reopened);
+}
+
+#[test]
+fn schema_v5_failed_attempt_commits_without_arming_or_occupancy() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = BundleStore::new(temp.path().join(format!("failed{V2_BUNDLE_SUFFIX}")));
+    let mut initial = command_v5_bundle();
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 1, 0).unwrap();
+    let hooks = Arc::new(Hooks {
+        now: now + chrono::Duration::seconds(1),
+        fail_at: None,
+    });
+    let mut writer = store.open_v3_writer_with_hooks(hooks).unwrap();
+    writer
+        .append_antenna_control(LiveAntennaControlMutationV5 {
+            expected_revision: writer.checkpoint().revision,
+            mutation_id: "failed-control".into(),
+            rig_records: vec![invocation_record(
+                "timed-out-switch",
+                AntennaControlRoleV5::Switch,
+                now,
+                AntennaControlDispositionV5::Timeout,
+            )],
+            armed_event: None,
+        })
+        .unwrap();
+    drop(writer);
+
+    let reopened = store.read_v3_checkpointed().unwrap();
+    assert_eq!(reopened.rig.len(), 1);
+    assert_eq!(reopened.events.len(), 1);
+    assert!(
+        reduce_operator_events_v3(SessionLifecycleV2::Ready, &reopened.events)
+            .effective_events
+            .is_empty()
+    );
+    assert!(
+        antennabench_core::project_wspr_run_v3(&reopened.schedule, &reopened.events)
+            .cycles
+            .is_empty()
+    );
+}
+
+#[test]
+fn schema_v5_persists_every_command_termination_disposition_and_output_form() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = BundleStore::new(temp.path().join(format!("dispositions{V2_BUNDLE_SUFFIX}")));
+    let mut initial = command_v5_bundle();
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 1, 0).unwrap();
+    let hooks = Arc::new(Hooks {
+        now: now + chrono::Duration::seconds(1),
+        fail_at: None,
+    });
+    let mut writer = store.open_v3_writer_with_hooks(hooks).unwrap();
+    let dispositions = [
+        AntennaControlDispositionV5::Exit { code: 7 },
+        AntennaControlDispositionV5::SpawnError {
+            message: "not found".into(),
+        },
+        AntennaControlDispositionV5::Signaled { signal: Some(15) },
+        AntennaControlDispositionV5::Timeout,
+    ];
+    for (index, disposition) in dispositions.iter().cloned().enumerate() {
+        let mut record = invocation_record(
+            &format!("disposition-{index}"),
+            AntennaControlRoleV5::Switch,
+            now,
+            disposition,
+        );
+        record.antenna_control.as_mut().unwrap().stdout.truncated = index == 3;
+        writer
+            .append_antenna_control(LiveAntennaControlMutationV5 {
+                expected_revision: writer.checkpoint().revision,
+                mutation_id: format!("disposition-mutation-{index}"),
+                rig_records: vec![record],
+                armed_event: None,
+            })
+            .unwrap();
+    }
+    drop(writer);
+    let reopened = store.read_v3_checkpointed().unwrap();
+    let actual = reopened
+        .rig
+        .iter()
+        .map(|record| record.antenna_control.as_ref().unwrap().disposition.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(actual, dispositions);
+    assert_eq!(
+        reopened.rig[0]
+            .antenna_control
+            .as_ref()
+            .unwrap()
+            .stderr
+            .encoding,
+        AntennaControlOutputEncodingV5::Base64
+    );
+    assert!(
+        reopened.rig[3]
+            .antenna_control
+            .as_ref()
+            .unwrap()
+            .stdout
+            .truncated
+    );
+}
+
+#[test]
+fn schema_v5_rejects_reference_and_output_failures_before_writing() {
+    let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 1, 0).unwrap();
+    for case in [
+        "missing",
+        "mismatch",
+        "mode",
+        "cross-intention",
+        "role",
+        "future",
+        "nonzero",
+        "oversized",
+        "duplicate",
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let store = BundleStore::new(temp.path().join(format!("{case}{V2_BUNDLE_SUFFIX}")));
+        let mut initial = command_v5_bundle();
+        BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+        store.create_v3_checkpointed(&initial).unwrap();
+        let hooks = Arc::new(Hooks {
+            now: now + chrono::Duration::milliseconds(50),
+            fail_at: None,
+        });
+        let mut writer = store.open_v3_writer_with_hooks(hooks).unwrap();
+        let mut mutation = verified_mutation(writer.checkpoint().revision, now);
+        match case {
+            "missing" => {
+                let event = mutation.armed_event.as_mut().unwrap();
+                let OperatorEventPayloadV3::WsprCycleArmed { readiness, .. } = &mut event.payload
+                else {
+                    unreachable!()
+                };
+                *readiness = Some(WsprReadinessBasisV5::CommandVerified {
+                    switch_record_id: "missing-record".into(),
+                    verification_record_id: "verify-record".into(),
+                });
+            }
+            "mismatch" => {
+                mutation.rig_records[1]
+                    .antenna_control
+                    .as_mut()
+                    .unwrap()
+                    .context
+                    .target = "relay-b".into()
+            }
+            "mode" => {
+                mutation.rig_records[1]
+                    .antenna_control
+                    .as_mut()
+                    .unwrap()
+                    .context
+                    .mode = ExperimentMode::RxFocused
+            }
+            "cross-intention" => {
+                mutation.rig_records[1]
+                    .antenna_control
+                    .as_mut()
+                    .unwrap()
+                    .context
+                    .intent_id = "other-intent".into()
+            }
+            "role" => {
+                mutation.rig_records[1]
+                    .antenna_control
+                    .as_mut()
+                    .unwrap()
+                    .role = AntennaControlRoleV5::Switch
+            }
+            "future" => {
+                let invocation = mutation.rig_records[1].antenna_control.as_mut().unwrap();
+                invocation.completed_at = now + chrono::Duration::milliseconds(75);
+                invocation.elapsed_milliseconds = 50;
+            }
+            "nonzero" => {
+                mutation.rig_records[0]
+                    .antenna_control
+                    .as_mut()
+                    .unwrap()
+                    .disposition = AntennaControlDispositionV5::Exit { code: 1 }
+            }
+            "oversized" => {
+                mutation.rig_records[0]
+                    .antenna_control
+                    .as_mut()
+                    .unwrap()
+                    .stdout
+                    .data = "x".repeat(COMMAND_OUTPUT_MAX_BYTES + 1)
+            }
+            "duplicate" => {
+                let event = mutation.armed_event.as_mut().unwrap();
+                let OperatorEventPayloadV3::WsprCycleArmed { readiness, .. } = &mut event.payload
+                else {
+                    unreachable!()
+                };
+                *readiness = Some(WsprReadinessBasisV5::CommandVerified {
+                    switch_record_id: "switch-record".into(),
+                    verification_record_id: "switch-record".into(),
+                });
+            }
+            _ => unreachable!(),
+        }
+        assert!(
+            writer.append_antenna_control(mutation).is_err(),
+            "case {case}"
+        );
+        drop(writer);
+        let reopened = store.read_v3_checkpointed().unwrap();
+        assert!(reopened.rig.is_empty(), "case {case}");
+        assert_eq!(reopened.events.len(), 1, "case {case}");
+    }
+}
+
+#[test]
+fn schema_v5_control_checkpoint_failures_expose_only_prior_or_complete_revision() {
+    let points = [
+        LivePersistencePoint::BeforeStreamWrite(LiveStreamV2::Rig),
+        LivePersistencePoint::MidStreamWrite(LiveStreamV2::Rig),
+        LivePersistencePoint::AfterStreamWrite(LiveStreamV2::Rig),
+        LivePersistencePoint::BeforeStreamSync(LiveStreamV2::Rig),
+        LivePersistencePoint::AfterStreamSync(LiveStreamV2::Rig),
+        LivePersistencePoint::BeforeStreamWrite(LiveStreamV2::Events),
+        LivePersistencePoint::MidStreamWrite(LiveStreamV2::Events),
+        LivePersistencePoint::AfterStreamWrite(LiveStreamV2::Events),
+        LivePersistencePoint::BeforeStreamSync(LiveStreamV2::Events),
+        LivePersistencePoint::AfterStreamSync(LiveStreamV2::Events),
+        LivePersistencePoint::BeforeCheckpointWrite,
+        LivePersistencePoint::AfterCheckpointWrite,
+        LivePersistencePoint::BeforeCheckpointSync,
+        LivePersistencePoint::AfterCheckpointSync,
+        LivePersistencePoint::BeforeCheckpointReplace,
+        LivePersistencePoint::AfterCheckpointReplace,
+        LivePersistencePoint::BeforeDirectorySync,
+        LivePersistencePoint::AfterDirectorySync,
+        LivePersistencePoint::BeforeCheckpointVerify,
+        LivePersistencePoint::AfterCheckpointVerify,
+        LivePersistencePoint::BeforeAcknowledge,
+    ];
+    let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 1, 0).unwrap();
+    for (index, point) in points.into_iter().enumerate() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = BundleStore::new(temp.path().join(format!("fault-{index}{V2_BUNDLE_SUFFIX}")));
+        let mut initial = command_v5_bundle();
+        BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+        store.create_v3_checkpointed(&initial).unwrap();
+        let hooks = Arc::new(Hooks {
+            now: now + chrono::Duration::milliseconds(50),
+            fail_at: Some(point),
+        });
+        let mut writer = store.open_v3_writer_with_hooks(hooks).unwrap();
+        let revision = writer.checkpoint().revision;
+        assert!(writer
+            .append_antenna_control(verified_mutation(revision, now))
+            .is_err());
+        drop(writer);
+        let reopened = store.read_v3_checkpointed().unwrap();
+        assert!(matches!(reopened.rig.len(), 0 | 2), "point {point:?}");
+        assert_eq!(
+            reopened.rig.len() == 2,
+            reopened.events.len() == 2,
+            "point {point:?}"
+        );
     }
 }
 

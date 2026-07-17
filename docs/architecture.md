@@ -49,6 +49,15 @@ Planned settings, confirmed operator actions, adapter observations, and public
 reports are different fact classes. AntennaBench does not silently substitute
 one for another.
 
+Schema-v5 antenna-control evidence follows the same boundary. Portable bundles
+may describe command-control policy and retain resolved invocation evidence,
+but never contain executable profiles, target mappings, or timeouts that grant
+local authority. This foundation performs no process execution. Later local
+controller work must attach and arm machine-local configuration explicitly.
+Command attempt records and an optional command-verified ready event cross one
+storage checkpoint; a failed attempt can remain auditable without advancing
+antenna occupancy.
+
 An active session is committed in checkpointed revisions. A report and its
 exports use one verified revision, so they cannot accidentally combine files
 from different moments in a live run.

@@ -4,7 +4,7 @@ This technical reference defines how AntennaBench records session lifecycle,
 operator actions, corrections, and observation eligibility. For the user-facing
 workflow, start with the [Product Overview](product.md).
 
-Schema-v2, schema-v3, and schema-v4 operator events are append-only evidence. The schedule
+Schema-v2 through schema-v5 operator events are append-only evidence. The schedule
 says what was planned; only explicit effective operator evidence says what
 actually happened. The pure reducers are implemented independently of storage,
 Tauri, sockets, and hardware. The checkpoint writer, shipped manual conductor,
@@ -137,3 +137,17 @@ is supported.
 Schema v4 retains the v3 event family and adds required WSPR intent direction.
 Existing schema-v3 intentions remain readable with unknown direction; readers
 and upgrades do not infer receive or transmit from surrounding evidence.
+
+Schema v5 requires every `wspr_cycle_armed` event to record a readiness basis.
+Historical and manual ready actions are `operator_confirmed`. A
+`command_verified` event names one switch rig record and one independent
+verification rig record. Both must precede the event as members of the same
+three-member mutation, exit zero, have their expected roles, and match the
+complete session/intention/target context, including the durable experiment
+mode used for `{mode}` interpolation. Switch success alone is never
+physical confirmation. Failed or uncertain command records are valid evidence
+without an armed event and therefore create no antenna occupancy.
+
+Explicit v1-v4 upgrade maps historical armed cycles to
+`operator_confirmed` and invents no controller or invocation facts. There is no
+schema downgrade.

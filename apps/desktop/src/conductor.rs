@@ -12,7 +12,8 @@ use antennabench_core::{
     OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2, OperatorEventV3, Provenance,
     RecordMetaV2, RecordMetaV3, RecordSource, ReplacementOperatorEventV2,
     ReplacementOperatorEventV3, SessionLifecycleV2, SignalModeV3, SignalStateConfirmationV3,
-    WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
+    WsprCycleDirection, WsprReadinessBasisV5, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -639,6 +640,7 @@ fn correction_payload_v3(
 fn action_payload_v3(
     action: ConductorAction,
     occurred_at: DateTime<Utc>,
+    schema_version: u16,
 ) -> Result<(Option<String>, OperatorEventPayloadV3), SessionErrorPayload> {
     Ok(match action {
         ConductorAction::Start { note } => (
@@ -689,6 +691,8 @@ fn action_payload_v3(
                 OperatorEventPayloadV3::WsprCycleArmed {
                     antenna_label: required_text(antenna_label, "antennaLabel")?,
                     cycle_starts_at: cycle.starts_at,
+                    readiness: (schema_version >= SCHEMA_VERSION_V5)
+                        .then_some(WsprReadinessBasisV5::OperatorConfirmed),
                 },
             )
         }
@@ -792,7 +796,7 @@ fn event_for_action_v3(
     let occurred_at = pending.occurred_at.ok_or_else(|| {
         SessionErrorPayload::report_pipeline("conductor action time was not initialized")
     })?;
-    let (slot_id, payload) = action_payload_v3(action, occurred_at)?;
+    let (slot_id, payload) = action_payload_v3(action, occurred_at, schema_version)?;
     Ok(OperatorEventV3 {
         meta: RecordMetaV3 {
             schema_version,
@@ -989,6 +993,7 @@ fn build_view_v3(
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label,
                 cycle_starts_at,
+                ..
             } => (
                 "wspr_cycle_armed",
                 format!("{antenna_label} ready; WSPR cycle armed for {cycle_starts_at}."),
@@ -1722,7 +1727,9 @@ fn read_conductor_with_hooks(
         let recovery = if !initialized {
             let report = match schema_version {
                 SCHEMA_VERSION_V2 => store.recover_v2_with_hooks(hooks.clone()),
-                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => store.recover_v3_with_hooks(hooks.clone()),
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+                    store.recover_v3_with_hooks(hooks.clone())
+                }
                 actual => {
                     return Err(SessionErrorPayload::new(
                         SessionErrorKind::Unsupported,
@@ -1756,7 +1763,7 @@ fn read_conductor_with_hooks(
                 )?;
                 build_view(bundle_name, &bundle, now, action_token, recovery)
             }
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
                 let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
                 register_view_action(
                     conductor_state,
@@ -1794,7 +1801,7 @@ fn mutate_conductor_with_hooks(
             SCHEMA_VERSION_V2 => {
                 mutate_conductor_v2(&store, bundle_name, conductor_state, request, hooks)
             }
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
                 mutate_conductor_v3(&store, bundle_name, conductor_state, request, hooks)
             }
             actual => Err(SessionErrorPayload::new(

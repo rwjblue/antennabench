@@ -92,8 +92,15 @@ single-antenna profiling sessions. Controlled CW and RTTY comparisons can use
 typed signal plans and offline Reverse Beacon Network imports, but remain a
 more technical path.
 
-Rig control, automatic winner selection, and hosted publishing are not yet
-available. See [Project Status](../README.md#project-status) for the concise
+Portable session evidence can now distinguish an operator-confirmed WSPR cycle
+from a cycle authorized by independent command verification, and reports show
+bounded switch/verification attempts and failures. AntennaBench does not yet
+execute those commands: executable controller profiles, command-assisted
+controls, and automatic switching are later local-only work. Manual operation
+remains the complete default workflow.
+
+Automatic winner selection and hosted publishing are not yet available. See
+[Project Status](../README.md#project-status) for the concise
 current state and the [Roadmap](roadmap.md) for direction.
 
 For the detailed evidence rules, operational boundaries, and selected hosted

@@ -10,13 +10,15 @@ use antennabench_analysis::AnalysisError;
 use antennabench_core::{
     normalize_bundle, project_wspr_run_v3, AdapterDisposition, AdapterInput, AdapterRecordV2, Band,
     BundleContents, BundleV3Contents, BundleValidationError, BundleValidationReport,
-    OperatorEventPayloadV2, OperatorEventPayloadV3, SessionLifecycleV2, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+    OperatorEventPayloadV2, OperatorEventPayloadV3, SessionLifecycleV2, WsprReadinessBasisV5,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, V1_BUNDLE_SUFFIX,
+    V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
-    build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence, ReportCompleteness,
-    ReportError, ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind,
-    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
+    build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence,
+    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportImportedEvidence,
+    ReportLifecycleEvent, ReportLifecycleEventKind, ReportSnapshotContext, ReportWsprAttribution,
+    ReportWsprCycle, ReportWsprReadinessBasis,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::{Deserialize, Serialize};
@@ -486,7 +488,7 @@ fn load_snapshot(path: &Path, bundle_name: &str) -> Result<LoadedSnapshot, OpenS
                         intended_cycle_count,
                     )
                 }
-                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
                     let bundle = store.read_v3_checkpointed()?;
                     let revision = bundle.session_state.revision;
                     let lifecycle = bundle.session_state.lifecycle;
@@ -583,6 +585,7 @@ fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapsh
         lifecycle: Some(bundle.session_state.lifecycle),
         lifecycle_events,
         wspr_cycles: Vec::new(),
+        antenna_control_attempts: Vec::new(),
         adapter_evidence: adapter,
     }
 }
@@ -662,7 +665,49 @@ fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
                         }
                     },
                 ),
+                readiness_basis: bundle.events.iter().find_map(|event| {
+                    if event.slot_id.as_deref() != Some(intent.intent_id.as_str()) {
+                        return None;
+                    }
+                    let OperatorEventPayloadV3::WsprCycleArmed { readiness, .. } = &event.payload
+                    else {
+                        return None;
+                    };
+                    Some(match readiness {
+                        Some(WsprReadinessBasisV5::CommandVerified { .. }) => {
+                            ReportWsprReadinessBasis::CommandVerified
+                        }
+                        Some(WsprReadinessBasisV5::OperatorConfirmed) | None => {
+                            ReportWsprReadinessBasis::OperatorConfirmed
+                        }
+                    })
+                }),
             }
+        })
+        .collect();
+    let antenna_control_attempts = bundle
+        .rig
+        .iter()
+        .filter_map(|record| {
+            let invocation = record.antenna_control.as_ref()?;
+            Some(ReportAntennaControlAttempt {
+                record_id: record.record_id.clone(),
+                role: invocation.role,
+                controller_profile_name: invocation.controller_profile_name.clone(),
+                controller_profile_revision: invocation.controller_profile_revision.clone(),
+                resolved_program: invocation.command.resolved_program.clone(),
+                resolved_arguments: invocation.command.resolved_arguments.clone(),
+                intent_id: invocation.context.intent_id.clone(),
+                antenna: invocation.context.antenna.clone(),
+                target: invocation.context.target.clone(),
+                mode: invocation.context.mode,
+                started_at: invocation.started_at,
+                completed_at: invocation.completed_at,
+                elapsed_milliseconds: invocation.elapsed_milliseconds,
+                disposition: invocation.disposition.clone(),
+                stdout: invocation.stdout.clone(),
+                stderr: invocation.stderr.clone(),
+            })
         })
         .collect();
     ReportSnapshotContext {
@@ -670,6 +715,7 @@ fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
         lifecycle: Some(bundle.session_state.lifecycle),
         lifecycle_events,
         wspr_cycles,
+        antenna_control_attempts,
         adapter_evidence: adapter,
     }
 }
@@ -812,7 +858,7 @@ fn export_bundle(
                 let exported = store.export_v2_checkpointed_to(destination)?;
                 Some(exported.read_v2_checkpointed()?.session_state.revision)
             }
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
                 let exported = store.export_v3_checkpointed_to(destination)?;
                 Some(exported.read_v3_checkpointed()?.session_state.revision)
             }

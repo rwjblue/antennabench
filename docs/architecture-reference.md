@@ -11,7 +11,7 @@ source of truth; everything else is derived from it.
 
 Current crates:
 
-- `crates/core`: versioned schema-v1 through schema-v4 wire types, a shared current
+- `crates/core`: versioned schema-v1 through schema-v5 wire types, a shared current
   projection, schedule alignment, normalization, and validation.
 - `crates/storage`: dispatched read/write, non-destructive upgrade, verified
   attachment, and lossless-copy APIs for `.session.wsprabundle` v1 and
@@ -520,6 +520,11 @@ comparison under
 tracked by [#14](https://github.com/rwjblue/antennabench/issues/14); any direct
 control requires a separately approved issue. The focused advisory-warning
 implementation is [#107](https://github.com/rwjblue/antennabench/issues/107).
+[Decision 0021](decisions/0021-use-command-verified-antenna-control.md) adds the
+schema-v5 portable policy, typed bounded rig invocation evidence, readiness
+basis, and atomic rig-plus-event checkpoint foundation. Local executable
+profiles and process authority remain outside portable bundles and outside
+this schema slice.
 
 ## Hosted Trust Boundary
 

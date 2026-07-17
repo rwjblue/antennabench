@@ -13,8 +13,8 @@ use antennabench_core::{
     BundleValidationProfile, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
     ObservationRecordV2, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
     OperatorEventV3, PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RecordMetaV3,
-    RecordSource, RigRecordV2, Schedule, SessionLifecycleV2, SessionStateV2, Station,
-    StreamCheckpointV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    RecordSource, RigRecordV2, RigRecordV3, Schedule, SessionLifecycleV2, SessionStateV2, Station,
+    StreamCheckpointV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -302,6 +302,17 @@ pub struct LiveEvidenceMutationV3 {
     pub mutation_id: String,
     pub adapter_records: Vec<AdapterRecordV2>,
     pub observations: Vec<ObservationRecordV2>,
+}
+
+/// One schema-v5 antenna-control checkpoint. Successful command-authorized
+/// readiness uses two rig records plus the armed event; failed attempts omit
+/// the event and therefore cannot change antenna occupancy.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LiveAntennaControlMutationV5 {
+    pub expected_revision: u64,
+    pub mutation_id: String,
+    pub rig_records: Vec<RigRecordV3>,
+    pub armed_event: Option<OperatorEventV3>,
 }
 
 pub struct LiveSessionV3 {
@@ -744,7 +755,7 @@ impl BundleStore {
         let manifest: BundleManifestV2 = read_json_file(self, &manifest_path, "manifest")?;
         if !matches!(
             manifest.schema_version,
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
         ) {
             return Err(LivePersistenceError::Store(
                 BundleStoreError::UnsupportedSchemaVersion {
@@ -1639,6 +1650,183 @@ impl LiveSessionV3 {
         })
     }
 
+    pub fn append_antenna_control(
+        &mut self,
+        mut mutation: LiveAntennaControlMutationV5,
+    ) -> Result<CommitReceiptV2, LivePersistenceError> {
+        if self.frozen {
+            return Err(LivePersistenceError::ExternalModification {
+                message: "this handle is read-only after a persistence failure".into(),
+            });
+        }
+        let actual_state = read_state(&self.paths.session_state)?;
+        if actual_state != self.bundle.session_state {
+            self.frozen = true;
+            return Err(LivePersistenceError::ExternalModification {
+                message: "session-state.json changed since the writer snapshot".into(),
+            });
+        }
+        verify_exact_checkpoint(&self.store, &actual_state, &self.paths).inspect_err(|_| {
+            self.frozen = true;
+        })?;
+        if self.bundle.session_state.lifecycle != SessionLifecycleV2::Running {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: "antenna-control evidence may append only to a running session".into(),
+            });
+        }
+        if mutation.rig_records.is_empty() || mutation.rig_records.len() > 2 {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: "antenna-control mutation requires one or two rig records".into(),
+            });
+        }
+        if validate_machine_identity(&mutation.mutation_id).is_err() {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: "mutation identity must be bounded nonempty ASCII".into(),
+            });
+        }
+        if let Some(receipt) = committed_v5_antenna_control(&self.bundle, &mutation) {
+            return receipt;
+        }
+        if mutation.expected_revision != self.bundle.session_state.revision {
+            return Err(LivePersistenceError::StaleRevision {
+                expected: mutation.expected_revision,
+                actual: self.bundle.session_state.revision,
+            });
+        }
+        if v3_other_stream_has_mutation(&self.bundle, &mutation.mutation_id)
+            || self
+                .bundle
+                .rig
+                .iter()
+                .any(|record| record.meta.mutation.mutation_id == mutation.mutation_id)
+        {
+            return Err(LivePersistenceError::MutationConflict {
+                mutation_id: mutation.mutation_id,
+            });
+        }
+
+        let member_count =
+            u32::try_from(mutation.rig_records.len() + usize::from(mutation.armed_event.is_some()))
+                .map_err(|_| LivePersistenceError::InvalidMutation {
+                    message: "antenna-control mutation has too many members".into(),
+                })?;
+        let recorded_at = self.hooks.now();
+        for (index, record) in mutation.rig_records.iter_mut().enumerate() {
+            if validate_machine_identity(&record.record_id).is_err()
+                || record.antenna_control.is_none()
+            {
+                return Err(LivePersistenceError::InvalidMutation {
+                    message: "antenna-control rig records require bounded identities and typed invocation evidence".into(),
+                });
+            }
+            record.meta.schema_version = self.bundle.manifest.schema_version;
+            record.meta.session_id = self.bundle.manifest.session_id.clone();
+            record.meta.recorded_at = recorded_at;
+            record.meta.mutation = MutationMember {
+                mutation_id: mutation.mutation_id.clone(),
+                member_index: u32::try_from(index).expect("at most two rig records"),
+                member_count,
+            };
+        }
+        if let Some(event) = &mut mutation.armed_event {
+            if validate_machine_identity(&event.event_id).is_err() {
+                return Err(LivePersistenceError::InvalidMutation {
+                    message: "armed event identity must be bounded nonempty ASCII".into(),
+                });
+            }
+            event.meta.schema_version = self.bundle.manifest.schema_version;
+            event.meta.session_id = self.bundle.manifest.session_id.clone();
+            event.meta.recorded_at = recorded_at;
+            event.meta.mutation = MutationMember {
+                mutation_id: mutation.mutation_id.clone(),
+                member_index: u32::try_from(mutation.rig_records.len())
+                    .expect("at most two rig records"),
+                member_count,
+            };
+        }
+
+        let mut candidate = self.bundle.clone();
+        candidate.rig.extend(mutation.rig_records.iter().cloned());
+        if let Some(event) = &mutation.armed_event {
+            candidate.events.push(event.clone());
+            let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &candidate.events);
+            if let Some(diagnostic) = reduction.diagnostics.first() {
+                return Err(LivePersistenceError::InvalidMutation {
+                    message: diagnostic.message.clone(),
+                });
+            }
+            candidate.session_state.lifecycle = reduction.lifecycle;
+        }
+        BundleStore::refresh_v3_checkpoint(&mut candidate)?;
+        candidate.session_state.revision = self
+            .bundle
+            .session_state
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| LivePersistenceError::InvalidMutation {
+                message: "checkpoint revision overflowed".into(),
+            })?;
+        candidate.session_state.last_committed_mutation_id = Some(mutation.mutation_id.clone());
+        crate::v3::validate_v3_model(&candidate)?;
+
+        let rig_bytes = serialize_v3_lines(&mutation.rig_records, "rig record")?;
+        let event_bytes = mutation
+            .armed_event
+            .as_ref()
+            .map(|event| serialize_v3_lines(std::slice::from_ref(event), "armed event"))
+            .transpose()?
+            .unwrap_or_default();
+        let serialized = [
+            (LiveStreamV2::Rig, rig_bytes),
+            (LiveStreamV2::Events, event_bytes),
+        ]
+        .into_iter()
+        .filter(|(_, bytes)| !bytes.is_empty())
+        .collect::<Vec<_>>();
+        preflight_live_budget(&self.store, &self.bundle.session_state, &serialized)?;
+
+        let baseline = self.bundle.session_state.clone();
+        let operation = (|| {
+            for (stream, bytes) in &serialized {
+                append_line(
+                    stream_path(&self.paths, *stream),
+                    *stream,
+                    bytes,
+                    self.hooks.as_ref(),
+                )?;
+            }
+            commit_checkpoint(
+                self.store.root(),
+                &self.paths.session_state,
+                &candidate.session_state,
+                self.hooks.as_ref(),
+            )
+        })();
+        if let Err(error) = operation {
+            let committed = read_state(&self.paths.session_state)
+                .is_ok_and(|state| state.revision > baseline.revision);
+            if committed {
+                self.bundle = self.store.read_v3()?;
+            } else {
+                rollback_v3_streams(
+                    &self.paths,
+                    &baseline,
+                    &[LiveStreamV2::Rig, LiveStreamV2::Events],
+                )?;
+            }
+            return Err(error);
+        }
+        self.bundle = candidate;
+        self.hooks
+            .check(LivePersistencePoint::BeforeAcknowledge)
+            .map_err(|source| live_io("acknowledge checkpoint", self.store.root(), source))?;
+        Ok(CommitReceiptV2 {
+            revision: self.bundle.session_state.revision,
+            mutation_id: mutation.mutation_id,
+            idempotent: false,
+        })
+    }
+
     pub fn append_evidence_with_attachment(
         &mut self,
         bytes: &[u8],
@@ -1900,6 +2088,61 @@ fn prepare_v3_evidence(
         )?;
     }
     Ok(())
+}
+
+fn committed_v5_antenna_control(
+    bundle: &BundleV3Contents,
+    mutation: &LiveAntennaControlMutationV5,
+) -> Option<Result<CommitReceiptV2, LivePersistenceError>> {
+    let existing_rig = bundle
+        .rig
+        .iter()
+        .filter(|record| record.meta.mutation.mutation_id == mutation.mutation_id)
+        .collect::<Vec<_>>();
+    let existing_event = bundle
+        .events
+        .iter()
+        .find(|event| event.meta.mutation.mutation_id == mutation.mutation_id);
+    if existing_rig.is_empty() && existing_event.is_none() {
+        return None;
+    }
+    let rig_matches = existing_rig.len() == mutation.rig_records.len()
+        && existing_rig
+            .iter()
+            .zip(&mutation.rig_records)
+            .all(|(existing, proposed)| {
+                existing.record_id == proposed.record_id
+                    && existing.adapter_record_ids == proposed.adapter_record_ids
+                    && existing.status == proposed.status
+                    && existing.frequency_hz == proposed.frequency_hz
+                    && existing.mode == proposed.mode
+                    && existing.power_watts == proposed.power_watts
+                    && existing.antenna_control == proposed.antenna_control
+                    && existing.raw == proposed.raw
+            });
+    let event_matches = match (existing_event, mutation.armed_event.as_ref()) {
+        (None, None) => true,
+        (Some(existing), Some(proposed)) => {
+            existing.event_id == proposed.event_id
+                && existing.occurred_at == proposed.occurred_at
+                && existing.time_basis == proposed.time_basis
+                && existing.uncertainty_seconds == proposed.uncertainty_seconds
+                && existing.slot_id == proposed.slot_id
+                && existing.payload == proposed.payload
+        }
+        _ => false,
+    };
+    Some(if rig_matches && event_matches {
+        Ok(CommitReceiptV2 {
+            revision: bundle.session_state.revision,
+            mutation_id: mutation.mutation_id.clone(),
+            idempotent: true,
+        })
+    } else {
+        Err(LivePersistenceError::MutationConflict {
+            mutation_id: mutation.mutation_id.clone(),
+        })
+    })
 }
 
 #[allow(clippy::too_many_arguments)]

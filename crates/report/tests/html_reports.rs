@@ -2,11 +2,14 @@ use std::path::PathBuf;
 
 use antennabench_analysis::{ComparisonAvailability, EvidenceQuality, ObservationCounts};
 use antennabench_core::{
-    normalize_bundle, Band, ObservationKind, RecordSource, SessionLifecycleV2,
+    normalize_bundle, AntennaControlDispositionV5, AntennaControlOutputEncodingV5,
+    AntennaControlOutputV5, AntennaControlRoleV5, Band, ExperimentMode, ObservationKind,
+    RecordSource, SessionLifecycleV2, WsprCycleDirection,
 };
 use antennabench_report::{
-    build_report, render_standalone_html, ReportAdapterEvidence, ReportImportedEvidence,
-    ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice, ReportSnapshotContext,
+    build_report, render_standalone_html, ReportAdapterEvidence, ReportAntennaControlAttempt,
+    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
+    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
     SessionReport,
 };
 use antennabench_storage::BundleStore;
@@ -74,6 +77,7 @@ fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
             detail: Some("recovered <without inventing evidence>".into()),
         }],
         wspr_cycles: Vec::new(),
+        antenna_control_attempts: Vec::new(),
         adapter_evidence: ReportAdapterEvidence {
             record_count: 9,
             accepted_count: 5,
@@ -114,6 +118,65 @@ fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
     assert!(html.contains("half-open window"));
     assert!(html.contains("Lifecycle and interruption history"));
     assert!(html.contains("recovered &lt;without inventing evidence&gt;"));
+}
+
+#[test]
+fn renders_readiness_basis_and_bounded_command_diagnostics() {
+    let mut report = canonical_report();
+    let ready_at = "2026-07-14T22:01:00Z".parse().unwrap();
+    report.snapshot = ReportSnapshotContext {
+        checkpoint_revision: Some(18),
+        lifecycle: Some(SessionLifecycleV2::Running),
+        lifecycle_events: Vec::new(),
+        wspr_cycles: vec![ReportWsprCycle {
+            intent_id: "intent-1".into(),
+            sequence_number: 1,
+            band: Band::M20,
+            direction: Some(WsprCycleDirection::Transmit),
+            planned_antenna: "A".into(),
+            actual_antenna: Some("A".into()),
+            ready_at: Some(ready_at),
+            starts_at: Some("2026-07-14T22:02:01Z".parse().unwrap()),
+            transmission_ends_at: Some("2026-07-14T22:03:51.592Z".parse().unwrap()),
+            attribution: ReportWsprAttribution::Attributable,
+            readiness_basis: Some(ReportWsprReadinessBasis::CommandVerified),
+        }],
+        antenna_control_attempts: vec![ReportAntennaControlAttempt {
+            record_id: "verify-record".into(),
+            role: AntennaControlRoleV5::Verification,
+            controller_profile_name: "switch <profile>".into(),
+            controller_profile_revision: "revision-7".into(),
+            resolved_program: "/opt/bin/verify".into(),
+            resolved_arguments: vec!["--target".into(), "relay-a".into()],
+            intent_id: "intent-1".into(),
+            antenna: "A".into(),
+            target: "relay-a".into(),
+            mode: ExperimentMode::TxFocused,
+            started_at: ready_at,
+            completed_at: ready_at,
+            elapsed_milliseconds: 0,
+            disposition: AntennaControlDispositionV5::Exit { code: 0 },
+            stdout: AntennaControlOutputV5 {
+                encoding: AntennaControlOutputEncodingV5::Utf8,
+                data: "verified".into(),
+                truncated: false,
+            },
+            stderr: AntennaControlOutputV5 {
+                encoding: AntennaControlOutputEncodingV5::Base64,
+                data: "AAE=".into(),
+                truncated: true,
+            },
+        }],
+        adapter_evidence: ReportAdapterEvidence::default(),
+    };
+
+    let html = render_standalone_html(&report).unwrap();
+    assert!(html.contains("Command verified"));
+    assert!(html.contains("Antenna-control command attempts"));
+    assert!(html.contains("Transmit-focused"));
+    assert!(html.contains("switch &lt;profile&gt;"));
+    assert!(html.contains("truncated=true"));
+    assert!(html.contains("[1]=&quot;relay-a&quot;"));
 }
 
 #[test]

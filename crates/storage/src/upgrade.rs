@@ -6,13 +6,14 @@ use std::{
 };
 
 use antennabench_core::{
-    upgrade_v2_bundle_model, validate_machine_identity, AdapterDisposition, AdapterInput,
-    AdapterReasonId, AdapterRecordV2, BundleContents, BundleFilesV2, BundleManifestV2,
-    BundleV2Contents, BundleValidationError, BundleValidationProfile, EventTimeBasisV2,
-    MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecordV2,
-    OperatorEventPayloadV2, OperatorEventType, OperatorEventV2, PlanGenerationV2,
-    PropagationRecordV2, Provenance, RecordMeta, RecordMetaV2, RigRecordV2, SessionLifecycleV2,
-    SessionStateV2, StreamCheckpointV2, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2,
+    upgrade_v2_bundle_model, upgrade_v3_bundle_model_to_v5, validate_machine_identity,
+    AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, BundleContents,
+    BundleFilesV2, BundleManifestV2, BundleV2Contents, BundleValidationError,
+    BundleValidationProfile, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
+    NormalizedRecordLink, ObservationRecordV2, OperatorEventPayloadV2, OperatorEventType,
+    OperatorEventV2, PlanGenerationV2, PropagationRecordV2, Provenance, RecordMeta, RecordMetaV2,
+    RigRecordV2, SessionLifecycleV2, SessionStateV2, StreamCheckpointV2, SCHEMA_VERSION_V1,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -227,6 +228,123 @@ impl BundleStore {
             return Err(BundleUpgradeError::SourceChanged);
         }
         Ok(destination_store)
+    }
+
+    /// Creates a new schema-v5 bundle from schema v3 or v4. Historical armed
+    /// cycles become explicitly operator-confirmed; no command evidence is
+    /// invented.
+    pub fn upgrade_v3_to_v5(
+        &self,
+        destination: impl AsRef<Path>,
+    ) -> Result<BundleStore, BundleUpgradeError> {
+        let source_before = snapshot_tree(self)?;
+        ensure_destination_outside_source(self.root(), destination.as_ref())?;
+        let source = self.read_v3()?;
+        if !matches!(
+            source.manifest.schema_version,
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4
+        ) {
+            return Err(BundleUpgradeError::NotVersionThreeOrFour {
+                actual: source.manifest.schema_version,
+            });
+        }
+        let source_attachments = self.root().join(&source.manifest.files.attachments_dir);
+        let mut upgraded = upgrade_v3_bundle_model_to_v5(source);
+        BundleStore::refresh_v3_checkpoint(&mut upgraded)?;
+        let destination_store = self.derived(destination);
+        destination_store.write_v3_for_upgrade(&upgraded)?;
+        let result = (|| {
+            copy_legacy_attachments(
+                self,
+                &source_attachments,
+                &destination_store
+                    .root()
+                    .join(&upgraded.manifest.files.attachments_dir),
+            )?;
+            for record in &upgraded.adapter_records {
+                if let AdapterInput::Attachment { attachment } = &record.input {
+                    destination_store.read_attachment(attachment)?;
+                }
+            }
+            if destination_store.read_v3()? != upgraded {
+                return Err(BundleUpgradeError::V3RoundTripMismatch);
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(error);
+        }
+        if source_before != snapshot_tree(self)? {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(BundleUpgradeError::SourceChanged);
+        }
+        Ok(destination_store)
+    }
+
+    /// Creates a new schema-v5 bundle from schema v2 without inventing
+    /// antenna-control evidence.
+    pub fn upgrade_v2_to_v5(
+        &self,
+        destination: impl AsRef<Path>,
+    ) -> Result<BundleStore, BundleUpgradeError> {
+        let source_before = snapshot_tree(self)?;
+        ensure_destination_outside_source(self.root(), destination.as_ref())?;
+        let v2 = self.read_v2()?;
+        if v2.manifest.schema_version != SCHEMA_VERSION_V2 {
+            return Err(BundleUpgradeError::NotVersionTwo {
+                actual: v2.manifest.schema_version,
+            });
+        }
+        let source_attachments = self.root().join(&v2.manifest.files.attachments_dir);
+        let mut upgraded = upgrade_v3_bundle_model_to_v5(upgrade_v2_bundle_model(v2));
+        BundleStore::refresh_v3_checkpoint(&mut upgraded)?;
+        let destination_store = self.derived(destination);
+        destination_store.write_v3_for_upgrade(&upgraded)?;
+        let result = copy_legacy_attachments(
+            self,
+            &source_attachments,
+            &destination_store
+                .root()
+                .join(&upgraded.manifest.files.attachments_dir),
+        );
+        if let Err(error) = result {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(error);
+        }
+        if destination_store.read_v3()? != upgraded {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(BundleUpgradeError::V3RoundTripMismatch);
+        }
+        if source_before != snapshot_tree(self)? {
+            let _ = fs::remove_dir_all(destination_store.root());
+            return Err(BundleUpgradeError::SourceChanged);
+        }
+        Ok(destination_store)
+    }
+
+    /// Creates a new schema-v5 bundle from schema v1 through the established
+    /// lossless v1-to-v3 migration, using an internal sibling staging bundle.
+    pub fn upgrade_v1_to_v5(
+        &self,
+        destination: impl AsRef<Path>,
+    ) -> Result<BundleStore, BundleUpgradeError> {
+        let destination = destination.as_ref();
+        ensure_destination_outside_source(self.root(), destination)?;
+        let staging = destination
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(format!(
+                ".schema-v3-upgrade-staging-{}{V2_BUNDLE_SUFFIX}",
+                uuid::Uuid::new_v4()
+            ));
+        let intermediate = self.upgrade_v1_to_v3(&staging)?;
+        let result = intermediate.upgrade_v3_to_v5(destination);
+        fs::remove_dir_all(&staging).map_err(|source| BundleUpgradeError::CopyAttachments {
+            path: staging,
+            source,
+        })?;
+        result
     }
 }
 
@@ -945,6 +1063,8 @@ pub enum BundleUpgradeError {
     NotVersionOne { actual: u16 },
     #[error("only schema version 2 can be upgraded to version 3, found {actual}")]
     NotVersionTwo { actual: u16 },
+    #[error("only schema version 3 or 4 can be upgraded to version 5, found {actual}")]
+    NotVersionThreeOrFour { actual: u16 },
     #[error("legacy WSJT-X evidence has {records} projected records but {lines} physical records")]
     LegacyEvidenceCount { records: usize, lines: usize },
     #[error("failed to read legacy evidence {path}")]

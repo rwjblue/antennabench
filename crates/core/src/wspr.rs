@@ -187,6 +187,7 @@ pub fn project_wspr_run_v3(
         let OperatorEventPayloadV3::WsprCycleArmed {
             antenna_label,
             cycle_starts_at,
+            ..
         } = &event.payload
         else {
             continue;
@@ -363,6 +364,7 @@ mod tests {
             session_id: "session".into(),
             mode: ExperimentMode::WholeStationAb,
             goal: SessionGoal::GeneralCoverage,
+            antenna_control: None,
             signal_plans: Vec::new(),
             wspr_cycle_intents: vec![
                 WsprCycleIntentV3 {
@@ -474,6 +476,7 @@ mod tests {
                 OperatorEventPayloadV3::WsprCycleArmed {
                     antenna_label: "A".into(),
                     cycle_starts_at: utc(12, 0, 1, 0),
+                    readiness: None,
                 },
             ),
             event(
@@ -489,6 +492,7 @@ mod tests {
                 OperatorEventPayloadV3::WsprCycleArmed {
                     antenna_label: "B".into(),
                     cycle_starts_at: utc(12, 2, 1, 0),
+                    readiness: None,
                 },
             ),
             event(
@@ -517,6 +521,7 @@ mod tests {
                 OperatorEventPayloadV3::WsprCycleArmed {
                     antenna_label: "A".into(),
                     cycle_starts_at: utc(12, 0, 1, 0),
+                    readiness: None,
                 },
             ),
             event(
@@ -532,6 +537,7 @@ mod tests {
                 OperatorEventPayloadV3::WsprCycleArmed {
                     antenna_label: "A".into(),
                     cycle_starts_at: utc(12, 2, 1, 0),
+                    readiness: None,
                 },
             ),
         ];

@@ -15,7 +15,7 @@ use antennabench_core::{
     AdapterReasonId, AdapterRecordV2, Band, BundleContents, BundleV2Contents, BundleV3Contents,
     MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecord,
     ObservationRecordV2, Provenance, RecordMetaV2, RecordSource, SessionLifecycleV2,
-    WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
@@ -257,7 +257,7 @@ struct PendingWsjtxMutation {
 fn read_wsjtx_snapshot(store: &BundleStore) -> Result<WsjtxSnapshot, LivePersistenceError> {
     match store.schema_version()? {
         SCHEMA_VERSION_V2 => store.read_v2_checkpointed().map(WsjtxSnapshot::V2),
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
             store.read_v3_checkpointed().map(WsjtxSnapshot::V3)
         }
         actual => {
@@ -1037,7 +1037,7 @@ impl WsjtxOrchestrator {
                             members,
                         })
                     }),
-                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => self
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => self
                     .store
                     .open_v3_writer_with_hooks(self.hooks.clone())
                     .and_then(|mut writer| {
@@ -1590,6 +1590,7 @@ mod tests {
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label: intent.antenna_label,
                 cycle_starts_at,
+                readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
             },
         ));
         let transmission_ends_at =
@@ -1623,6 +1624,7 @@ mod tests {
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label: second_receive_intent.antenna_label,
                 cycle_starts_at: second_receive_starts_at,
+                readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
             },
         ));
         let after_second_receive = WsjtxSnapshot::V3(bundle.clone()).current_bundle(
@@ -1647,6 +1649,7 @@ mod tests {
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label: transmit_intent.antenna_label,
                 cycle_starts_at: transmit_starts_at,
+                readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
             },
         ));
         let after_transmit = WsjtxSnapshot::V3(bundle.clone()).current_bundle(

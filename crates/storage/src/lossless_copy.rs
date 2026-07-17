@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use antennabench_core::{
     BundleManifestV2, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
-    V1_BUNDLE_SUFFIX,
+    SCHEMA_VERSION_V5, V1_BUNDLE_SUFFIX,
 };
 
 use super::{
@@ -60,7 +60,7 @@ impl BundleStore {
                     .and_then(|paths| paths.ensure_readable_targets())
                     .map_err(map_source_error)?;
             }
-            SCHEMA_VERSION_V2 | SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 => {
+            SCHEMA_VERSION_V2 | SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
                 let manifest: BundleManifestV2 =
                     serde_json::from_str(&manifest_text).map_err(|source| {
                         source_error(BundleStoreError::ParseJson {
@@ -83,7 +83,7 @@ impl BundleStore {
         let destination = destination.as_ref();
         if matches!(
             schema_version,
-            SCHEMA_VERSION_V2 | SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4
+            SCHEMA_VERSION_V2 | SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
         ) {
             ensure_v2_suffix(destination)
                 .map_err(|source| BundleCopyError::DestinationLayout { source })?;

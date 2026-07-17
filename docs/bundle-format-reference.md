@@ -6,7 +6,7 @@ mental model, start with [Session Bundles](bundle-format.md).
 
 A session bundle is a directory containing JSON root files, JSONL streams, and
 an attachments directory. Schema version 1 uses `.session.wsprabundle`; schema
-versions 2 and 3 use the provider-neutral `.session.antennabundle` suffix.
+versions 2 through 5 use the provider-neutral `.session.antennabundle` suffix.
 
 Version 1 layout:
 
@@ -25,7 +25,7 @@ example.session.wsprabundle/
   attachments/
 ```
 
-Versions 2 and 3 share this physical layout:
+Versions 2 through 5 share this physical layout:
 
 ```text
 example.session.antennabundle/
@@ -52,7 +52,7 @@ example.session.antennabundle/
 ```
 
 Storage reads `manifest.schema_version` first and dispatches into distinct v1,
-v2, and v3 wire models. Unknown versions fail with a typed unsupported-version
+v2, and v3-v5 wire models. Unknown versions fail with a typed unsupported-version
 error. All versions project into one current analysis model; v2/v3 projection retains a
 provider-neutral provenance sidecar, generic adapter records, and the session
 checkpoint. V3-only planned and confirmed signal facts are not coerced into
@@ -130,6 +130,31 @@ profiling schedules contain both. Existing schema-v3 cycles deserialize with
 unknown direction and remain readable; no migration guesses whether a past
 period transmitted or received.
 
+[Decision 0021](decisions/0021-use-command-verified-antenna-control.md)
+selects schema v5 for antenna-control policy and evidence. `schedule.json`
+records only the portable policy: manual or command-controlled,
+operator-triggered or automatic invocation, and whether manual review is
+required. Executable paths, argument templates, antenna target mappings, and
+timeouts are local application configuration and are never plan fields.
+
+Each attempted switch or verification may add one typed `rig.jsonl` record.
+It contains the controller profile name/revision, original command templates,
+resolved program and indexed argument array, complete intention context
+(including the durable experiment mode used for `{mode}` interpolation),
+timing, exit/spawn/signal/timeout disposition, and independently bounded
+stdout/stderr. Output is UTF-8 or base64 with explicit truncation state and a
+64 KiB decoded-byte limit per stream. A complete rig line remains subject to
+the 256 KiB JSONL line limit.
+
+Every schema-v5 `wspr_cycle_armed` event names its readiness basis.
+`operator_confirmed` is the default manual meaning. `command_verified`
+references one successful switch record and one successful verification record
+for the same intention and target. Strict validation requires the two rig
+records and event to be members 0, 1, and 2 of one checkpointed mutation;
+roles, order, session, intention, antenna, target, direction, band, frequency,
+sequence, callsign, and exit-zero outcomes must agree. Failed attempts may be
+committed alone and never arm a cycle or change antenna occupancy.
+
 ## Provider-Neutral Evidence
 
 Every v2 provenance contains `provider_id`, `source_id`,
@@ -197,7 +222,12 @@ digests, retained evidence counts, destination reopen, and a before/after
 snapshot of every source file. `upgrade_v1_to_v3()` applies the same lossless
 legacy conversion directly, while `upgrade_v2_to_v3()` preserves v2 evidence
 and attachments. The direct and two-step v3 models are deterministic and
-equivalent. There is no downgrade to an older schema.
+equivalent. Explicit `upgrade_v1_to_v5()`, `upgrade_v2_to_v5()`, and
+`upgrade_v3_to_v5()` create a new v5 destination. Schema-v3 and schema-v4 armed
+cycles become `operator_confirmed`; no command, target, invocation, or
+verification fact is invented. Historical schema-v3 WSPR intentions retain an
+unknown direction under the manual policy rather than guessing RX or TX. There
+is no downgrade to an older schema.
 
 ## Schema-V2 Operator Events
 
@@ -254,7 +284,7 @@ whole bundle or no typed bundle. Storage-safe preservation remains separate
 from parsing and analysis, and strict writes or live checkpoints never promote
 bytes that cross the profile.
 
-Schema-v1, schema-v2, and schema-v3 reads, strict writes, upgrades, attachment access, and
+Schema-v1 through schema-v5 reads, strict writes, upgrades, attachment access, and
 lossless copies use this same fixed profile. Production callers cannot override
 it. Tests can inject a tiny equivalent to exercise exact boundaries and
 mid-operation failures deterministically. Resource failures expose a stable
@@ -282,7 +312,8 @@ chunk.
   `all_wspr_decode` for parsed decode rows and `all_wspr_malformed` for
   preserved lines that could not become observations. Live companion records
   use `udp_heartbeat`, `udp_status`, `udp_wspr_decode`, and `udp_close`.
-- `rig.jsonl`: rig adapter state.
+- `rig.jsonl`: rig adapter state and, in schema v5, typed bounded
+  antenna-control invocation evidence.
 - `propagation.jsonl`: time-scoped propagation context. The implemented NOAA
   SWPC adapter writes observed F10.7 and provisional estimated planetary Kp as
   separate sparse records because the products have different source times.
@@ -293,7 +324,8 @@ chunk.
 
 Every v1 JSONL record includes `meta` with schema version, session id,
 timestamp, and legacy source. Every v2 record instead uses structured
-provenance and mutation membership. V3 retains that envelope for every stream.
+provenance and mutation membership. V3 through v5 retain that envelope for
+every stream.
 
 Offline WSJT-X WSPR log import preserves every nonblank imported line in
 `wsjtx.jsonl`. Valid `ALL_WSPR.TXT`-style decode rows also produce
@@ -391,6 +423,9 @@ Structural and semantic validation checks:
 - normalized v2 records link to existing generic adapter evidence
 - attachment digests/sizes, active-plan digests, and committed stream heads
   match `session-state.json`
+- schema-v5 command invocations satisfy command/argument/output bounds and
+  command-verified readiness resolves to one matching, successful switch and
+  verification pair in the same ordered mutation
 
 Use `BundleStore::inspect()` to retain the report beside an optional all-or-none
 current projection. `read_for_analysis()` returns a normalized compatibility-safe

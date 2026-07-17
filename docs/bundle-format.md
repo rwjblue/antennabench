@@ -16,6 +16,8 @@ does not reduce a session to a winner or a few chart values. The bundle keeps:
 
 - the station, antennas, and schedule you entered;
 - confirmations, missed or bad slots, notes, and later corrections;
+- operator-confirmed or command-verified WSPR readiness plus bounded command
+  attempts when present;
 - local decodes and imported public reports;
 - original adapter input when it is needed for provenance;
 - enough metadata to reproduce the analysis and disclose missing evidence.
@@ -47,10 +49,13 @@ rewriting earlier evidence.
 
 ## Versions
 
-New AntennaBench sessions use schema v4. It adds an explicit receive or transmit
-direction to every WSPR cycle intention. Signal plans remain optional, so
+New AntennaBench sessions use schema v5. It retains schema-v4 receive/transmit
+direction and adds portable antenna-control policy, typed invocation evidence,
+and an explicit readiness basis. Signal plans remain optional, so
 routine WSPR sessions and controlled CW/RTTY sessions share the same durable
-envelope. Schema-v3 bundles remain readable without inventing a direction. The
+envelope. Schema-v1 through schema-v4 bundles remain bounded-readable and
+losslessly exportable. Explicit upgrade maps historical ready actions to
+operator-confirmed and invents no commands. The
 storage boundary dispatches explicitly by schema version so compatibility
 readers can be retained once released user formats exist; pre-release v1/v2
 fixtures are not a compatibility promise.
@@ -64,6 +69,8 @@ fixtures are not a compatibility promise.
   HTML when you want a convenient, read-only report to share.
 - Treat imported source attachments as evidence. AntennaBench verifies their
   recorded sizes and SHA-256 digests when reading them.
+- A bundle can retain resolved command diagnostics, but it never carries or
+  activates local executable profiles, antenna mappings, or timeouts.
 - A report may exclude a damaged or ambiguous record while still explaining
   the problem. It will not silently turn missing evidence into a result.
 

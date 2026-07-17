@@ -722,6 +722,7 @@ fn event_shape_error_v3(event: &OperatorEventV3) -> Option<String> {
         OperatorEventPayloadV3::WsprCycleArmed {
             antenna_label,
             cycle_starts_at,
+            ..
         } => slot_required("armed WSPR cycle")
             .or_else(|| {
                 (antenna_label.trim().is_empty() || antenna_label.trim() != antenna_label)

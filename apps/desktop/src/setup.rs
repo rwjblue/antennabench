@@ -13,7 +13,7 @@ use antennabench_core::{
     PlanGenerationV2, PlannedSlot, Schedule, SessionGoal, SessionLifecycleV2, SessionStateV2,
     SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3,
     SignalPlanV3, SignalVariantIdV3, Station, WsprCycleDirection, WsprCycleIntentV3,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{
     BundleStore, BundleStoreError, LivePersistenceError, LivePersistenceHooks,
@@ -261,12 +261,13 @@ fn planned_wspr_cycles(
 }
 
 fn use_latest_schema(bundle: &mut BundleV3Contents) {
-    bundle.manifest.schema_version = SCHEMA_VERSION_V4;
-    bundle.session_state.schema_version = SCHEMA_VERSION_V4;
-    bundle.station.schema_version = SCHEMA_VERSION_V4;
-    bundle.antennas.schema_version = SCHEMA_VERSION_V4;
-    bundle.schedule.schema_version = SCHEMA_VERSION_V4;
-    bundle.analysis.schema_version = SCHEMA_VERSION_V4;
+    bundle.manifest.schema_version = SCHEMA_VERSION_V5;
+    bundle.session_state.schema_version = SCHEMA_VERSION_V5;
+    bundle.station.schema_version = SCHEMA_VERSION_V5;
+    bundle.antennas.schema_version = SCHEMA_VERSION_V5;
+    bundle.schedule.schema_version = SCHEMA_VERSION_V5;
+    bundle.schedule.antenna_control = Some(antennabench_core::AntennaControlPolicyV5::Manual);
+    bundle.analysis.schema_version = SCHEMA_VERSION_V5;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -757,7 +758,7 @@ fn build_review(
     BundleStore::refresh_v3_checkpoint(&mut bundle).map_err(|error| {
         SessionErrorPayload::new(
             SessionErrorKind::Validation,
-            "The normalized schema-v4 setup plan could not be prepared.",
+            "The normalized schema-v5 setup plan could not be prepared.",
             error.to_string(),
         )
     })?;
@@ -1556,7 +1557,7 @@ mod tests {
         assert_eq!(review.review_id.as_deref(), Some("review-0003"));
         let plan = review.plan.unwrap();
         assert_eq!(plan.session_id, "session-0001");
-        assert_eq!(plan.schema_version, SCHEMA_VERSION_V4);
+        assert_eq!(plan.schema_version, SCHEMA_VERSION_V5);
         assert_eq!(plan.station.callsign, "N1RWJ");
         assert_eq!(plan.station.grid, "FN42");
         assert!(!plan.wspr_live_acquisition_enabled);
@@ -1649,7 +1650,7 @@ mod tests {
         assert!(review.valid, "diagnostics: {:?}", review.diagnostics);
         let review_id = review.review_id.unwrap();
         let plan = review.plan.unwrap();
-        assert_eq!(plan.schema_version, SCHEMA_VERSION_V4);
+        assert_eq!(plan.schema_version, SCHEMA_VERSION_V5);
         assert!(!plan.wspr_live_acquisition_enabled);
         assert_eq!(plan.slots.len(), 8);
         let signal_plan = plan.signal_plan.unwrap();
@@ -1670,7 +1671,11 @@ mod tests {
             create_with_selection(&state, &active, &review_id, |_| Ok(Some(path.clone()))).unwrap();
         assert!(matches!(outcome, CreateSessionOutcome::Created { .. }));
         let persisted = BundleStore::new(path).read_v3_checkpointed().unwrap();
-        assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V4);
+        assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V5);
+        assert_eq!(
+            persisted.schedule.antenna_control,
+            Some(antennabench_core::AntennaControlPolicyV5::Manual)
+        );
         assert_eq!(persisted.schedule.signal_plans.len(), 1);
         assert_eq!(persisted.schedule.wspr_cycle_intents.len(), 8);
         assert!(persisted.schedule.slots.is_empty());

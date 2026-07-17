@@ -134,7 +134,7 @@ the UI could not outrun the durable, validation, and resource boundaries:
    lifecycle, correction, explicit-actual-state, conflict-exclusion, durable
    append, plan-generation, locking, snapshot, export, and recovery layers are
    implemented.
-3. Validated setup creates and opens a new checkpointed schema-v4 bundle from
+3. Validated setup creates and opens a new checkpointed schema-v5 bundle from
    an exact normalized review (#61). The manual/no-rig conductor runs it without
    depending on any optional adapter, with current/next slot guidance, explicit
    actual-antenna confirmation, missed/bad/note facts, append-only correction,

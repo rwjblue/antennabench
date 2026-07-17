@@ -1,15 +1,16 @@
 use std::{collections::BTreeMap, fs, path::Path};
 
 use antennabench_core::{
-    AcquisitionChannelId, AdapterId, AdapterInput, AnalysisFile, AnalysisStatus, Antenna,
-    AntennasFile, Band, BundleFilesV3, BundleManifestV3, BundleV3Contents,
+    upgrade_v3_bundle_model_to_v5, AcquisitionChannelId, AdapterId, AdapterInput, AnalysisFile,
+    AnalysisStatus, Antenna, AntennasFile, Band, BundleFilesV3, BundleManifestV3, BundleV3Contents,
     CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3, EventCorrectionActionV3,
     EventTimeBasisV2, ExperimentMode, MutationMember, OperatorEventPayloadV3, OperatorEventV3,
     PlanGenerationV2, PlannedSlotV3, Provenance, ProviderId, RecordMetaV3,
     ReplacementOperatorEventV3, RigRecordV3, ScheduleV3, SessionGoal, SessionLifecycleV2,
     SessionStateV3, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3,
     SignalPlanIdV3, SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station,
-    SCHEMA_VERSION_V3, V2_BUNDLE_SUFFIX,
+    WsprCycleDirection, WsprCycleIntentV3, WsprReadinessBasisV5, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
 };
 use antennabench_storage::{BundleAttachment, BundleStore, BundleStoreError};
 use chrono::{TimeZone, Utc};
@@ -89,6 +90,7 @@ fn bundle() -> BundleV3Contents {
             session_id: session_id.clone(),
             mode: ExperimentMode::TxFocused,
             goal: SessionGoal::GeneralCoverage,
+            antenna_control: None,
             signal_plans: vec![SignalPlanV3 {
                 signal_plan_id: signal_plan_id.clone(),
                 mode: SignalModeV3::Cw,
@@ -196,6 +198,7 @@ fn bundle() -> BundleV3Contents {
             frequency_hz: Some(14_050_000),
             mode: Some("CW".into()),
             power_watts: Some(9.5),
+            antenna_control: None,
             raw: serde_json::json!({"source": "manual read-back"}),
         }],
         propagation: Vec::new(),
@@ -218,6 +221,9 @@ fn v3_static_bundle_round_trips_with_signal_plan_and_confirmation() {
     BundleStore::refresh_v3_checkpoint(&mut bundle).unwrap();
 
     store.write_v3(&bundle).unwrap();
+    assert!(!fs::read_to_string(path.join("schedule.json"))
+        .unwrap()
+        .contains("antenna_control"));
 
     assert_eq!(store.read_v3().unwrap(), bundle);
     assert_eq!(
@@ -236,6 +242,106 @@ fn v3_static_bundle_round_trips_with_signal_plan_and_confirmation() {
     let copy_path = temp.path().join(format!("copy{V2_BUNDLE_SUFFIX}"));
     let copied = store.copy_losslessly_to(&copy_path).unwrap();
     assert_eq!(copied.read_v3().unwrap(), bundle);
+}
+
+#[test]
+fn schema_v3_and_v4_upgrade_to_v5_without_inventing_command_evidence() {
+    let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 0, 0).unwrap();
+    let mut source = bundle();
+    for version in [SCHEMA_VERSION_V3, SCHEMA_VERSION_V4] {
+        source.manifest.schema_version = version;
+        source.session_state.schema_version = version;
+        source.station.schema_version = version;
+        source.antennas.schema_version = version;
+        source.schedule.schema_version = version;
+        source.analysis.schema_version = version;
+        source.schedule.signal_plans.clear();
+        source.schedule.slots.clear();
+        source.schedule.wspr_cycle_intents = vec![WsprCycleIntentV3 {
+            intent_id: "historical-intent".into(),
+            sequence_number: 1,
+            band: Band::M20,
+            antenna_label: "A".into(),
+            direction: (version >= SCHEMA_VERSION_V4).then_some(WsprCycleDirection::Transmit),
+            signal: None,
+        }];
+        source.events = vec![OperatorEventV3 {
+            meta: RecordMetaV3 {
+                schema_version: version,
+                session_id: source.manifest.session_id.clone(),
+                recorded_at: now,
+                provenance: source.rig[0].meta.provenance.clone(),
+                mutation: MutationMember {
+                    mutation_id: "historical-ready".into(),
+                    member_index: 0,
+                    member_count: 1,
+                },
+            },
+            event_id: "historical-ready-event".into(),
+            occurred_at: now,
+            time_basis: EventTimeBasisV2::OperatorReported,
+            uncertainty_seconds: None,
+            slot_id: Some("historical-intent".into()),
+            payload: OperatorEventPayloadV3::WsprCycleArmed {
+                antenna_label: "A".into(),
+                cycle_starts_at: now + chrono::Duration::seconds(1),
+                readiness: None,
+            },
+        }];
+        let upgraded = upgrade_v3_bundle_model_to_v5(source.clone());
+        assert_eq!(upgraded.manifest.schema_version, SCHEMA_VERSION_V5);
+        assert_eq!(
+            upgraded.schedule.antenna_control,
+            Some(antennabench_core::AntennaControlPolicyV5::Manual)
+        );
+        assert!(upgraded
+            .rig
+            .iter()
+            .all(|record| record.antenna_control.is_none()));
+        assert!(matches!(
+            upgraded.events[0].payload,
+            OperatorEventPayloadV3::WsprCycleArmed {
+                readiness: Some(WsprReadinessBasisV5::OperatorConfirmed),
+                ..
+            }
+        ));
+    }
+}
+
+#[test]
+fn schema_v3_storage_upgrade_to_v5_is_non_destructive() {
+    let temp = tempfile::tempdir().unwrap();
+    for version in [SCHEMA_VERSION_V3, SCHEMA_VERSION_V4] {
+        let source_path = temp
+            .path()
+            .join(format!("source-v{version}{V2_BUNDLE_SUFFIX}"));
+        let destination_path = temp
+            .path()
+            .join(format!("destination-v{version}{V2_BUNDLE_SUFFIX}"));
+        let source_store = BundleStore::new(&source_path);
+        let mut source = bundle();
+        source.manifest.schema_version = version;
+        source.session_state.schema_version = version;
+        source.station.schema_version = version;
+        source.antennas.schema_version = version;
+        source.schedule.schema_version = version;
+        source.analysis.schema_version = version;
+        for event in &mut source.events {
+            event.meta.schema_version = version;
+        }
+        for record in &mut source.rig {
+            record.meta.schema_version = version;
+        }
+        BundleStore::refresh_v3_checkpoint(&mut source).unwrap();
+        source_store.write_v3(&source).unwrap();
+        let before = fs::read(source_path.join("manifest.json")).unwrap();
+        let destination = source_store.upgrade_v3_to_v5(&destination_path).unwrap();
+        assert_eq!(
+            destination.read_v3().unwrap().manifest.schema_version,
+            SCHEMA_VERSION_V5
+        );
+        assert_eq!(fs::read(source_path.join("manifest.json")).unwrap(), before);
+    }
 }
 
 #[test]
@@ -378,4 +484,16 @@ fn direct_v1_upgrade_matches_the_deterministic_two_step_model() {
     let two_step = intermediate.upgrade_v2_to_v3(&two_step_path).unwrap();
 
     assert_eq!(direct.read_v3().unwrap(), two_step.read_v3().unwrap());
+
+    let direct_v5_path = temp.path().join(format!("direct-v5{V2_BUNDLE_SUFFIX}"));
+    let two_step_v5_path = temp.path().join(format!("two-step-v5{V2_BUNDLE_SUFFIX}"));
+    let direct_v5 = BundleStore::new(&fixture)
+        .upgrade_v1_to_v5(&direct_v5_path)
+        .unwrap();
+    let two_step_v5 = intermediate.upgrade_v2_to_v5(&two_step_v5_path).unwrap();
+    assert_eq!(direct_v5.read_v3().unwrap(), two_step_v5.read_v3().unwrap());
+    assert_eq!(
+        direct_v5.read_v3().unwrap().manifest.schema_version,
+        SCHEMA_VERSION_V5
+    );
 }

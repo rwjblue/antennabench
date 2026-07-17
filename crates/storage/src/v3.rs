@@ -1,12 +1,13 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    codes, project_wspr_run_v3, reduce_operator_events_v3, validate_bundle_report,
-    validate_signal_plan_schedule_v3, validate_signal_state_confirmation_v3,
-    validate_signal_state_event_v3, AdapterInput, BundleManifestV3, BundleV3Contents,
-    BundleValidationProfile, BundleValidationReport, CorrectableOperatorEventPayloadV3,
-    ExperimentMode, OperatorEventPayloadV3, SessionLifecycleV2, SessionStateV3, WsprCycleDirection,
-    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
+    codes, project_wspr_run_v3, reduce_operator_events_v3, validate_antenna_control_v5,
+    validate_bundle_report, validate_signal_plan_schedule_v3,
+    validate_signal_state_confirmation_v3, validate_signal_state_event_v3, AdapterInput,
+    BundleManifestV3, BundleV3Contents, BundleValidationProfile, BundleValidationReport,
+    CorrectableOperatorEventPayloadV3, ExperimentMode, OperatorEventPayloadV3, SessionLifecycleV2,
+    SessionStateV3, WsprCycleDirection, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    V2_BUNDLE_SUFFIX,
 };
 
 use super::{
@@ -175,7 +176,7 @@ impl BundleStore {
             self.read_json_bounded(&self.bundle_path("manifest.json")?, &mut budget)?;
         if !matches!(
             manifest.schema_version,
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
         ) {
             return Err(BundleStoreError::UnsupportedSchemaVersion {
                 actual: manifest.schema_version,
@@ -314,7 +315,10 @@ impl BundleStore {
 pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
     let session_id = bundle.manifest.session_id.as_str();
     let schema_version = bundle.manifest.schema_version;
-    if !matches!(schema_version, SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4) {
+    if !matches!(
+        schema_version,
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
+    ) {
         return Err(BundleStoreError::UnsupportedSchemaVersion {
             actual: schema_version,
         });
@@ -374,9 +378,16 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
         .map(|antenna| antenna.label.as_str())
         .collect::<std::collections::BTreeSet<_>>();
     for (index, intent) in bundle.schedule.wspr_cycle_intents.iter().enumerate() {
-        if schema_version >= SCHEMA_VERSION_V4 && intent.direction.is_none() {
+        if (schema_version == SCHEMA_VERSION_V4
+            || (schema_version >= SCHEMA_VERSION_V5
+                && !matches!(
+                    bundle.schedule.antenna_control,
+                    Some(antennabench_core::AntennaControlPolicyV5::Manual)
+                )))
+            && intent.direction.is_none()
+        {
             return Err(invalid_v3(
-                "schema-v4 WSPR cycle intentions require an explicit direction",
+                "current command-controlled WSPR cycle intentions require an explicit direction",
             ));
         }
         if intent.intent_id.trim().is_empty()
@@ -407,7 +418,15 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
             ));
         }
     }
-    if schema_version >= SCHEMA_VERSION_V4 && bundle.schedule.signal_plans.is_empty() {
+    if schema_version >= SCHEMA_VERSION_V4
+        && bundle.schedule.signal_plans.is_empty()
+        && !bundle.schedule.wspr_cycle_intents.is_empty()
+        && bundle
+            .schedule
+            .wspr_cycle_intents
+            .iter()
+            .all(|intent| intent.direction.is_some())
+    {
         let directions = bundle
             .schedule
             .wspr_cycle_intents
@@ -556,6 +575,7 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
             )));
         }
     }
+    validate_antenna_control_v5(bundle).map_err(invalid_v3)?;
     Ok(())
 }
 

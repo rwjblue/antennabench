@@ -385,6 +385,7 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     report.chart_data = ReportChartData::default();
     report.snapshot.lifecycle_events.clear();
     report.snapshot.wspr_cycles.clear();
+    report.snapshot.antenna_control_attempts.clear();
     report
         .notices
         .retain(|notice| !matches!(notice, ReportNotice::DetailOmitted { .. }));

@@ -11,6 +11,7 @@ repository = "https://github.com/rwjblue/antennabench"
 publish = false
 
 [workspace.dependencies]
+base64 = "0.22.1"
 chrono = { version = "0.4.38", default-features = false, features = ["clock", "serde", "std"] }
 csv = "1.4.0"
 insta = { version = "1.48.0", features = ["json"] }

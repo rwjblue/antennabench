@@ -2,8 +2,8 @@
 
 This technical reference defines how an active session becomes durable and how
 AntennaBench recovers after interruption. Schema v2 owns the complete live
-mutation and recovery protocol; schema v3 reuses its checkpoint, locking, and
-verified snapshot boundaries for signal-plan sessions. For the bundle mental
+mutation and recovery protocol; schema v3 through v5 reuse its checkpoint,
+locking, and verified snapshot boundaries. For the bundle mental
 model, start with [Session Bundles](bundle-format.md).
 
 Live mutation is owned by `antennabench-storage`. A `LiveSessionV2` or
@@ -14,7 +14,7 @@ appends in a fixed order, synchronizes every changed stream, and promotes one
 checkpoint.
 
 Schema-v1 bundles remain immutable inputs. They must be explicitly upgraded to
-schema v2 or v3 in a new `.session.antennabundle` before these APIs will mutate
+a checkpointed schema in a new `.session.antennabundle` before these APIs will mutate
 them.
 
 ## Durable Layout
@@ -96,6 +96,13 @@ Schema v3 provides corresponding `read_v3_checkpointed()` and
 `export_v3_checkpointed_to()` boundaries. Its writer appends correctable
 operator events and attachment-backed adapter evidence plus observations while
 preserving the same expected-revision, digest, lock, and checkpoint rules.
+The same versioned writer carries schema v4 and v5. Schema v5 adds
+`append_antenna_control`: a failed attempt commits one or two rig records with
+no event; successful command-authorized readiness commits switch, verification,
+and armed event as one ordered mutation. Injected failure before checkpoint
+promotion exposes the prior revision, while failure after promotion exposes
+the complete next revision. Exact retry returns the committed receipt and a
+conflicting mutation-ID reuse fails.
 
 ## Recovery
 
@@ -156,7 +163,9 @@ raw-plus-normalized batches, complete/torn/incomplete/duplicate/conflicting
 tails, current/previous checkpoint selection, committed corruption, plan
 freeze, recovery attachments, interruption detection, and checkpointed export.
 
-`crates/storage/tests/v3_live_persistence.rs` separately verifies schema-v3
+`crates/storage/tests/v3_live_persistence.rs` separately verifies schema-v3-v5
 creation, checkpointed reads and exports, event and evidence appends,
 attachment rollback, stale revisions, conflicting mutation reuse, and external
-modification detection.
+modification detection. Schema-v5 cases inject every rig/event/checkpoint
+failure boundary and verify that failed attempts remain non-arming while a
+verified pair and armed event are all-or-nothing.
