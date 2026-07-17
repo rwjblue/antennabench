@@ -1,86 +1,96 @@
 # Local Antenna Controller Profiles
 
-AntennaBench can optionally assist an operator by running a machine-local
-antenna switch program and, when configured, a separate verification program.
-This is an operator-triggered aid: the existing named **antenna ready** action
-still arms every WSPR cycle and records `operator_confirmed` readiness.
+> **Audience:** advanced operators integrating a local switch or radio-control
+> program. Manual operation is the default and remains fully supported.
 
-Manual operation is the default and remains complete after every missing
-profile, process error, timeout, verification failure, interruption, or edit.
-There is no automatic retry.
+AntennaBench can run a machine-local program to request an antenna switch and,
+optionally, a separate program to verify the resulting state. These commands are
+operator-triggered aids. They do not automatically arm a WSPR cycle: after
+checking the physical station state, you still press the named antenna’s
+**ready** action.
 
-## Local Configuration And Portable Evidence
+There is no automatic retry. A missing profile, command error, timeout, failed
+verification, interrupted run, or profile edit leaves the normal manual workflow
+available.
 
-Profiles are stored only in the platform application-data directory. A profile
-contains a name and revision, switch and optional verification templates, and
-a timeout from one through sixty seconds. The per-session association maps
-every scheduled antenna label to one opaque target. Associations may be saved
-locally, but executable authority is volatile: opening or recovering a bundle
-never attaches or arms a profile. The operator must explicitly attach and arm
-it again.
+## Security And Portability Model
 
-Session bundles contain only the portable antenna-control policy and evidence
-from commands that actually ran. They never contain executable paths, target
-mappings, or timeouts. Opening or importing a bundle therefore cannot grant it
-process authority.
+Controller profiles are stored only in this computer’s application-data
+directory. A profile contains a name, switch command, optional verification
+command, and timeout. Each session maps its antenna labels to opaque controller
+targets such as `1`, `2`, `north`, or `loop`.
 
-Resolved programs, indexed arguments, stdout, and stderr become portable
-evidence. They may disclose local paths, usernames, network addresses, or
-credentials. Setup displays this warning before creation and previews every
-normalized invocation with its experiment mode and direction.
+Portable session bundles never contain an executable profile, target mapping, or
+timeout. Opening or recovering a bundle cannot run a command or restore process
+authority. You must explicitly attach and arm a local profile for the active
+session again.
 
-## Command Entry And Expansion
+A bundle can retain the resolved program, ordered arguments, standard output,
+standard error, timing, and result from commands that actually ran. That evidence
+may expose local paths, usernames, network addresses, or credentials. Review it
+before sharing a bundle.
 
-On macOS and Linux, the setup UI accepts one command line. AntennaBench's small
-tokenizer recognizes only whitespace, single- or double-quote grouping, and a
-backslash that escapes the next character. On Windows, setup presents the
-program and ordered argument array separately. Both inputs normalize to the
-same program-plus-arguments model.
+## Creating A Profile
 
-No shell is used. Environment variables, `~`, globs, redirects, pipes,
-substitutions, and chaining are not expanded. Text such as `*`, `>`, `|`,
-`$()`, and `&&` remains ordinary argument text.
+A profile has:
 
-Templates support `{antenna}`, `{target}`, `{mode}`, `{direction}`, `{band}`,
-`{frequency_hz}`, `{sequence}`, `{intent_id}`, `{session_id}`, and `{callsign}`.
-`{{` and `}}` produce literal braces. Unknown or malformed placeholders fail
-setup review. Tokenization happens first and interpolation happens inside each
-existing token, so a value containing whitespace, quotes, braces, or shell
-metacharacters cannot create another argument or executable.
+- one switch command;
+- an optional, independent verification command;
+- a timeout from 1 through 60 seconds; and
+- one target mapping for every antenna in the session.
 
-## Active Run
+On macOS and Linux, the app accepts a command line and applies a small,
+predictable tokenizer for whitespace, quotes, and backslash escapes. On Windows,
+the program and arguments are entered separately. In both cases AntennaBench
+runs the program directly—never through a shell.
 
-The direct-process action is available only when all of these remain true:
+Shell expansion is not available. Environment variables, `~`, globs, pipes,
+redirection, substitutions, and command chaining are passed as ordinary argument
+text rather than executed.
 
-- the active bundle is a running schema-v5 session whose portable policy is
-  command-controlled, operator-triggered, and manual-review-required;
-- the prior committed WSPR transmission interval has ended;
-- Rust issued the action token for the current revision and pending intention;
-- a local profile revision and complete antenna-target mapping were explicitly
-  attached and armed for that session; and
-- the saved profile still has the attached revision.
+Templates can use these placeholders:
 
-Rust derives the complete interpolation context from the active bundle. The
-webview submits only the action token, checkpoint revision, and pending
-intention identity; it cannot choose an executable at invocation time.
+| Placeholder | Value |
+| --- | --- |
+| `{antenna}` | Antenna label in the session |
+| `{target}` | Local target mapped to that antenna |
+| `{mode}` | Experiment mode |
+| `{direction}` | `receive` or `transmit` |
+| `{band}` | Scheduled amateur band |
+| `{frequency_hz}` | Scheduled frequency when available |
+| `{sequence}` | Cycle sequence number |
+| `{intent_id}` | Stable cycle-intention identity |
+| `{session_id}` | Stable session identity |
+| `{callsign}` | Station callsign |
 
-The switch program runs first. Verification runs only after switch exit zero.
-Switch or verification success is diagnostic evidence, not physical antenna
-confirmation. Active Run always waits for the named operator-ready action.
-Retry is explicit. Editing a profile creates a new revision and revokes its
-current arm until the operator reviews and attaches it again.
+Use `{{` and `}}` for literal braces. Unknown or malformed placeholders fail
+setup review. Interpolation occurs within an existing argument, so a substituted
+value cannot create a new argument or executable.
 
-Each process has the configured one-to-sixty-second timeout and independent
-64 KiB stdout/stderr capture. UTF-8 is retained as text; other bytes use base64.
-Truncation, spawn failure, exit code, signal termination, and timeout remain
-explicit. Every attempt commits through the schema-v5 rig-evidence boundary,
-including failures. These failure-only commits do not arm a cycle or change
-antenna occupancy.
+## During A Run
 
-Interruption, end, abandon, active-session replacement, profile replacement,
-and application shutdown revoke in-memory authority and stop new invocations.
-An in-flight child may be terminated, but AntennaBench never claims that child
-termination restored the hardware and issues no compensating command.
+For the pending antenna instruction:
+
+1. Request the configured switch command.
+2. Inspect the result and, when configured, request independent verification.
+3. Confirm the actual hardware state.
+4. Press the named antenna’s **ready** action to arm the next eligible cycle.
+
+Command success is diagnostic evidence, not proof of the physical antenna state.
+A failed attempt is retained without advancing the schedule or changing antenna
+occupancy. Retry is always explicit.
+
+Editing a profile creates a new local revision and revokes its current arm until
+you review and attach it again. Interruption, session end, session replacement,
+and application shutdown also revoke the in-memory authority used to start new
+commands.
+
+## Example Integration
 
 The checked-in [Elecraft K4/QK4 example](../examples/rig-control/elecraft-k4/README.md)
-shows a protocol-specific wrapper behind this protocol-neutral boundary.
+shows dependency-free Node wrappers that switch and verify KAT4 ANT1/ANT2 without
+using a shell.
+
+For the implementation-level command boundary, evidence records, output limits,
+and validation rules, see the [Architecture Technical Reference](architecture-reference.md)
+and [Bundle Format Technical Reference](bundle-format-reference.md).
