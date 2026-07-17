@@ -21,10 +21,17 @@ mod live_session;
 mod timing;
 mod view;
 
-use actions::{event_for_action, ConductorAction, ConductorMutationRequest, CorrectableAction};
-use live_session::{mutate_conductor_with_hooks, read_conductor_with_hooks, PendingAction};
+#[cfg(test)]
+use actions::{event_for_action, CorrectableAction};
+use actions::{ConductorAction, ConductorMutationRequest};
+#[cfg(test)]
+use live_session::PendingAction;
+use live_session::{mutate_conductor_with_hooks, read_conductor_with_hooks};
+#[cfg(test)]
 use timing::slot_evidence;
-use view::{build_view_v3, requires_wsjtx_receiver};
+#[cfg(test)]
+use view::build_view_v3;
+use view::requires_wsjtx_receiver;
 
 const CONDUCTOR_VIEW_IPC_BYTES: u64 = 512 * 1024;
 const MAX_PENDING_ACTION_TOKENS: usize = 32;
