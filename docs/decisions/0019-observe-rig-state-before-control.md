@@ -6,6 +6,10 @@ Accepted.
 
 Implemented 2026-07-16 by #107.
 
+The antenna-selection portion of the control deferral was narrowed by Decision
+0021. Frequency, mode, PTT, keying, general rig control, and this decision's
+passive WSJT-X observation boundary remain unchanged.
+
 ## Context
 
 The manual conductor and bounded WSJT-X UDP intake are now implemented. WSJT-X
