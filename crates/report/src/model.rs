@@ -128,6 +128,11 @@ pub struct ReportOverviewStratum {
     /// Unique finite paths classified by the antennas on which they were
     /// observed. Missing SNR is deliberately accounted for separately.
     pub reach: ReportOverviewReach,
+    /// One deterministic location context record per paired remote path. It
+    /// never pools strata and never lets repeated paired rows dominate a
+    /// distance bin or azimuth sector.
+    #[serde(default)]
+    pub location_context: ReportOverviewLocationContext,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -142,6 +147,93 @@ pub struct ReportOverviewReach {
     pub left_only_unique_path_count: usize,
     pub both_unique_path_count: usize,
     pub right_only_unique_path_count: usize,
+}
+
+/// Fixed, documented distance bins for observed-session path context.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportDistanceBin {
+    Under500Km,
+    Km500To1499,
+    Km1500To2999,
+    Km3000AndAbove,
+}
+
+impl ReportDistanceBin {
+    pub const ALL: [Self; 4] = [
+        Self::Under500Km,
+        Self::Km500To1499,
+        Self::Km1500To2999,
+        Self::Km3000AndAbove,
+    ];
+}
+
+/// Fixed 45° compass sectors for observed-session path context. North wraps
+/// across 360°: [337.5°, 360°) and [0°, 22.5°).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportAzimuthSector {
+    North,
+    NorthEast,
+    East,
+    SouthEast,
+    South,
+    SouthWest,
+    West,
+    NorthWest,
+}
+
+impl ReportAzimuthSector {
+    pub const ALL: [Self; 8] = [
+        Self::North,
+        Self::NorthEast,
+        Self::East,
+        Self::SouthEast,
+        Self::South,
+        Self::SouthWest,
+        Self::West,
+        Self::NorthWest,
+    ];
+}
+
+/// Why a paired path cannot participate in a geographic aggregate. The raw
+/// paired rows retain the exact left/right values in the audit appendix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportPathLocationAvailability {
+    Available,
+    Missing,
+    Inconsistent,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverviewLocationPath {
+    pub remote_path: String,
+    pub paired_row_count: usize,
+    pub median_delta_right_minus_left_db: f64,
+    pub availability: ReportPathLocationAvailability,
+    pub distance_km: Option<f64>,
+    pub azimuth_degrees: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverviewLocationCell<T> {
+    pub category: T,
+    pub unique_located_path_count: usize,
+    pub paired_row_count: usize,
+    pub median_path_delta_right_minus_left_db: Option<f64>,
+}
+
+/// Bounded, renderer-ready geographic context for one comparison stratum.
+/// Every path has one status record; available paths contribute once to one
+/// fixed distance bin and one fixed azimuth sector.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverviewLocationContext {
+    pub paths: Vec<ReportOverviewLocationPath>,
+    pub distance_bins: Vec<ReportOverviewLocationCell<ReportDistanceBin>>,
+    pub azimuth_sectors: Vec<ReportOverviewLocationCell<ReportAzimuthSector>>,
+    pub missing_location_path_count: usize,
+    pub inconsistent_location_path_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

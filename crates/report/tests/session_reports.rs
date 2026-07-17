@@ -1301,6 +1301,87 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 0
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
             }
           },
           {
@@ -1330,6 +1411,87 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 0,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
             }
           },
           {
@@ -1359,6 +1521,87 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
             }
           },
           {
@@ -1388,6 +1631,87 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
             }
           },
           {
@@ -1417,6 +1741,87 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
             }
           },
           {
@@ -1446,6 +1851,87 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
             }
           }
         ],

@@ -8,9 +8,10 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report, render_standalone_html, ReportAdapterEvidence, ReportAntennaControlAttempt,
-    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
-    ReportOverviewLimitation, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
-    ReportWsprReadinessBasis, SessionReport,
+    ReportAzimuthSector, ReportDistanceBin, ReportImportedEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportNotice, ReportOverviewLimitation, ReportOverviewLocationCell,
+    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
+    SessionReport,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -658,6 +659,43 @@ fn renders_stratified_location_context_missingness_and_concentration() {
 
     let empty = render_standalone_html(&canonical_report()).unwrap();
     assert!(empty.contains("No paired rows are available for location views."));
+}
+
+#[test]
+fn renders_fixed_path_context_tables_with_equivalent_visual_states() {
+    let mut report = paired_report(true);
+    let context = &mut report.overview.strata[0].location_context;
+    context.distance_bins = ReportDistanceBin::ALL
+        .into_iter()
+        .map(|category| ReportOverviewLocationCell {
+            category,
+            unique_located_path_count: usize::from(category == ReportDistanceBin::Under500Km),
+            paired_row_count: usize::from(category == ReportDistanceBin::Under500Km),
+            median_path_delta_right_minus_left_db: (category == ReportDistanceBin::Under500Km)
+                .then_some(0.0),
+        })
+        .collect();
+    context.azimuth_sectors = ReportAzimuthSector::ALL
+        .into_iter()
+        .map(|category| ReportOverviewLocationCell {
+            category,
+            unique_located_path_count: usize::from(category == ReportAzimuthSector::NorthEast),
+            paired_row_count: usize::from(category == ReportAzimuthSector::NorthEast),
+            median_path_delta_right_minus_left_db: (category == ReportAzimuthSector::NorthEast)
+                .then_some(0.0),
+        })
+        .collect();
+
+    let html = render_standalone_html(&report).unwrap();
+
+    assert!(html.contains("not a radiation pattern, propagation model, or causal conclusion"));
+    assert!(html.contains("Fixed distance bins for observed paired paths"));
+    assert!(html.contains("Fixed 45° azimuth sectors for observed paired paths"));
+    assert!(html.contains("0 dB (near-zero)"));
+    assert!(html.contains("Sparse evidence: 1 path(s), 1 row(s)"));
+    assert!(html.contains("No observed paired paths"));
+    assert_eq!(html.matches("Under 500 km").count(), 2);
+    assert_eq!(html.matches("NE (22.5°–67.5°)").count(), 2);
 }
 
 #[test]

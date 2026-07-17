@@ -77,6 +77,16 @@ and must not be pooled. Missing decodes are not zero-SNR observations. Goal
 lenses may choose documented views or filters, but they do not change effect or
 conclusion rules. Single-antenna profiling never invents an A/B comparison.
 
+Distance and azimuth report views are observed-session path context, not maps,
+radiation patterns, propagation models, or causal conclusions. They remain
+separate for every comparison stratum and use one paired-path median at most
+once per aggregate. The fixed initial policy is distance bins of under 500 km,
+500–1499 km, 1500–2999 km, and 3000 km and above; azimuth uses eight 45°
+compass sectors, with North spanning 337.5° through 22.5°. Each populated cell
+shows unique located paths, paired-row support, and the available median path
+delta. Missing or inconsistent location evidence remains visible and exact
+paired-row values stay available in the audit tables.
+
 Directional evidence, practical equivalence, uncertainty intervals, and "too
 close to call" require a later validated inference contract with recorded
 experimental-design gates, a prespecified practical-effect bound, dependence
