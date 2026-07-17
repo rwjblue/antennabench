@@ -23,12 +23,14 @@ antennabench-report = { path = "../../crates/report" }
 antennabench-rbn = { path = "../../crates/rbn" }
 antennabench-storage = { path = "../../crates/storage" }
 antennabench-wsjtx = { path = "../../crates/wsjtx" }
+base64.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true
 tauri-plugin-dialog.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true

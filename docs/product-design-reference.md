@@ -155,6 +155,10 @@ the UI could not outrun the durable, validation, and resource boundaries:
    checkpoint export remains available when report generation is ineligible.
 6. A deterministic unattended scenario proves creation through interruption,
    recovery, completion, reporting, export, and reopen (#65).
+7. Optional operator-triggered local antenna-controller profiles normalize to
+   one direct program plus ordered argv, remain outside portable bundles, and
+   commit every bounded switch/verification attempt as schema-v5 rig evidence
+   while retaining the named manual-ready action (#109).
 
 Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
 antenna definitions, and complete repetitions. BOTH and four repetitions are
@@ -183,6 +187,17 @@ details are stored separately as reusable preferences; they are not session
 evidence. Stale review, validation failure, and destination collision do not
 replace active state or expose a partial destination. Portable placement remains
 an explicit lossless export.
+
+Controller-assisted setup is explicitly opt-in. It selects the portable
+operator-triggered/manual-review-required policy, a revisioned app-data profile,
+and one opaque target per scheduled antenna. Review shows the canonical
+program/indexed arguments for every mode/direction intention and warns that
+resolved commands and output become portable evidence. Reopening a saved or
+imported bundle restores no executable authority; local association and arming
+are explicit. Active Run offers switch, optional verification, retry, profile
+edit/reattach, and the unchanged manual-ready fallback without automatic retry
+or command-authorized arming. See
+[Local Antenna Controller Profiles](antenna-controller-profiles.md).
 
 Controlled non-WSPR transmit comparisons use the schema-v3 foundation of
 reusable typed signal plans with explicit per-slot frequency variants and

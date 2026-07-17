@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-active-session-antenna-controller"
+description = "Enables the active_session_antenna_controller command without any pre-configured scope."
+commands.allow = ["active_session_antenna_controller"]
+
+[[permission]]
+identifier = "deny-active-session-antenna-controller"
+description = "Denies the active_session_antenna_controller command without any pre-configured scope."
+commands.deny = ["active_session_antenna_controller"]

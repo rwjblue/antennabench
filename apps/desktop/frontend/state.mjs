@@ -35,6 +35,11 @@ export function initialState(workflow = "setup") {
       wsprLiveAcquisitionStatus: "idle",
       wsprLiveAcquisition: null,
       wsprLiveAcquisitionError: null,
+      antennaControllerStatus: "idle",
+      antennaControllerCatalog: null,
+      antennaController: null,
+      antennaControllerError: null,
+      antennaControllerOutcome: null,
     },
     workflow,
   );
@@ -381,6 +386,50 @@ export function conductorMutationFailed(state, error) {
   };
 }
 
+export function beginAntennaControllerAction(state, status = "loading") {
+  return {
+    ...state,
+    antennaControllerStatus: status,
+    antennaControllerOutcome: null,
+    antennaControllerError: null,
+  };
+}
+
+export function antennaControllerCatalogSucceeded(state, catalog) {
+  return {
+    ...state,
+    antennaControllerStatus: "ready",
+    antennaControllerCatalog: catalog,
+    antennaControllerError: null,
+  };
+}
+
+export function antennaControllerViewSucceeded(state, controller) {
+  return {
+    ...state,
+    antennaControllerStatus: "ready",
+    antennaController: controller,
+    antennaControllerError: null,
+  };
+}
+
+export function antennaControllerRunSucceeded(state, outcome) {
+  return {
+    ...state,
+    antennaControllerStatus: "ready",
+    antennaControllerOutcome: outcome,
+    antennaControllerError: null,
+  };
+}
+
+export function antennaControllerActionFailed(state, error) {
+  return {
+    ...state,
+    antennaControllerStatus: "error",
+    antennaControllerError: normalizeOpenError(error),
+  };
+}
+
 export function beginWsjtxAction(state, action = "refreshing") {
   return { ...state, wsjtxStatus: action, wsjtxError: null };
 }
@@ -503,5 +552,3 @@ function conductorActionCompletedLabel(action) {
     default: return "Entry saved.";
   }
 }
-
-

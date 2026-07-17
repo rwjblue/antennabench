@@ -82,6 +82,7 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
       completeness: "full_detail",
     },
     active_session_conductor: conductor({ revision: 4 }),
+    active_session_antenna_controller: { policy: "manual", attached: false, armed: false, targets: {} },
     active_session_wsjtx_status: { phase: "stopped" },
     advance_active_session_wspr_live: { status: "disabled" },
   });
@@ -94,6 +95,7 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
     "create_session_from_review",
     "refresh_active_session_report",
     "active_session_conductor",
+    "active_session_antenna_controller",
     "active_session_wsjtx_status",
     "advance_active_session_wspr_live",
   ]);
@@ -212,6 +214,7 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
   const completed = harness({
     advance_active_session_wspr_live: { status: "completed", session: session({ lifecycle: "ended" }) },
     active_session_conductor: conductor({ lifecycle: "ended", phase: "complete" }),
+    active_session_antenna_controller: { policy: "manual", attached: false, armed: false, targets: {} },
     active_session_wsjtx_status: { phase: "stopped" },
     refresh_active_session_report: {
       presentationId: 6,
@@ -225,6 +228,7 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
   assert.deepEqual(completed.calls.map(([command]) => command), [
     "advance_active_session_wspr_live",
     "active_session_conductor",
+    "active_session_antenna_controller",
     "active_session_wsjtx_status",
     "refresh_active_session_report",
   ]);

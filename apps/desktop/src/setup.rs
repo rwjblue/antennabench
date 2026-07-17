@@ -23,6 +23,11 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
+use crate::antenna_control::{
+    activate_setup_controller, controller_profiles_for_app, prepare_setup_controller,
+    AntennaControllerState, ControllerProfile, PreparedSetupController, SetupControllerDraft,
+    SetupControllerReview,
+};
 use crate::open_session::{
     activate_created_bundle, with_foreground_operation, ActiveSessionState, OpenedSession,
     SessionErrorKind, SessionErrorPayload,
@@ -42,6 +47,7 @@ pub(crate) struct SetupSessionState(Mutex<Option<PendingSetup>>);
 struct PendingSetup {
     review_id: String,
     bundle: BundleV3Contents,
+    controller: Option<PreparedSetupController>,
 }
 
 fn station_preferences(bundle: &BundleV3Contents) -> StationPreferences {
@@ -72,6 +78,8 @@ pub(crate) struct SetupDraft {
     wspr_live_acquisition_enabled: bool,
     #[serde(default)]
     signal_plan: Option<SetupSignalPlanDraft>,
+    #[serde(default)]
+    antenna_controller: Option<SetupControllerDraft>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -167,6 +175,7 @@ struct SetupPlanReview {
     wspr_live_acquisition_enabled: bool,
     signal_plan: Option<SetupSignalPlanReview>,
     slots: Vec<SetupSlotReview>,
+    antenna_controller: Option<SetupControllerReview>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -453,10 +462,20 @@ fn parse_signal_plan(
     })
 }
 
+#[cfg(test)]
 fn build_review(
     state: &SetupSessionState,
     draft: SetupDraft,
     hooks: &dyn LivePersistenceHooks,
+) -> Result<SetupReview, SessionErrorPayload> {
+    build_review_with_profiles(state, draft, hooks, &[])
+}
+
+fn build_review_with_profiles(
+    state: &SetupSessionState,
+    draft: SetupDraft,
+    hooks: &dyn LivePersistenceHooks,
+    controller_profiles: &[ControllerProfile],
 ) -> Result<SetupReview, SessionErrorPayload> {
     let draft_bytes = serde_json::to_vec(&draft).map_err(|error| {
         SessionErrorPayload::report_pipeline(format!("setup draft serialization failed: {error}"))
@@ -755,6 +774,35 @@ fn build_review(
         bundle
     };
     use_latest_schema(&mut bundle);
+    let (prepared_controller, controller_review) = match draft
+        .antenna_controller
+        .as_ref()
+        .filter(|controller| controller.enabled)
+    {
+        Some(controller) => {
+            match prepare_setup_controller(controller, &mut bundle, controller_profiles, |prefix| {
+                hooks.new_id(prefix)
+            }) {
+                Ok((prepared, review)) => (Some(prepared), Some(review)),
+                Err(message) => {
+                    *state.0.lock().map_err(|_| {
+                        SessionErrorPayload::report_pipeline("setup review state is unavailable")
+                    })? = None;
+                    return Ok(SetupReview {
+                        review_id: None,
+                        valid: false,
+                        diagnostics: vec![field_diagnostic(
+                            "setup.antenna_controller.invalid",
+                            "antennaController",
+                            message,
+                        )],
+                        plan: None,
+                    });
+                }
+            }
+        }
+        None => (None, None),
+    };
     BundleStore::refresh_v3_checkpoint(&mut bundle).map_err(|error| {
         SessionErrorPayload::new(
             SessionErrorKind::Validation,
@@ -798,7 +846,7 @@ fn build_review(
         });
     }
 
-    let plan = setup_plan_review_v3(&bundle);
+    let plan = setup_plan_review_v3(&bundle, controller_review);
     *state
         .0
         .lock()
@@ -806,6 +854,7 @@ fn build_review(
         Some(PendingSetup {
             review_id: review_id.clone(),
             bundle,
+            controller: prepared_controller,
         });
     let review = SetupReview {
         review_id: Some(review_id),
@@ -975,7 +1024,10 @@ fn build_v3_setup_bundle(
     Ok(bundle)
 }
 
-fn setup_plan_review_v3(bundle: &BundleV3Contents) -> SetupPlanReview {
+fn setup_plan_review_v3(
+    bundle: &BundleV3Contents,
+    antenna_controller: Option<SetupControllerReview>,
+) -> SetupPlanReview {
     let signal_plan = bundle.schedule.signal_plans.first();
     SetupPlanReview {
         schema_version: bundle.manifest.schema_version,
@@ -1036,6 +1088,7 @@ fn setup_plan_review_v3(bundle: &BundleV3Contents) -> SetupPlanReview {
                 }),
             })
             .collect(),
+        antenna_controller,
     }
 }
 
@@ -1209,6 +1262,26 @@ fn reviewed_station_preferences(
         })
 }
 
+fn reviewed_setup_controller(
+    state: &SetupSessionState,
+    review_id: &str,
+) -> Result<Option<PreparedSetupController>, SessionErrorPayload> {
+    state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("setup review state is unavailable"))?
+        .as_ref()
+        .filter(|pending| pending.review_id == review_id)
+        .map(|pending| pending.controller.clone())
+        .ok_or_else(|| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Validation,
+                "Review the current setup before creating its bundle.",
+                "the supplied setup review is missing or stale",
+            )
+        })
+}
+
 fn validate_destination(path: &Path) -> Result<(), SessionErrorPayload> {
     if path
         .file_name()
@@ -1303,10 +1376,12 @@ fn create_with_selection(
 
 #[tauri::command]
 pub(crate) fn review_session_setup(
+    app: AppHandle,
     state: State<'_, SetupSessionState>,
     draft: SetupDraft,
 ) -> Result<SetupReview, SessionErrorPayload> {
-    build_review(state.inner(), draft, &SystemLivePersistenceHooks)
+    let profiles = controller_profiles_for_app(&app)?;
+    build_review_with_profiles(state.inner(), draft, &SystemLivePersistenceHooks, &profiles)
 }
 
 #[tauri::command]
@@ -1321,11 +1396,14 @@ pub(crate) async fn create_session_from_review(
     app: AppHandle,
     setup_state: State<'_, SetupSessionState>,
     active_state: State<'_, ActiveSessionState>,
+    controller_state: State<'_, AntennaControllerState>,
     wsjtx_state: State<'_, WsjtxSessionState>,
     review_id: String,
 ) -> Result<CreateSessionOutcome, SessionErrorPayload> {
     let app_data_dir = resolved_app_data_dir(&app)?;
     let station_preferences = reviewed_station_preferences(setup_state.inner(), &review_id)?;
+    let setup_controller = reviewed_setup_controller(setup_state.inner(), &review_id)?;
+    controller_state.revoke();
     let outcome = create_with_selection(
         setup_state.inner(),
         active_state.inner(),
@@ -1339,6 +1417,21 @@ pub(crate) async fn create_session_from_review(
         wsjtx_state.stop_all(
             "WSJT-X reception stopped because a different session was created and activated.",
         );
+        if let Some(controller) = &setup_controller {
+            let (source, _) = crate::open_session::active_session_source(active_state.inner())?;
+            let session_id = BundleStore::new(&source)
+                .read_v3_checkpointed()
+                .map_err(creation_error)?
+                .manifest
+                .session_id;
+            activate_setup_controller(
+                &app_data_dir,
+                controller_state.inner(),
+                source,
+                session_id,
+                controller,
+            )?;
+        }
     }
     Ok(outcome)
 }
@@ -1442,6 +1535,7 @@ fn create_e2e_session_with_signal(
             interval_seconds: "30".into(),
             frequencies_hz: "14050000".into(),
         }),
+        antenna_controller: None,
     };
     let review = build_review(&setup_state, draft, &DeterministicHooks(Mutex::new(1)))
         .expect("deterministic setup review");
@@ -1544,6 +1638,7 @@ mod tests {
             },
             wspr_live_acquisition_enabled: false,
             signal_plan: None,
+            antenna_controller: None,
         }
     }
 
@@ -1572,6 +1667,132 @@ mod tests {
         assert_eq!(plan.slots[3].antenna_label, "Vertical");
         assert_eq!(plan.slots[3].direction, Some(WsprCycleDirection::Transmit));
         assert_eq!(plan.slots[2].sequence_number, 3);
+    }
+
+    #[test]
+    fn review_normalizes_local_controller_policy_targets_and_every_invocation_preview() {
+        let state = SetupSessionState::default();
+        let mut draft = valid_draft();
+        draft.antenna_controller = Some(SetupControllerDraft {
+            enabled: true,
+            arm_for_session: true,
+            profile: crate::antenna_control::ControllerProfileDraft {
+                profile_id: None,
+                name: "Bench switch".into(),
+                switch_command: crate::antenna_control::ControllerCommandDraft {
+                    one_line: "switch --target {target} --mode {mode} --direction {direction}"
+                        .into(),
+                    program: String::new(),
+                    arguments: Vec::new(),
+                },
+                verification_command: Some(crate::antenna_control::ControllerCommandDraft {
+                    one_line: "verify --target {target} --mode {mode}".into(),
+                    program: String::new(),
+                    arguments: Vec::new(),
+                }),
+                timeout_seconds: 10,
+            },
+            targets: vec![
+                crate::antenna_control::ControllerTargetDraft {
+                    antenna_label: "Vertical".into(),
+                    target: "relay A;$(literal)".into(),
+                },
+                crate::antenna_control::ControllerTargetDraft {
+                    antenna_label: "Dipole".into(),
+                    target: "relay B".into(),
+                },
+            ],
+        });
+
+        let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
+        assert!(review.valid, "diagnostics: {:?}", review.diagnostics);
+        let plan = review.plan.unwrap();
+        let controller = plan.antenna_controller.unwrap();
+        assert!(controller.arm_for_session);
+        assert_eq!(controller.invocations.len(), plan.slots.len());
+        assert_eq!(
+            controller.invocations[0].mode,
+            ExperimentMode::WholeStationAb
+        );
+        assert_eq!(
+            controller.invocations[0].switch_arguments[1],
+            "relay A;$(literal)"
+        );
+        let pending = state.0.lock().unwrap();
+        let pending = pending.as_ref().unwrap();
+        assert!(matches!(
+            pending.bundle.schedule.antenna_control,
+            Some(
+                antennabench_core::AntennaControlPolicyV5::CommandControlled {
+                    invocation:
+                        antennabench_core::AntennaControlInvocationPolicyV5::OperatorTriggered,
+                    manual_review_required: true,
+                }
+            )
+        ));
+    }
+
+    fn controller_draft() -> SetupControllerDraft {
+        SetupControllerDraft {
+            enabled: true,
+            arm_for_session: false,
+            profile: crate::antenna_control::ControllerProfileDraft {
+                profile_id: None,
+                name: "Bench switch".into(),
+                switch_command: crate::antenna_control::ControllerCommandDraft {
+                    one_line: "switch {target} {mode} {direction}".into(),
+                    program: String::new(),
+                    arguments: Vec::new(),
+                },
+                verification_command: None,
+                timeout_seconds: 10,
+            },
+            targets: vec![
+                crate::antenna_control::ControllerTargetDraft {
+                    antenna_label: "Vertical".into(),
+                    target: "relay-a".into(),
+                },
+                crate::antenna_control::ControllerTargetDraft {
+                    antenna_label: "Dipole".into(),
+                    target: "relay-b".into(),
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn review_rejects_every_controller_setup_failure_before_pending_creation() {
+        for case in ["quoting", "placeholder", "target", "timeout", "argument"] {
+            let state = SetupSessionState::default();
+            let mut draft = valid_draft();
+            let mut controller = controller_draft();
+            match case {
+                "quoting" => controller.profile.switch_command.one_line = "switch 'open".into(),
+                "placeholder" => {
+                    controller.profile.switch_command.one_line = "switch {unknown}".into()
+                }
+                "target" => {
+                    controller.targets.pop();
+                }
+                "timeout" => controller.profile.timeout_seconds = 0,
+                "argument" => {
+                    controller.profile.switch_command.one_line = format!(
+                        "switch {}",
+                        "x".repeat(antennabench_core::COMMAND_ARGUMENT_MAX_BYTES + 1)
+                    )
+                }
+                _ => unreachable!(),
+            }
+            draft.antenna_controller = Some(controller);
+            let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
+            assert!(!review.valid, "case {case}");
+            assert!(review.plan.is_none(), "case {case}");
+            assert!(state.0.lock().unwrap().is_none(), "case {case}");
+            assert_eq!(
+                review.diagnostics[0].code, "setup.antenna_controller.invalid",
+                "case {case}"
+            );
+        }
     }
 
     #[test]

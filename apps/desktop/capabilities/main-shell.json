@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-shell",
-  "description": "Main shell capability limited to setup, the manual local conductor, opening sessions, lossless export, and active reports.",
+  "description": "Main shell capability limited to setup, operator-triggered local control, the manual conductor, opening sessions, lossless export, and active reports.",
   "windows": ["main"],
   "permissions": [
     "allow-review-session-setup",
@@ -20,6 +20,11 @@
     "allow-stop-active-session-wsjtx",
     "allow-advance-active-session-wspr-live",
     "allow-import-active-session-wspr-live",
-    "allow-import-active-session-rbn"
+    "allow-import-active-session-rbn",
+    "allow-antenna-controller-profiles",
+    "allow-save-antenna-controller-profile",
+    "allow-active-session-antenna-controller",
+    "allow-attach-active-session-antenna-controller",
+    "allow-run-active-session-antenna-controller"
   ]
 }

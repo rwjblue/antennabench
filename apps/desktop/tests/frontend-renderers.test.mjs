@@ -130,6 +130,10 @@ function runElements(document) {
     "wsjtxForm", "wsjtxStart", "wsjtxStop", "wsjtxRequirement", "wsjtxPhase",
     "wsjtxCounts", "wsjtxSetupWarnings", "wsjtxDiagnostic", "wsprLivePhase", "wsprLiveDetail",
     "wsprLiveDiagnostic", "wsprLiveRetry", "wsprLiveEndWithout",
+    "antennaControllerStatus", "antennaControllerDetail", "antennaControllerDiagnostic",
+    "antennaControllerAttach",
+    "antennaControllerRun", "antennaControllerRetry", "antennaControllerEditor",
+    "antennaControllerOneLine", "antennaControllerStructured",
   ], document);
   e.evidenceForm.submit = new FakeElement("button", document);
   e.evidenceSlot.ownerDocument = document;
@@ -162,12 +166,20 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   state.conductorStatus = "ready";
   state.conductor = conductorView();
   state.wsjtx = { phase: "stopped", receivedDatagrams: 0, committedMutations: 0, ignoredDatagrams: 0 };
+  state.antennaController = { policy: "manual", attached: false, armed: false, targets: {} };
   let result = renderRun(e, state, document, { monotonicNow: () => 1000 });
   assert.equal(e.conductorPanel.hidden, false);
   assert.equal(e.conductorCountdown.textContent, "00:30");
   assert.match(e.nextSlot.children[0].textContent, /Transmit on Dipole/);
   assert.equal(e.lifecycleButtons[0].disabled, true, "start waits for required WSJT-X");
   assert.equal(e.evidenceSlot.children.length, 2);
+  state.antennaControllerOutcome = {
+    detail: "Switch failed; manual operation remains available.",
+    diagnostic: "Switch program: /opt/controller\ndisposition: exit 7\nstderr: failure",
+  };
+  renderRun(e, state, document, { monotonicNow: () => 1000 });
+  assert.equal(e.antennaControllerDiagnostic.hidden, false);
+  assert.match(e.antennaControllerDiagnostic.textContent, /stderr: failure/);
 
   state.wsjtx = {
     phase: "running", bindAddress: "127.0.0.1", receivedDatagrams: 2,

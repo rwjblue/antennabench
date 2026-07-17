@@ -3,10 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  invokeActiveSessionAntennaController,
   invokeActiveSessionConductor,
   invokeActiveSessionReport,
   invokeActiveSessionWsjtxStatus,
   invokeAdvanceSessionWsprLive,
+  invokeAntennaControllerProfiles,
+  invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
   invokeExportActiveSessionReport,
   invokeExportSession,
@@ -17,6 +20,8 @@ import {
   invokeOpenSession,
   invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
+  invokeRunSessionAntennaController,
+  invokeSaveAntennaControllerProfile,
   invokeStartSessionWsjtx,
   invokeStationLocation,
   invokeStopSessionWsjtx,
@@ -264,6 +269,11 @@ test("the shell starts in session setup", () => {
     wsprLiveAcquisitionStatus: "idle",
     wsprLiveAcquisition: null,
     wsprLiveAcquisitionError: null,
+    antennaControllerStatus: "idle",
+    antennaControllerCatalog: null,
+    antennaController: null,
+    antennaControllerError: null,
+    antennaControllerOutcome: null,
   });
 });
 
@@ -359,6 +369,54 @@ test("WSPR run summaries derive cycles and ideal minimum time", () => {
   }
   assert.equal(wsprRunPlanSummary("5", 0), null);
   assert.equal(wsprRunPlanSummary("5", -1), null);
+});
+
+test("setup serializes explicit local controller policy, profile, and target mappings", () => {
+  const setupHtml = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  assert.match(setupHtml, /Use a local direct-process controller with operator review/);
+  assert.match(setupHtml, /Imported bundles never attach or run them/);
+  assert.match(setupHtml, /may disclose paths, addresses, usernames, or credentials/);
+  assert.match(setupHtml, /Switch arguments, one per line/);
+
+  const values = new Map([
+    ["callsign", "n1rwj"], ["grid", "FN42"], ["powerWatts", "5"], ["operatorNotes", ""],
+    ["mode", "tx_focused"], ["goal", "general_coverage"], ["band", "20m"], ["rounds", "1"],
+    ["controllerProfileId", "profile-1"], ["controllerProfileName", "Bench switch"],
+    ["controllerTimeoutSeconds", "10"],
+    ["controllerSwitchCommand", "switch --target {target} --mode {mode}"],
+    ["controllerVerificationCommand", "verify --target {target}"],
+    ["controllerSwitchProgram", ""], ["controllerSwitchArguments", ""],
+    ["controllerVerificationProgram", ""], ["controllerVerificationArguments", ""],
+  ]);
+  const antennaRows = [
+    { label: "A", controllerTarget: "relay A" },
+    { label: "B", controllerTarget: "relay B" },
+  ].map((fields) => ({
+    querySelector(selector) {
+      const field = selector.match(/data-antenna-field="([^"]+)"/)?.[1];
+      return field ? { value: fields[field] ?? "" } : null;
+    },
+  }));
+  const form = {
+    querySelector(selector) {
+      if (selector.includes("signalPlanEnabled")) return { checked: false };
+      if (selector.includes("wsprLiveAcquisitionEnabled")) return { checked: false };
+      if (selector.includes("antennaControllerEnabled")) return { checked: true };
+      if (selector.includes("controllerArmForSession")) return { checked: true };
+      const field = selector.match(/data-setup-field="([^"]+)"/)?.[1];
+      return { value: values.get(field) ?? "" };
+    },
+    querySelectorAll(selector) { return selector === "[data-antenna-row]" ? antennaRows : []; },
+  };
+
+  const draft = readSetupDraft(form);
+  assert.equal(draft.antennaController.profile.profileId, "profile-1");
+  assert.equal(draft.antennaController.profile.timeoutSeconds, 10);
+  assert.equal(draft.antennaController.armForSession, true);
+  assert.deepEqual(draft.antennaController.targets, [
+    { antennaLabel: "A", target: "relay A" },
+    { antennaLabel: "B", target: "relay B" },
+  ]);
 });
 
 test("active run leads with task actions and hides implementation-oriented tools", () => {
@@ -645,6 +703,43 @@ test("the conductor bridge exposes only bounded read and focused mutation comman
   ]);
   assert.equal(view.revision, 4);
   assert.equal(updated.revision, 5);
+});
+
+test("antenna-controller bridge separates local profile writes from narrow active-run intent", async () => {
+  const calls = [];
+  const invoke = async (...args) => {
+    calls.push(args);
+    return {};
+  };
+  const draft = {
+    profileId: null,
+    name: "Bench switch",
+    timeoutSeconds: 10,
+    switchCommand: { oneLine: "switch {target}", program: "", arguments: [] },
+    verificationCommand: null,
+  };
+  const attach = {
+    profileId: "profile-1",
+    profileRevision: "revision-1",
+    targets: [{ antennaLabel: "A", target: "relay-a" }],
+    armed: true,
+  };
+  const run = { actionToken: "token-4", expectedRevision: 4, intentId: "intent-1" };
+
+  await invokeAntennaControllerProfiles(invoke);
+  await invokeSaveAntennaControllerProfile(invoke, draft);
+  await invokeActiveSessionAntennaController(invoke);
+  await invokeAttachSessionAntennaController(invoke, attach);
+  await invokeRunSessionAntennaController(invoke, run);
+
+  assert.deepEqual(calls, [
+    ["antenna_controller_profiles"],
+    ["save_antenna_controller_profile", { draft }],
+    ["active_session_antenna_controller"],
+    ["attach_active_session_antenna_controller", { request: attach }],
+    ["run_active_session_antenna_controller", { request: run }],
+  ]);
+  assert.deepEqual(Object.keys(run).sort(), ["actionToken", "expectedRevision", "intentId"]);
 });
 
 test("signal confirmations preserve explicit actual facts for append and correction", () => {

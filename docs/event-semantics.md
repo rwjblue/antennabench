@@ -147,6 +147,10 @@ complete session/intention/target context, including the durable experiment
 mode used for `{mode}` interpolation. Switch success alone is never
 physical confirmation. Failed or uncertain command records are valid evidence
 without an armed event and therefore create no antenna occupancy.
+The operator-triggered local-profile workflow always follows any command
+attempt with the existing named readiness action, so its durable basis remains
+`operator_confirmed`; successful command records stay associated by intention
+context as supporting diagnostics.
 
 Explicit v1-v4 upgrade maps historical armed cycles to
 `operator_confirmed` and invents no controller or invocation facts. There is no

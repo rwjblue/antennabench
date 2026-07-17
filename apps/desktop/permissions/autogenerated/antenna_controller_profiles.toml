@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-antenna-controller-profiles"
+description = "Enables the antenna_controller_profiles command without any pre-configured scope."
+commands.allow = ["antenna_controller_profiles"]
+
+[[permission]]
+identifier = "deny-antenna-controller-profiles"
+description = "Denies the antenna_controller_profiles command without any pre-configured scope."
+commands.deny = ["antenna_controller_profiles"]

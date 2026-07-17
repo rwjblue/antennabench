@@ -52,6 +52,8 @@ function mount(root, browserWindow) {
     setupReviewShape,
     setupReviewSlots,
     setupRunPlanSummary,
+    controllerSetupFields,
+    controllerProfileSelect,
     conductorPanel,
     conductorEmpty,
     conductorStatus,
@@ -81,6 +83,10 @@ function mount(root, browserWindow) {
     conductorFeedbackDetail,
     conductorDiagnostics,
     conductorEvents,
+    antennaControllerAttach,
+    antennaControllerRun,
+    antennaControllerRetry,
+    antennaControllerSave,
     wsprLivePhase,
     wsprLiveDetail,
     wsprLiveDiagnostic,
@@ -332,11 +338,62 @@ function mount(root, browserWindow) {
     await controller.stopWsjtx();
   });
 
+  controllerProfileSelect.addEventListener("change", () => {
+    const profile = state.antennaControllerCatalog?.profiles?.find(
+      (candidate) => candidate.profileId === controllerProfileSelect.value,
+    );
+    if (profile) applyControllerProfile(setupForm, profile);
+    controller.editSetup();
+  });
+
+  antennaControllerAttach.addEventListener("click", async () => {
+    const current = state.antennaController;
+    const profile = state.antennaControllerCatalog?.profiles?.find(
+      (candidate) => candidate.profileId === current?.profileId,
+    );
+    if (!current || !profile) return;
+    await controller.attachAntennaController({
+      profileId: profile.profileId,
+      profileRevision: profile.revision,
+      targets: Object.entries(current.targets ?? {}).map(([antennaLabel, target]) => ({ antennaLabel, target })),
+      armed: true,
+    });
+  });
+
+  antennaControllerRun.addEventListener("click", () => controller.runAntennaController());
+  antennaControllerRetry.addEventListener("click", () => controller.runAntennaController());
+  antennaControllerSave.addEventListener("click", async () => {
+    const profile = state.antennaControllerCatalog?.profiles?.find(
+      (candidate) => candidate.profileId === state.antennaController?.profileId,
+    );
+    if (!profile) return;
+    const field = (name) => root.querySelector(`[data-active-controller-field="${name}"]`).value;
+    const lines = (name) => field(name) === "" ? [] : field(name).split(/\r?\n/);
+    const structured = state.antennaControllerCatalog?.inputStyle === "structured";
+    const switchCommand = structured
+      ? { oneLine: "", program: field("switchProgram"), arguments: lines("switchArguments") }
+      : { oneLine: field("switchCommand"), program: "", arguments: [] };
+    const hasVerification = structured ? field("verificationProgram") : field("verificationCommand");
+    const verificationCommand = !hasVerification
+      ? null
+      : structured
+        ? { oneLine: "", program: field("verificationProgram"), arguments: lines("verificationArguments") }
+        : { oneLine: field("verificationCommand"), program: "", arguments: [] };
+    await controller.saveAntennaControllerProfile({
+      profileId: profile.profileId,
+      name: field("name"),
+      timeoutSeconds: Number(field("timeoutSeconds")),
+      switchCommand,
+      verificationCommand,
+    });
+  });
+
   setupForm.addEventListener("input", (event) => {
     if (event.target.matches?.('[data-setup-field="callsign"], [data-setup-field="signalTransmittedCallsign"]')) {
       event.target.value = event.target.value.toUpperCase();
     }
     syncSignalPlanFields(setupForm);
+    syncControllerSetupFields(setupForm, controllerSetupFields);
     updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     if (!setupBusyState(state)) {
       controller.editSetup();
@@ -413,15 +470,50 @@ function mount(root, browserWindow) {
   });
 
   syncSignalPlanFields(setupForm);
+  syncControllerSetupFields(setupForm, controllerSetupFields);
   updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
   render();
   if (typeof browserWindow.__TAURI__?.core?.invoke === "function") {
     void controller.loadStationPreferences()
       .then((preferences) => applyStationPreferences(setupForm, preferences))
       .catch(() => {});
+    void controller.loadAntennaControllerProfiles();
   }
   controller.start();
   return controller;
+}
+
+function canonicalCommandLine(command) {
+  if (!command) return "";
+  return [command.programTemplate, ...command.argumentTemplates]
+    .map((token) => JSON.stringify(token))
+    .join(" ");
+}
+
+function applyControllerProfile(form, profile) {
+  const set = (field, value) => {
+    form.querySelector(`[data-setup-field="${field}"]`).value = value ?? "";
+  };
+  set("controllerProfileName", profile.name);
+  set("controllerTimeoutSeconds", profile.timeoutSeconds);
+  set("controllerSwitchCommand", canonicalCommandLine(profile.switchCommand));
+  set("controllerVerificationCommand", canonicalCommandLine(profile.verificationCommand));
+  set("controllerSwitchProgram", profile.switchCommand.programTemplate);
+  set("controllerSwitchArguments", profile.switchCommand.argumentTemplates.join("\n"));
+  set("controllerVerificationProgram", profile.verificationCommand?.programTemplate ?? "");
+  set("controllerVerificationArguments", profile.verificationCommand?.argumentTemplates?.join("\n") ?? "");
+}
+
+function syncControllerSetupFields(form, fields) {
+  const enabled = form.querySelector('[data-setup-field="antennaControllerEnabled"]').checked;
+  fields.hidden = !enabled;
+  for (const control of fields.querySelectorAll("input, select, textarea")) {
+    control.disabled = !enabled;
+  }
+  for (const target of form.querySelectorAll("[data-controller-target-field]")) {
+    target.hidden = !enabled;
+    target.querySelector("input").disabled = !enabled;
+  }
 }
 
 function setupBusyState(state) {

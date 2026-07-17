@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-antenna-controller-profile"
+description = "Enables the save_antenna_controller_profile command without any pre-configured scope."
+commands.allow = ["save_antenna_controller_profile"]
+
+[[permission]]
+identifier = "deny-save-antenna-controller-profile"
+description = "Denies the save_antenna_controller_profile command without any pre-configured scope."
+commands.deny = ["save_antenna_controller_profile"]

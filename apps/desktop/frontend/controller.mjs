@@ -1,7 +1,10 @@
 import {
+  invokeActiveSessionAntennaController,
   invokeActiveSessionConductor,
   invokeActiveSessionWsjtxStatus,
   invokeAdvanceSessionWsprLive,
+  invokeAntennaControllerProfiles,
+  invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
   invokeExportActiveSessionReport,
   invokeExportSession,
@@ -12,12 +15,19 @@ import {
   invokeOpenSession,
   invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
+  invokeRunSessionAntennaController,
+  invokeSaveAntennaControllerProfile,
   invokeStartSessionWsjtx,
   invokeStationLocation,
   invokeStopSessionWsjtx,
 } from "./bridge.mjs";
 import { projectCountdown } from "./models.mjs";
 import {
+  antennaControllerActionFailed,
+  antennaControllerCatalogSucceeded,
+  antennaControllerRunSucceeded,
+  antennaControllerViewSucceeded,
+  beginAntennaControllerAction,
   beginConductorLoad,
   beginConductorMutation,
   beginExportSession,
@@ -121,6 +131,85 @@ export function createDesktopController(options = {}) {
         commit(setupReviewSucceeded(state, await invokeReviewSessionSetup(invoke(), draft)));
       } catch (error) {
         commit(setupReviewFailed(state, error));
+      }
+      return state;
+    },
+
+    async loadAntennaControllerProfiles() {
+      if (state.antennaControllerStatus === "loading") return state;
+      commit(beginAntennaControllerAction(state));
+      try {
+        commit(antennaControllerCatalogSucceeded(
+          state,
+          await invokeAntennaControllerProfiles(invoke()),
+        ));
+      } catch (error) {
+        commit(antennaControllerActionFailed(state, error));
+      }
+      return state;
+    },
+
+    async refreshAntennaController() {
+      if (!state.session || state.antennaControllerStatus === "running") return state;
+      commit(beginAntennaControllerAction(state));
+      try {
+        commit(antennaControllerViewSucceeded(
+          state,
+          await invokeActiveSessionAntennaController(invoke()),
+        ));
+      } catch (error) {
+        commit(antennaControllerActionFailed(state, error));
+      }
+      return state;
+    },
+
+    async attachAntennaController(request) {
+      if (!state.session || state.antennaControllerStatus === "running") return state;
+      commit(beginAntennaControllerAction(state, "attaching"));
+      try {
+        commit(antennaControllerViewSucceeded(
+          state,
+          await invokeAttachSessionAntennaController(invoke(), request),
+        ));
+      } catch (error) {
+        commit(antennaControllerActionFailed(state, error));
+      }
+      return state;
+    },
+
+    async saveAntennaControllerProfile(draft) {
+      commit(beginAntennaControllerAction(state, "saving"));
+      try {
+        await invokeSaveAntennaControllerProfile(invoke(), draft);
+        commit(antennaControllerCatalogSucceeded(
+          state,
+          await invokeAntennaControllerProfiles(invoke()),
+        ));
+        if (state.session) await controller.refreshAntennaController();
+      } catch (error) {
+        commit(antennaControllerActionFailed(state, error));
+      }
+      return state;
+    },
+
+    async runAntennaController() {
+      if (!state.conductor?.nextIntent || state.antennaControllerStatus === "running") return state;
+      const request = {
+        actionToken: state.conductor.actionToken,
+        expectedRevision: state.conductor.revision,
+        intentId: state.conductor.nextIntent.intentId,
+      };
+      commit(beginAntennaControllerAction(state, "running"));
+      try {
+        commit(antennaControllerRunSucceeded(
+          state,
+          await invokeRunSessionAntennaController(invoke(), request),
+        ));
+        await controller.refreshConductor(false);
+        await controller.refreshAntennaController();
+        await controller.refreshReport();
+      } catch (error) {
+        commit(antennaControllerActionFailed(state, error));
       }
       return state;
     },
@@ -314,6 +403,7 @@ export function createDesktopController(options = {}) {
         commit(conductorMutationFailed(state, error));
       }
       if (state.conductor) {
+        await controller.refreshAntennaController();
         await controller.refreshWsjtxStatus();
         if (advanceAcquisition && state.conductor.lifecycle === "running") {
           await controller.advanceWsprLive();

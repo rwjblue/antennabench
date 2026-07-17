@@ -76,6 +76,7 @@ dependencies = [
  "antennabench-report",
  "antennabench-storage",
  "antennabench-wsjtx",
+ "base64 0.22.1",
  "chrono",
  "objc2",
  "objc2-core-location",
@@ -87,6 +88,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tempfile",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]

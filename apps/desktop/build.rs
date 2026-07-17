@@ -17,6 +17,11 @@ fn main() {
         "advance_active_session_wspr_live",
         "import_active_session_wspr_live",
         "import_active_session_rbn",
+        "antenna_controller_profiles",
+        "save_antenna_controller_profile",
+        "active_session_antenna_controller",
+        "attach_active_session_antenna_controller",
+        "run_active_session_antenna_controller",
     ]);
 
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))

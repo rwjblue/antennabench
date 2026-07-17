@@ -236,6 +236,8 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .action-list p a { color: #245451; font-weight: 700; }
 .authority-confirmation { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; color: #435b57; font-size: 0.78rem; line-height: 1.45; }
 .authority-confirmation input { flex: 0 0 auto; margin-top: 2px; accent-color: #245451; }
+.privacy-note { margin-top: 12px; padding: 10px 12px; border-left: 3px solid #b97925; background: #fff8ea; color: #65461d; font-size: 0.78rem; line-height: 1.5; }
+.controller-diagnostic { max-height: 18rem; overflow: auto; padding: 12px; border: 1px solid #d8ddd6; border-radius: 10px; background: #f7f9f7; font-size: 0.72rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .open-feedback { display: grid; grid-template-columns: 12px 1fr; gap: 13px; margin-top: 16px; padding: 16px 18px; border: 1px solid #c9d7d1; border-radius: 14px; background: #eef4ef; }
 .feedback-mark { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: #3d9889; box-shadow: 0 0 0 4px rgba(61, 152, 137, 0.12); }

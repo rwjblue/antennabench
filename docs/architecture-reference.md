@@ -523,8 +523,21 @@ implementation is [#107](https://github.com/rwjblue/antennabench/issues/107).
 [Decision 0021](decisions/0021-use-command-verified-antenna-control.md) adds the
 schema-v5 portable policy, typed bounded rig invocation evidence, readiness
 basis, and atomic rig-plus-event checkpoint foundation. Local executable
-profiles and process authority remain outside portable bundles and outside
-this schema slice.
+profiles and process authority remain outside portable bundles. The desktop
+implements the operator-triggered/manual-review slice through revisioned
+application-data profiles, volatile per-session arming, direct program-plus-argv
+execution, bounded concurrent output capture, and schema-v5 failure-only rig
+mutations. Automatic coordination remains outside this slice.
+
+The allowlisted `antenna_controller_profiles` and
+`save_antenna_controller_profile` commands manage only bounded local profile
+configuration. `active_session_antenna_controller` and
+`attach_active_session_antenna_controller` expose and re-arm the association
+for the active session. `run_active_session_antenna_controller` accepts only a
+Rust-issued action token, expected checkpoint revision, and pending intention
+identity. Rust re-derives all context and resolves the pinned profile; there is
+no generic webview process API. Interruption, terminal lifecycle, session
+replacement, profile change, and shutdown revoke volatile authority.
 
 ## Hosted Trust Boundary
 

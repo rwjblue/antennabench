@@ -94,6 +94,7 @@
                   <div class="field-grid">
                     <label>Antenna label<input data-antenna-field="label" /></label>
                     <label>Description<input data-antenna-field="facets" /></label>
+                    <label data-controller-target-field hidden>Controller target<input data-antenna-field="controllerTarget" /></label>
                   </div>
                   <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
                     <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
@@ -104,6 +105,7 @@
                   <div class="field-grid">
                     <label>Antenna label<input data-antenna-field="label" /></label>
                     <label>Description<input data-antenna-field="facets" /></label>
+                    <label data-controller-target-field hidden>Controller target<input data-antenna-field="controllerTarget" /></label>
                   </div>
                   <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
                     <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
@@ -116,6 +118,7 @@
                     <div class="field-grid">
                       <label>Antenna label<input data-antenna-field="label" /></label>
                       <label>Description<input data-antenna-field="facets" /></label>
+                      <label data-controller-target-field hidden>Controller target<input data-antenna-field="controllerTarget" /></label>
                     </div>
                     <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
                       <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
@@ -142,7 +145,32 @@
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>04</span> WSPR Spots <button class="context-help" type="button" data-help-trigger="public_spots">?</button></legend>
+                <legend><span>04</span> Optional antenna controller</legend>
+                <label class="authority-confirmation"><input type="checkbox" data-setup-field="antennaControllerEnabled"> Use a local direct-process controller with operator review</label>
+                <p class="field-help">Controller programs and target mappings stay in this computer's application data. Imported bundles never attach or run them.</p>
+                <div data-controller-setup-fields hidden>
+                  <div class="field-grid">
+                    <label>Saved profile<select data-setup-field="controllerProfileId"><option value="">New profile</option></select></label>
+                    <label>Profile name<input data-setup-field="controllerProfileName" maxlength="256"></label>
+                    <label>Timeout (seconds)<input type="number" min="1" max="60" value="10" data-setup-field="controllerTimeoutSeconds"></label>
+                  </div>
+                  <div data-controller-one-line>
+                    <label class="field-wide">Switch command<input data-setup-field="controllerSwitchCommand" autocomplete="off" spellcheck="false"></label>
+                    <label class="field-wide">Verification command (optional)<input data-setup-field="controllerVerificationCommand" autocomplete="off" spellcheck="false"></label>
+                  </div>
+                  <div data-controller-structured hidden>
+                    <label class="field-wide">Switch program<input data-setup-field="controllerSwitchProgram" autocomplete="off" spellcheck="false"></label>
+                    <label class="field-wide">Switch arguments, one per line<textarea rows="5" data-setup-field="controllerSwitchArguments" spellcheck="false"></textarea></label>
+                    <label class="field-wide">Verification program (optional)<input data-setup-field="controllerVerificationProgram" autocomplete="off" spellcheck="false"></label>
+                    <label class="field-wide">Verification arguments, one per line<textarea rows="5" data-setup-field="controllerVerificationArguments" spellcheck="false"></textarea></label>
+                  </div>
+                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerArmForSession"> Attach and arm this local profile for the newly created session</label>
+                  <p class="privacy-note">Resolved programs, indexed arguments, stdout, and stderr become portable session evidence and may disclose paths, addresses, usernames, or credentials.</p>
+                </div>
+              </fieldset>
+
+              <fieldset class="setup-section">
+                <legend><span>05</span> WSPR Spots <button class="context-help" type="button" data-help-trigger="public_spots">?</button></legend>
                 <p class="field-help">Delayed public TX and RX WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Enable WSJT-X <strong>Upload spots</strong>, keep WSJT-X online, and expect ingestion delay and unknown completeness.</p>
                 <details class="advanced-fields">
                   <summary>Offline option</summary>
@@ -215,6 +243,35 @@
               </section>
 
               <ul class="setup-diagnostics" data-wsjtx-setup-warnings role="status" aria-live="polite" hidden></ul>
+
+              <details class="receiver-panel" data-antenna-controller-panel>
+                <summary>Antenna controller · <strong data-antenna-controller-status>Manual only</strong></summary>
+                <p class="field-help" data-antenna-controller-detail>No local controller is attached. The manual ready action remains available.</p>
+                <pre class="controller-diagnostic" data-antenna-controller-diagnostic hidden></pre>
+                <div class="conductor-actions">
+                  <button type="button" data-antenna-controller-attach hidden>Attach and arm saved profile</button>
+                  <button type="button" class="primary-action" data-antenna-controller-run hidden>Switch antenna</button>
+                  <button type="button" data-antenna-controller-retry hidden>Retry switch</button>
+                </div>
+                <details data-antenna-controller-editor hidden>
+                  <summary>Edit local profile</summary>
+                  <div class="field-grid">
+                    <label>Name<input data-active-controller-field="name" maxlength="256"></label>
+                    <label>Timeout (seconds)<input type="number" min="1" max="60" data-active-controller-field="timeoutSeconds"></label>
+                    <div class="field-wide" data-active-controller-one-line>
+                      <label class="field-wide">Switch command<input data-active-controller-field="switchCommand" spellcheck="false"></label>
+                      <label class="field-wide">Verification command<input data-active-controller-field="verificationCommand" spellcheck="false"></label>
+                    </div>
+                    <div class="field-wide" data-active-controller-structured hidden>
+                      <label class="field-wide">Switch program<input data-active-controller-field="switchProgram" spellcheck="false"></label>
+                      <label class="field-wide">Switch arguments, one per line<textarea rows="5" data-active-controller-field="switchArguments" spellcheck="false"></textarea></label>
+                      <label class="field-wide">Verification program<input data-active-controller-field="verificationProgram" spellcheck="false"></label>
+                      <label class="field-wide">Verification arguments, one per line<textarea rows="5" data-active-controller-field="verificationArguments" spellcheck="false"></textarea></label>
+                    </div>
+                  </div>
+                  <div class="conductor-actions"><button type="button" data-antenna-controller-save>Save local profile</button></div>
+                </details>
+              </details>
 
               <div class="conductor-actions run-primary-actions" data-primary-run-actions>
                 <button type="button" class="primary-action" data-conductor-action="start">Start session</button>

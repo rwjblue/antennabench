@@ -52,8 +52,10 @@ one for another.
 Schema-v5 antenna-control evidence follows the same boundary. Portable bundles
 may describe command-control policy and retain resolved invocation evidence,
 but never contain executable profiles, target mappings, or timeouts that grant
-local authority. This foundation performs no process execution. Later local
-controller work must attach and arm machine-local configuration explicitly.
+local authority. The desktop can explicitly attach and arm a revisioned
+machine-local profile for one active session. Rust derives the pending
+intention context and directly spawns only that profile's program plus argument
+array; the webview never supplies an executable at invocation time.
 Command attempt records and an optional command-verified ready event cross one
 storage checkpoint; a failed attempt can remain auditable without advancing
 antenna occupancy.

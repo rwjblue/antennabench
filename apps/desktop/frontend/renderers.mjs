@@ -27,6 +27,7 @@ export function renderSetup(elements, state, root) {
     setupForm, setupReviewButton, setupCreateButton, setupStatus, setupFeedback,
     setupFeedbackMessage, setupFeedbackDetail, setupDiagnostics, setupReviewPanel,
     setupReviewStation, setupReviewAntennas, setupReviewShape, setupReviewSlots,
+    controllerOneLine, controllerStructured, controllerProfileSelect,
   } = elements;
   const setupBusy = ["reviewing", "creating"].includes(state.setupStatus);
   setupForm.setAttribute("aria-busy", String(setupBusy));
@@ -38,6 +39,24 @@ export function renderSetup(elements, state, root) {
   setupCreateButton.textContent = state.setupStatus === "creating" ? "Creating…" : "Create session";
   setupStatus.textContent = setupStatusText(state);
   setupStatus.classList.toggle("muted", ["editing", "invalid", "error"].includes(state.setupStatus));
+  const catalog = state.antennaControllerCatalog;
+  if (catalog) {
+    const selected = controllerProfileSelect.value;
+    const signature = catalog.profiles.map((profile) => `${profile.profileId}:${profile.revision}`).join("|");
+    if (controllerProfileSelect.dataset.catalogSignature !== signature) {
+      replaceSelectOptions(controllerProfileSelect, [
+        { value: "", label: "New profile" },
+        ...catalog.profiles.map((profile) => ({ value: profile.profileId, label: profile.name })),
+      ]);
+      controllerProfileSelect.value = catalog.profiles.some((profile) => profile.profileId === selected)
+        ? selected
+        : "";
+      controllerProfileSelect.dataset.catalogSignature = signature;
+    }
+    const structured = catalog.inputStyle === "structured";
+    controllerOneLine.hidden = structured;
+    controllerStructured.hidden = !structured;
+  }
 
   renderFeedback(
     setupFeedback,
@@ -70,7 +89,10 @@ export function renderSetup(elements, state, root) {
   const runLength = plan.signalPlan
     ? `${plan.slots.length} planned signal slots`
     : `${plan.slots.length} WSPR cycles · at least ${plan.slots.length * 2} minutes`;
-  setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${runLength} · ${signalSummary}`;
+  const controllerSummary = plan.antennaController
+    ? ` · controller ${plan.antennaController.profileName} · operator ready required`
+    : " · manual antenna control";
+  setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${runLength} · ${signalSummary}${controllerSummary}`;
   setupReviewSlots.replaceChildren(...plan.slots.map((slot) => {
     const row = root.createElement("tr");
     for (const value of [
@@ -99,6 +121,10 @@ export function renderRun(elements, state, root, options = {}) {
     lifecycleButtons, conductorDiagnostics, conductorEvents, wsjtxForm, wsjtxStart,
     wsjtxStop, wsjtxRequirement, wsjtxPhase, wsjtxCounts, wsjtxSetupWarnings, wsjtxDiagnostic,
     wsprLivePhase, wsprLiveDetail, wsprLiveDiagnostic, wsprLiveRetry, wsprLiveEndWithout,
+    antennaControllerStatus, antennaControllerDetail, antennaControllerDiagnostic,
+    antennaControllerAttach,
+    antennaControllerRun, antennaControllerRetry, antennaControllerEditor,
+    antennaControllerOneLine, antennaControllerStructured,
   } = elements;
   const conductorBusy = ["loading", "refreshing", "mutating"].includes(state.conductorStatus);
   const hasConductor = state.conductor !== null;
@@ -122,10 +148,66 @@ export function renderRun(elements, state, root, options = {}) {
     conductorEvents.replaceChildren();
     wsjtxStart.disabled = true;
     wsjtxStop.disabled = true;
+    antennaControllerAttach.hidden = true;
+    antennaControllerRun.hidden = true;
+    antennaControllerRetry.hidden = true;
+    antennaControllerDiagnostic.hidden = true;
     return { anchor: null, key: null };
   }
 
   const view = state.conductor;
+  const controller = state.antennaController;
+  const controllerBusy = ["loading", "attaching", "saving", "running"].includes(state.antennaControllerStatus);
+  antennaControllerStatus.textContent = controller?.armed
+    ? `${controller.profileName ?? "Local profile"} armed`
+    : controller?.profileId
+      ? `${controller.profileName ?? "Saved profile"} not armed`
+      : controller?.policy === "command_controlled"
+        ? "No local profile attached"
+        : "Manual only";
+  antennaControllerDetail.textContent = state.antennaControllerError?.message
+    ?? state.antennaControllerOutcome?.detail
+    ?? controller?.lastAttempt?.detail
+    ?? (controller?.staleProfile
+      ? "The saved profile changed. Review, attach, and arm its current revision before retrying."
+      : "Commands are optional assistance. The named operator ready action always remains authoritative.");
+  const controllerDiagnostic = state.antennaControllerOutcome?.diagnostic
+    ?? controller?.lastAttempt?.diagnostic
+    ?? "";
+  antennaControllerDiagnostic.textContent = controllerDiagnostic;
+  antennaControllerDiagnostic.hidden = !controllerDiagnostic;
+  const hasSavedAssociation = Boolean(controller?.profileId);
+  antennaControllerAttach.hidden = controller?.policy !== "command_controlled" || !hasSavedAssociation || controller?.armed;
+  antennaControllerAttach.disabled = controllerBusy;
+  const canRunController = controller?.armed && view.lifecycle === "running" && Boolean(view.nextIntent);
+  antennaControllerRun.hidden = !canRunController;
+  antennaControllerRun.disabled = controllerBusy;
+  antennaControllerRetry.hidden = !canRunController || !controller?.lastAttempt;
+  antennaControllerRetry.disabled = controllerBusy;
+  antennaControllerEditor.hidden = !hasSavedAssociation;
+  const activeProfile = state.antennaControllerCatalog?.profiles?.find(
+    (profile) => profile.profileId === controller?.profileId,
+  );
+  const structuredControllerInput = state.antennaControllerCatalog?.inputStyle === "structured";
+  antennaControllerOneLine.hidden = structuredControllerInput;
+  antennaControllerStructured.hidden = !structuredControllerInput;
+  if (activeProfile && antennaControllerEditor.dataset.profileRevision !== activeProfile.revision) {
+    const set = (field, value) => {
+      antennaControllerEditor.querySelector(`[data-active-controller-field="${field}"]`).value = value ?? "";
+    };
+    const commandLine = (command) => command
+      ? [command.programTemplate, ...command.argumentTemplates].map((token) => JSON.stringify(token)).join(" ")
+      : "";
+    set("name", activeProfile.name);
+    set("timeoutSeconds", activeProfile.timeoutSeconds);
+    set("switchCommand", commandLine(activeProfile.switchCommand));
+    set("verificationCommand", commandLine(activeProfile.verificationCommand));
+    set("switchProgram", activeProfile.switchCommand.programTemplate);
+    set("switchArguments", activeProfile.switchCommand.argumentTemplates.join("\n"));
+    set("verificationProgram", activeProfile.verificationCommand?.programTemplate);
+    set("verificationArguments", activeProfile.verificationCommand?.argumentTemplates?.join("\n"));
+    antennaControllerEditor.dataset.profileRevision = activeProfile.revision;
+  }
   const monotonicNow = options.monotonicNow ?? (() => Date.now());
   const nextAnchor = createCountdownAnchor(view, monotonicNow());
   const anchor = nextAnchor?.key === options.countdownKey ? options.countdownAnchor : nextAnchor;

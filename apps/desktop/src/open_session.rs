@@ -26,6 +26,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use thiserror::Error;
 
+use crate::antenna_control::AntennaControllerState;
 use crate::wsjtx_session::WsjtxSessionState;
 
 const SESSION_SUMMARY_IPC_BYTES: u64 = 64 * 1024;
@@ -1274,6 +1275,7 @@ pub(crate) async fn open_session_bundle(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
     wsjtx_state: State<'_, WsjtxSessionState>,
+    controller_state: State<'_, AntennaControllerState>,
 ) -> Result<OpenSessionOutcome, SessionErrorPayload> {
     let outcome = open_session_with_selection(state.inner(), || {
         let Some(selection) = app
@@ -1295,6 +1297,7 @@ pub(crate) async fn open_session_bundle(
         })
     })?;
     if matches!(outcome, OpenSessionOutcome::Opened { .. }) {
+        controller_state.revoke();
         wsjtx_state.stop_all("WSJT-X reception stopped because a different session was opened.");
     }
     Ok(outcome)

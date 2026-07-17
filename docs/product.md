@@ -34,6 +34,16 @@ step. Short contextual help is available beside selected unfamiliar concepts;
 required instructions, validation, safety, and recovery guidance remain visible
 without opening it.
 
+Setup can optionally select a reusable local direct-process antenna controller,
+map each antenna to an opaque target, and preview every normalized invocation.
+On macOS/Linux a deterministic one-line tokenizer is available; Windows uses
+an explicit program and ordered arguments. No shell or shell expansion is
+used. During Active Run the operator may request switch and optional
+verification commands, inspect bounded diagnostics, retry explicitly, edit and
+reattach the local profile, or continue manually. Regardless of command
+success, the named antenna-ready action remains the authority that arms the
+cycle.
+
 Local WSJT-X UDP reception is an optional direct/local source when WSPR.live is
 enabled, and is required before a receive-capable run only when WSPR.live is
 disabled. It remains useful offline and may run alongside the delayed/public
@@ -94,9 +104,10 @@ more technical path.
 
 Portable session evidence can now distinguish an operator-confirmed WSPR cycle
 from a cycle authorized by independent command verification, and reports show
-bounded switch/verification attempts and failures. AntennaBench does not yet
-execute those commands: executable controller profiles, command-assisted
-controls, and automatic switching are later local-only work. Manual operation
+bounded switch/verification attempts and failures. AntennaBench now supports
+optional local operator-triggered switch and verification profiles while
+keeping executable configuration outside portable bundles. Automatic
+switching and command-verified arming remain later work. Manual operation
 remains the complete default workflow.
 
 Automatic winner selection and hosted publishing are not yet available. See

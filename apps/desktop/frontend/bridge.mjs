@@ -66,4 +66,23 @@ export function invokeAdvanceSessionWsprLive(invoke, retry = false) {
   return invoke("advance_active_session_wspr_live", { request: { retry } });
 }
 
+export function invokeAntennaControllerProfiles(invoke) {
+  return invoke("antenna_controller_profiles");
+}
+
+export function invokeSaveAntennaControllerProfile(invoke, draft) {
+  return invoke("save_antenna_controller_profile", { draft });
+}
+
+export function invokeActiveSessionAntennaController(invoke) {
+  return invoke("active_session_antenna_controller");
+}
+
+export function invokeAttachSessionAntennaController(invoke, request) {
+  return invoke("attach_active_session_antenna_controller", { request });
+}
+
+export function invokeRunSessionAntennaController(invoke, request) {
+  return invoke("run_active_session_antenna_controller", { request });
+}
 

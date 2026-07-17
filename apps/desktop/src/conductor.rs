@@ -24,6 +24,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::antenna_control::AntennaControllerState;
 use crate::open_session::{
     active_session_source, check_ipc_payload, storage_error_payload, with_foreground_operation,
     ActiveSessionState, SessionErrorKind, SessionErrorPayload,
@@ -315,6 +316,37 @@ impl ConductorRuntime {
                 pending.occurred_at.get_or_insert(now);
                 pending.clone()
             })
+    }
+}
+
+impl ConductorSessionState {
+    pub(crate) fn authorize_action_token(
+        &self,
+        token: &str,
+        session_id: &str,
+        expected_revision: u64,
+        now: DateTime<Utc>,
+    ) -> Result<(), SessionErrorPayload> {
+        let pending = self
+            .0
+            .lock()
+            .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?
+            .resolve_action(token, now)
+            .ok_or_else(|| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::StaleRevision,
+                    "Refresh Active Run before submitting this controller action.",
+                    "the Rust-issued action token is missing or expired",
+                )
+            })?;
+        if pending.session_id != session_id || pending.expected_revision != expected_revision {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::StaleRevision,
+                "Refresh Active Run before submitting this controller action.",
+                "the action token does not match this session revision",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -1964,6 +1996,7 @@ pub(crate) fn mutate_active_session_conductor(
     active_state: State<'_, ActiveSessionState>,
     conductor_state: State<'_, ConductorSessionState>,
     wsjtx_state: State<'_, WsjtxSessionState>,
+    controller_state: State<'_, AntennaControllerState>,
 ) -> Result<ConductorView, SessionErrorPayload> {
     if matches!(&request.action, ConductorAction::Start { .. }) {
         let (source, _) = active_session_source(active_state.inner())?;
@@ -1989,6 +2022,7 @@ pub(crate) fn mutate_active_session_conductor(
         Arc::new(SystemLivePersistenceHooks),
     )?;
     if view.lifecycle != SessionLifecycleV2::Running {
+        controller_state.revoke();
         let (source, _) = active_session_source(active_state.inner())?;
         wsjtx_state.stop_for_source(
             &source,

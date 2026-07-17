@@ -1,3 +1,4 @@
+mod antenna_control;
 mod conductor;
 mod location;
 mod open_session;
@@ -7,6 +8,11 @@ mod wsjtx_session;
 mod wspr_live_acquisition;
 mod wspr_live_import;
 
+use antenna_control::{
+    active_session_antenna_controller, antenna_controller_profiles,
+    attach_active_session_antenna_controller, run_active_session_antenna_controller,
+    save_antenna_controller_profile, AntennaControllerState,
+};
 use conductor::{active_session_conductor, mutate_active_session_conductor, ConductorSessionState};
 use location::{request_station_location, LocationState};
 use open_session::{
@@ -17,6 +23,7 @@ use rbn_import::import_active_session_rbn;
 use setup::{
     create_session_from_review, load_station_preferences, review_session_setup, SetupSessionState,
 };
+use tauri::Manager;
 use wsjtx_session::{
     active_session_wsjtx_status, start_active_session_wsjtx, stop_active_session_wsjtx,
     WsjtxSessionState,
@@ -29,6 +36,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ActiveSessionState::default())
+        .manage(AntennaControllerState::default())
         .manage(ConductorSessionState::default())
         .manage(LocationState::default())
         .manage(SetupSessionState::default())
@@ -51,8 +59,39 @@ pub fn run() {
             stop_active_session_wsjtx,
             advance_active_session_wspr_live,
             import_active_session_wspr_live,
-            import_active_session_rbn
+            import_active_session_rbn,
+            antenna_controller_profiles,
+            save_antenna_controller_profile,
+            active_session_antenna_controller,
+            attach_active_session_antenna_controller,
+            run_active_session_antenna_controller
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the AntennaBench desktop shell");
+        .build(tauri::generate_context!())
+        .expect("error while building the AntennaBench desktop shell")
+        .run(|app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                app.state::<AntennaControllerState>().revoke();
+            }
+        });
+}
+
+#[cfg(test)]
+mod zz_controller_process_tests {
+    #[test]
+    fn verification_runs_only_after_a_zero_switch_exit() {
+        crate::antenna_control::tests::assert_verification_runs_only_after_a_zero_switch_exit();
+    }
+
+    #[test]
+    fn fake_process_covers_exit_binary_truncation_timeout_and_spawn_failure() {
+        crate::antenna_control::tests::assert_fake_process_covers_exit_binary_truncation_timeout_and_spawn_failure();
+    }
+
+    #[test]
+    fn cancellation_terminates_the_child_without_claiming_hardware_restoration() {
+        crate::antenna_control::tests::assert_cancellation_terminates_the_child_without_claiming_hardware_restoration();
+    }
 }
