@@ -1205,7 +1205,7 @@ mod tests {
         assert!(exported.report_html.contains("Ended / final"));
         assert!(exported
             .report_html
-            .contains("Incomplete or unknown: 1 explicit acquisition gap(s)"));
+            .contains("1 recorded acquisition gap; inspect the durable adapter evidence"));
         assert!(exported
             .report_html
             .contains("Lifecycle and interruption history"));

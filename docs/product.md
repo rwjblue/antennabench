@@ -19,8 +19,9 @@ default BOTH repetitions with two antennas are 16 periods, or 32 ideal minutes.
 Setup also identifies automatic bidirectional public spots as coming from
 WSPR.live, with an offline opt-out available as a secondary choice. Operators
 using this default online path enable WSJT-X **Upload spots** and keep WSJT-X
-online; WSPRnet acceptance, mirror ingestion delay, and completeness remain
-outside AntennaBench's control. There are
+online. AntennaBench collects the rows returned for its configured request
+windows on a best-effort basis; the upstream mirror does not provide an
+independent completeness guarantee. There are
 no setup-time timestamps or manual-switch deadlines. During the session, begin
 the physical antenna change and press the named antenna's ready button once the
 change is complete. AntennaBench does not ask when switching began or measure
@@ -50,8 +51,9 @@ disabled. It remains useful offline and may run alongside the delayed/public
 source; their provenance and analysis strata stay separate. Before each period, Active Run separately
 identifies any antenna change and whether WSJT-X Enable Tx must be turned on or
 off. WSPR.live TX and RX spots are gathered automatically by default for WSPR
-plans, with source, ingestion lag, and unknown completeness disclosed. A network
-or adapter failure does not prevent exporting already recorded session evidence.
+plans. Successful configured-window collection is presented as best effort;
+recorded network or adapter failures remain explicit and do not prevent
+exporting already recorded session evidence.
 
 When the run is over, AntennaBench builds a local report and can export:
 

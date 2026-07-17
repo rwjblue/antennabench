@@ -559,7 +559,7 @@ function importFeedbackModel(state) {
   if (!state.importNotice) return null;
   const result = state.importNotice;
   const omitted = result.omitted ? `, ${result.omitted} omitted by the retention bound` : "";
-  return { kind: "ready", message: `${result.observationsCreated} imported spot observation(s) committed at revision ${result.revision}.`, detail: `${result.total} rows: ${result.accepted} accepted, ${result.filtered} filtered, ${result.malformed} malformed, ${result.unsupported} unsupported, ${result.duplicate} duplicate, ${result.conflict} conflict${omitted}. Source completeness is unknown.` };
+  return { kind: "ready", message: `${result.observationsCreated} imported spot observation(s) committed at revision ${result.revision}.`, detail: `${result.total} rows: ${result.accepted} accepted, ${result.filtered} filtered, ${result.malformed} malformed, ${result.unsupported} unsupported, ${result.duplicate} duplicate, ${result.conflict} conflict${omitted}. AntennaBench retained the rows returned by this WSPR.live response; the upstream mirror does not provide an independent completeness guarantee.` };
 }
 
 function reportFeedbackModel(state) {

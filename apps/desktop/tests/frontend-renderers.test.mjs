@@ -193,7 +193,7 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
     countdownKey: result.key,
   });
   assert.equal(e.wsjtxPhase.textContent, "Running · 127.0.0.1");
-  assert.equal(e.wsprLivePhase.textContent, "Collecting delayed/public spots…");
+  assert.equal(e.wsprLivePhase.textContent, "Collecting best-effort public spots…");
   assert.match(e.wsjtxCounts.textContent, /Direct\/local active/);
   assert.equal(e.wsjtxSetupWarnings.hidden, false);
   assert.equal(e.wsjtxSetupWarnings.children[0].dataset.code, "wsjtx.setup.tx_disabled_during_transmit");

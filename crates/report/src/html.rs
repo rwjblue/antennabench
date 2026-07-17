@@ -18,8 +18,9 @@ use chrono::{SecondsFormat, Utc};
 use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, BandEvidenceSection,
     ReportCancellationToken, ReportDetailFamily, ReportError, ReportEvidenceSummary,
-    ReportLifecycleEventKind, ReportNotice, ReportResourceLimits, ReportResourceStage,
-    SessionReport, SlotEvidenceSection, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
+    ReportImportedEvidence, ReportLifecycleEventKind, ReportNotice, ReportResourceLimits,
+    ReportResourceStage, SessionReport, SlotEvidenceSection, UsableObservationKindCounts,
+    REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
@@ -129,22 +130,48 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     );
     fact(
         out,
-        "Acquisition completeness",
+        "Recorded acquisition",
         &if snapshot.adapter_evidence.evidence_complete {
-            "Complete within recorded adapter scope".into()
-        } else {
-            let unknown = snapshot
-                .adapter_evidence
-                .imports
-                .iter()
-                .filter(|import| !import.completeness_known)
-                .count();
+            "No recorded acquisition gaps".into()
+        } else if snapshot.adapter_evidence.gap_count == 1 {
+            "1 recorded acquisition gap; inspect the durable adapter evidence and lifecycle history for its recorded reason".into()
+        } else if snapshot.adapter_evidence.gap_count > 1 {
             format!(
-                "Incomplete or unknown: {} explicit acquisition gap(s); {} import(s) with unknown source completeness",
-                snapshot.adapter_evidence.gap_count, unknown
+                "{} recorded acquisition gaps; inspect the durable adapter evidence and lifecycle history for their recorded reasons",
+                snapshot.adapter_evidence.gap_count,
             )
+        } else {
+            "Recorded acquisition is incomplete; inspect the durable adapter evidence and lifecycle history for the recorded reason".into()
         },
     );
+    let wspr_live_imports = snapshot
+        .adapter_evidence
+        .imports
+        .iter()
+        .filter(|import| import.provider_id == "wspr-live")
+        .count();
+    if wspr_live_imports > 0 {
+        fact(
+            out,
+            "Public collection",
+            &if snapshot.adapter_evidence.evidence_complete {
+                format!(
+                    "Best-effort public collection completed for {} recorded requested window(s)",
+                    wspr_live_imports,
+                )
+            } else {
+                format!(
+                    "Best-effort public collection retained rows for {} recorded requested window(s); recorded acquisition gaps remain",
+                    wspr_live_imports,
+                )
+            },
+        );
+        fact(
+            out,
+            "Public-source boundary",
+            "AntennaBench retained the spots returned by the configured WSPR.live queries; the upstream mirror does not provide an independent completeness guarantee.",
+        );
+    }
     for (index, import) in snapshot.adapter_evidence.imports.iter().enumerate() {
         let bands = import
             .selected_bands
@@ -156,7 +183,7 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
             out,
             &format!("Imported evidence {}", index + 1),
             &format!(
-                "{} / {}; captured {}; half-open window {} to {}; bands {}; {} rows: {} accepted, {} malformed, {} unsupported, {} filtered, {} duplicate, {} conflict; {} observations created; source completeness {}",
+                "{} / {}; captured {}; half-open window {} to {}; bands {}; {} rows: {} accepted, {} malformed, {} unsupported, {} filtered, {} duplicate, {} conflict; {} observations created; {}",
                 import.provider_id,
                 import.source_id,
                 timestamp(import.captured_at),
@@ -171,7 +198,7 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
                 import.duplicate_count,
                 import.conflict_count,
                 import.observations_created,
-                if import.completeness_known { "known" } else { "unknown" },
+                import_source_boundary(import),
             ),
         );
     }
@@ -1439,6 +1466,17 @@ fn record_source(value: RecordSource) -> &'static str {
         RecordSource::Derived => "Derived",
     }
 }
+
+fn import_source_boundary(import: &ReportImportedEvidence) -> &'static str {
+    if import.provider_id == "wspr-live" {
+        "best-effort WSPR.live request-window collection; upstream mirror has no independent completeness guarantee"
+    } else if import.completeness_known {
+        "upstream completeness guarantee recorded"
+    } else {
+        "upstream completeness guarantee not independently recorded"
+    }
+}
+
 fn yes_no(value: bool) -> &'static str {
     if value {
         "Yes"

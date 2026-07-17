@@ -171,7 +171,7 @@
 
               <fieldset class="setup-section">
                 <legend><span>05</span> WSPR Spots <button class="context-help" type="button" data-help-trigger="public_spots">?</button></legend>
-                <p class="field-help">Delayed public TX and RX WSPR spots are gathered automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Enable WSJT-X <strong>Upload spots</strong>, keep WSJT-X online, and expect ingestion delay and unknown completeness.</p>
+                <p class="field-help">Delayed public TX and RX WSPR spots are collected automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Enable WSJT-X <strong>Upload spots</strong> and keep WSJT-X online. AntennaBench collects returned rows for configured request windows on a best-effort basis; the upstream mirror does not provide an independent completeness guarantee.</p>
                 <details class="advanced-fields">
                   <summary>Offline option</summary>
                   <label class="authority-confirmation"><input type="checkbox" data-setup-field="wsprLiveAcquisitionEnabled" checked> Gather delayed/public WSPR.live TX and RX spots automatically</label>
@@ -307,7 +307,7 @@
 
               <details class="receiver-panel" data-wspr-live-panel>
                 <summary>Delayed/public WSPR.live collection · <strong data-wspr-live-phase>Waiting for antenna confirmation</strong> <button class="context-help" type="button" data-help-trigger="wspr_live_status">?</button></summary>
-                <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror for both TX and RX rows after the ingestion grace period. No separate fetch action is required.</p>
+                <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror for both TX and RX rows after the ingestion grace period. No separate fetch action is required; successful configured-window collection is best effort.</p>
                 <p class="receiver-diagnostic" data-wspr-live-diagnostic hidden></p>
                 <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry acquisition</button><button type="button" class="danger-action" data-wspr-live-end-without hidden>End without public spots</button></div>
               </details>

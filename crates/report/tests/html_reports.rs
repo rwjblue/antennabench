@@ -66,7 +66,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
 }
 
 #[test]
-fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
+fn renders_revision_lifecycle_and_recorded_adapter_gap_disclosures() {
     let mut report = canonical_report();
     report.snapshot = ReportSnapshotContext {
         checkpoint_revision: Some(17),
@@ -113,11 +113,87 @@ fn renders_revision_lifecycle_and_adapter_gap_disclosures() {
     assert!(html.contains("Committed session snapshot"));
     assert!(html.contains("<dt>Checkpoint revision</dt><dd>17</dd>"));
     assert!(html.contains("Interrupted / in progress"));
-    assert!(html.contains("1 import(s) with unknown source completeness"));
+    assert!(html.contains("1 recorded acquisition gap"));
+    assert!(html.contains("Best-effort public collection retained rows for 1 recorded requested window(s); recorded acquisition gaps remain"));
+    assert!(html.contains("Public-source boundary"));
+    assert!(
+        html.contains("the upstream mirror does not provide an independent completeness guarantee")
+    );
+    assert!(!html.contains("unknown source completeness"));
     assert!(html.contains("wspr-live / wsprnet-spots-mirror"));
     assert!(html.contains("half-open window"));
     assert!(html.contains("Lifecycle and interruption history"));
     assert!(html.contains("recovered &lt;without inventing evidence&gt;"));
+}
+
+#[test]
+fn renders_successful_public_collection_without_turning_a_source_boundary_into_a_gap() {
+    let mut report = canonical_report();
+    report.snapshot = ReportSnapshotContext {
+        checkpoint_revision: Some(19),
+        lifecycle: Some(SessionLifecycleV2::Ended),
+        lifecycle_events: Vec::new(),
+        wspr_cycles: Vec::new(),
+        antenna_control_attempts: Vec::new(),
+        adapter_evidence: ReportAdapterEvidence {
+            record_count: 6,
+            accepted_count: 4,
+            malformed_count: 1,
+            unsupported_count: 0,
+            filtered_count: 1,
+            duplicate_count: 0,
+            conflict_count: 0,
+            partially_normalized_count: 0,
+            gap_count: 0,
+            evidence_complete: true,
+            imports: vec![
+                ReportImportedEvidence {
+                    provider_id: "wspr-live".into(),
+                    source_id: "wsprnet-spots-mirror".into(),
+                    captured_at: "2026-07-14T22:05:00Z".parse().unwrap(),
+                    window_start: "2026-07-14T21:00:00Z".parse().unwrap(),
+                    window_end: "2026-07-14T22:00:00Z".parse().unwrap(),
+                    selected_bands: vec![Band::M20],
+                    total_count: 6,
+                    accepted_count: 4,
+                    malformed_count: 1,
+                    filtered_count: 1,
+                    unsupported_count: 0,
+                    duplicate_count: 0,
+                    conflict_count: 0,
+                    observations_created: 4,
+                    completeness_known: false,
+                },
+                ReportImportedEvidence {
+                    provider_id: "wsjtx-udp".into(),
+                    source_id: "direct-local".into(),
+                    captured_at: "2026-07-14T22:05:01Z".parse().unwrap(),
+                    window_start: "2026-07-14T21:00:00Z".parse().unwrap(),
+                    window_end: "2026-07-14T22:00:00Z".parse().unwrap(),
+                    selected_bands: vec![Band::M20],
+                    total_count: 1,
+                    accepted_count: 1,
+                    malformed_count: 0,
+                    filtered_count: 0,
+                    unsupported_count: 0,
+                    duplicate_count: 0,
+                    conflict_count: 0,
+                    observations_created: 1,
+                    completeness_known: true,
+                },
+            ],
+        },
+    };
+
+    let html = render_standalone_html(&report).unwrap();
+    assert!(html.contains("No recorded acquisition gaps"));
+    assert!(
+        html.contains("Best-effort public collection completed for 1 recorded requested window(s)")
+    );
+    assert!(html.contains("best-effort WSPR.live request-window collection; upstream mirror has no independent completeness guarantee"));
+    assert!(html.contains("wsjtx-udp / direct-local"));
+    assert!(html.contains("upstream completeness guarantee recorded"));
+    assert!(!html.contains("Complete within recorded adapter scope"));
 }
 
 #[test]

@@ -167,7 +167,8 @@ selected direction; the form derives the number of individual two-minute WSPR
 periods and ideal minimum time and presents automatic bidirectional WSPR.live
 public spots as a normal attributed section before advanced controlled-signal
 setup. The online path requires WSJT-X **Upload spots** and network access, and
-discloses mirror lag plus unknown completeness. The offline opt-out remains
+collects returned rows for configured request windows on a best-effort basis;
+the upstream mirror does not provide an independent completeness guarantee. The offline opt-out remains
 secondary behavior; a receive-capable offline run requires the direct/local UDP
 receiver, while UDP is optional and separately attributed when WSPR.live is on. The routine
 form keeps station identity plus antenna labels/descriptions visible and places

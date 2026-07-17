@@ -23,7 +23,7 @@ export const CONTEXT_HELP = Object.freeze({
   },
   public_spots: {
     title: "Automatic bidirectional WSPR spots",
-    text: "AntennaBench gathers delayed public reports for both transmissions and receptions from WSPR.live; enable WSJT-X Upload spots and keep it online. Lag and completeness remain unknown, and you can turn this off for an offline run.",
+    text: "AntennaBench collects delayed public reports for both transmissions and receptions from WSPR.live on a best-effort basis; enable WSJT-X Upload spots and keep it online. It retains the rows returned for configured request windows, the upstream mirror does not provide an independent completeness guarantee, and you can turn this off for an offline run.",
   },
   controlled_signal: {
     title: "Controlled CW or RTTY plan",
@@ -55,7 +55,7 @@ export const CONTEXT_HELP = Object.freeze({
   },
   wspr_live_status: {
     title: "Delayed/public WSPR.live collection",
-    text: "This default online source gathers both TX and RX rows after WSPRnet/WSPR.live ingestion. Upload spots and network access are required; lag and completeness remain unknown.",
+    text: "This default online source collects both TX and RX rows after WSPRnet/WSPR.live ingestion; Upload spots and network access are required. AntennaBench retains rows returned for configured request windows; the upstream mirror does not provide an independent completeness guarantee.",
   },
   wsjtx_receiver: {
     title: "Local/offline WSJT-X receiver",
@@ -294,15 +294,15 @@ export function wsprLiveAcquisitionModel(state) {
   });
   if (state.wsprLiveAcquisitionStatus === "fetching") {
     return {
-      phase: "Collecting delayed/public spots…",
-      detail: "Delayed/public active · AntennaBench is checking WSPR.live for TX and RX rows now.",
+      phase: "Collecting best-effort public spots…",
+      detail: "Delayed/public active · AntennaBench is checking WSPR.live for TX and RX rows in the configured request window now.",
       diagnostic: "",
       retry: false,
     };
   }
   if (state.wsprLiveAcquisitionError) {
     return {
-      phase: "Public spots need attention",
+      phase: "Public collection needs attention",
       detail: state.wsprLiveAcquisitionError.message,
       diagnostic: "",
       retry: true,
@@ -329,37 +329,37 @@ export function wsprLiveAcquisitionModel(state) {
   if (outcome.status === "waiting") {
     return {
       phase: "Waiting briefly for public spots",
-      detail: `Delayed/public active · TX and RX spots from the last completed cycle may be available after ${localTime(outcome.notBefore)}; completeness is unknown.`,
+      detail: `Delayed/public active · TX and RX spots from the last completed cycle may be available after ${localTime(outcome.notBefore)}.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "up_to_date") {
     return {
-      phase: "Delayed/public spots are up to date",
-      detail: `Delayed/public active · TX and RX spots collected through ${localTime(outcome.capturedThrough)} with unknown completeness.`,
+      phase: "Best-effort public collection completed",
+      detail: `Delayed/public active · AntennaBench retained the rows returned for configured request windows through ${localTime(outcome.capturedThrough)}. The upstream mirror does not provide an independent completeness guarantee.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "captured") {
     return {
-      phase: "Delayed/public spots collected",
-      detail: `Delayed/public active · ${outcome.observationsCreated} new TX/RX spot(s) collected through ${localTime(outcome.capturedThrough)} with unknown completeness.`,
+      phase: "Best-effort public collection completed",
+      detail: `Delayed/public active · ${outcome.observationsCreated} new TX/RX spot(s) were retained from configured request windows through ${localTime(outcome.capturedThrough)}. The upstream mirror does not provide an independent completeness guarantee.`,
       diagnostic: "",
       retry: false,
     };
   }
   if (outcome.status === "completed") {
     return {
-      phase: "Final delayed/public spots collected",
-      detail: `TX and RX spots collected through ${localTime(outcome.capturedThrough)} with unknown completeness. The session ended automatically.`,
+      phase: "Best-effort public collection completed",
+      detail: `TX and RX spots returned for configured request windows through ${localTime(outcome.capturedThrough)} were retained. The upstream mirror does not provide an independent completeness guarantee. The session ended automatically.`,
       diagnostic: "",
       retry: false,
     };
   }
   return {
-    phase: "Public spots need attention",
+    phase: "Public collection needs attention",
     detail: outcome.message || "Automatic public spot collection could not finish.",
     diagnostic: "",
     retry: true,

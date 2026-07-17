@@ -306,9 +306,11 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
     /data-setup-field="wsprLiveAcquisitionEnabled" checked/,
   );
   assert.doesNotMatch(setupHtml, /Optional public spots/);
-  assert.match(setupHtml, /Delayed public TX and RX WSPR spots are gathered automatically/);
+  assert.match(setupHtml, /Delayed public TX and RX WSPR spots are collected automatically/);
   assert.match(setupHtml, /Upload spots/);
-  assert.match(setupHtml, /unknown completeness/);
+  assert.match(setupHtml, /best-effort basis/);
+  assert.match(setupHtml, /independent completeness guarantee/);
+  assert.doesNotMatch(setupHtml, /unknown completeness/);
   assert.doesNotMatch(setupHtml, /data-import-authority|Confirm source authority/);
   const setupPanel = setupHtml.match(/data-panel="setup"[\s\S]*?data-panel="run"/)?.[0] ?? "";
   assert.doesNotMatch(setupPanel, /Facets|placeholder=|Trusted boundary|trusted Rust/);
@@ -875,16 +877,21 @@ test("active-run public spot states stay plain and hide opaque identifiers", () 
     );
   }
   assert.deepEqual(presentations.map(({ phase }) => phase), [
-    "Collecting delayed/public spots…",
-    "Public spots need attention",
+    "Collecting best-effort public spots…",
+    "Public collection needs attention",
     "Automatic collection is off",
     "Waiting for the first completed cycle",
     "Waiting briefly for public spots",
-    "Delayed/public spots are up to date",
-    "Delayed/public spots collected",
-    "Final delayed/public spots collected",
-    "Public spots need attention",
+    "Best-effort public collection completed",
+    "Best-effort public collection completed",
+    "Best-effort public collection completed",
+    "Public collection needs attention",
   ]);
+  assert.match(presentations[5].detail, /configured request windows/);
+  assert.match(presentations[5].detail, /independent completeness guarantee/);
+  assert.match(presentations[8].detail, /Collection stopped/);
+  assert.equal(presentations[8].retry, true);
+  assert.doesNotMatch(JSON.stringify(presentations), /unknown completeness|completeness is unknown/i);
 
   const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
   const runPanel = html.match(/data-panel="run"[\s\S]*?data-panel="transfer"/u)?.[0] ?? "";
