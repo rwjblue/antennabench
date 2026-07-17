@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Build and test the optional hosted foundation"
+#MISE depends=["hosted:deps"]
 
 set -euo pipefail
 
 cd apps/hosted
-npm ci
 npm run test
 npm run build

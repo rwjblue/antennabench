@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Install hosted dependencies"
+#MISE hide=true
+#MISE sources=["apps/hosted/package.json", "apps/hosted/package-lock.json"]
+#MISE outputs=["apps/hosted/node_modules/.package-lock.json"]
+
+set -euo pipefail
+
+cd apps/hosted
+npm ci
