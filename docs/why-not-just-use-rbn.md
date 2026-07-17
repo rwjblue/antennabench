@@ -38,10 +38,10 @@ capabilities vary, while the most uniform and familiar RBN path remains CW.
 
 ## What the current receiver populations look like
 
-The old illustration for this page contained only a small WSPR sample. That was
-not suitable for comparing network size. The current figures instead come from
-bounded WSPR.live database queries over 24-hour, 72-hour, and seven-day windows,
-plus a point-in-time pull of the RBN active-node endpoint.
+These figures come from bounded WSPR.live database queries over 24-hour,
+72-hour, and seven-day windows, plus a point-in-time pull of the RBN
+active-node endpoint. The WSPR windows and the RBN snapshot are the two
+populations being compared below.
 
 <!-- BEGIN GENERATED RECEIVER SNAPSHOT -->
 **Snapshot interval:** WSPR data from `2026-07-10T17:00:00Z` through `2026-07-17T17:00:00Z`; RBN active nodes fetched near the end of that interval.
@@ -73,10 +73,9 @@ The counts are not perfectly apples-to-apples:
 - Neither count measures receiver quality, antenna performance, local noise, or
   continuous availability.
 
-Even with those cautions, the original expectation was directionally correct in
-this snapshot: WSPR exposed a materially larger receiver population on 40, 20,
-and 15 meters. The difference was hidden by the earlier 49-point illustrative
-sample, not by the underlying WSPR.live data.
+Even with those cautions, the pattern in this snapshot is clear: WSPR exposed a
+materially larger reporting population than RBN on 40, 20, and 15 meters, by
+factors of roughly 4.5× to 9× over the seven-day window.
 
 ## Geography matters as much as the total
 
