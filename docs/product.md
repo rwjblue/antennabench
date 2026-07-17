@@ -76,6 +76,17 @@ pooled average of observations. When a comparison or path delta is unavailable,
 the report records that state and its typed limitations rather than inventing a
 zero or conclusion.
 
+The standalone HTML turns that overview into the first reading page. It shows
+no more than four scope facts, the full named delta orientation, one concise
+row per retained comparison stratum, and explicit supported/not-established
+statements before detailed diagnostics. Stable question links lead to
+same-path signal, reach, distance/direction, run quality, and the audit
+appendix. Native disclosures keep lifecycle, schedule, antenna, controller,
+raw paired-row, solar, and per-slot evidence available without making the
+default report one uninterrupted audit table. Required failures, unavailable
+states, bounded-overview omissions, acquisition gaps, and important
+limitations remain visible while those disclosures are closed.
+
 It also says what is missing. Intended order is shown separately from observed
 antenna use. A cycle switched before its 110.592-second transmission completed
 has unknown antenna attribution. A missing decode is not treated as a

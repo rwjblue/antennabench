@@ -18,9 +18,9 @@ use chrono::{SecondsFormat, Utc};
 use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, BandEvidenceSection,
     ReportCancellationToken, ReportDetailFamily, ReportError, ReportEvidenceSummary,
-    ReportImportedEvidence, ReportLifecycleEventKind, ReportNotice, ReportResourceLimits,
-    ReportResourceStage, SessionReport, SlotEvidenceSection, UsableObservationKindCounts,
-    REPORT_RESOURCE_LIMITS,
+    ReportImportedEvidence, ReportLifecycleEventKind, ReportNotice, ReportOverviewLifecycleState,
+    ReportOverviewLimitation, ReportOverviewPathDelta, ReportResourceLimits, ReportResourceStage,
+    SessionReport, SlotEvidenceSection, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
@@ -30,7 +30,10 @@ macro_rules! write_html {
 }
 
 const STYLES: &str = r#"
-:root{color-scheme:light;--ink:#172033;--muted:#5c667a;--line:#d8deea;--paper:#fff;--soft:#f5f7fb;--usable:#237a57;--excluded:#b84b4b;--accent:#315da8}*{box-sizing:border-box}body{margin:0;background:var(--soft);color:var(--ink);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(1120px,calc(100% - 2rem));margin:2rem auto 4rem}.hero,.panel{background:var(--paper);border:1px solid var(--line);border-radius:.75rem;box-shadow:0 1px 2px #17203312}.hero{padding:1.5rem 1.75rem}.hero h1{margin:0 0 .25rem;font-size:clamp(1.7rem,4vw,2.6rem)}.eyebrow{margin:0;color:var(--accent);font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}.muted{color:var(--muted)}.panel{margin-top:1rem;padding:1.25rem;overflow:hidden}.panel h2{margin:.1rem 0 1rem}.panel h3{margin:1.4rem 0 .6rem}.facts,.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}.fact,.stat{padding:.75rem;background:var(--soft);border-radius:.5rem}.fact dt,.stat dt{color:var(--muted);font-size:.78rem;font-weight:700;text-transform:uppercase}.fact dd,.stat dd{margin:.2rem 0 0;font-weight:650}.notice{padding:.75rem 1rem;border-left:.3rem solid #b36b00;background:#fff8e8}.badge{display:inline-block;padding:.16rem .55rem;border-radius:999px;background:#e5ebf7;font-size:.82rem;font-weight:700}.empty{padding:.85rem;border:1px dashed var(--line);border-radius:.5rem;color:var(--muted)}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.9rem}caption{text-align:left;font-weight:700;padding:.25rem 0 .55rem}th,td{padding:.55rem .65rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}thead th{background:var(--soft);white-space:nowrap}.chart,.comparison-chart{display:grid;gap:.5rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.chart-row{display:grid;grid-template-columns:minmax(7rem,14rem) 1fr 4.5rem;gap:.6rem;align-items:center}.comparison-row{display:grid;grid-template-columns:minmax(8rem,16rem) 1fr minmax(5rem,auto);gap:.6rem;align-items:center}.chart-label{overflow-wrap:anywhere}.bar-track,.snr-track,.comparison-track,.snr-pair{position:relative;height:1rem;background:#e1e6ef;border-radius:999px;overflow:hidden}.bar{height:100%;float:left}.bar.usable{background:var(--usable)}.bar.excluded{background:var(--excluded)}.snr-range{position:absolute;top:.3rem;height:.4rem;border-radius:999px;background:var(--accent)}.snr-point{position:absolute;top:.1rem;width:.18rem;height:.8rem;background:var(--ink)}.comparison-zero{position:absolute;left:50%;top:0;width:1px;height:100%;background:var(--muted)}.comparison-delta{position:absolute;top:.2rem;height:.6rem;border-radius:999px;background:var(--accent)}.snr-pair{height:1.2rem}.snr-left,.snr-right{position:absolute;top:.15rem;width:.55rem;height:.9rem;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}.snr-left{background:#315da8}.snr-right{background:#b35c00}.timeline{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.timeline-slot{min-width:2.6rem;padding:.45rem;border:1px solid var(--line);border-radius:.35rem;text-align:center}.timeline-slot.invalid{border-style:dashed;color:var(--muted)}.timeline-slot.issue{background:#fff8e8}.legend{display:flex;gap:1rem;color:var(--muted);font-size:.82rem}.swatch{display:inline-block;width:.7rem;height:.7rem;margin-right:.25rem;border-radius:.15rem}.swatch.usable{background:var(--usable)}.swatch.excluded{background:var(--excluded)}.antenna-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.75rem}.antenna-card{padding:1rem;border:1px solid var(--line);border-radius:.5rem}.antenna-card h3{margin:0 0 .6rem}.antenna-card dl{margin:0}.antenna-card dt{color:var(--muted);font-size:.8rem;font-weight:700}.antenna-card dd{margin:0 0 .45rem}.footnote{font-size:.84rem;color:var(--muted)}@media print{body{background:#fff}main{width:100%;margin:0}.hero,.panel{box-shadow:none;break-inside:avoid}}@media(max-width:620px){.chart-row,.comparison-row{grid-template-columns:1fr}.chart-value{color:var(--muted)}}
+:root{color-scheme:light;--ink:#172033;--muted:#5c667a;--line:#d8deea;--paper:#fff;--soft:#f5f7fb;--usable:#237a57;--excluded:#b84b4b;--accent:#315da8;--accent-soft:#edf3ff}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:1rem}body{margin:0;background:var(--soft);color:var(--ink);font:15px/1.42 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(1120px,calc(100% - 2rem));margin:1rem auto 3rem}.skip-link{position:absolute;left:1rem;top:-5rem;padding:.65rem .85rem;background:var(--ink);color:#fff;z-index:2}.skip-link:focus{top:1rem}.hero,.panel,.question-nav{background:var(--paper);border:1px solid var(--line);border-radius:.65rem;box-shadow:0 1px 2px #17203312}.hero{display:grid;grid-template-columns:1fr auto;align-items:end;gap:.1rem 1rem;padding:.7rem 1rem}.hero .eyebrow{grid-column:1/-1}.hero h1{margin:0;font-size:clamp(1.55rem,3vw,2rem)}.hero .muted{margin:0}.eyebrow{margin:0;color:var(--accent);font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}.muted{color:var(--muted)}.question-nav{margin-top:.5rem;padding:.35rem .55rem}.question-nav ul{display:flex;flex-wrap:wrap;gap:.15rem .35rem;margin:0;padding:0;list-style:none}.question-nav a{display:block;padding:.25rem .4rem;border-radius:.35rem;color:var(--accent);font-size:.82rem;font-weight:700;text-decoration-thickness:.08em;text-underline-offset:.16em}.question-nav a:hover{background:var(--accent-soft)}a:focus-visible,summary:focus-visible{outline:3px solid #e09b22;outline-offset:3px}.panel{margin-top:.75rem;padding:1rem;overflow:hidden}.panel h2{margin:.05rem 0 .4rem}.panel h3{margin:1rem 0 .35rem}.overview{border-top:.3rem solid var(--accent);padding:.75rem 1rem}.overview .answer{margin:.4rem 0;padding:.5rem .65rem;background:var(--accent-soft);border-radius:.5rem;font-size:.98rem}.scope-line{margin:.2rem 0 .5rem;color:var(--muted)}.orientation{margin:.5rem 0;padding:.4rem .55rem;border:1px solid var(--line);border-radius:.45rem}.headline-facts{grid-template-columns:repeat(4,minmax(0,1fr));margin:.45rem 0}.facts,.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.45rem}.fact,.stat{padding:.45rem .55rem;background:var(--soft);border-radius:.45rem}.fact dt,.stat dt{color:var(--muted);font-size:.68rem;font-weight:700;text-transform:uppercase}.fact dd,.stat dd{margin:.08rem 0 0;font-weight:650;overflow-wrap:anywhere}.overview-support{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem}.overview-support section{padding:.45rem .6rem;border:1px solid var(--line);border-radius:.45rem}.overview-support h3{margin:0 0 .15rem;font-size:.88rem}.overview-support ul{margin:.1rem 0;padding-left:1rem;font-size:.82rem;line-height:1.3}.overview-support li+li{margin-top:.1rem}.notice{padding:.6rem .8rem;border-left:.3rem solid #b36b00;background:#fff8e8}.critical{border-left-color:#8a3f00}.badge{display:inline-block;padding:.12rem .45rem;border-radius:999px;background:#e5ebf7;font-size:.78rem;font-weight:700}.empty{padding:.7rem;border:1px dashed var(--line);border-radius:.5rem;color:var(--muted)}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.84rem}caption{text-align:left;font-weight:700;padding:.2rem 0 .35rem}th,td{padding:.38rem .48rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}thead th{background:var(--soft);white-space:nowrap}.overview-table{font-size:.78rem;line-height:1.28}.overview-table td:first-child{min-width:13rem}.question-section>p:first-of-type{margin-top:0}.audit-disclosure{margin-top:.55rem;border:1px solid var(--line);border-radius:.5rem;background:var(--paper)}.audit-disclosure>summary{padding:.6rem .7rem;cursor:pointer;color:var(--accent);font-weight:750}.audit-disclosure[open]>summary{border-bottom:1px solid var(--line)}.disclosure-body{padding:0 .7rem .7rem}.audit-disclosure .panel{margin:.65rem 0 0;box-shadow:none}.chart,.comparison-chart{display:grid;gap:.5rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.chart-row{display:grid;grid-template-columns:minmax(7rem,14rem) 1fr 4.5rem;gap:.6rem;align-items:center}.comparison-row{display:grid;grid-template-columns:minmax(8rem,16rem) 1fr minmax(5rem,auto);gap:.6rem;align-items:center}.chart-label{overflow-wrap:anywhere}.bar-track,.snr-track,.comparison-track,.snr-pair{position:relative;height:1rem;background:#e1e6ef;border-radius:999px;overflow:hidden}.bar{height:100%;float:left}.bar.usable{background:var(--usable)}.bar.excluded{background:var(--excluded)}.snr-range{position:absolute;top:.3rem;height:.4rem;border-radius:999px;background:var(--accent)}.snr-point{position:absolute;top:.1rem;width:.18rem;height:.8rem;background:var(--ink)}.comparison-zero{position:absolute;left:50%;top:0;width:1px;height:100%;background:var(--muted)}.comparison-delta{position:absolute;top:.2rem;height:.6rem;border-radius:999px;background:var(--accent)}.snr-pair{height:1.2rem}.snr-left,.snr-right{position:absolute;top:.15rem;width:.55rem;height:.9rem;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}.snr-left{background:#315da8}.snr-right{background:#b35c00}.timeline{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0 1rem;padding:.8rem;background:var(--soft);border-radius:.5rem}.timeline-slot{min-width:2.6rem;padding:.45rem;border:1px solid var(--line);border-radius:.35rem;text-align:center}.timeline-slot.invalid{border-style:dashed;color:var(--muted)}.timeline-slot.issue{background:#fff8e8}.legend{display:flex;gap:1rem;color:var(--muted);font-size:.82rem}.swatch{display:inline-block;width:.7rem;height:.7rem;margin-right:.25rem;border-radius:.15rem}.swatch.usable{background:var(--usable)}.swatch.excluded{background:var(--excluded)}.antenna-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.75rem}.antenna-card{padding:1rem;border:1px solid var(--line);border-radius:.5rem}.antenna-card h3{margin:0 0 .6rem}.antenna-card dl{margin:0}.antenna-card dt{color:var(--muted);font-size:.8rem;font-weight:700}.antenna-card dd{margin:0 0 .45rem}.footnote{font-size:.84rem;color:var(--muted)}
+@media print{body{background:#fff;font-size:10.5pt}main{width:100%;margin:0}.hero,.panel,.question-nav{box-shadow:none}.question-nav,.skip-link{display:none}.hero{padding:.65rem .8rem}.overview{margin-top:.55rem;padding:.7rem;break-after:page}.overview .answer,.orientation{padding:.4rem .55rem;margin:.4rem 0}.headline-facts{margin:.45rem 0;gap:.4rem}.fact{padding:.4rem .5rem}.overview-support{margin-top:.45rem;gap:.45rem}.overview-support section{padding:.4rem .55rem}.overview-support li+li{margin-top:0}.overview table{font-size:8.8pt}details:not([open])>:not(summary){display:none!important}.audit-disclosure{break-inside:avoid}.audit-disclosure[open]{break-inside:auto}.panel{box-shadow:none}.question-section{break-before:page}}
+@media(max-width:760px){.headline-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-support{grid-template-columns:1fr}}
+@media(max-width:620px){main{width:min(100% - 1rem,1120px);margin:.5rem auto 2rem}.hero{display:block}.hero .muted{margin-top:.2rem}.hero,.panel{border-radius:.55rem}.chart-row,.comparison-row{grid-template-columns:1fr}.chart-value{color:var(--muted)}.question-nav ul{display:grid;grid-template-columns:1fr 1fr}.overview-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.overview-table tr{display:block;margin:.5rem 0;border:1px solid var(--line);border-radius:.45rem}.overview-table td{display:grid;grid-template-columns:minmax(7rem,42%) 1fr;gap:.5rem;border-bottom:1px solid var(--line)}.overview-table td:last-child{border-bottom:0}.overview-table td::before{content:attr(data-label);color:var(--muted);font-size:.72rem;font-weight:700;text-transform:uppercase}.overview-table td:first-child{min-width:0}.headline-facts{grid-template-columns:1fr 1fr}}
 .swatch.left,.bar.left{background:#315da8}.swatch.right,.bar.right{background:#b35c00}
 .location-fill{height:100%;background:#315da8;border-radius:999px}.azimuth-track{position:relative;height:1rem;background:linear-gradient(90deg,#e1e6ef 0 24.8%,#cbd5e7 25% 25.2%,#e1e6ef 25.4% 49.8%,#cbd5e7 50% 50.2%,#e1e6ef 50.4% 74.8%,#cbd5e7 75% 75.2%,#e1e6ef 75.4% 100%);border-radius:999px}.azimuth-marker{position:absolute;top:.1rem;width:.45rem;height:.8rem;background:#b35c00;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}
 "#;
@@ -61,34 +64,290 @@ pub fn render_standalone_html_with_resources(
 <title>AntennaBench session report</title><style>",
     );
     out.push_str(STYLES);
-    out.push_str("</style></head><body><main>");
+    out.push_str("</style></head><body><main><a class=\"skip-link\" href=\"#what-run-show\">Skip to report findings</a>");
 
     write_html!(
         out,
         "<header class=\"hero\"><p class=\"eyebrow\">AntennaBench local report</p>\
 <h1>Session evidence report</h1><p class=\"muted\">Session <code>{}</code></p></header>",
-        escape_html(&report.context.session_id)
+        escape_html(&report.overview.scope.session_id)
     );
-    render_snapshot(&mut out, report);
-    render_notices(&mut out, &report.notices);
-    render_eligibility(&mut out, report);
-    render_context(&mut out, report);
-    render_overall(&mut out, report);
-    render_comparison(&mut out, report);
-    render_antenna_section(&mut out, report);
-    render_band_section(&mut out, report);
-    render_slot_section(&mut out, report);
+    render_question_navigation(&mut out);
+    render_answer_first_overview(&mut out, report);
+    render_same_path_section(&mut out, report);
+    render_reach_section(&mut out, report);
+    render_distance_section(&mut out, report);
+    render_run_quality_section(&mut out, report);
+    render_audit_appendix(&mut out, report);
 
     out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
     out.finish().map_err(ReportError::from)
 }
 
+fn render_question_navigation(out: &mut CheckedHtmlWriter<'_>) {
+    out.push_str(
+        "<nav class=\"question-nav\" aria-label=\"Report questions\"><ul>\
+<li><a href=\"#what-run-show\">What did the run show?</a></li>\
+<li><a href=\"#same-path-signal\">Same-path signal</a></li>\
+<li><a href=\"#reach-unique-paths\">Reach and unique paths</a></li>\
+<li><a href=\"#distance-direction\">Distance and direction</a></li>\
+<li><a href=\"#run-quality\">Run quality</a></li>\
+<li><a href=\"#audit-appendix\">Audit appendix</a></li>\
+</ul></nav>",
+    );
+}
+
+fn render_answer_first_overview(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let overview = &report.overview;
+    let scope = &overview.scope;
+    let antennas = if scope.antenna_labels.is_empty() {
+        "None recorded".to_string()
+    } else {
+        scope.antenna_labels.join(" / ")
+    };
+    let bands = if scope.bands.is_empty() {
+        "None recorded".to_string()
+    } else {
+        scope
+            .bands
+            .iter()
+            .map(|value| band(*value))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let directions = if scope.observed_directions.is_empty() {
+        "No comparison direction observed".to_string()
+    } else {
+        scope
+            .observed_directions
+            .iter()
+            .map(|value| path_direction(*value))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mode = scope
+        .experiment_mode
+        .map(experiment_mode)
+        .unwrap_or("Not recorded");
+    let lifecycle_label = overview_lifecycle_label(overview.lifecycle.state);
+    let paired_rows = overview
+        .strata
+        .iter()
+        .map(|row| row.paired_row_count)
+        .sum::<usize>();
+
+    out.push_str("<section id=\"what-run-show\" class=\"panel overview\" aria-labelledby=\"what-run-show-title\"><p class=\"eyebrow\">Answer first</p><h2 id=\"what-run-show-title\">What did the run show?</h2>");
+    write_html!(
+        out,
+        "<p class=\"scope-line\">Station <strong>{}</strong> at <strong>{}</strong>; goal: <strong>{}</strong>.</p>",
+        escape_html(&scope.station.callsign),
+        escape_html(&scope.station.grid),
+        scope.goal.map(session_goal).unwrap_or("Not recorded"),
+    );
+    out.push_str("<dl class=\"facts headline-facts\">");
+    fact(out, "Antennas", &antennas);
+    fact(out, "Bands", &bands);
+    fact(out, "Direction / mode", &format!("{directions}; {mode}"));
+    fact(out, "Session state", lifecycle_label);
+    out.push_str("</dl>");
+
+    match &scope.delta_orientation {
+        Some(orientation) => write_html!(
+            out,
+            "<p class=\"orientation\"><strong>Delta orientation:</strong> {} minus {} (right minus left). Every signed value below uses this fixed orientation.</p>",
+            escape_html(&orientation.minuend_label),
+            escape_html(&orientation.subtrahend_label),
+        ),
+        None => out.push_str("<p class=\"orientation\"><strong>Delta orientation:</strong> unavailable because this run does not provide a two-label paired orientation.</p>"),
+    }
+    write_html!(
+        out,
+        "<p class=\"answer\"><strong>Comparison availability: <span class=\"badge\">{}</span>.</strong> {}</p>",
+        comparison_availability_label(overview.comparison_availability),
+        comparison_availability_text(overview.comparison_availability),
+    );
+
+    out.push_str("<div class=\"table-wrap\"><table class=\"overview-table\"><caption>Descriptive result by comparison stratum</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Path delta</th><th scope=\"col\">Paths / rows</th><th scope=\"col\">Blocks</th><th scope=\"col\">Coverage</th></tr></thead><tbody>");
+    if overview.strata.is_empty() {
+        out.push_str("<tr><td data-label=\"Stratum\" colspan=\"5\">No comparison strata are available for this run.</td></tr>");
+    } else {
+        for row in &overview.strata {
+            let (delta, coverage) = match row.path_delta {
+                ReportOverviewPathDelta::Unavailable => {
+                    ("Not available".to_string(), "Unavailable".to_string())
+                }
+                ReportOverviewPathDelta::Available {
+                    minimum_delta_right_minus_left_db,
+                    median_path_delta_right_minus_left_db,
+                    maximum_delta_right_minus_left_db,
+                } => (
+                    format!(
+                        "{} to {} dB; median across paths {} dB",
+                        format_signed(minimum_delta_right_minus_left_db),
+                        format_signed(maximum_delta_right_minus_left_db),
+                        format_signed(median_path_delta_right_minus_left_db),
+                    ),
+                    "Available".to_string(),
+                ),
+            };
+            write_html!(
+                out,
+                "<tr><td data-label=\"Stratum\">{}</td><td data-label=\"Path delta\">{}</td><td data-label=\"Paths / rows\">{} / {}</td><td data-label=\"Blocks\">{}</td><td data-label=\"Coverage\">{}</td></tr>",
+                comparison_stratum(&row.stratum),
+                delta,
+                row.unique_path_count,
+                row.paired_row_count,
+                row.contributing_block_count,
+                coverage,
+            );
+        }
+    }
+    out.push_str("</tbody></table></div><div class=\"overview-support\"><section aria-labelledby=\"supported-title\"><h3 id=\"supported-title\">Supported by this run</h3><ul>");
+    write_html!(
+        out,
+        "<li>The recorded comparison state is <strong>{}</strong>.</li>",
+        comparison_availability_label(overview.comparison_availability),
+    );
+    if overview.strata.is_empty() {
+        out.push_str("<li>The session scope and availability state remain explicit even without an available comparison stratum.</li>");
+    } else {
+        write_html!(
+            out,
+            "<li>{} paired row(s) are retained in {} unpooled stratum row(s).</li>",
+            paired_rows,
+            overview.strata.len(),
+        );
+    }
+    out.push_str("</ul></section><section aria-labelledby=\"not-established-title\"><h3 id=\"not-established-title\">Not established by this run</h3><ul><li>This descriptive report does not select a winner or establish antenna superiority.</li><li>Adjacent switched slots reduce elapsed time but do not remove propagation or time confounding.</li>");
+    for limitation in &overview.limitations {
+        write_html!(out, "<li>{}</li>", overview_limitation_text(*limitation));
+    }
+    out.push_str("</ul></section></div>");
+    render_visible_acquisition_limitations(out, report);
+    out.push_str("</section>");
+}
+
+fn overview_lifecycle_label(state: ReportOverviewLifecycleState) -> &'static str {
+    match state {
+        ReportOverviewLifecycleState::NotRecorded => "Not recorded",
+        ReportOverviewLifecycleState::Recorded(value) => lifecycle(value),
+    }
+}
+
+fn overview_limitation_text(value: ReportOverviewLimitation) -> String {
+    match value {
+        ReportOverviewLimitation::ComparisonNotApplicable => {
+            "A/B comparison: not established for single-antenna profiling.".into()
+        }
+        ReportOverviewLimitation::UnsupportedComparisonShape => {
+            "A/B comparison: unavailable without the required two-label shape.".into()
+        }
+        ReportOverviewLimitation::NoEligibleBlocks => {
+            "Eligible blocks: none with one usable actual slot for each label.".into()
+        }
+        ReportOverviewLimitation::NoMatchedPaths => {
+            "Matched paths: no same-stratum path had finite SNR under both labels.".into()
+        }
+        ReportOverviewLimitation::UnmatchedPaths {
+            left_count,
+            right_count,
+        } => format!("Unmatched paths: {left_count} left / {right_count} right."),
+        ReportOverviewLimitation::MissingSnr {
+            left_count,
+            right_count,
+        } => format!("Missing SNR: {left_count} left / {right_count} right."),
+        ReportOverviewLimitation::DuplicateEvidence {
+            exact_count,
+            conflicting_group_count,
+        } => format!(
+            "Duplicates: {exact_count} exact / {conflicting_group_count} conflicting group(s)."
+        ),
+    }
+}
+
+fn render_visible_acquisition_limitations(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let evidence = &report.snapshot.adapter_evidence;
+    if !evidence.evidence_complete {
+        let message = if evidence.gap_count == 1 {
+            "1 recorded acquisition gap; inspect the audit appendix for its durable recorded context"
+                .to_string()
+        } else if evidence.gap_count > 1 {
+            format!(
+                "{} recorded acquisition gaps; inspect the audit appendix for their durable recorded context",
+                evidence.gap_count
+            )
+        } else {
+            "Recorded acquisition is incomplete; inspect the audit appendix for its durable recorded context"
+                .to_string()
+        };
+        write_html!(
+            out,
+            "<p class=\"notice critical\"><strong>Recorded acquisition:</strong> {}.</p>",
+            message
+        );
+    }
+    if evidence
+        .imports
+        .iter()
+        .any(|import| import.provider_id == "wspr-live")
+    {
+        out.push_str("<p class=\"notice\"><strong>Public-source boundary:</strong> AntennaBench retained the spots returned by the configured WSPR.live queries; the upstream mirror does not provide an independent completeness guarantee.</p>");
+    }
+}
+
+fn render_same_path_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2><p class=\"muted\">The overview above is the concise result. The existing paired rows and signal accounting remain available below for audit.</p><details class=\"audit-disclosure\"><summary>Review same-path signal detail</summary><div class=\"disclosure-body\">");
+    render_comparison_diagnostics(out, report);
+    render_paired_differences(out, report);
+    render_paired_snr_time(out, report);
+    render_stratum_summaries(out, report);
+    out.push_str("</div></details></section>");
+}
+
+fn render_reach_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2><p class=\"muted\">Path overlap and missingness are retained as descriptive evidence; no focused reach view is added here.</p><details class=\"audit-disclosure\"><summary>Review path overlap and missingness</summary><div class=\"disclosure-body\">");
+    render_overlap(out, report);
+    out.push_str("</div></details></section>");
+}
+
+fn render_distance_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Distance and direction</h2><p class=\"muted\">Existing geographic and solar context remains descriptive supporting detail.</p><details class=\"audit-disclosure\"><summary>Review distance and azimuth detail</summary><div class=\"disclosure-body\">");
+    render_location_views(out, report);
+    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review derived solar context</summary><div class=\"disclosure-body\">");
+    render_solar_context(out, report);
+    out.push_str("</div></details></section>");
+}
+
+fn render_run_quality_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<section id=\"run-quality\" class=\"question-section\" aria-labelledby=\"run-quality-title\"><div class=\"panel\"><h2 id=\"run-quality-title\">Run quality</h2><p class=\"muted\">Required omissions, unavailable states, and validation exclusions stay visible without opening an audit disclosure.</p></div>");
+    render_notices(out, &report.notices);
+    render_eligibility(out, report);
+    out.push_str("<div class=\"panel\"><details class=\"audit-disclosure\"><summary>Review overall, antenna, and band evidence accounting</summary><div class=\"disclosure-body\">");
+    render_overall(out, report);
+    render_antenna_section(out, report);
+    render_band_section(out, report);
+    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review per-slot evidence accounting</summary><div class=\"disclosure-body\">");
+    render_slot_section(out, report);
+    out.push_str("</div></details></div></section>");
+}
+
+fn render_audit_appendix(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<section id=\"audit-appendix\" class=\"panel question-section\" aria-labelledby=\"audit-title\"><h2 id=\"audit-title\">Audit appendix</h2><p class=\"muted\">Open only the supporting detail needed for review. Closed disclosures remain closed in default print output.</p>");
+    if snapshot_has_detail(report) {
+        out.push_str("<details class=\"audit-disclosure\"><summary>Review committed snapshot, lifecycle, acquisition, and controller attempts</summary><div class=\"disclosure-body\">");
+        render_snapshot(out, report);
+        out.push_str("</div></details>");
+    }
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review station, antenna, and planned schedule detail</summary><div class=\"disclosure-body\">");
+    render_context(out, report);
+    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review comparison data-quality timeline</summary><div class=\"disclosure-body\">");
+    render_comparison_timeline(out, report);
+    out.push_str("</div></details></section>");
+}
+
 fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let snapshot = &report.snapshot;
-    if snapshot.checkpoint_revision.is_none()
-        && snapshot.lifecycle.is_none()
-        && snapshot.adapter_evidence.record_count == 0
-    {
+    if !snapshot_has_detail(report) {
         return;
     }
     out.push_str("<section class=\"panel\" aria-labelledby=\"snapshot-title\"><h2 id=\"snapshot-title\">Committed session snapshot</h2><dl class=\"facts\">");
@@ -268,6 +527,19 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         out.push_str("</tbody></table></div>");
     }
     out.push_str("</section>");
+}
+
+fn snapshot_has_detail(report: &SessionReport) -> bool {
+    let snapshot = &report.snapshot;
+    snapshot.checkpoint_revision.is_some()
+        || snapshot.lifecycle.is_some()
+        || !snapshot.lifecycle_events.is_empty()
+        || !snapshot.wspr_cycles.is_empty()
+        || !snapshot.antenna_control_attempts.is_empty()
+        || snapshot.adapter_evidence.record_count > 0
+        || snapshot.adapter_evidence.gap_count > 0
+        || !snapshot.adapter_evidence.evidence_complete
+        || !snapshot.adapter_evidence.imports.is_empty()
 }
 
 fn lifecycle(value: SessionLifecycleV2) -> &'static str {
@@ -552,35 +824,6 @@ fn render_overall(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         evidence_coverage(report.evidence.evidence_quality)
     );
     evidence_summary(out, &report.evidence.overall);
-    out.push_str("</section>");
-}
-
-fn render_comparison(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
-    let comparison = &report.comparison;
-    out.push_str("<section class=\"panel\" aria-labelledby=\"comparison-title\"><h2 id=\"comparison-title\">Paired comparison diagnostics</h2>");
-    write_html!(
-        out,
-        "<p>Comparison availability: <span class=\"badge\">{}</span></p><p class=\"muted\">{}</p>",
-        comparison_availability_label(comparison.availability),
-        comparison_availability_text(comparison.availability)
-    );
-    if let Some(orientation) = &comparison.delta_orientation {
-        write_html!(
-            out,
-            "<p><strong>Delta orientation:</strong> {} minus {} (right minus left).</p>",
-            escape_html(&orientation.minuend_label),
-            escape_html(&orientation.subtrahend_label)
-        );
-    }
-    out.push_str("<p class=\"notice\">Adjacent switched slots reduce elapsed time but do not remove propagation or time confounding. Paired values are descriptive and do not establish antenna superiority.</p>");
-    render_comparison_diagnostics(out, report);
-    render_overlap(out, report);
-    render_comparison_timeline(out, report);
-    render_paired_differences(out, report);
-    render_paired_snr_time(out, report);
-    render_location_views(out, report);
-    render_solar_context(out, report);
-    render_stratum_summaries(out, report);
     out.push_str("</section>");
 }
 

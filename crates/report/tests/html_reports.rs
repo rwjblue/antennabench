@@ -9,8 +9,8 @@ use antennabench_core::{
 use antennabench_report::{
     build_report, render_standalone_html, ReportAdapterEvidence, ReportAntennaControlAttempt,
     ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
-    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
-    SessionReport,
+    ReportOverviewLimitation, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
+    ReportWsprReadinessBasis, SessionReport,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -34,10 +34,15 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     assert!(!first.contains("src=\""));
 
     for section in [
+        "What did the run show?",
+        "Same-path signal",
+        "Reach and unique paths",
+        "Distance and direction",
+        "Run quality",
+        "Audit appendix",
         "Session context",
         "Schedule overview",
         "Evidence overview",
-        "Paired comparison diagnostics",
         "Antenna evidence",
         "Band evidence",
         "Slot evidence",
@@ -63,6 +68,21 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     assert!(first.contains("<dt>Scheduled bands</dt><dd>40 m, 20 m</dd>"));
     assert!(first.contains("<dt>Scheduled slots</dt><dd>12</dd>"));
     assert!(first.contains("This report is descriptive and does not select an antenna winner."));
+    assert!(first.contains("<nav class=\"question-nav\" aria-label=\"Report questions\">"));
+    for anchor in [
+        "what-run-show",
+        "same-path-signal",
+        "reach-unique-paths",
+        "distance-direction",
+        "run-quality",
+        "audit-appendix",
+    ] {
+        assert!(first.contains(&format!("href=\"#{anchor}\"")));
+        assert!(first.contains(&format!("id=\"{anchor}\"")));
+    }
+    assert!(first.contains("<details class=\"audit-disclosure\">"));
+    assert!(first.contains("details:not([open])>:not(summary){display:none!important}"));
+    assert!(first.contains("break-after:page"));
 }
 
 #[test]
@@ -261,8 +281,12 @@ fn escapes_every_untrusted_report_string() {
     let hostile = "\"><script>alert('x') & imported</script>".to_string();
 
     report.context.session_id = hostile.clone();
+    report.overview.scope.session_id = hostile.clone();
     report.context.station.callsign = hostile.clone();
     report.context.station.grid = hostile.clone();
+    report.overview.scope.station.callsign = hostile.clone();
+    report.overview.scope.station.grid = hostile.clone();
+    report.overview.scope.antenna_labels = vec![hostile.clone(), hostile.clone()];
     for antenna in &mut report.context.antennas {
         antenna.label = hostile.clone();
         antenna.facets = vec![hostile.clone()];
@@ -293,6 +317,10 @@ fn escapes_every_untrusted_report_string() {
     report.comparison.left_label = Some(hostile.clone());
     report.comparison.right_label = Some(hostile.clone());
     if let Some(orientation) = &mut report.comparison.delta_orientation {
+        orientation.minuend_label = hostile.clone();
+        orientation.subtrahend_label = hostile.clone();
+    }
+    if let Some(orientation) = &mut report.overview.scope.delta_orientation {
         orientation.minuend_label = hostile.clone();
         orientation.subtrahend_label = hostile.clone();
     }
@@ -447,6 +475,7 @@ fn renders_every_comparison_availability_before_difference_output() {
     ] {
         let mut report = paired_report(false);
         report.comparison.availability = availability;
+        report.overview.comparison_availability = availability;
 
         let html = render_standalone_html(&report).unwrap();
         let availability_position = html
@@ -460,6 +489,39 @@ fn renders_every_comparison_availability_before_difference_output() {
         assert!(html.contains(&format!("<span class=\"badge\">{label}</span>")));
         assert!(html.contains(explanation));
     }
+}
+
+#[test]
+fn renders_answer_first_order_unavailable_states_and_visible_limitations() {
+    let mut report = paired_report(true);
+    report.overview.comparison_availability = ComparisonAvailability::NotApplicable;
+    report.overview.scope.delta_orientation = None;
+    report.overview.strata.clear();
+    report.overview.limitations = vec![ReportOverviewLimitation::ComparisonNotApplicable];
+    report.snapshot.adapter_evidence.evidence_complete = false;
+    report.snapshot.adapter_evidence.gap_count = 2;
+    report.notices.push(ReportNotice::DetailOmitted {
+        family: antennabench_report::ReportDetailFamily::PairedObservations,
+        row_count: 42,
+    });
+
+    let html = render_standalone_html(&report).unwrap();
+    let overview = html.find("id=\"what-run-show\"").unwrap();
+    let same_path = html.find("id=\"same-path-signal\"").unwrap();
+    let omission = html
+        .find("full paired observation detail is omitted")
+        .unwrap();
+    let run_quality = html.find("id=\"run-quality\"").unwrap();
+    let first_details = html.find("<details").unwrap();
+
+    assert!(overview < same_path);
+    assert!(run_quality < omission);
+    assert!(html.find("2 recorded acquisition gaps").unwrap() < first_details);
+    assert!(html.contains("Delta orientation:</strong> unavailable"));
+    assert!(html.contains("No comparison strata are available for this run."));
+    assert!(html.contains("A/B comparison: not established for single-antenna profiling."));
+    assert!(!html.contains("Winner:"));
+    assert!(!html.contains("antenna gain"));
 }
 
 #[test]

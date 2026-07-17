@@ -173,9 +173,21 @@ or evidence-coverage labels.
 reanalyze a bundle and does not persist output into one. The renderer produces a
 complete deterministic HTML document with embedded CSS, a restrictive content
 security policy, no scripts or external resources, and accessible tables beside
-its CSS visualizations. Comparison availability precedes overlap and missingness,
-slot data-quality, paired-difference, SNR-over-time, stratum-summary, and
-distance/azimuth path-context views. Geographic views consume the already
+its CSS visualizations. The open first page consumes only the typed overview and
+recorded acquisition vocabulary for top-level meaning: scope, named delta
+orientation, comparison availability, at most four headline facts, unpooled
+stratum rows, and supported/not-established limitations. Stable native anchors
+organize the remaining report by operator question. Audit-heavy snapshot,
+lifecycle, schedule, antenna, controller-attempt, raw paired-row, solar, and
+per-slot material remains in native `details` disclosures. Required failures,
+typed unavailable states, bounded-overview omission notices, acquisition gaps,
+and important limitations stay outside closed audit disclosures. Closed
+disclosures stay closed in default print output; an explicitly opened disclosure
+remains printable.
+
+Comparison availability precedes overlap and missingness, slot data-quality,
+paired-difference, SNR-over-time, stratum-summary, and distance/azimuth
+path-context detail. Geographic views consume the already
 paired rows, preserve every comparison stratum, retain incomplete grid,
 distance, or azimuth facts as `location unavailable`, and show unique-path and
 45-degree display-sector concentration counts. The sectors are presentation

@@ -254,9 +254,12 @@ fixed `local-standard-v1` values; injection exists only in explicit test-facing
 APIs.
 
 Standalone report-renderer tests use the same canonical sample to verify
-determinism, offline-only document structure, accessible chart tables, and all
-report sections. Separate hostile-string and empty-data cases pin escaping and
-honest unavailable states without loading a browser or making network requests.
+determinism, offline-only document structure, answer-first section order,
+question anchors, native audit disclosures, closed-disclosure print rules,
+responsive text alternatives, accessible chart tables, and all report sections.
+Separate hostile-string, single-antenna/unavailable, bounded-overview, and
+empty-data cases pin escaping, visible limitations and omissions, and honest
+unavailable states without making network requests.
 Mixed-quality analysis/report tests pair malformed and contradictory observations
 with valid evidence, assert stable eligibility code/category/scope counts, and
 prove unrelated slots and summaries remain usable. Structural antenna ambiguity
