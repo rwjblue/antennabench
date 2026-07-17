@@ -1,0 +1,15 @@
+{
+  "name": "@antennabench/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "coverage": "vitest run --config ../../vitest.config.mjs --project desktop-node --project desktop-dom --coverage",
+    "test": "vitest run --config ../../vitest.config.mjs --project desktop-node --project desktop-dom"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "4.1.10",
+    "jsdom": "29.1.1",
+    "vitest": "4.1.10"
+  }
+}

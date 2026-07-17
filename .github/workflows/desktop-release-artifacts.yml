@@ -7,6 +7,9 @@ on:
       - "Cargo.toml"
       - "crates/**"
       - "apps/desktop/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vitest.config.mjs"
       - "rust-toolchain.toml"
       - "deny.toml"
       - "scripts/desktop-release.mjs"
@@ -31,6 +34,9 @@ on:
       - "Cargo.toml"
       - "crates/**"
       - "apps/desktop/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vitest.config.mjs"
       - "rust-toolchain.toml"
       - "deny.toml"
       - "scripts/desktop-release.mjs"
@@ -77,6 +83,13 @@ jobs:
         with:
           version: 2026.7.6
           github_token: ${{ github.token }}
+
+      - name: Cache npm dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
 
       - name: Run portable and unattended desktop verification
         run: |

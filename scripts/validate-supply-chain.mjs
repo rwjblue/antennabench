@@ -63,7 +63,7 @@ export function validateManifestCoverage(manifests, policy) {
 
 export function validateDependabotText(text, source = ".github/dependabot.yml") {
   const errors = [];
-  for (const ecosystem of ["cargo", "github-actions"]) {
+  for (const ecosystem of ["cargo", "github-actions", "npm"]) {
     const block = text
       .split(/\n(?=  - package-ecosystem:)/)
       .find((candidate) => candidate.includes(`package-ecosystem: ${ecosystem}`));
@@ -87,6 +87,42 @@ export function validateDependabotText(text, source = ".github/dependabot.yml") 
     }
     if (/^\s+- major\s*$/m.test(block)) {
       errors.push(`${source}: ${ecosystem} major updates must remain individual`);
+    }
+  }
+  return errors;
+}
+
+export function validateNpmWorkspace(manifests, lockfiles, lock) {
+  const errors = [];
+  const expectedWorkspaces = ["apps/desktop", "apps/hosted"];
+  const root = manifests["package.json"];
+  if (!root) return ["package.json: root npm workspace manifest is missing"];
+  if (root.private !== true) errors.push("package.json: root npm workspace must be private");
+  if (JSON.stringify(root.workspaces) !== JSON.stringify(expectedWorkspaces)) {
+    errors.push("package.json: npm workspaces must explicitly contain apps/desktop and apps/hosted");
+  }
+  if (lockfiles.length !== 1 || lockfiles[0] !== "package-lock.json") {
+    errors.push("npm workspace must have exactly one root package-lock.json and no nested lockfiles");
+  }
+  if (!lock?.packages) return [...errors, "package-lock.json: npm lockfile packages map is missing"];
+
+  for (const [manifestPath, manifest] of Object.entries(manifests)) {
+    const lockKey = manifestPath === "package.json" ? "" : path.posix.dirname(manifestPath);
+    const locked = lock.packages[lockKey];
+    if (!locked) {
+      errors.push(`${manifestPath}: workspace is missing from package-lock.json`);
+      continue;
+    }
+    for (const section of ["dependencies", "devDependencies", "optionalDependencies"]) {
+      const declared = manifest[section] ?? {};
+      for (const [name, version] of Object.entries(declared)) {
+        if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+          errors.push(`${manifestPath}: ${section}.${name} must use an exact reviewed version`);
+        }
+      }
+      if (!sameRecord(declared, locked[section] ?? {})) {
+        errors.push(`${manifestPath}: ${section} disagrees with package-lock.json`);
+      }
     }
   }
   return errors;
@@ -198,6 +234,19 @@ export function validateRepository(root) {
     .map((file) => path.relative(root, file).split(path.sep).join("/"))
     .sort();
   errors.push(...validateManifestCoverage(manifests, policy));
+  const packageManifests = Object.fromEntries(
+    manifests
+      .filter((file) => path.basename(file) === "package.json")
+      .map((file) => [file, JSON.parse(fs.readFileSync(path.join(root, file), "utf8"))]),
+  );
+  const npmLockfiles = walk(root)
+    .filter((file) => path.basename(file) === "package-lock.json")
+    .map((file) => path.relative(root, file).split(path.sep).join("/"))
+    .sort();
+  const rootNpmLock = fs.existsSync(path.join(root, "package-lock.json"))
+    ? JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
+    : null;
+  errors.push(...validateNpmWorkspace(packageManifests, npmLockfiles, rootNpmLock));
   for (const ecosystem of policy.ecosystems) {
     if (!fs.existsSync(path.join(root, ecosystem.lockfile))) {
       errors.push(`${ecosystem.name}: declared lockfile ${ecosystem.lockfile} is missing`);
@@ -237,6 +286,11 @@ export function validateRepository(root) {
 function globRegex(glob) {
   const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("*", "[^/]*");
   return new RegExp(`^${escaped}$`);
+}
+
+function sameRecord(left, right) {
+  const normalize = (record) => Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
 }
 
 function walk(root) {

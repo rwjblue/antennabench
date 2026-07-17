@@ -14,11 +14,14 @@ xcode-select --install
 git clone https://github.com/rwjblue/antennabench.git
 cd antennabench
 mise install
+npm ci
 mise run desktop:dev
 ```
 
-The first setup downloads the pinned tools, and the first build compiles the
-application. Stop the development process with Control-C.
+`npm ci` runs once at the repository root for the desktop test and hosted
+workspaces; it does not build the desktop frontend. The first setup downloads
+the pinned tools, and the first desktop build compiles the application. Stop
+the development process with Control-C.
 
 ## Contributor References
 

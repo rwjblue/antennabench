@@ -35,7 +35,7 @@ updates:
           - patch
 
   - package-ecosystem: npm
-    directory: /apps/hosted
+    directory: /
     schedule:
       interval: weekly
       day: monday

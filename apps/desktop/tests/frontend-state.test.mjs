@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
-import test from "node:test";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { test } from "vitest";
 
 import {
   invokeActiveSessionAntennaController,
@@ -27,11 +27,6 @@ import {
   invokeStopSessionWsjtx,
 } from "../frontend/bridge.mjs";
 import {
-  REQUIRED_ELEMENT_LIST_SELECTORS,
-  REQUIRED_ELEMENT_SELECTORS,
-  collectDesktopElements,
-} from "../frontend/elements.mjs";
-import {
   SETUP_QUESTION_MODES,
   applyStationPreferences,
   goalForSetupQuestion,
@@ -44,13 +39,11 @@ import {
   syncWsprLiveForSignalPlan,
 } from "../frontend/forms.mjs";
 import {
-  CONTEXT_HELP,
   WORKFLOWS,
   conductorActionAvailable,
   createCountdownAnchor,
   formatActiveRunTime,
   focusSetupOutcome,
-  installContextualHelp,
   locationLookupMessage,
   maidenheadGrid,
   projectCountdown,
@@ -111,134 +104,37 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     new URL("../tauri.conf.json", import.meta.url),
     "utf8",
   ));
+  const packageManifest = JSON.parse(readFileSync(
+    new URL("../package.json", import.meta.url),
+    "utf8",
+  ));
+  const lock = JSON.parse(readFileSync(
+    new URL("../../../package-lock.json", import.meta.url),
+    "utf8",
+  ));
   assert.match(html, /<script type="module" src="app\.mjs"><\/script>/);
   assert.equal(tauri.build.frontendDist, "frontend");
-  assert.equal(existsSync(new URL("../package.json", import.meta.url)), false);
+  assert.equal(tauri.build.beforeDevCommand, undefined);
+  assert.equal(tauri.build.beforeBuildCommand, undefined);
+  assert.equal(packageManifest.private, true);
+  assert.equal(packageManifest.dependencies, undefined);
+  assert.deepEqual(Object.keys(packageManifest.scripts).sort(), ["coverage", "test"]);
   assert.equal(existsSync(new URL("../package-lock.json", import.meta.url)), false);
-});
-
-test("the checked-in HTML satisfies the fail-fast renderer element inventory", () => {
-  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
-  for (const selector of [
-    ...Object.values(REQUIRED_ELEMENT_SELECTORS),
-    ...Object.values(REQUIRED_ELEMENT_LIST_SELECTORS),
-  ]) {
-    const fragment = selector.replace(/^\[/, "").replace(/\]$/, "");
-    assert.match(html, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
-
-  assert.throws(
-    () => collectDesktopElements({ querySelector: () => null, querySelectorAll: () => [] }),
-    /Missing required desktop element mainContent/,
-  );
-});
-
-test("contextual help is centralized, keyboard accessible, and fully inventoried", () => {
-  class FakeElement {
-    constructor(helpTrigger = null) {
-      this.dataset = helpTrigger ? { helpTrigger } : {};
-      this.attributes = new Map();
-      this.listeners = new Map();
-      this.hidden = false;
-      this.focusCount = 0;
-      this.afterNode = null;
-    }
-
-    setAttribute(name, value) {
-      this.attributes.set(name, value);
-    }
-
-    getAttribute(name) {
-      return this.attributes.get(name);
-    }
-
-    removeAttribute(name) {
-      this.attributes.delete(name);
-    }
-
-    addEventListener(name, listener) {
-      this.listeners.set(name, listener);
-    }
-
-    after(node) {
-      this.afterNode = node;
-    }
-
-    contains(target) {
-      return target === this;
-    }
-
-    focus() {
-      this.focusCount += 1;
-    }
-  }
-
-  const trigger = new FakeElement("countdown");
-  const documentListeners = new Map();
-  const document = {
-    createElement() {
-      return new FakeElement();
-    },
-    addEventListener(name, listener) {
-      documentListeners.set(name, listener);
-    },
-  };
-  const root = {
-    ownerDocument: document,
-    querySelectorAll() {
-      return [trigger];
-    },
-  };
-
-  installContextualHelp(root);
-
-  assert.equal(trigger.getAttribute("aria-label"), "Help: Countdown");
-  assert.equal(trigger.getAttribute("aria-controls"), trigger.afterNode.id);
-  assert.equal(trigger.getAttribute("aria-expanded"), "false");
-  assert.equal(trigger.afterNode.getAttribute("role"), "note");
-  assert.match(trigger.afterNode.textContent, /time until the current transmission ends/);
-  assert.equal(trigger.afterNode.hidden, true);
-
-  const click = {
-    preventDefault() {},
-    stopPropagation() {},
-  };
-  trigger.listeners.get("click")(click);
-
-  assert.equal(trigger.getAttribute("aria-expanded"), "true");
-  assert.equal(trigger.getAttribute("aria-describedby"), trigger.afterNode.id);
-  assert.equal(trigger.afterNode.hidden, false);
-
-  documentListeners.get("keydown")({ key: "Escape" });
-
-  assert.equal(trigger.getAttribute("aria-expanded"), "false");
-  assert.equal(trigger.focusCount, 1);
-
-  trigger.listeners.get("click")(click);
-  documentListeners.get("click")({ target: new FakeElement() });
-
-  assert.equal(trigger.afterNode.hidden, true);
-  assert.equal(trigger.getAttribute("aria-expanded"), "false");
-
-  for (const help of Object.values(CONTEXT_HELP)) {
-    const sentences = help.text.match(/[.!?](?:\s|$)/g) ?? [];
-    assert.ok(sentences.length <= 2, `${help.title} is longer than two sentences`);
-  }
-
-  const html = readFileSync(
-    new URL("../frontend/index.html", import.meta.url),
-    "utf8",
-  );
-  const inventory = new Set(
-    [...html.matchAll(/data-help-trigger="([^"]+)"/g)].map((match) => match[1]),
-  );
-
-  assert.deepEqual([...inventory].sort(), Object.keys(CONTEXT_HELP).sort());
-  assert.equal(
-    [...html.matchAll(/<button[^>]+data-help-trigger="[^"]+"/g)].length,
-    Object.keys(CONTEXT_HELP).length,
-  );
-  assert.doesNotMatch(html, /title="[^"]*help/i);
+  assert.equal(existsSync(new URL("../../../package-lock.json", import.meta.url)), true);
+  assert.equal(lock.packages["apps/desktop"].dependencies, undefined);
+  assert.deepEqual(readdirSync(new URL("../frontend", import.meta.url)).sort(), [
+    "app.mjs",
+    "bridge.mjs",
+    "controller.mjs",
+    "elements.mjs",
+    "forms.mjs",
+    "index.html",
+    "mark.svg",
+    "models.mjs",
+    "renderers.mjs",
+    "state.mjs",
+    "styles.css",
+  ]);
 });
 
 test("the shell starts in session setup", () => {

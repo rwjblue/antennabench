@@ -9,6 +9,7 @@ mise run supply-chain
 mise run dependency-policy
 mise run desktop:e2e
 mise run desktop:frontend-test
+mise run desktop:frontend-coverage
 mise run desktop:release-test
 mise run hosted:test
 mise run examples:test

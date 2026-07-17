@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # -*- mode: sh; sh-shell: bash; -*-
-#MISE description="Run dependency-free desktop frontend tests"
+#MISE description="Run desktop frontend tests in Node and jsdom"
+#MISE depends=["npm:deps"]
 
 set -euo pipefail
 
-node --test --experimental-test-coverage apps/desktop/tests/*.test.mjs
+npm run test:desktop

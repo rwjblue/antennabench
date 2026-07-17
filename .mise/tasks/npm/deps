@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="Install the repository npm workspace dependencies"
+#MISE hide=true
+#MISE sources=["package.json", "package-lock.json", "apps/desktop/package.json", "apps/hosted/package.json"]
+#MISE outputs=["node_modules/.package-lock.json"]
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$repo_root"
+npm ci

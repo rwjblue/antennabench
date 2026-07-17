@@ -19,6 +19,7 @@ xcode-select --install
 git clone https://github.com/rwjblue/antennabench.git
 cd antennabench
 mise install
+npm ci
 ```
 
 Launch the desktop app with:
@@ -40,6 +41,7 @@ mise run desktop:test        # focused desktop and frontend tests
 mise run desktop:e2e         # unattended setup-to-export workflow
 mise run desktop:build       # debug app build without packaging
 mise run hosted:test         # optional hosted foundation
+mise run desktop:frontend-coverage
 mise run desktop:release-test
 mise run desktop:publication-test
 mise run ci                  # complete routine repository checks

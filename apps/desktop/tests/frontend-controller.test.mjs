@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
 import { createDesktopController } from "../frontend/controller.mjs";
 import { initialState, openSessionSucceeded } from "../frontend/state.mjs";

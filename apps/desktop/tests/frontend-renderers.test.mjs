@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { test } from "vitest";
+
+import {
+  REQUIRED_ELEMENT_LIST_SELECTORS,
+  REQUIRED_ELEMENT_SELECTORS,
+  collectDesktopElements,
+} from "../frontend/elements.mjs";
+import { CONTEXT_HELP, installContextualHelp } from "../frontend/models.mjs";
 
 import {
   renderNavigation,
@@ -10,67 +19,89 @@ import {
 } from "../frontend/renderers.mjs";
 import { initialState } from "../frontend/state.mjs";
 
-class FakeElement {
-  constructor(tag = "div", document = null) {
-    this.tagName = tag.toUpperCase();
-    this.ownerDocument = document;
-    this.dataset = {};
-    this.attributes = new Map();
-    this.children = [];
-    this.className = "";
-    this.classList = {
-      values: new Set(),
-      toggle: (name, enabled) => enabled
-        ? this.classList.values.add(name)
-        : this.classList.values.delete(name),
-    };
-    this.hidden = false;
-    this.disabled = false;
-    this.textContent = "";
-    this.value = "";
-    this.srcdoc = "";
-    this.submit = null;
+const DESKTOP_HTML = readFileSync(
+  path.join(process.cwd(), "frontend", "index.html"),
+  "utf8",
+);
+
+function loadDesktopDocument() {
+  document.open();
+  document.write(DESKTOP_HTML);
+  document.close();
+  return collectDesktopElements(document);
+}
+
+test("the checked-in HTML satisfies the fail-fast renderer element inventory", () => {
+  const elements = loadDesktopDocument();
+  assert.ok(elements.mainContent instanceof HTMLElement);
+  for (const selector of [
+    ...Object.values(REQUIRED_ELEMENT_SELECTORS),
+    ...Object.values(REQUIRED_ELEMENT_LIST_SELECTORS),
+  ]) {
+    assert.ok(document.querySelector(selector), `missing ${selector}`);
   }
 
-  setAttribute(name, value) { this.attributes.set(name, String(value)); }
-  getAttribute(name) { return this.attributes.get(name); }
-  append(...children) { this.children.push(...children); }
-  replaceChildren(...children) { this.children = children; }
-  querySelector(selector) { return selector === "button[type=submit]" ? this.submit : null; }
-}
+  const emptyDocument = document.implementation.createHTMLDocument("empty");
+  assert.throws(
+    () => collectDesktopElements(emptyDocument),
+    /Missing required desktop element mainContent/,
+  );
+});
 
-function fakeDocument() {
-  const document = { createElement: (tag) => new FakeElement(tag, document) };
-  return document;
-}
+test("contextual help is centralized, keyboard accessible, and fully inventoried", () => {
+  loadDesktopDocument();
+  const root = document.documentElement;
+  const trigger = root.querySelector('[data-help-trigger="countdown"]');
+  installContextualHelp(root);
+  const popover = document.getElementById(trigger.getAttribute("aria-controls"));
 
-function elements(names, document = fakeDocument()) {
-  return Object.fromEntries(names.map((name) => [name, new FakeElement("div", document)]));
-}
+  assert.equal(trigger.getAttribute("aria-label"), "Help: Countdown");
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(popover.getAttribute("role"), "note");
+  assert.match(popover.textContent, /time until the current transmission ends/);
+  assert.equal(popover.hidden, true);
+
+  trigger.click();
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  assert.equal(trigger.getAttribute("aria-describedby"), popover.id);
+  assert.equal(popover.hidden, false);
+
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(document.activeElement, trigger);
+
+  trigger.click();
+  document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  assert.equal(popover.hidden, true);
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+
+  for (const help of Object.values(CONTEXT_HELP)) {
+    const sentences = help.text.match(/[.!?](?:\s|$)/g) ?? [];
+    assert.ok(sentences.length <= 2, `${help.title} is longer than two sentences`);
+  }
+
+  const inventory = new Set(
+    [...document.querySelectorAll("[data-help-trigger]")]
+      .map((element) => element.dataset.helpTrigger),
+  );
+  assert.deepEqual([...inventory].sort(), Object.keys(CONTEXT_HELP).sort());
+  assert.equal(
+    document.querySelectorAll("button[data-help-trigger]").length,
+    Object.keys(CONTEXT_HELP).length,
+  );
+  assert.equal(document.querySelector('[title*="help" i]'), null);
+});
 
 test("navigation renders exactly one active accessible workflow", () => {
-  const navigation = ["setup", "run", "transfer", "report"].map((workflow) => {
-    const node = new FakeElement("button"); node.dataset.workflow = workflow; return node;
-  });
-  const panels = ["setup", "run", "transfer", "report"].map((workflow) => {
-    const node = new FakeElement("section"); node.dataset.panel = workflow; return node;
-  });
-  renderNavigation({ navigation, panels }, { activeWorkflow: "transfer" });
-  assert.deepEqual(navigation.map((node) => node.getAttribute("aria-current")), ["false", "false", "page", "false"]);
-  assert.deepEqual(panels.map((node) => node.hidden), [true, true, false, true]);
-  assert.equal(navigation.filter((node) => node.classList.values.has("active")).length, 1);
+  const e = loadDesktopDocument();
+  renderNavigation(e, { activeWorkflow: "transfer" });
+  assert.deepEqual(e.navigation.map((node) => node.getAttribute("aria-current")), ["false", "false", "page", "false"]);
+  assert.deepEqual(e.panels.map((node) => node.hidden), [true, true, false, true]);
+  assert.equal(e.navigation.filter((node) => node.classList.contains("active")).length, 1);
 });
 
 test("setup renderer covers editing, review, diagnostics, creating, invalid, and created states", () => {
-  const document = fakeDocument();
-  const e = elements([
-    "setupForm", "setupReviewButton", "setupCreateButton", "setupStatus",
-    "setupFeedback", "setupFeedbackMessage", "setupFeedbackDetail",
-    "setupDiagnostics", "setupReviewPanel", "setupReviewStation",
-    "setupReviewAntennas", "setupReviewShape", "setupReviewSchedule",
-    "setupReviewCounterbalance", "setupReviewTransitions", "setupReviewSequence",
-    "setupReviewCanDescribe", "setupReviewCannotEstablish", "setupReviewSlots",
-  ], document);
+  const e = loadDesktopDocument();
   const state = initialState();
   renderSetup(e, state, document);
   assert.equal(e.setupStatus.textContent, "Draft");
@@ -151,31 +182,6 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   assert.match(e.setupFeedbackMessage.textContent, /field\.session/);
 });
 
-function runElements(document) {
-  const e = elements([
-    "conductorPanel", "conductorEmpty", "conductorStatus", "evidenceForm",
-    "conductorFeedback", "conductorFeedbackMessage", "conductorFeedbackDetail",
-    "conductorLifecycle", "conductorAntennaInUse", "conductorPhase",
-    "conductorGuidance", "conductorCountdown", "currentSlot", "nextSlot",
-    "evidenceSlot", "evidenceAntenna", "conductorDiagnostics", "conductorEvents",
-    "wsjtxForm", "wsjtxStart", "wsjtxStop", "wsjtxRequirement", "wsjtxPhase",
-    "wsjtxCounts", "wsjtxSetupWarnings", "wsjtxDiagnostic", "wsprLivePhase", "wsprLiveDetail",
-    "wsprLiveDiagnostic", "wsprLiveRetry", "wsprLiveEndWithout",
-    "antennaControllerStatus", "antennaControllerDetail", "antennaControllerDiagnostic",
-    "antennaControllerAttach",
-    "antennaControllerRun", "antennaControllerRetry", "antennaControllerEditor",
-    "antennaControllerOneLine", "antennaControllerStructured",
-  ], document);
-  e.evidenceForm.submit = new FakeElement("button", document);
-  e.evidenceSlot.ownerDocument = document;
-  e.evidenceAntenna.ownerDocument = document;
-  e.conductorRefreshButtons = [new FakeElement("button", document)];
-  e.lifecycleButtons = ["start", "arm_wspr_cycle", "end"].map((action) => {
-    const button = new FakeElement("button", document); button.dataset.conductorAction = action; return button;
-  });
-  return e;
-}
-
 function conductorView(overrides = {}) {
   return {
     sessionId: "session-1", revision: 4, actionToken: "token-4", lifecycle: "running",
@@ -191,8 +197,7 @@ function conductorView(overrides = {}) {
 }
 
 test("run renderer covers lifecycle actions, cycles, evidence controls, and adapter states", () => {
-  const document = fakeDocument();
-  const e = runElements(document);
+  const e = loadDesktopDocument();
   const state = initialState("run");
   state.conductorStatus = "ready";
   state.conductor = conductorView();
@@ -262,12 +267,7 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
 });
 
 test("transfer renderer covers lifecycle/schema eligibility and feedback outcomes", () => {
-  const e = elements([
-    "openButton", "exportButton", "importWsprLiveButton", "importRbnButton",
-    "transferStatus", "openFeedback", "feedbackMessage", "feedbackDetail",
-    "exportFeedback", "exportFeedbackMessage", "exportFeedbackDetail",
-    "importFeedback", "importFeedbackMessage", "importFeedbackDetail",
-  ]);
+  const e = loadDesktopDocument();
   const state = initialState("transfer");
   renderTransfer(e, state);
   assert.equal(e.exportButton.disabled, true);
@@ -292,12 +292,7 @@ test("transfer renderer covers lifecycle/schema eligibility and feedback outcome
 });
 
 test("report renderer covers unavailable, refreshing, ready, exporting, error, and frame identity", () => {
-  const e = elements([
-    "reportStatus", "reportPlaceholder", "reportViewer", "reportFrame",
-    "reportRefreshButton", "reportCompactExportButton", "reportFullExportButton", "reportFeedback",
-    "reportFeedbackMessage", "reportFeedbackDetail", "reportBundleName",
-    "reportRevision", "reportSummary",
-  ]);
+  const e = loadDesktopDocument();
   const state = initialState("report");
   renderReport(e, state);
   assert.equal(e.reportStatus.textContent, "Unavailable");
