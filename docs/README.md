@@ -1,50 +1,70 @@
 # AntennaBench Documentation
 
-Start with the page that matches what you are trying to do.
+Choose the section that matches why you are here. Operator guides explain the
+product without requiring repository knowledge. Contributor and maintainer pages
+are intentionally technical.
 
-## Understand The Product
+## Use Or Evaluate AntennaBench
 
-- [Product overview](product.md) explains the experiment workflow, local-first
-  approach, and why reports stay conservative.
-- [Session bundles](bundle-format.md) gives a short tour of the portable record
-  AntennaBench keeps for every experiment.
-- [Roadmap](roadmap.md) summarizes what is available now and what comes next.
+- [How AntennaBench Works](product.md) walks through planning, running, and
+  reviewing an antenna experiment.
+- [Session Bundles](bundle-format.md) explains the portable experiment record and
+  when to export a bundle versus an HTML report.
+- [Why Not Just Use The Reverse Beacon Network?](why-not-just-use-rbn.md) compares
+  WSPR and RBN as antenna-testing tools, with current receiver-population data.
+- [Local Antenna Controller Profiles](antenna-controller-profiles.md) is an
+  advanced operator guide for optional local switch and verification programs.
+- [Examples](../examples/README.md) contains reviewed starting points for optional
+  station integrations.
+- [Roadmap](roadmap.md) summarizes what works today, what is next, and what remains
+  exploratory.
 
-## Build Or Contribute
+## Contribute To The Project
 
-- [Development](development.md) covers local setup, common commands, and
-  repository conventions.
-- [Architecture](architecture.md) explains the system shape, major components,
-  trust boundaries, and derived-state model.
-- [Desktop releases](releasing.md) covers protected signing, draft
-  verification, installation, promotion, recovery, and credentials.
-- [Work tracking](work-tracking.md) describes milestones, issues, labels,
-  dependencies, and completion evidence.
-
-## Technical References
-
-- [Product design reference](product-design-reference.md) records detailed
-  evidence rules, operational boundaries, and selected future direction.
-- [Architecture technical reference](architecture-reference.md) records
-  crate-level APIs, data flow, adapters, and trust boundaries.
-- [Development technical reference](development-reference.md) records coding
-  policy, verification coverage, CI, desktop internals, and release details.
-- [Bundle format technical reference](bundle-format-reference.md) specifies
-  layouts, records, upgrades, validation, limits, and storage APIs.
-- [Operator event semantics](event-semantics.md) defines lifecycle,
-  corrections, actual state, and conservative observation alignment.
-- [Live persistence and recovery](live-persistence.md) defines checkpointing,
+- [Development Guide](development.md) covers setup, routine commands, repository
+  layout, and contribution expectations.
+- [Architecture Overview](architecture.md) explains the major components and the
+  boundaries that protect experiment evidence.
+- [Architecture Technical Reference](architecture-reference.md) records
+  crate-level responsibilities, APIs, data flow, and trust boundaries.
+- [Bundle Format Technical Reference](bundle-format-reference.md) specifies the
+  on-disk formats, upgrades, validation rules, and resource limits.
+- [Operator Event Semantics](event-semantics.md) defines lifecycle, corrections,
+  actual state, and observation eligibility.
+- [Live Persistence And Recovery](live-persistence.md) defines checkpointing,
   locking, snapshots, export, and crash recovery.
-- [Hosted foundation operations](hosted-operations.md) covers environment
-  isolation, verification, cost controls, drain, and teardown.
-- [Attribution](attribution.md) records external data and service attribution
-  plus fixture redistribution policy.
-- [Supply-chain updates](supply-chain.md) documents dependency, Action, tool,
-  and runner review.
-- [Architecture decisions](decisions/) preserve the reasoning behind durable
-  product and engineering choices.
+- [Product Design Reference](product-design-reference.md) records detailed product
+  invariants and selected future direction.
 
-Code, tests, fixtures, and public APIs are authoritative when documentation and
-implemented behavior disagree. GitHub Issues are the durable source of truth
-for unfinished work and open decisions; ignored `docs/superpowers/` files are
-temporary planning notes.
+## Internal Maintainer And Automation Guides
+
+> [!NOTE]
+> The pages in this section are repository operations material. They are not
+> end-user documentation. Agent-specific authority and execution rules are
+> scoped to [AGENTS.md](../AGENTS.md) and the work-tracking references below.
+
+- [Internal Work Tracking And Agent Handoffs](work-tracking.md) defines issue
+  layers, labels, authorization boundaries, dependencies, and completion
+  evidence.
+- [Development Technical Reference](development-reference.md) records repository
+  policy, verification coverage, CI behavior, desktop internals, and agent
+  execution conventions.
+- [Desktop Releases](releasing.md) is the owner runbook for signing, notarization,
+  draft verification, promotion, recovery, and credentials.
+- [Supply-Chain Updates](supply-chain.md) is the dependency, tool, Action, runner,
+  and exception-maintenance procedure.
+- [Hosted Foundation Operations](hosted-operations.md) is the environment and
+  teardown runbook for the admission-disabled hosted prototype.
+
+## Historical And Legal References
+
+- [Architecture Decisions](decisions/) preserve the reasoning behind durable
+  product and engineering choices. They are historical records, not tutorials or
+  work trackers.
+- [Attribution And External Data](attribution.md) records third-party data and
+  service attribution plus fixture redistribution policy.
+
+Code, tests, fixtures, and public APIs are authoritative when maintained
+documentation and implemented behavior disagree. GitHub Issues track unfinished
+work and open decisions. Ignored `docs/superpowers/` files are temporary agent
+planning artifacts and are not project documentation.
