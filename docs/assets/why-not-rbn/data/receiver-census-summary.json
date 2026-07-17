@@ -1,0 +1,483 @@
+{
+  "generated_at_utc": "2026-07-17T17:47:09.820979+00:00",
+  "end_utc": "2026-07-17T17:00:00+00:00",
+  "mode": "WSPR-2 (code=1)",
+  "all_hf_bands": [
+    1,
+    3,
+    5,
+    7,
+    10,
+    14,
+    18,
+    21,
+    24,
+    28,
+    50
+  ],
+  "popular_bands": {
+    "7": "40m",
+    "14": "20m",
+    "21": "15m"
+  },
+  "windows": {
+    "24": {
+      "start_utc": "2026-07-16T17:00:00+00:00",
+      "end_utc": "2026-07-17T17:00:00+00:00",
+      "unique_reporter_grid_pairs": 1534,
+      "unique_reporter_calls": 1466,
+      "unique_four_character_grids": 531,
+      "total_spots": 5980208,
+      "persistent_all_days": 1534,
+      "top_four_character_grids": [
+        [
+          "JO31",
+          34
+        ],
+        [
+          "JO22",
+          27
+        ],
+        [
+          "IO91",
+          21
+        ],
+        [
+          "FM18",
+          21
+        ],
+        [
+          "IO81",
+          19
+        ],
+        [
+          "CM87",
+          18
+        ],
+        [
+          "JO21",
+          18
+        ],
+        [
+          "JN47",
+          17
+        ],
+        [
+          "EM13",
+          16
+        ],
+        [
+          "EN82",
+          16
+        ],
+        [
+          "JN48",
+          15
+        ],
+        [
+          "IO90",
+          14
+        ],
+        [
+          "CN87",
+          14
+        ],
+        [
+          "FN42",
+          13
+        ],
+        [
+          "IO93",
+          13
+        ],
+        [
+          "FM05",
+          13
+        ],
+        [
+          "JO62",
+          12
+        ],
+        [
+          "JO30",
+          12
+        ],
+        [
+          "JO33",
+          12
+        ],
+        [
+          "FM19",
+          12
+        ],
+        [
+          "JN58",
+          11
+        ],
+        [
+          "QG62",
+          11
+        ],
+        [
+          "PM95",
+          10
+        ],
+        [
+          "JO02",
+          10
+        ],
+        [
+          "DM13",
+          10
+        ]
+      ],
+      "query": "SELECT\n  upperUTF8(rx_sign) AS reporter_call,\n  upperUTF8(rx_loc) AS reporter_grid,\n  any(rx_lat) AS latitude,\n  any(rx_lon) AS longitude,\n  count() AS spots,\n  min(time) AS first_seen,\n  max(time) AS last_seen,\n  uniqExact(toDate(time)) AS active_days\nFROM wspr.rx\nWHERE time >= toDateTime('2026-07-16 17:00:00')\n  AND time < toDateTime('2026-07-17 17:00:00')\n  AND band IN (1,3,5,7,10,14,18,21,24,28,50)\n  AND code = 1\n  AND rx_sign != ''\n  AND rx_loc != ''\n  AND rx_lat BETWEEN -90 AND 90\n  AND rx_lon BETWEEN -180 AND 180\nGROUP BY reporter_call, reporter_grid\nORDER BY reporter_call, reporter_grid\nFORMAT CSVWithNames"
+    },
+    "72": {
+      "start_utc": "2026-07-14T17:00:00+00:00",
+      "end_utc": "2026-07-17T17:00:00+00:00",
+      "unique_reporter_grid_pairs": 1960,
+      "unique_reporter_calls": 1825,
+      "unique_four_character_grids": 604,
+      "total_spots": 17414086,
+      "persistent_all_days": 1197,
+      "top_four_character_grids": [
+        [
+          "JO31",
+          37
+        ],
+        [
+          "FM18",
+          36
+        ],
+        [
+          "JO22",
+          34
+        ],
+        [
+          "IO91",
+          25
+        ],
+        [
+          "JO21",
+          24
+        ],
+        [
+          "CN87",
+          22
+        ],
+        [
+          "IO90",
+          21
+        ],
+        [
+          "CM87",
+          21
+        ],
+        [
+          "IO81",
+          21
+        ],
+        [
+          "EM13",
+          20
+        ],
+        [
+          "JN47",
+          20
+        ],
+        [
+          "JN48",
+          19
+        ],
+        [
+          "EN82",
+          17
+        ],
+        [
+          "FN42",
+          16
+        ],
+        [
+          "JO30",
+          16
+        ],
+        [
+          "IO93",
+          16
+        ],
+        [
+          "FM05",
+          16
+        ],
+        [
+          "JO33",
+          15
+        ],
+        [
+          "IO92",
+          15
+        ],
+        [
+          "JO62",
+          14
+        ],
+        [
+          "IO82",
+          14
+        ],
+        [
+          "JN49",
+          14
+        ],
+        [
+          "CN88",
+          14
+        ],
+        [
+          "QG62",
+          14
+        ],
+        [
+          "JO43",
+          13
+        ]
+      ],
+      "query": "SELECT\n  upperUTF8(rx_sign) AS reporter_call,\n  upperUTF8(rx_loc) AS reporter_grid,\n  any(rx_lat) AS latitude,\n  any(rx_lon) AS longitude,\n  count() AS spots,\n  min(time) AS first_seen,\n  max(time) AS last_seen,\n  uniqExact(toDate(time)) AS active_days\nFROM wspr.rx\nWHERE time >= toDateTime('2026-07-14 17:00:00')\n  AND time < toDateTime('2026-07-17 17:00:00')\n  AND band IN (1,3,5,7,10,14,18,21,24,28,50)\n  AND code = 1\n  AND rx_sign != ''\n  AND rx_loc != ''\n  AND rx_lat BETWEEN -90 AND 90\n  AND rx_lon BETWEEN -180 AND 180\nGROUP BY reporter_call, reporter_grid\nORDER BY reporter_call, reporter_grid\nFORMAT CSVWithNames"
+    },
+    "168": {
+      "start_utc": "2026-07-10T17:00:00+00:00",
+      "end_utc": "2026-07-17T17:00:00+00:00",
+      "unique_reporter_grid_pairs": 2658,
+      "unique_reporter_calls": 2436,
+      "unique_four_character_grids": 706,
+      "total_spots": 41253108,
+      "persistent_all_days": 1032,
+      "top_four_character_grids": [
+        [
+          "JO22",
+          53
+        ],
+        [
+          "JO31",
+          52
+        ],
+        [
+          "FM18",
+          45
+        ],
+        [
+          "IO91",
+          34
+        ],
+        [
+          "IO81",
+          30
+        ],
+        [
+          "IO90",
+          29
+        ],
+        [
+          "CN87",
+          29
+        ],
+        [
+          "JO21",
+          29
+        ],
+        [
+          "JN47",
+          25
+        ],
+        [
+          "EM13",
+          24
+        ],
+        [
+          "CM87",
+          24
+        ],
+        [
+          "JN48",
+          23
+        ],
+        [
+          "FN42",
+          22
+        ],
+        [
+          "FM05",
+          22
+        ],
+        [
+          "IO93",
+          22
+        ],
+        [
+          "JO62",
+          21
+        ],
+        [
+          "CN88",
+          21
+        ],
+        [
+          "JO30",
+          21
+        ],
+        [
+          "JO33",
+          20
+        ],
+        [
+          "QG62",
+          20
+        ],
+        [
+          "JN49",
+          19
+        ],
+        [
+          "IO92",
+          19
+        ],
+        [
+          "EN82",
+          19
+        ],
+        [
+          "IO82",
+          18
+        ],
+        [
+          "JO43",
+          18
+        ]
+      ],
+      "query": "SELECT\n  upperUTF8(rx_sign) AS reporter_call,\n  upperUTF8(rx_loc) AS reporter_grid,\n  any(rx_lat) AS latitude,\n  any(rx_lon) AS longitude,\n  count() AS spots,\n  min(time) AS first_seen,\n  max(time) AS last_seen,\n  uniqExact(toDate(time)) AS active_days\nFROM wspr.rx\nWHERE time >= toDateTime('2026-07-10 17:00:00')\n  AND time < toDateTime('2026-07-17 17:00:00')\n  AND band IN (1,3,5,7,10,14,18,21,24,28,50)\n  AND code = 1\n  AND rx_sign != ''\n  AND rx_loc != ''\n  AND rx_lat BETWEEN -90 AND 90\n  AND rx_lon BETWEEN -180 AND 180\nGROUP BY reporter_call, reporter_grid\nORDER BY reporter_call, reporter_grid\nFORMAT CSVWithNames"
+    }
+  },
+  "wspr_popular_bands": {
+    "40m": {
+      "band_value": 7,
+      "windows": {
+        "24": {
+          "unique_reporter_grid_pairs": 846,
+          "unique_reporter_calls": 818,
+          "unique_four_character_grids": 370,
+          "total_spots": 1763065,
+          "persistent_all_days": 846
+        },
+        "72": {
+          "unique_reporter_grid_pairs": 1035,
+          "unique_reporter_calls": 984,
+          "unique_four_character_grids": 423,
+          "total_spots": 5002361,
+          "persistent_all_days": 697
+        },
+        "168": {
+          "unique_reporter_grid_pairs": 1333,
+          "unique_reporter_calls": 1251,
+          "unique_four_character_grids": 492,
+          "total_spots": 11923937,
+          "persistent_all_days": 622
+        }
+      }
+    },
+    "20m": {
+      "band_value": 14,
+      "windows": {
+        "24": {
+          "unique_reporter_grid_pairs": 1017,
+          "unique_reporter_calls": 992,
+          "unique_four_character_grids": 422,
+          "total_spots": 2007625,
+          "persistent_all_days": 1017
+        },
+        "72": {
+          "unique_reporter_grid_pairs": 1282,
+          "unique_reporter_calls": 1230,
+          "unique_four_character_grids": 480,
+          "total_spots": 5845187,
+          "persistent_all_days": 784
+        },
+        "168": {
+          "unique_reporter_grid_pairs": 1764,
+          "unique_reporter_calls": 1670,
+          "unique_four_character_grids": 565,
+          "total_spots": 13908677,
+          "persistent_all_days": 690
+        }
+      }
+    },
+    "15m": {
+      "band_value": 21,
+      "windows": {
+        "24": {
+          "unique_reporter_grid_pairs": 548,
+          "unique_reporter_calls": 543,
+          "unique_four_character_grids": 271,
+          "total_spots": 276723,
+          "persistent_all_days": 548
+        },
+        "72": {
+          "unique_reporter_grid_pairs": 658,
+          "unique_reporter_calls": 644,
+          "unique_four_character_grids": 305,
+          "total_spots": 777147,
+          "persistent_all_days": 470
+        },
+        "168": {
+          "unique_reporter_grid_pairs": 827,
+          "unique_reporter_calls": 803,
+          "unique_four_character_grids": 361,
+          "total_spots": 1845802,
+          "persistent_all_days": 414
+        }
+      }
+    }
+  },
+  "wspr_popular_band_query": "SELECT\n  band,\n  upperUTF8(rx_sign) AS reporter_call,\n  upperUTF8(rx_loc) AS reporter_grid,\n  any(rx_lat) AS latitude,\n  any(rx_lon) AS longitude,\n  countIf(time >= toDateTime('2026-07-16 17:00:00')) AS spots_24h,\n  countIf(time >= toDateTime('2026-07-14 17:00:00')) AS spots_72h,\n  count() AS spots_168h,\n  uniqExactIf(toDate(time), time >= toDateTime('2026-07-16 17:00:00')) AS active_days_24h,\n  uniqExactIf(toDate(time), time >= toDateTime('2026-07-14 17:00:00')) AS active_days_72h,\n  uniqExact(toDate(time)) AS active_days_168h,\n  min(time) AS first_seen_168h,\n  max(time) AS last_seen_168h\nFROM wspr.rx\nWHERE time >= toDateTime('2026-07-10 17:00:00')\n  AND time < toDateTime('2026-07-17 17:00:00')\n  AND band IN (7,14,21)\n  AND code = 1\n  AND rx_sign != ''\n  AND rx_loc != ''\n  AND rx_lat BETWEEN -90 AND 90\n  AND rx_lon BETWEEN -180 AND 180\nGROUP BY band, reporter_call, reporter_grid\nORDER BY band, reporter_call, reporter_grid\nFORMAT CSVWithNames",
+  "rbn_active_nodes": {
+    "endpoint": "https://www.reversebeacon.net/nodes/detail_json.php",
+    "records_returned": 207,
+    "usable_node_grid_pairs": 207,
+    "band_counts": {
+      "40m": 180,
+      "20m": 183,
+      "15m": 177
+    },
+    "band_continents": {
+      "40m": {
+        "AF": 5,
+        "AS": 21,
+        "NA": 62,
+        "EU": 82,
+        "OC": 7,
+        "SA": 3
+      },
+      "20m": {
+        "AF": 5,
+        "AS": 22,
+        "NA": 62,
+        "EU": 84,
+        "OC": 7,
+        "SA": 3
+      },
+      "15m": {
+        "AF": 4,
+        "AS": 21,
+        "NA": 58,
+        "EU": 84,
+        "OC": 7,
+        "SA": 3
+      }
+    },
+    "band_four_character_grids": {
+      "40m": 137,
+      "20m": 138,
+      "15m": 135
+    }
+  }
+}
