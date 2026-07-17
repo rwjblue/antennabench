@@ -87,6 +87,16 @@ default report one uninterrupted audit table. Required failures, unavailable
 states, bounded-overview omissions, acquisition gaps, and important
 limitations remain visible while those disclosures are closed.
 
+For each retained stratum, the same-path view shows one zero-centered dot for
+each unique remote path’s `right − left` median, plus a distinct median of
+those path medians. Its accessible table carries the same exact values and
+paired-row/block counts. The reach view separately shows unique finite paths
+seen left-only, on both antennas, and right-only. Unmatched paths remain
+operational evidence, never zero-SNR measurements; missing SNR, duplicates,
+and conflicts remain separately accounted for and auditable. These report-owned
+projections are bounded before rendering, so the HTML never groups unbounded
+raw records to create the headline views.
+
 It also says what is missing. Intended order is shown separately from observed
 antenna use. A cycle switched before its 110.592-second transmission completed
 has unknown antenna attribution. A missing decode is not treated as a

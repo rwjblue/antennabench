@@ -14,10 +14,11 @@ use crate::{
     ReportCancellationToken, ReportChartData, ReportComparisonData, ReportCompleteness,
     ReportDetailFamily, ReportError, ReportEvidenceSummary, ReportNotice, ReportOverview,
     ReportOverviewLifecycle, ReportOverviewLifecycleState, ReportOverviewLimitation,
-    ReportOverviewPathDelta, ReportOverviewScope, ReportOverviewStratum, ReportResourceLimits,
-    ReportResourceStage, ReportSnapshotContext, ScheduleOverview, ScheduledSlotContext,
-    ScheduledTimeRange, SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection,
-    StationContext, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
+    ReportOverviewPathDelta, ReportOverviewPathMedianDelta, ReportOverviewReach,
+    ReportOverviewScope, ReportOverviewStratum, ReportResourceLimits, ReportResourceStage,
+    ReportSnapshotContext, ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange,
+    SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection, StationContext,
+    UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
 pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportError> {
@@ -76,8 +77,12 @@ fn build_report_with_resources_and_snapshot(
     let summary =
         summarize_bundle_with_resources(bundle, validation, limits.analysis, cancellation)?;
     let detail_counts = DetailCounts::new(bundle, &summary, &snapshot);
-    let required_overview_rows =
-        summary.eligibility.exclusions.len() + summary.comparison.strata.len();
+    // The question-first views retain every path median, rather than sampling
+    // them in the renderer. Count those rows up front so a bounded overview is
+    // complete or explicitly rejected, never silently partial.
+    let required_overview_rows = summary.eligibility.exclusions.len()
+        + summary.comparison.strata.len()
+        + summary.comparison.path_summaries.len();
     if required_overview_rows as u64 > limits.rows {
         return Err(report_resource_error(
             "resource.report.rows",
@@ -203,7 +208,7 @@ fn build_overview(
         strata: comparison
             .strata
             .iter()
-            .map(project_overview_stratum)
+            .map(|summary| project_overview_stratum(summary, comparison))
             .collect(),
         limitations,
     }
@@ -211,6 +216,7 @@ fn build_overview(
 
 fn project_overview_stratum(
     summary: &antennabench_analysis::PairedStratumSummary,
+    comparison: &PairedComparisonAnalysis,
 ) -> ReportOverviewStratum {
     let path_delta = match (
         summary.minimum_delta_right_minus_left_db,
@@ -224,6 +230,30 @@ fn project_overview_stratum(
         },
         _ => ReportOverviewPathDelta::Unavailable,
     };
+
+    let path_median_deltas = comparison
+        .path_summaries
+        .iter()
+        .filter(|path| path.stratum == summary.stratum)
+        .map(|path| ReportOverviewPathMedianDelta {
+            remote_path: path.remote_path.clone(),
+            paired_row_count: path.paired_row_count,
+            median_delta_right_minus_left_db: path.median_delta_right_minus_left_db,
+        })
+        .collect();
+    let reach = comparison
+        .overlap_rows
+        .iter()
+        .filter(|row| row.stratum == summary.stratum)
+        .fold(ReportOverviewReach::default(), |mut reach, row| {
+            match (row.left_finite_count > 0, row.right_finite_count > 0) {
+                (true, false) => reach.left_only_unique_path_count += 1,
+                (true, true) => reach.both_unique_path_count += 1,
+                (false, true) => reach.right_only_unique_path_count += 1,
+                (false, false) => {}
+            }
+            reach
+        });
 
     ReportOverviewStratum {
         stratum: summary.stratum.clone(),
@@ -239,6 +269,8 @@ fn project_overview_stratum(
         exact_duplicate_count: summary.exact_duplicate_count,
         conflicting_duplicate_group_count: summary.conflicting_duplicate_group_count,
         path_delta,
+        path_median_deltas,
+        reach,
     }
 }
 

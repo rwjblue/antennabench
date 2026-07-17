@@ -95,6 +95,50 @@ fn paired_overview_preserves_each_stratum_and_uses_path_medians() {
         },
         "the +12 dB prolific path and -4 dB sparse path have equal path weight"
     );
+    assert_eq!(
+        row.path_median_deltas,
+        vec![
+            antennabench_report::ReportOverviewPathMedianDelta {
+                remote_path: "K1PROLIFIC".into(),
+                paired_row_count: 3,
+                median_delta_right_minus_left_db: 12.0,
+            },
+            antennabench_report::ReportOverviewPathMedianDelta {
+                remote_path: "K2SPARSE".into(),
+                paired_row_count: 1,
+                median_delta_right_minus_left_db: -4.0,
+            },
+        ]
+    );
+    assert_eq!(row.reach.left_only_unique_path_count, 0);
+    assert_eq!(row.reach.both_unique_path_count, 2);
+    assert_eq!(row.reach.right_only_unique_path_count, 0);
+}
+
+#[test]
+fn overview_reach_keeps_unmatched_paths_and_missing_snr_distinct_from_zero_delta() {
+    let mut bundle = bundle_with_layout(&["A", "B"]);
+    bundle.observations = vec![
+        tx_observation(&bundle, "zero-left", 0, "K1ZERO", Some(-20.0)),
+        tx_observation(&bundle, "zero-right", 1, "K1ZERO", Some(-20.0)),
+        tx_observation(&bundle, "left-only", 0, "K1LEFT", Some(-20.0)),
+        tx_observation(&bundle, "right-only", 1, "K1RIGHT", Some(-20.0)),
+        tx_observation(&bundle, "missing-left", 0, "K1MISSING", None),
+        tx_observation(&bundle, "finite-right", 1, "K1MISSING", Some(-20.0)),
+    ];
+    let report = build_report(&normalize_bundle(bundle)).unwrap();
+    let row = &report.overview.strata[0];
+
+    assert_eq!(row.path_median_deltas.len(), 1);
+    assert_eq!(row.path_median_deltas[0].remote_path, "K1ZERO");
+    assert_eq!(
+        row.path_median_deltas[0].median_delta_right_minus_left_db,
+        0.0
+    );
+    assert_eq!(row.reach.left_only_unique_path_count, 1);
+    assert_eq!(row.reach.both_unique_path_count, 1);
+    assert_eq!(row.reach.right_only_unique_path_count, 2);
+    assert_eq!(row.missing_snr_left_count, 1);
 }
 
 #[test]
@@ -191,7 +235,7 @@ fn overview_rows_are_part_of_the_required_bounded_projection() {
         ReportError::Resource(ref error)
             if error.diagnostic.code == "resource.report.rows"
                 && error.diagnostic.role == "required_overview_rows"
-                && error.diagnostic.observed == Some(1)
+                && error.diagnostic.observed == Some(3)
     ));
 }
 

@@ -1295,6 +1295,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
               "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 1,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 0
             }
           },
           {
@@ -1318,6 +1324,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
               "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 0,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 1
             }
           },
           {
@@ -1341,6 +1353,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
               "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 1,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 1
             }
           },
           {
@@ -1364,6 +1382,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
               "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 1,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 1
             }
           },
           {
@@ -1387,6 +1411,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
               "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 1,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 1
             }
           },
           {
@@ -1410,6 +1440,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
               "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 1,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 1
             }
           }
         ],

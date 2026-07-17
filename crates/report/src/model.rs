@@ -121,6 +121,27 @@ pub struct ReportOverviewStratum {
     pub exact_duplicate_count: usize,
     pub conflicting_duplicate_group_count: usize,
     pub path_delta: ReportOverviewPathDelta,
+    /// One finite path-median delta per remote path. This is a bounded,
+    /// renderer-ready projection: prolific reporters therefore cannot occupy
+    /// more than one headline dot.
+    pub path_median_deltas: Vec<ReportOverviewPathMedianDelta>,
+    /// Unique finite paths classified by the antennas on which they were
+    /// observed. Missing SNR is deliberately accounted for separately.
+    pub reach: ReportOverviewReach,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverviewPathMedianDelta {
+    pub remote_path: String,
+    pub paired_row_count: usize,
+    pub median_delta_right_minus_left_db: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportOverviewReach {
+    pub left_only_unique_path_count: usize,
+    pub both_unique_path_count: usize,
+    pub right_only_unique_path_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

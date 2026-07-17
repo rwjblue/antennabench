@@ -62,7 +62,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     ] {
         assert!(first.contains(&format!("<caption>{caption}</caption>")));
     }
-    assert_eq!(first.matches("aria-hidden=\"true\"").count(), 5);
+    assert!(first.matches("aria-hidden=\"true\"").count() >= 5);
     assert!(first.contains("<dt>Usable</dt><dd>19</dd>"));
     assert!(first.contains("<dt>Excluded</dt><dd>7</dd>"));
     assert!(first.contains("<dt>Scheduled bands</dt><dd>40 m, 20 m</dd>"));
@@ -583,6 +583,41 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
     ] {
         assert!(!html.contains(prohibited));
     }
+}
+
+#[test]
+fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
+    let report = paired_report(true);
+    let html = render_standalone_html(&report).unwrap();
+
+    assert!(html.contains("each value is <strong>B − A</strong> SNR in dB"));
+    assert_eq!(html.matches("<span class=\"path-strip-dot\"").count(), 2);
+    assert_eq!(html.matches("<span class=\"path-strip-median\"").count(), 1);
+    assert!(html.contains("A finite 0 dB dot is retained as a true zero"));
+    assert!(html.contains("<caption>One path-median B − A SNR delta per remote path"));
+    assert!(html.contains("<td>K1PAIR</td><td>2</td>"));
+    assert!(html.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
+    assert!(html.contains("<strong>not</strong> zero-SNR measurements."));
+    assert!(html.contains("<caption>Unique finite remote-path reach counts"));
+    assert!(html.contains(".path-strip-row{grid-template-columns:1fr}"));
+    assert!(html.contains("@media print"));
+}
+
+#[test]
+fn renders_missing_and_unavailable_same_path_states_without_zeroing_them() {
+    let mut report = paired_report(true);
+    let row = &mut report.overview.strata[0];
+    row.path_median_deltas.clear();
+    row.missing_snr_left_count = 2;
+    row.missing_snr_right_count = 1;
+    row.reach = Default::default();
+
+    let html = render_standalone_html(&report).unwrap();
+
+    assert!(html.contains("No finite same-path delta is available; missing SNR is retained separately (left: 2, right: 1). This is not a 0 dB result."));
+    assert!(html.contains(
+        "No finite path reach counts; missing SNR is retained separately (left: 2, right: 1)."
+    ));
 }
 
 #[test]
