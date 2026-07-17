@@ -19,8 +19,9 @@ use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, BandEvidenceSection,
     ReportCancellationToken, ReportDetailFamily, ReportError, ReportEvidenceSummary,
     ReportImportedEvidence, ReportLifecycleEventKind, ReportNotice, ReportOverviewLifecycleState,
-    ReportOverviewLimitation, ReportOverviewPathDelta, ReportResourceLimits, ReportResourceStage,
-    SessionReport, SlotEvidenceSection, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
+    ReportOverviewLimitation, ReportOverviewPathDelta, ReportOverviewStratum, ReportResourceLimits,
+    ReportResourceStage, SessionReport, SlotEvidenceSection, UsableObservationKindCounts,
+    REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
@@ -35,6 +36,8 @@ const STYLES: &str = r#"
 @media(max-width:760px){.headline-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-support{grid-template-columns:1fr}}
 @media(max-width:620px){main{width:min(100% - 1rem,1120px);margin:.5rem auto 2rem}.hero{display:block}.hero .muted{margin-top:.2rem}.hero,.panel{border-radius:.55rem}.chart-row,.comparison-row{grid-template-columns:1fr}.chart-value{color:var(--muted)}.question-nav ul{display:grid;grid-template-columns:1fr 1fr}.overview-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.overview-table tr{display:block;margin:.5rem 0;border:1px solid var(--line);border-radius:.45rem}.overview-table td{display:grid;grid-template-columns:minmax(7rem,42%) 1fr;gap:.5rem;border-bottom:1px solid var(--line)}.overview-table td:last-child{border-bottom:0}.overview-table td::before{content:attr(data-label);color:var(--muted);font-size:.72rem;font-weight:700;text-transform:uppercase}.overview-table td:first-child{min-width:0}.headline-facts{grid-template-columns:1fr 1fr}}
 .swatch.left,.bar.left{background:#315da8}.swatch.right,.bar.right{background:#b35c00}
+.path-strip{display:grid;gap:.3rem;margin:.55rem 0;padding:.7rem;background:var(--soft);border-radius:.5rem}.path-strip-row{display:grid;grid-template-columns:minmax(7rem,15rem) 1fr 4.5rem;gap:.55rem;align-items:center}.path-strip-track{position:relative;height:1.15rem;background:#e1e6ef;border-radius:.2rem}.path-strip-zero{position:absolute;left:50%;top:0;width:2px;height:100%;background:var(--muted)}.path-strip-dot{position:absolute;top:.2rem;width:.72rem;height:.72rem;background:#315da8;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}.path-strip-median{position:absolute;top:.16rem;width:.82rem;height:.82rem;background:#6d4c9a;border:2px solid var(--paper);transform:translateX(-50%) rotate(45deg)}.path-view-note{margin:.35rem 0;color:var(--muted);font-size:.84rem}.reach-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:hidden;margin:.55rem 0;border:1px solid var(--line);border-radius:.45rem}.reach-strip span{min-height:2.5rem;padding:.4rem .55rem;border-right:1px solid var(--paper);background:#e8effb}.reach-strip span:nth-child(2){background:#e7e3f2}.reach-strip span:last-child{border-right:0;background:#f8ead9}.reach-strip strong{display:block;font-size:1.15rem}.reach-strip small{display:block;color:var(--muted)}
+@media(max-width:620px){.path-strip-row{grid-template-columns:1fr}.reach-strip{grid-template-columns:1fr}.reach-strip span{border-right:0;border-bottom:1px solid var(--paper)}.reach-strip span:last-child{border-bottom:0}}
 .location-fill{height:100%;background:#315da8;border-radius:999px}.azimuth-track{position:relative;height:1rem;background:linear-gradient(90deg,#e1e6ef 0 24.8%,#cbd5e7 25% 25.2%,#e1e6ef 25.4% 49.8%,#cbd5e7 50% 50.2%,#e1e6ef 50.4% 74.8%,#cbd5e7 75% 75.2%,#e1e6ef 75.4% 100%);border-radius:999px}.azimuth-marker{position:absolute;top:.1rem;width:.45rem;height:.8rem;background:#b35c00;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}
 "#;
 
@@ -296,7 +299,9 @@ fn render_visible_acquisition_limitations(out: &mut CheckedHtmlWriter<'_>, repor
 }
 
 fn render_same_path_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
-    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2><p class=\"muted\">The overview above is the concise result. The existing paired rows and signal accounting remain available below for audit.</p><details class=\"audit-disclosure\"><summary>Review same-path signal detail</summary><div class=\"disclosure-body\">");
+    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2>");
+    render_same_path_view(out, report);
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review same-path signal detail</summary><div class=\"disclosure-body\">");
     render_comparison_diagnostics(out, report);
     render_paired_differences(out, report);
     render_paired_snr_time(out, report);
@@ -305,9 +310,120 @@ fn render_same_path_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionRep
 }
 
 fn render_reach_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
-    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2><p class=\"muted\">Path overlap and missingness are retained as descriptive evidence; no focused reach view is added here.</p><details class=\"audit-disclosure\"><summary>Review path overlap and missingness</summary><div class=\"disclosure-body\">");
+    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
+    render_reach_view(out, report);
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review path overlap and missingness</summary><div class=\"disclosure-body\">");
     render_overlap(out, report);
     out.push_str("</div></details></section>");
+}
+
+fn render_same_path_view(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let orientation = report.overview.scope.delta_orientation.as_ref();
+    if report.overview.strata.is_empty() {
+        out.push_str("<p class=\"empty\">No comparison stratum has same-path evidence available. This is not a zero-delta result.</p>");
+        return;
+    }
+    if let Some(orientation) = orientation {
+        write_html!(out, "<p class=\"orientation\"><strong>Orientation:</strong> each value is <strong>{} − {}</strong> SNR in dB. Negative values are toward {}; positive values are toward {}. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label), escape_html(&orientation.subtrahend_label), escape_html(&orientation.minuend_label));
+    }
+    out.push_str("<p class=\"path-view-note\">Each blue dot is one unique remote path’s median across its paired rows; the purple diamond is the median across those path medians. A finite 0 dB dot is retained as a true zero, not missing evidence.</p>");
+    for row in &report.overview.strata {
+        render_same_path_stratum(out, row, orientation);
+    }
+}
+
+fn render_same_path_stratum(
+    out: &mut CheckedHtmlWriter<'_>,
+    row: &ReportOverviewStratum,
+    orientation: Option<&antennabench_analysis::DeltaOrientation>,
+) {
+    write_html!(out, "<h3>{}</h3><p class=\"muted\">{} paired path{} · {} paired row{} · {} contributing block{}</p>", comparison_stratum(&row.stratum), row.path_median_deltas.len(), plural_suffix(row.path_median_deltas.len()), row.paired_row_count, plural_suffix(row.paired_row_count), row.contributing_block_count, plural_suffix(row.contributing_block_count));
+    if row.path_median_deltas.is_empty() {
+        if row.missing_snr_left_count > 0 || row.missing_snr_right_count > 0 {
+            write_html!(out, "<p class=\"empty\">No finite same-path delta is available; missing SNR is retained separately (left: {}, right: {}). This is not a 0 dB result.</p>", row.missing_snr_left_count, row.missing_snr_right_count);
+        } else {
+            out.push_str("<p class=\"empty\">No finite same-path paired evidence is available for this stratum. This is not a 0 dB result.</p>");
+        }
+        return;
+    }
+    let median = match row.path_delta {
+        ReportOverviewPathDelta::Available {
+            median_path_delta_right_minus_left_db,
+            ..
+        } => median_path_delta_right_minus_left_db,
+        ReportOverviewPathDelta::Unavailable => return,
+    };
+    let max_abs = row
+        .path_median_deltas
+        .iter()
+        .map(|path| path.median_delta_right_minus_left_db.abs())
+        .chain(std::iter::once(median.abs()))
+        .fold(1.0_f64, f64::max);
+    out.push_str("<div class=\"path-strip\" aria-hidden=\"true\">");
+    for path in &row.path_median_deltas {
+        let position = delta_position(path.median_delta_right_minus_left_db, max_abs);
+        write_html!(out, "<div class=\"path-strip-row\"><span class=\"chart-label\">{}</span><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-dot\" style=\"left:{position:.3}%\"></span></span><span>{} dB</span></div>", escape_html(&path.remote_path), format_signed(path.median_delta_right_minus_left_db));
+    }
+    let median_position = delta_position(median, max_abs);
+    write_html!(out, "<div class=\"path-strip-row\"><strong>Stratum median</strong><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-median\" style=\"left:{median_position:.3}%\"></span></span><strong>{} dB</strong></div></div>", format_signed(median));
+    let orientation_text = orientation
+        .map(|orientation| {
+            format!(
+                "{} − {}",
+                orientation.minuend_label, orientation.subtrahend_label
+            )
+        })
+        .unwrap_or_else(|| "right − left".to_string());
+    write_html!(out, "<div class=\"table-wrap\"><table><caption>One path-median {} SNR delta per remote path for {}; the stratum median is {} dB.</caption><thead><tr><th scope=\"col\">Remote path</th><th scope=\"col\">Paired rows</th><th scope=\"col\">Median delta</th></tr></thead><tbody>", escape_html(&orientation_text), comparison_stratum(&row.stratum), format_signed(median));
+    for path in &row.path_median_deltas {
+        write_html!(
+            out,
+            "<tr><td>{}</td><td>{}</td><td>{} dB</td></tr>",
+            escape_html(&path.remote_path),
+            path.paired_row_count,
+            format_signed(path.median_delta_right_minus_left_db)
+        );
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_reach_view(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<p class=\"muted\">Counts are unique finite remote paths within each stratum. “Both” records finite observations for the path on both antennas and supplies the path universe for same-path analysis; left-only and right-only paths are operationally interesting, but are <strong>not</strong> zero-SNR measurements.</p>");
+    if report.overview.strata.is_empty() {
+        out.push_str(
+            "<p class=\"empty\">No comparison stratum has path-reach evidence available.</p>",
+        );
+        return;
+    }
+    for row in &report.overview.strata {
+        let reach = &row.reach;
+        write_html!(out, "<h3>{}</h3>", comparison_stratum(&row.stratum));
+        if reach.left_only_unique_path_count
+            + reach.both_unique_path_count
+            + reach.right_only_unique_path_count
+            == 0
+        {
+            if row.missing_snr_left_count > 0 || row.missing_snr_right_count > 0 {
+                write_html!(out, "<p class=\"empty\">No finite path reach counts; missing SNR is retained separately (left: {}, right: {}).</p>", row.missing_snr_left_count, row.missing_snr_right_count);
+            } else {
+                out.push_str("<p class=\"empty\">No finite path-reach evidence is available for this stratum.</p>");
+            }
+            continue;
+        }
+        write_html!(out, "<div class=\"reach-strip\" aria-hidden=\"true\"><span><strong>{}</strong><small>left only</small></span><span><strong>{}</strong><small>both</small></span><span><strong>{}</strong><small>right only</small></span></div><div class=\"table-wrap\"><table><caption>Unique finite remote-path reach counts for {}. Unmatched paths are not zero-SNR measurements.</caption><thead><tr><th scope=\"col\">Left only</th><th scope=\"col\">Both</th><th scope=\"col\">Right only</th><th scope=\"col\">Missing SNR left</th><th scope=\"col\">Missing SNR right</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody><tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr></tbody></table></div>", reach.left_only_unique_path_count, reach.both_unique_path_count, reach.right_only_unique_path_count, comparison_stratum(&row.stratum), reach.left_only_unique_path_count, reach.both_unique_path_count, reach.right_only_unique_path_count, row.missing_snr_left_count, row.missing_snr_right_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+    }
+}
+
+fn delta_position(value: f64, maximum_absolute: f64) -> f64 {
+    (50.0 + value / maximum_absolute * 50.0).clamp(0.0, 100.0)
+}
+
+fn plural_suffix(value: usize) -> &'static str {
+    if value == 1 {
+        ""
+    } else {
+        "s"
+    }
 }
 
 fn render_distance_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
