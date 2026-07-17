@@ -68,10 +68,17 @@ The report starts with the scope and quality of the experiment, then shows the
 available comparisons. Depending on the session, it can include:
 
 - coverage by antenna, band, direction, and cycle;
-- same-path signal differences, kept separate by source and mode;
-- matched and unmatched observations;
+- a zero-centered same-path view with one median difference per unique remote
+  path and a separate median across those paths;
+- reach counts for paths observed on the left comparison side only, both sides,
+  or the right side only;
 - switching-order and timing context; and
 - available path distance, direction, and solar context.
+
+Each comparison stays separate by transmit/receive direction, band, mode,
+observation kind, and source. The visible same-path view and its accessible table
+use the same exact path values and paired-evidence counts. Unmatched paths remain
+reach evidence, not zero-SNR measurements.
 
 A missing decode is not a zero-strength signal. A cycle switched before the WSPR
 transmission finished may have unknown antenna attribution. Conflicting, damaged,
