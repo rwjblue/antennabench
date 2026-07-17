@@ -32,10 +32,16 @@ import {
   collectDesktopElements,
 } from "../frontend/elements.mjs";
 import {
+  SETUP_QUESTION_MODES,
   applyStationPreferences,
+  goalForSetupQuestion,
+  modeForSetupQuestion,
   readEvidenceAction,
   readEvidenceReplacement,
   readSetupDraft,
+  selectSetupQuestion,
+  syncSetupQuestionToMode,
+  syncWsprLiveForSignalPlan,
 } from "../frontend/forms.mjs";
 import {
   CONTEXT_HELP,
@@ -43,6 +49,7 @@ import {
   conductorActionAvailable,
   createCountdownAnchor,
   formatActiveRunTime,
+  focusSetupOutcome,
   installContextualHelp,
   locationLookupMessage,
   maidenheadGrid,
@@ -52,7 +59,6 @@ import {
   viewModel,
   workflowFromHash,
   wsprLiveAcquisitionModel,
-  wsprRunPlanSummary,
 } from "../frontend/models.mjs";
 import {
   beginConductorLoad,
@@ -320,7 +326,10 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.match(setupPanel, /Advanced: controlled CW or RTTY signal/);
   assert.ok(setupPanel.indexOf("WSPR Spots") < setupPanel.indexOf("Advanced: controlled CW or RTTY signal"));
   assert.match(setupPanel, /One repetition tests every antenna in each direction selected by the mode/);
-  assert.match(setupPanel, /Both mode schedules one full receive and one full transmit period per antenna/);
+  assert.match(setupPanel, /Rust-calculated directed sequence, exact cycle count, and ideal minimum time/);
+  assert.match(setupPanel, /This plan can describe/);
+  assert.match(setupPanel, /This plan cannot establish/);
+  assert.doesNotMatch(setupPanel, /SWR|return loss|impedance|resonance|cable health|tuner health|analy[sz]er/i);
 
   const values = new Map([
     ["callsign", "n1rwj"],
@@ -350,27 +359,94 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
 });
 
-test("WSPR run summaries derive cycles and ideal minimum time", () => {
-  assert.deepEqual(wsprRunPlanSummary("5", 2), {
-    rounds: 5,
-    antennaCount: 2,
-    directionCount: 2,
-    cycles: 20,
-    minimumMinutes: 40,
-    text: "20 WSPR cycles · at least 40 minutes",
-  });
-  assert.equal(wsprRunPlanSummary("3", 4)?.text, "24 WSPR cycles · at least 48 minutes");
-  assert.equal(wsprRunPlanSummary("1", 1)?.text, "2 WSPR cycles · at least 4 minutes");
-  assert.equal(wsprRunPlanSummary("4", 2, "tx_focused")?.text, "8 WSPR cycles · at least 16 minutes");
-  assert.equal(
-    wsprRunPlanSummary("4", 2, "single_antenna_profiling")?.text,
-    "8 WSPR cycles · at least 16 minutes",
-  );
-  for (const invalid of ["", " ", "0", "-1", "1.5", "not-a-number"]) {
-    assert.equal(wsprRunPlanSummary(invalid, 2), null);
+test("every setup question maps to the exact existing mode without entering the draft", () => {
+  const values = new Map([
+    ["callsign", "N1RWJ"], ["grid", "FN42"], ["powerWatts", "5"],
+    ["operatorNotes", ""], ["mode", "whole_station_ab"],
+    ["goal", "general_coverage"], ["band", "20m"], ["rounds", "4"],
+  ]);
+  const questions = Object.keys(SETUP_QUESTION_MODES).map((value) => ({ value, checked: false }));
+  const form = {
+    querySelector(selector) {
+      if (selector.includes("signalPlanEnabled")) return { checked: false };
+      if (selector.includes("wsprLiveAcquisitionEnabled")) return { checked: true };
+      if (selector.includes("antennaControllerEnabled")) return { checked: false };
+      const field = selector.match(/data-setup-field="([^"]+)"/)?.[1];
+      return {
+        get value() { return values.get(field) ?? ""; },
+        set value(value) { values.set(field, value); },
+      };
+    },
+    querySelectorAll(selector) {
+      if (selector === "[data-setup-question]") return questions;
+      return [];
+    },
+  };
+
+  for (const [question, mode] of Object.entries(SETUP_QUESTION_MODES)) {
+    values.set("mode", mode);
+    values.set("goal", goalForSetupQuestion(question));
+    const direct = readSetupDraft(form);
+    values.set("mode", "whole_station_ab");
+    values.set("goal", "dx");
+    assert.equal(selectSetupQuestion(form, question), mode);
+    const questionFirst = readSetupDraft(form);
+    assert.deepEqual(questionFirst, direct, `${question} produces the direct-mode RPC draft`);
+    assert.equal(Object.hasOwn(questionFirst, "question"), false);
+    assert.equal(questions.find((choice) => choice.value === question).checked, true);
   }
-  assert.equal(wsprRunPlanSummary("5", 0), null);
-  assert.equal(wsprRunPlanSummary("5", -1), null);
+  values.set("mode", "rx_focused");
+  values.set("goal", "single_antenna_profiling");
+  assert.equal(syncSetupQuestionToMode(form), "rx_focused");
+  assert.equal(questions.find((choice) => choice.value === "hear_better").checked, true);
+  assert.equal(values.get("goal"), "general_coverage");
+  assert.equal(modeForSetupQuestion("profile_one_antenna"), "single_antenna_profiling");
+  assert.equal(goalForSetupQuestion("profile_one_antenna"), "single_antenna_profiling");
+  assert.throws(() => modeForSetupQuestion("desired_winner"), /Unknown setup question/);
+
+  const reviewed = setupReviewSucceeded(beginSetupReview(initialState()), {
+    valid: true,
+    reviewId: "review-before-question-edit",
+    diagnostics: [],
+    plan: {},
+  });
+  const edited = editSessionSetup(reviewed);
+  assert.equal(edited.setupStatus, "editing");
+  assert.equal(edited.setupReview, null, "question or direct-mode edits stale the prior review token");
+});
+
+test("RX-only questions retain default best-effort public collection and explicit offline opt-out", () => {
+  const wsprLive = { checked: true, disabled: false };
+  const form = { querySelector() { return wsprLive; } };
+  assert.equal(syncWsprLiveForSignalPlan(form, false), true);
+  assert.equal(wsprLive.disabled, false);
+  wsprLive.checked = false;
+  assert.equal(syncWsprLiveForSignalPlan(form, false), false, "offline opt-out remains selected");
+  wsprLive.checked = true;
+  assert.equal(syncWsprLiveForSignalPlan(form, true), false);
+  assert.equal(wsprLive.disabled, true, "controlled CW/RTTY is not a WSPR.live plan");
+});
+
+test("setup review focus follows successful and invalid keyboard submissions", () => {
+  const review = { focusCount: 0, focus() { this.focusCount += 1; } };
+  const diagnostics = { focusCount: 0, focus() { this.focusCount += 1; } };
+  assert.equal(focusSetupOutcome({ setupStatus: "reviewed" }, review, diagnostics), "review");
+  assert.equal(review.focusCount, 1);
+  assert.equal(focusSetupOutcome({ setupStatus: "invalid" }, review, diagnostics), "diagnostics");
+  assert.equal(diagnostics.focusCount, 1);
+  assert.equal(focusSetupOutcome({ setupStatus: "error" }, review, diagnostics), null);
+});
+
+test("question cards preserve native keyboard controls and collapse on narrow screens", () => {
+  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
+  assert.equal([...html.matchAll(/type="radio" name="setup-question"/g)].length, 4);
+  assert.match(html, /data-setup-field="mode"/);
+  assert.match(html, /data-setup-field="goal"/);
+  assert.match(html, /data-setup-review tabindex="-1"/);
+  assert.match(html, /data-setup-diagnostics tabindex="-1"/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.question-choices[\s\S]*grid-template-columns: 1fr/);
+  assert.match(css, /question-choices label:has\(input:focus-visible\)/);
 });
 
 test("setup serializes explicit local controller policy, profile, and target mappings", () => {

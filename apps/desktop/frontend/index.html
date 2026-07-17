@@ -59,11 +59,22 @@
               <div><p class="eyebrow">Prepare an experiment</p><h1 id="setup-title">Session setup</h1></div>
               <span class="status-chip muted" data-setup-status>Draft</span>
             </div>
-            <p class="lede">Add your station and antennas, review the session, then start the comparison.</p>
+            <p class="lede">Start with what you want to learn, then review the exact directed plan and its limits before creating the session.</p>
 
             <form class="setup-form" data-setup-form novalidate>
+              <fieldset class="setup-section question-section">
+                <legend><span>01</span> What do you want to learn? <button class="context-help" type="button" data-help-trigger="setup_question">?</button></legend>
+                <p class="field-help">This choice sets the existing experiment mode and a compatible goal default. It does not record a desired result, and you can edit both below.</p>
+                <div class="question-choices">
+                  <label><input type="radio" name="setup-question" value="compare_whole_station" data-setup-question checked><span><strong>Compare the whole station</strong><small>Schedule both transmit and receive periods across antennas.</small></span></label>
+                  <label><input type="radio" name="setup-question" value="heard_better" data-setup-question><span><strong>Where am I heard better?</strong><small>Compare transmit paths reported by remote receivers.</small></span></label>
+                  <label><input type="radio" name="setup-question" value="hear_better" data-setup-question><span><strong>What can I hear better?</strong><small>Compare receive paths decoded by this station.</small></span></label>
+                  <label><input type="radio" name="setup-question" value="profile_one_antenna" data-setup-question><span><strong>Profile one antenna</strong><small>Describe one antenna in both transmit and receive directions.</small></span></label>
+                </div>
+              </fieldset>
+
               <fieldset class="setup-section">
-                <legend><span>01</span> Station <button class="context-help" type="button" data-help-trigger="station_location">?</button></legend>
+                <legend><span>02</span> Station <button class="context-help" type="button" data-help-trigger="station_location">?</button></legend>
                 <div class="field-grid">
                   <label>Callsign<input data-setup-field="callsign" autocomplete="off" autocapitalize="characters" spellcheck="false" /></label>
                   <label>Grid
@@ -87,7 +98,7 @@
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>02</span> Antennas and explicit order <button class="context-help" type="button" data-help-trigger="antennas">?</button></legend>
+                <legend><span>03</span> Antennas and explicit order <button class="context-help" type="button" data-help-trigger="antennas">?</button></legend>
                 <p class="field-help">Rows are persisted and scheduled in A/B order. Add more rows for a larger comparison.</p>
                 <div class="antenna-editor" data-antenna-row>
                   <div class="antenna-heading"><strong data-antenna-title>Antenna A</strong><button type="button" data-remove-antenna>Remove</button></div>
@@ -128,7 +139,7 @@
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>03</span> Run plan <button class="context-help" type="button" data-help-trigger="run_plan">?</button></legend>
+                <legend><span>04</span> Run plan <button class="context-help" type="button" data-help-trigger="run_plan">?</button></legend>
                 <p class="field-help">Choose the intended antenna order. Actual WSPR cycle times are set during the run after each antenna is ready.</p>
                 <div class="field-grid">
                   <label>Experiment mode<select data-setup-field="mode"><option value="whole_station_ab">Both (TX + RX)</option><option value="tx_focused">TX focused</option><option value="rx_focused">RX focused</option><option value="single_antenna_profiling">Single-antenna profiling (TX + RX)</option></select></label>
@@ -140,12 +151,12 @@
                     <small>One repetition tests every antenna in each direction selected by the mode.</small>
                   </div>
                 </div>
-                <p class="run-plan-summary" data-run-plan-summary aria-live="polite">16 WSPR cycles · at least 32 minutes</p>
-                <p class="field-help">Both mode schedules one full receive and one full transmit period per antenna in each repetition. This minimum excludes switching time and waits for cycle boundaries.</p>
+                <p class="run-plan-summary">Review the normalized plan to see the Rust-calculated directed sequence, exact cycle count, and ideal minimum time.</p>
+                <p class="field-help">Actual WSPR timing remains operator-paced and excludes switching time and waits for eligible cycle boundaries.</p>
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>04</span> Optional antenna controller</legend>
+                <legend><span>05</span> Optional antenna controller</legend>
                 <label class="authority-confirmation"><input type="checkbox" data-setup-field="antennaControllerEnabled"> Use a local direct-process controller with operator review</label>
                 <p class="field-help">Controller programs and target mappings stay in this computer's application data. Imported bundles never attach or run them.</p>
                 <div data-controller-setup-fields hidden>
@@ -170,7 +181,7 @@
               </fieldset>
 
               <fieldset class="setup-section">
-                <legend><span>05</span> WSPR Spots <button class="context-help" type="button" data-help-trigger="public_spots">?</button></legend>
+                <legend><span>06</span> WSPR Spots <button class="context-help" type="button" data-help-trigger="public_spots">?</button></legend>
                 <p class="field-help">Delayed public TX and RX WSPR spots are collected automatically from <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a>, a volunteer WSPRnet mirror. Enable WSJT-X <strong>Upload spots</strong> and keep WSJT-X online. AntennaBench collects returned rows for configured request windows on a best-effort basis; the upstream mirror does not provide an independent completeness guarantee.</p>
                 <details class="advanced-fields">
                   <summary>Offline option</summary>
@@ -207,12 +218,22 @@
               <span class="feedback-mark" aria-hidden="true"></span>
               <div><strong data-setup-feedback-message></strong><p data-setup-feedback-detail></p></div>
             </div>
-            <ul class="setup-diagnostics" data-setup-diagnostics hidden></ul>
+            <ul class="setup-diagnostics" data-setup-diagnostics tabindex="-1" hidden></ul>
 
-            <section class="setup-review" data-setup-review hidden aria-labelledby="review-title">
+            <section class="setup-review" data-setup-review tabindex="-1" hidden aria-labelledby="review-title">
               <div><p class="eyebrow">Run guidance</p><h2 id="review-title">Normalized plan review</h2></div>
-              <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div></dl>
-              <div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Direction</th><th>Band</th><th>Signal</th></tr></thead><tbody data-review-slots></tbody></table></div>
+              <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment and goal</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div><div><dt>Exact plan length</dt><dd data-review-schedule></dd></div></dl>
+              <section class="review-sequence" aria-labelledby="review-sequence-title">
+                <h3 id="review-sequence-title">Directed counterbalanced sequence</h3>
+                <p data-review-counterbalance></p>
+                <p class="transition-summary" data-review-transitions></p>
+                <ol class="cycle-sequence" data-review-sequence></ol>
+              </section>
+              <div class="capability-review">
+                <section aria-labelledby="can-describe-title"><h3 id="can-describe-title">This plan can describe</h3><ul data-review-can-describe></ul></section>
+                <section aria-labelledby="cannot-establish-title"><h3 id="cannot-establish-title">This plan cannot establish</h3><ul data-review-cannot-establish></ul></section>
+              </div>
+              <details class="review-cycle-detail"><summary>Exact cycle table</summary><div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Direction</th><th>Band</th><th>Signal</th></tr></thead><tbody data-review-slots></tbody></table></div></details>
             </section>
 
           </section>

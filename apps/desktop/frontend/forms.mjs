@@ -3,6 +3,61 @@ function optionalNumber(value) {
   return trimmed.length === 0 ? null : Number(trimmed);
 }
 
+export const SETUP_QUESTION_MODES = Object.freeze({
+  compare_whole_station: "whole_station_ab",
+  heard_better: "tx_focused",
+  hear_better: "rx_focused",
+  profile_one_antenna: "single_antenna_profiling",
+});
+
+export function modeForSetupQuestion(question) {
+  if (!Object.hasOwn(SETUP_QUESTION_MODES, question)) {
+    throw new RangeError(`Unknown setup question: ${question}`);
+  }
+  return SETUP_QUESTION_MODES[question];
+}
+
+export function goalForSetupQuestion(question) {
+  return modeForSetupQuestion(question) === "single_antenna_profiling"
+    ? "single_antenna_profiling"
+    : "general_coverage";
+}
+
+function syncGoalToMode(form, mode) {
+  const goal = form.querySelector('[data-setup-field="goal"]');
+  if (mode === "single_antenna_profiling") {
+    goal.value = "single_antenna_profiling";
+  } else if (goal.value === "single_antenna_profiling") {
+    goal.value = "general_coverage";
+  }
+}
+
+export function selectSetupQuestion(form, question) {
+  const mode = modeForSetupQuestion(question);
+  form.querySelector('[data-setup-field="mode"]').value = mode;
+  form.querySelector('[data-setup-field="goal"]').value = goalForSetupQuestion(question);
+  for (const choice of form.querySelectorAll("[data-setup-question]")) {
+    choice.checked = choice.value === question;
+  }
+  return mode;
+}
+
+export function syncSetupQuestionToMode(form) {
+  const mode = form.querySelector('[data-setup-field="mode"]').value;
+  syncGoalToMode(form, mode);
+  for (const choice of form.querySelectorAll("[data-setup-question]")) {
+    choice.checked = modeForSetupQuestion(choice.value) === mode;
+  }
+  return mode;
+}
+
+export function syncWsprLiveForSignalPlan(form, signalPlanEnabled) {
+  const wsprLive = form.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]');
+  if (signalPlanEnabled) wsprLive.checked = false;
+  wsprLive.disabled = signalPlanEnabled;
+  return wsprLive.checked;
+}
+
 export function readSignalEvidenceFields(frequency, mode, power, callsign, cadence) {
   return {
     frequencyHz: optionalNumber(frequency.value),

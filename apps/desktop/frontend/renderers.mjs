@@ -27,6 +27,8 @@ export function renderSetup(elements, state, root) {
     setupForm, setupReviewButton, setupCreateButton, setupStatus, setupFeedback,
     setupFeedbackMessage, setupFeedbackDetail, setupDiagnostics, setupReviewPanel,
     setupReviewStation, setupReviewAntennas, setupReviewShape, setupReviewSlots,
+    setupReviewSchedule, setupReviewCounterbalance, setupReviewTransitions,
+    setupReviewSequence, setupReviewCanDescribe, setupReviewCannotEstablish,
     controllerOneLine, controllerStructured, controllerProfileSelect,
   } = elements;
   const setupBusy = ["reviewing", "creating"].includes(state.setupStatus);
@@ -86,13 +88,41 @@ export function renderSetup(elements, state, root) {
   const signalSummary = plan.signalPlan
     ? `${humanizeIdentifier(plan.signalPlan.mode)} · ${humanizeIdentifier(plan.signalPlan.collectionProfile)} · ${plan.signalPlan.frequenciesHz.length} frequencies`
     : `WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
-  const runLength = plan.signalPlan
-    ? `${plan.slots.length} planned signal slots`
-    : `${plan.slots.length} WSPR cycles · at least ${plan.slots.length * 2} minutes`;
   const controllerSummary = plan.antennaController
     ? ` · controller ${plan.antennaController.profileName} · operator ready required`
     : " · manual antenna control";
-  setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${runLength} · ${signalSummary}${controllerSummary}`;
+  setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${signalSummary}${controllerSummary}`;
+  setupReviewSchedule.textContent = plan.scheduleReview.summary;
+  setupReviewCounterbalance.textContent = plan.scheduleReview.counterbalanceExplanation;
+  setupReviewTransitions.textContent = plan.scheduleReview.transitionSummary;
+  setupReviewSequence.replaceChildren(...plan.slots.map((slot, index) => {
+    const item = root.createElement("li");
+    const transition = plan.scheduleReview.transitions[index - 1];
+    if (transition) {
+      const change = root.createElement("span");
+      change.className = "cycle-transition";
+      change.textContent = transition.summary;
+      item.append(change);
+    }
+    const cycle = root.createElement("strong");
+    cycle.textContent = `${slot.sequenceNumber}. ${slot.direction ? humanizeIdentifier(slot.direction) : "Signal"} · ${slot.antennaLabel}`;
+    const context = root.createElement("small");
+    context.textContent = slot.signal
+      ? `${slot.band} · ${slot.signal.frequencyHz} Hz`
+      : slot.band;
+    item.append(cycle, context);
+    return item;
+  }));
+  setupReviewCanDescribe.replaceChildren(...plan.capabilities.canDescribe.map((statement) => {
+    const item = root.createElement("li");
+    item.textContent = statement;
+    return item;
+  }));
+  setupReviewCannotEstablish.replaceChildren(...plan.capabilities.cannotEstablish.map((statement) => {
+    const item = root.createElement("li");
+    item.textContent = statement;
+    return item;
+  }));
   setupReviewSlots.replaceChildren(...plan.slots.map((slot) => {
     const row = root.createElement("tr");
     for (const value of [

@@ -333,7 +333,13 @@ semantics.
 
 The trusted boundary remains Rust-owned throughout. Setup review accepts a
 typed draft, assigns trusted session/plan/cycle-intention identities, applies the
-strict creation profile, and retains the exact normalized commit candidate.
+strict creation profile, and retains the exact normalized commit candidate. Its
+additive review projection owns the exact directed sequence, cycle/time totals,
+antenna-versus-direction transitions, counterbalance rationale, and
+mode/direction/single-antenna capability matrix. The question-first frontend
+only maps disposable question cards to the existing mode and compatible goal;
+no question field is persisted and JavaScript does not recalculate the schedule
+or capability statements.
 Creation accepts only the retained review identity; Rust owns the native picker,
 synchronized sibling staging, live capability probe, complete publication, and
 active-session replacement. `active_session_conductor` recovers a newly active

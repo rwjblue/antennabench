@@ -160,13 +160,22 @@ the UI could not outrun the durable, validation, and resource boundaries:
    commit every bounded switch/verification attempt as schema-v5 rig evidence
    while retaining the named manual-ready action (#109).
 
-Setup accepts callsign, grid, transmit power, experiment mode/goal, ordered
+Setup begins with four disposable operator questions that map deterministically
+to the existing whole-station BOTH, TX-focused, RX-focused, and single-antenna
+profiling modes. The single-antenna choice selects its required existing goal;
+other questions default the separate goal to general coverage. Mode and goal
+remain visible and editable, and no question or expected-result field enters the
+draft or bundle. Setup then accepts callsign, grid, transmit power, ordered
 antenna definitions, and complete repetitions. BOTH and four repetitions are
 the defaults. Each repetition visits every configured antenna once in each
-selected direction; the form derives the number of individual two-minute WSPR
-periods and ideal minimum time and presents automatic bidirectional WSPR.live
-public spots as a normal attributed section before advanced controlled-signal
-setup. The online path requires WSJT-X **Upload spots** and network access, and
+selected direction. Rust projects the exact directed order, WSPR cycle count,
+ideal minimum time, antenna-versus-direction transitions, counterbalance
+rationale, and mode-shaped can-describe/cannot-establish statements from the
+same normalized candidate retained for creation. The frontend renders that
+projection and does not maintain a second schedule or capability model.
+Automatic bidirectional WSPR.live public spots remain a normal attributed
+section before advanced controlled-signal setup. The online path requires
+WSJT-X **Upload spots** and network access, and
 collects returned rows for configured request windows on a best-effort basis;
 the upstream mirror does not provide an independent completeness guarantee. The offline opt-out remains
 secondary behavior; a receive-capable offline run requires the direct/local UDP

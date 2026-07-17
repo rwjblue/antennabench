@@ -6,14 +6,17 @@ import {
   readEvidenceReplacement,
   readSetupDraft,
   readSignalEvidenceFields,
+  selectSetupQuestion,
+  syncSetupQuestionToMode,
+  syncWsprLiveForSignalPlan,
 } from "./forms.mjs";
 import {
+  focusSetupOutcome,
   installContextualHelp,
   locationLookupMessage,
   maidenheadGrid,
   recommendedNoteTarget,
   workflowFromHash,
-  wsprRunPlanSummary,
 } from "./models.mjs";
 import { initialState } from "./state.mjs";
 import {
@@ -50,8 +53,13 @@ function mount(root, browserWindow) {
     setupReviewStation,
     setupReviewAntennas,
     setupReviewShape,
+    setupReviewSchedule,
+    setupReviewCounterbalance,
+    setupReviewTransitions,
+    setupReviewSequence,
+    setupReviewCanDescribe,
+    setupReviewCannotEstablish,
     setupReviewSlots,
-    setupRunPlanSummary,
     controllerSetupFields,
     controllerProfileSelect,
     conductorPanel,
@@ -392,9 +400,13 @@ function mount(root, browserWindow) {
     if (event.target.matches?.('[data-setup-field="callsign"], [data-setup-field="signalTransmittedCallsign"]')) {
       event.target.value = event.target.value.toUpperCase();
     }
+    if (event.target.matches?.("[data-setup-question]")) {
+      selectSetupQuestion(setupForm, event.target.value);
+    } else if (event.target.matches?.('[data-setup-field="mode"]')) {
+      syncSetupQuestionToMode(setupForm);
+    }
     syncSignalPlanFields(setupForm);
     syncControllerSetupFields(setupForm, controllerSetupFields);
-    updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     if (!setupBusyState(state)) {
       controller.editSetup();
     }
@@ -423,7 +435,8 @@ function mount(root, browserWindow) {
 
   setupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await controller.reviewSetup(readSetupDraft(setupForm));
+    const outcome = await controller.reviewSetup(readSetupDraft(setupForm));
+    focusSetupOutcome(outcome, setupReviewPanel, setupDiagnostics);
   });
 
   setupCreateButton.addEventListener("click", async () => {
@@ -434,7 +447,6 @@ function mount(root, browserWindow) {
     const fragment = setupAntennaTemplate.content.cloneNode(true);
     setupAddAntennaButton.before(fragment);
     refreshAntennaRows(setupForm);
-    updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     controller.editSetup();
   });
 
@@ -445,7 +457,6 @@ function mount(root, browserWindow) {
     if (rows.length <= 1) return;
     removeButton.closest("[data-antenna-row]").remove();
     refreshAntennaRows(setupForm);
-    updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
     controller.editSetup();
   });
 
@@ -471,7 +482,7 @@ function mount(root, browserWindow) {
 
   syncSignalPlanFields(setupForm);
   syncControllerSetupFields(setupForm, controllerSetupFields);
-  updateWsprRunPlanSummary(setupForm, setupRunPlanSummary);
+  syncSetupQuestionToMode(setupForm);
   render();
   if (typeof browserWindow.__TAURI__?.core?.invoke === "function") {
     void controller.loadStationPreferences()
@@ -522,15 +533,12 @@ function setupBusyState(state) {
 
 function syncSignalPlanFields(form) {
   const enabled = form.querySelector('[data-setup-field="signalPlanEnabled"]').checked;
-  const receiveOnly = form.querySelector('[data-setup-field="mode"]').value === "rx_focused";
   const fields = form.querySelector("[data-signal-plan-fields]");
   fields.hidden = !enabled;
   for (const control of fields.querySelectorAll("input, select, textarea")) {
     control.disabled = !enabled;
   }
-  const wsprLive = form.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]');
-  if (enabled || receiveOnly) wsprLive.checked = false;
-  wsprLive.disabled = enabled || receiveOnly;
+  syncWsprLiveForSignalPlan(form, enabled);
 }
 
 function refreshAntennaRows(form) {
@@ -539,15 +547,6 @@ function refreshAntennaRows(form) {
     row.querySelector("[data-antenna-title]").textContent = `Antenna ${String.fromCharCode(65 + index)}`;
     row.querySelector("[data-remove-antenna]").disabled = rows.length <= 1;
   });
-}
-
-function updateWsprRunPlanSummary(form, output) {
-  const summary = wsprRunPlanSummary(
-    form.querySelector('[data-setup-field="rounds"]').value,
-    form.querySelectorAll("[data-antenna-row]").length,
-    form.querySelector('[data-setup-field="mode"]').value,
-  );
-  output.textContent = summary?.text ?? "Enter complete rounds to estimate the run length.";
 }
 
 if (typeof document !== "undefined") {

@@ -11,7 +11,13 @@ builds a report that stays close to that evidence.
 
 ## Before The Run
 
-Create a session by entering:
+Setup starts with **What do you want to learn?** Choose whether to compare the
+whole station, ask where you are heard better, ask what you can hear better, or
+profile one antenna. That choice selects an existing experiment mode and a
+compatible goal default; the mode and coverage goal remain visible and editable.
+It is not saved as a desired result.
+
+Then enter:
 
 - station details such as callsign, Maidenhead grid, and transmit power;
 - one or more antenna labels and optional installation notes (two or more for
@@ -20,8 +26,15 @@ Create a session by entering:
 - whether AntennaBench should gather delayed public WSPR spots from WSPR.live.
 
 The default **Both (TX + RX)** mode schedules one receive period and one transmit
-period for every antenna in each repetition. Setup shows the resulting number of
-WSPR cycles and the ideal minimum duration before creating the session.
+period for every antenna in each repetition. The normalized review shows the
+exact directed counterbalanced order, antenna-versus-direction changes, cycle
+count, and ideal minimum duration before session creation. It also states what
+the plan can describe—such as same-path differences, overlap and unmatched
+paths, available band/direction/distance/azimuth context, and run-quality
+limits—and what it cannot establish. A run does not prove universal gain,
+causal superiority, a missing decode as zero, complete public collection, a
+winner, or practical equivalence. Counterbalancing reduces but does not
+eliminate time and propagation confounding.
 
 When using WSPR.live, enable **Upload spots** in WSJT-X and keep WSJT-X online.
 Local WSJT-X UDP reception is optional on that path and can provide separately

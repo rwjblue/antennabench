@@ -171,8 +171,40 @@ struct SetupPlanReview {
     goal: SessionGoal,
     wspr_live_acquisition_enabled: bool,
     signal_plan: Option<SetupSignalPlanReview>,
+    schedule_review: SetupScheduleReview,
+    capabilities: SetupCapabilityReview,
     slots: Vec<SetupSlotReview>,
     antenna_controller: Option<SetupControllerReview>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SetupScheduleReview {
+    period_kind: &'static str,
+    period_count: usize,
+    wspr_cycle_count: Option<usize>,
+    ideal_minimum_minutes: Option<u64>,
+    summary: String,
+    counterbalance_explanation: String,
+    transition_summary: String,
+    transitions: Vec<SetupTransitionReview>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SetupTransitionReview {
+    from_sequence_number: u32,
+    to_sequence_number: u32,
+    antenna_change: bool,
+    direction_change: bool,
+    summary: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SetupCapabilityReview {
+    can_describe: Vec<String>,
+    cannot_establish: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -1046,6 +1078,29 @@ fn create_e2e_session_with_signal(
     assert!(review.valid, "setup diagnostics: {:?}", review.diagnostics);
     let review_id = review.review_id.expect("valid review ID");
     let plan = review.plan.expect("valid reviewed plan");
+    if with_signal {
+        assert_eq!(plan.schedule_review.period_kind, "controlled_signal_slot");
+        assert!(plan.schedule_review.wspr_cycle_count.is_none());
+        assert!(plan.schedule_review.ideal_minimum_minutes.is_none());
+    } else {
+        assert_eq!(plan.schedule_review.period_kind, "wspr_cycle");
+        assert_eq!(plan.schedule_review.wspr_cycle_count, Some(8));
+        assert_eq!(plan.schedule_review.ideal_minimum_minutes, Some(16));
+        assert_eq!(plan.schedule_review.transitions.len(), 7);
+        assert!(plan
+            .capabilities
+            .can_describe
+            .iter()
+            .any(|statement| { statement.contains("Transmit-path same-path signal differences") }));
+        assert!(plan
+            .capabilities
+            .can_describe
+            .iter()
+            .any(|statement| { statement.contains("Receive-path same-path signal differences") }));
+        assert!(plan.capabilities.cannot_establish.iter().any(|statement| {
+            statement.contains("reduces but does not eliminate time and propagation confounding")
+        }));
+    }
     let stem = if with_signal {
         "signal-workflow"
     } else {
@@ -1339,6 +1394,187 @@ mod tests {
     }
 
     #[test]
+    fn normalized_review_projects_every_mode_schedule_and_capability_matrix() {
+        struct Case {
+            mode: ExperimentMode,
+            cycle_count: usize,
+            minimum_minutes: u64,
+            order: &'static [(&'static str, WsprCycleDirection)],
+            can_include: &'static str,
+            cannot_include: Option<&'static str>,
+        }
+        let cases = [
+            Case {
+                mode: ExperimentMode::WholeStationAb,
+                cycle_count: 8,
+                minimum_minutes: 16,
+                order: &[
+                    ("Vertical", WsprCycleDirection::Receive),
+                    ("Dipole", WsprCycleDirection::Receive),
+                    ("Dipole", WsprCycleDirection::Transmit),
+                    ("Vertical", WsprCycleDirection::Transmit),
+                    ("Dipole", WsprCycleDirection::Receive),
+                    ("Vertical", WsprCycleDirection::Receive),
+                    ("Vertical", WsprCycleDirection::Transmit),
+                    ("Dipole", WsprCycleDirection::Transmit),
+                ],
+                can_include: "Receive-path same-path signal differences",
+                cannot_include: None,
+            },
+            Case {
+                mode: ExperimentMode::TxFocused,
+                cycle_count: 4,
+                minimum_minutes: 8,
+                order: &[
+                    ("Vertical", WsprCycleDirection::Transmit),
+                    ("Dipole", WsprCycleDirection::Transmit),
+                    ("Dipole", WsprCycleDirection::Transmit),
+                    ("Vertical", WsprCycleDirection::Transmit),
+                ],
+                can_include: "Transmit-path same-path signal differences",
+                cannot_include: Some("Receive-path antenna performance"),
+            },
+            Case {
+                mode: ExperimentMode::RxFocused,
+                cycle_count: 4,
+                minimum_minutes: 8,
+                order: &[
+                    ("Vertical", WsprCycleDirection::Receive),
+                    ("Dipole", WsprCycleDirection::Receive),
+                    ("Dipole", WsprCycleDirection::Receive),
+                    ("Vertical", WsprCycleDirection::Receive),
+                ],
+                can_include: "Receive-path same-path signal differences",
+                cannot_include: Some("Transmit reach or transmit-path antenna performance"),
+            },
+            Case {
+                mode: ExperimentMode::SingleAntennaProfiling,
+                cycle_count: 4,
+                minimum_minutes: 8,
+                order: &[
+                    ("Vertical", WsprCycleDirection::Receive),
+                    ("Vertical", WsprCycleDirection::Transmit),
+                    ("Vertical", WsprCycleDirection::Receive),
+                    ("Vertical", WsprCycleDirection::Transmit),
+                ],
+                can_include: "profiled antenna",
+                cannot_include: Some("only one antenna is scheduled"),
+            },
+        ];
+
+        for case in cases {
+            let state = SetupSessionState::default();
+            let mut draft = valid_draft();
+            draft.schedule.mode = case.mode;
+            if case.mode == ExperimentMode::SingleAntennaProfiling {
+                draft.schedule.goal = SessionGoal::SingleAntennaProfiling;
+            }
+            draft.wspr_live_acquisition_enabled = true;
+            let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
+            assert!(
+                review.valid,
+                "mode {:?}: {:?}",
+                case.mode, review.diagnostics
+            );
+            let plan = review.plan.unwrap();
+            assert_eq!(plan.mode, case.mode);
+            assert_eq!(plan.schedule_review.period_kind, "wspr_cycle");
+            assert_eq!(plan.schedule_review.period_count, case.cycle_count);
+            assert_eq!(
+                plan.schedule_review.wspr_cycle_count,
+                Some(case.cycle_count)
+            );
+            assert_eq!(
+                plan.schedule_review.ideal_minimum_minutes,
+                Some(case.minimum_minutes)
+            );
+            assert_eq!(
+                plan.slots
+                    .iter()
+                    .map(|slot| (slot.antenna_label.as_str(), slot.direction.unwrap()))
+                    .collect::<Vec<_>>(),
+                case.order,
+                "mode {:?}",
+                case.mode
+            );
+            assert!(plan
+                .capabilities
+                .can_describe
+                .iter()
+                .any(|statement| statement.contains(case.can_include)));
+            if let Some(expected) = case.cannot_include {
+                assert!(plan
+                    .capabilities
+                    .cannot_establish
+                    .iter()
+                    .any(|statement| statement.contains(expected)));
+            }
+            for expected in [
+                "Universal antenna gain",
+                "reduces but does not eliminate time and propagation confounding",
+                "missing decode as a zero-strength measurement",
+                "does not provide an independent completeness guarantee",
+                "winner",
+            ] {
+                assert!(
+                    plan.capabilities
+                        .cannot_establish
+                        .iter()
+                        .any(|statement| statement.contains(expected)),
+                    "mode {:?} missing {expected}",
+                    case.mode
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn normalized_review_distinguishes_antenna_and_direction_transitions() {
+        let state = SetupSessionState::default();
+        let review = build_review(&state, valid_draft(), &FixedHooks::new()).unwrap();
+        let schedule = review.plan.unwrap().schedule_review;
+
+        assert_eq!(schedule.transitions.len(), 7);
+        assert_eq!(
+            (
+                schedule.transitions[0].antenna_change,
+                schedule.transitions[0].direction_change
+            ),
+            (true, false)
+        );
+        assert_eq!(
+            schedule.transitions[0].summary,
+            "Change antenna; keep TX/RX direction"
+        );
+        assert_eq!(
+            (
+                schedule.transitions[1].antenna_change,
+                schedule.transitions[1].direction_change
+            ),
+            (false, true)
+        );
+        assert_eq!(
+            schedule.transitions[1].summary,
+            "Keep antenna; change TX/RX direction"
+        );
+        assert_eq!(
+            (
+                schedule.transitions[3].antenna_change,
+                schedule.transitions[3].direction_change
+            ),
+            (true, true)
+        );
+        assert_eq!(
+            schedule.transitions[3].summary,
+            "Change antenna and TX/RX direction"
+        );
+        assert_eq!(
+            schedule.transition_summary,
+            "7 transitions: 5 antenna changes, 3 direction changes, 1 requiring both."
+        );
+    }
+
+    #[test]
     fn receive_only_setup_accepts_bidirectional_public_spot_collection() {
         let state = SetupSessionState::default();
         let mut draft = valid_draft();
@@ -1378,6 +1614,20 @@ mod tests {
         assert_eq!(plan.schema_version, SCHEMA_VERSION_V5);
         assert!(!plan.wspr_live_acquisition_enabled);
         assert_eq!(plan.slots.len(), 8);
+        assert_eq!(plan.schedule_review.period_kind, "controlled_signal_slot");
+        assert_eq!(plan.schedule_review.period_count, 8);
+        assert!(plan.schedule_review.wspr_cycle_count.is_none());
+        assert!(plan.schedule_review.ideal_minimum_minutes.is_none());
+        assert!(plan
+            .capabilities
+            .cannot_establish
+            .iter()
+            .any(|statement| { statement.contains("Receive-path antenna performance") }));
+        assert!(plan.capabilities.cannot_establish.iter().any(|statement| {
+            statement.contains("automatic WSPR.live collection is off")
+                && statement
+                    .contains("direct/local receiver evidence remains separately attributed")
+        }));
         let signal_plan = plan.signal_plan.unwrap();
         assert_eq!(signal_plan.transmitted_callsign, "N1RWJ");
         assert_eq!(signal_plan.frequencies_hz, vec![14_050_000, 14_050_300]);

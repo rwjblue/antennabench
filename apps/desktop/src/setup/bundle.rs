@@ -8,9 +8,9 @@ use antennabench_core::{
 use antennabench_storage::LivePersistenceHooks;
 
 use super::{
-    ParsedSignalPlan, SessionErrorPayload, SetupAntennaReview, SetupControllerReview,
-    SetupPlanReview, SetupSignalPlanReview, SetupSlotReview, SetupSlotSignalReview,
-    SetupStationReview,
+    ParsedSignalPlan, SessionErrorPayload, SetupAntennaReview, SetupCapabilityReview,
+    SetupControllerReview, SetupPlanReview, SetupScheduleReview, SetupSignalPlanReview,
+    SetupSlotReview, SetupSlotSignalReview, SetupStationReview, SetupTransitionReview,
 };
 
 /// Builds the durable current-schema schedule and its review projection.
@@ -184,6 +184,8 @@ pub(super) fn setup_plan_review_v3(
     antenna_controller: Option<SetupControllerReview>,
 ) -> SetupPlanReview {
     let signal_plan = bundle.schedule.signal_plans.first();
+    let schedule_review = schedule_review(bundle);
+    let capabilities = capability_review(bundle);
     SetupPlanReview {
         schema_version: bundle.manifest.schema_version,
         session_id: bundle.manifest.session_id.clone(),
@@ -225,6 +227,8 @@ pub(super) fn setup_plan_review_v3(
                 .into_iter()
                 .collect(),
         }),
+        schedule_review,
+        capabilities,
         slots: bundle
             .schedule
             .wspr_cycle_intents
@@ -244,6 +248,206 @@ pub(super) fn setup_plan_review_v3(
             })
             .collect(),
         antenna_controller,
+    }
+}
+
+fn schedule_review(bundle: &BundleV3Contents) -> SetupScheduleReview {
+    let slots = &bundle.schedule.wspr_cycle_intents;
+    let transitions = slots
+        .windows(2)
+        .map(|pair| {
+            let from = &pair[0];
+            let to = &pair[1];
+            let antenna_change = from.antenna_label != to.antenna_label;
+            let direction_change = from.direction != to.direction;
+            let summary = match (antenna_change, direction_change) {
+                (true, true) => "Change antenna and TX/RX direction",
+                (true, false) => "Change antenna; keep TX/RX direction",
+                (false, true) => "Keep antenna; change TX/RX direction",
+                (false, false) => "Keep antenna and TX/RX direction",
+            };
+            SetupTransitionReview {
+                from_sequence_number: from.sequence_number,
+                to_sequence_number: to.sequence_number,
+                antenna_change,
+                direction_change,
+                summary,
+            }
+        })
+        .collect::<Vec<_>>();
+    let antenna_changes = transitions
+        .iter()
+        .filter(|transition| transition.antenna_change)
+        .count();
+    let direction_changes = transitions
+        .iter()
+        .filter(|transition| transition.direction_change)
+        .count();
+    let combined_changes = transitions
+        .iter()
+        .filter(|transition| transition.antenna_change && transition.direction_change)
+        .count();
+    let transition_summary = format!(
+        "{} transitions: {antenna_changes} antenna changes, {direction_changes} direction changes, {combined_changes} requiring both.",
+        transitions.len()
+    );
+    let scheduled_antenna_count = slots
+        .iter()
+        .map(|slot| slot.antenna_label.as_str())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let has_signal_plan = !bundle.schedule.signal_plans.is_empty();
+    let counterbalance_explanation = if has_signal_plan {
+        "Successive controlled-signal blocks reverse the antenna-by-frequency order so each combination is represented in early and late positions."
+            .into()
+    } else if scheduled_antenna_count < 2 {
+        "A single-antenna plan has no A/B early/late order to alternate; transmit and receive direction changes remain explicit."
+            .into()
+    } else if bundle.schedule.mode == ExperimentMode::WholeStationAb {
+        "Successive repetitions reverse the starting antenna while retaining directed receive and transmit blocks, balancing early/late positions without forcing an antenna change at every cycle."
+            .into()
+    } else {
+        "Successive repetitions reverse the antenna order so each antenna is represented equally in early and late positions."
+            .into()
+    };
+    if has_signal_plan {
+        SetupScheduleReview {
+            period_kind: "controlled_signal_slot",
+            period_count: slots.len(),
+            wspr_cycle_count: None,
+            ideal_minimum_minutes: None,
+            summary: format!(
+                "{} controlled signal slots; timing follows the reviewed operator cadence.",
+                slots.len()
+            ),
+            counterbalance_explanation,
+            transition_summary,
+            transitions,
+        }
+    } else {
+        let ideal_minimum_minutes = u64::try_from(slots.len())
+            .expect("setup slot count is bounded")
+            .saturating_mul(2);
+        SetupScheduleReview {
+            period_kind: "wspr_cycle",
+            period_count: slots.len(),
+            wspr_cycle_count: Some(slots.len()),
+            ideal_minimum_minutes: Some(ideal_minimum_minutes),
+            summary: format!(
+                "{} directed WSPR cycles; ideal minimum {ideal_minimum_minutes} minutes.",
+                slots.len()
+            ),
+            counterbalance_explanation,
+            transition_summary,
+            transitions,
+        }
+    }
+}
+
+fn capability_review(bundle: &BundleV3Contents) -> SetupCapabilityReview {
+    let has_transmit = bundle
+        .schedule
+        .wspr_cycle_intents
+        .iter()
+        .any(|slot| slot.direction == Some(WsprCycleDirection::Transmit));
+    let has_receive = bundle
+        .schedule
+        .wspr_cycle_intents
+        .iter()
+        .any(|slot| slot.direction == Some(WsprCycleDirection::Receive));
+    let scheduled_antenna_count = bundle
+        .schedule
+        .wspr_cycle_intents
+        .iter()
+        .map(|slot| slot.antenna_label.as_str())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let single_antenna = scheduled_antenna_count < 2;
+    let mut can_describe = Vec::new();
+    if single_antenna {
+        if has_transmit {
+            can_describe.push(
+                "Transmit reach reported for the profiled antenna and its observed remote receiving paths; there is no A/B comparison."
+                    .into(),
+            );
+        }
+        if has_receive {
+            can_describe.push(
+                "Signals decoded by the profiled antenna and their observed remote transmitting paths; there is no A/B comparison."
+                    .into(),
+            );
+        }
+    } else {
+        if has_transmit {
+            can_describe.push(
+                "Transmit-path same-path signal differences between scheduled antennas when the same remote receiving path reports both."
+                    .into(),
+            );
+            can_describe.push(
+                "Transmit-path overlap and unmatched receiving paths, kept separate from same-path differences."
+                    .into(),
+            );
+        }
+        if has_receive {
+            can_describe.push(
+                "Receive-path same-path signal differences between scheduled antennas when the same remote transmitting path is decoded on both."
+                    .into(),
+            );
+            can_describe.push(
+                "Receive-path overlap and unmatched transmitting paths, kept separate from same-path differences."
+                    .into(),
+            );
+        }
+    }
+    can_describe.push(
+        "Band and planned direction remain separate; distance and azimuth context is available only where valid locator evidence supports it."
+            .into(),
+    );
+    can_describe.push(
+        "Run-quality limits remain visible through missed, bad, or unknown cycles, acquisition gaps, duplicates, conflicts, and missing SNR."
+            .into(),
+    );
+
+    let mut cannot_establish = Vec::new();
+    if !has_receive {
+        cannot_establish.push(
+            "Receive-path antenna performance; this plan contains no receive periods.".into(),
+        );
+    }
+    if !has_transmit {
+        cannot_establish.push(
+            "Transmit reach or transmit-path antenna performance; this plan contains no transmit periods."
+                .into(),
+        );
+    }
+    cannot_establish.push(
+        "Universal antenna gain or performance beyond the recorded band, directions, times, station, and paths."
+            .into(),
+    );
+    cannot_establish.push(
+        "Causal superiority: counterbalancing reduces but does not eliminate time and propagation confounding."
+            .into(),
+    );
+    cannot_establish.push(
+        "A missing decode as a zero-strength measurement; unmatched paths remain separate.".into(),
+    );
+    cannot_establish.push(if bundle.session_state.wspr_live_acquisition_enabled {
+        "Guaranteed public completeness: WSPR.live collection is best effort, and the upstream mirror does not provide an independent completeness guarantee."
+            .into()
+    } else {
+        "Guaranteed public completeness: automatic WSPR.live collection is off, and direct/local receiver evidence remains separately attributed."
+            .into()
+    });
+    cannot_establish.push(if single_antenna {
+        "A relative antenna winner, superiority, equivalence, or same-path A/B difference; only one antenna is scheduled."
+            .into()
+    } else {
+        "A winner, antenna superiority, or practical equivalence; this plan supports descriptive evidence only."
+            .into()
+    });
+    SetupCapabilityReview {
+        can_describe,
+        cannot_establish,
     }
 }
 

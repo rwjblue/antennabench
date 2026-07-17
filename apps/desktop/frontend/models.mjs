@@ -1,6 +1,10 @@
 export const WORKFLOWS = Object.freeze(["setup", "run", "transfer", "report"]);
 
 export const CONTEXT_HELP = Object.freeze({
+  setup_question: {
+    title: "Question-first setup",
+    text: "Choose the routine question closest to what you want to learn; it selects an existing experiment mode without adding evidence or predicting a winner. The mode and goal remain visible and editable in the run plan.",
+  },
   station_location: {
     title: "Grid and current location",
     text: "A Maidenhead grid is a short code for your station area. Use current location asks macOS for one location estimate; you can always type the grid instead.",
@@ -161,32 +165,16 @@ export function locationLookupMessage(outcome) {
   }
 }
 
-export function wsprRunPlanSummary(roundsValue, antennaCount, mode = "whole_station_ab") {
-  const normalizedRounds = typeof roundsValue === "number"
-    ? roundsValue
-    : Number(String(roundsValue).trim());
-  if (
-    String(roundsValue).trim().length === 0
-    || !Number.isSafeInteger(normalizedRounds)
-    || normalizedRounds <= 0
-    || !Number.isSafeInteger(antennaCount)
-    || antennaCount <= 0
-  ) {
-    return null;
+export function focusSetupOutcome(state, reviewPanel, diagnostics) {
+  if (state.setupStatus === "reviewed") {
+    reviewPanel.focus();
+    return "review";
   }
-  const scheduledAntennaCount = mode === "single_antenna_profiling" ? 1 : antennaCount;
-  const directionCount = ["whole_station_ab", "single_antenna_profiling"].includes(mode) ? 2 : 1;
-  const cycles = normalizedRounds * scheduledAntennaCount * directionCount;
-  const minimumMinutes = cycles * 2;
-  if (!Number.isSafeInteger(cycles) || !Number.isSafeInteger(minimumMinutes)) return null;
-  return {
-    rounds: normalizedRounds,
-    antennaCount: scheduledAntennaCount,
-    directionCount,
-    cycles,
-    minimumMinutes,
-    text: `${cycles} WSPR ${cycles === 1 ? "cycle" : "cycles"} · at least ${minimumMinutes} ${minimumMinutes === 1 ? "minute" : "minutes"}`,
-  };
+  if (state.setupStatus === "invalid") {
+    diagnostics.focus();
+    return "diagnostics";
+  }
+  return null;
 }
 
 export function conductorActionAvailable(view, action) {

@@ -67,7 +67,9 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
     "setupForm", "setupReviewButton", "setupCreateButton", "setupStatus",
     "setupFeedback", "setupFeedbackMessage", "setupFeedbackDetail",
     "setupDiagnostics", "setupReviewPanel", "setupReviewStation",
-    "setupReviewAntennas", "setupReviewShape", "setupReviewSlots",
+    "setupReviewAntennas", "setupReviewShape", "setupReviewSchedule",
+    "setupReviewCounterbalance", "setupReviewTransitions", "setupReviewSequence",
+    "setupReviewCanDescribe", "setupReviewCannotEstablish", "setupReviewSlots",
   ], document);
   const state = initialState();
   renderSetup(e, state, document);
@@ -100,14 +102,43 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
       goal: "general_coverage",
       wsprLiveAcquisitionEnabled: true,
       signalPlan: null,
-      slots: [{ sequenceNumber: 1, antennaLabel: "Dipole", direction: "transmit", band: "20m", signal: null }],
+      scheduleReview: {
+        periodKind: "wspr_cycle",
+        periodCount: 2,
+        wsprCycleCount: 2,
+        idealMinimumMinutes: 4,
+        summary: "2 directed WSPR cycles; ideal minimum 4 minutes.",
+        counterbalanceExplanation: "Successive repetitions reverse the antenna order.",
+        transitionSummary: "1 transition: 1 antenna change, 1 direction change, 1 requiring both.",
+        transitions: [{
+          fromSequenceNumber: 1,
+          toSequenceNumber: 2,
+          antennaChange: true,
+          directionChange: true,
+          summary: "Change antenna and TX/RX direction",
+        }],
+      },
+      capabilities: {
+        canDescribe: ["Transmit-path same-path differences."],
+        cannotEstablish: ["A winner."],
+      },
+      slots: [
+        { sequenceNumber: 1, antennaLabel: "Dipole", direction: "transmit", band: "20m", signal: null },
+        { sequenceNumber: 2, antennaLabel: "Vertical", direction: "receive", band: "20m", signal: null },
+      ],
     },
   };
   renderSetup(e, state, document);
   assert.equal(e.setupCreateButton.disabled, false);
   assert.equal(e.setupReviewPanel.hidden, false);
   assert.match(e.setupReviewShape.textContent, /Whole Station Ab/);
-  assert.equal(e.setupReviewSlots.children.length, 1);
+  assert.match(e.setupReviewSchedule.textContent, /ideal minimum 4 minutes/);
+  assert.equal(e.setupReviewSequence.children[0].children[0].textContent, "1. Transmit · Dipole");
+  assert.equal(e.setupReviewSequence.children[1].children[0].textContent, "Change antenna and TX/RX direction");
+  assert.equal(e.setupReviewSequence.children[1].children[1].textContent, "2. Receive · Vertical");
+  assert.equal(e.setupReviewCanDescribe.children[0].textContent, "Transmit-path same-path differences.");
+  assert.equal(e.setupReviewCannotEstablish.children[0].textContent, "A winner.");
+  assert.equal(e.setupReviewSlots.children.length, 2);
 
   state.setupStatus = "creating";
   renderSetup(e, state, document);
