@@ -149,10 +149,19 @@ Report construction accepts one `BundleContents` value and its matching layered
 report, then invokes analysis internally, preventing callers from pairing bundle
 context with a summary from another bundle. Its compatibility helper computes
 that report directly for already-typed inputs. It deterministically projects session context, conservative
-evidence sections, typed notices, paired comparison availability and
-diagnostics, and concrete chart-ready rows for antenna SNR, band evidence, slot
-evidence, overlap, data-quality timelines, paired differences, and SNR over
-time, plus station and remote solar context. Validation-driven exclusions remain serializable structured data and render
+evidence sections, typed notices, and a bounded question-first overview. The
+overview carries typed session scope and lifecycle context, named delta
+orientation, comparison availability, and exactly one row for each existing
+comparison stratum. Its headline range reuses the analysis path-level
+minimum/median/maximum summaries, preserving TX/RX direction, band, normalized
+mode, observation kind, and source without pooling them. Typed unavailable and
+limitation states preserve no-comparison, no-eligible-block, no-matched-path,
+unmatched, missing-SNR, and duplicate/conflict facts without renderer-invented
+prose or zero values. Report construction also retains paired comparison
+availability and diagnostics, and concrete chart-ready rows for antenna SNR,
+band evidence, slot evidence, overlap, data-quality timelines, paired
+differences, and SNR over time, plus station and remote solar context.
+Validation-driven exclusions remain serializable structured data and render
 in an operator-facing eligibility disclosure table. The model is otherwise
 renderer-neutral: it contains no generated
 prose, winner logic, generic chart configuration, or rendering output. The

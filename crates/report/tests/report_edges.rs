@@ -24,6 +24,7 @@ fn report_rows_fall_back_to_a_complete_unsampled_overview() {
     assert_eq!(overview.completeness, ReportCompleteness::BoundedOverview);
     assert_eq!(overview.evidence.overall, full.evidence.overall);
     assert_eq!(overview.comparison.diagnostics, full.comparison.diagnostics);
+    assert_eq!(overview.overview, full.overview);
     assert!(overview.context.schedule.slots.is_empty());
     assert!(overview.evidence.slots.is_empty());
     assert!(overview.comparison.paired_rows.is_empty());

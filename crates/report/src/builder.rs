@@ -12,7 +12,9 @@ use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, AntennaSnrRow,
     BandEvidenceCountRow, BandEvidenceSection, CountingWriter, EvidenceSections,
     ReportCancellationToken, ReportChartData, ReportComparisonData, ReportCompleteness,
-    ReportDetailFamily, ReportError, ReportEvidenceSummary, ReportNotice, ReportResourceLimits,
+    ReportDetailFamily, ReportError, ReportEvidenceSummary, ReportNotice, ReportOverview,
+    ReportOverviewLifecycle, ReportOverviewLifecycleState, ReportOverviewLimitation,
+    ReportOverviewPathDelta, ReportOverviewScope, ReportOverviewStratum, ReportResourceLimits,
     ReportResourceStage, ReportSnapshotContext, ScheduleOverview, ScheduledSlotContext,
     ScheduledTimeRange, SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection,
     StationContext, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
@@ -74,13 +76,15 @@ fn build_report_with_resources_and_snapshot(
     let summary =
         summarize_bundle_with_resources(bundle, validation, limits.analysis, cancellation)?;
     let detail_counts = DetailCounts::new(bundle, &summary, &snapshot);
-    if summary.eligibility.exclusions.len() as u64 > limits.rows {
+    let required_overview_rows =
+        summary.eligibility.exclusions.len() + summary.comparison.strata.len();
+    if required_overview_rows as u64 > limits.rows {
         return Err(report_resource_error(
             "resource.report.rows",
             ReportResourceStage::Projection,
             "required_overview_rows",
             limits.rows,
-            Some(summary.eligibility.exclusions.len() as u64),
+            Some(required_overview_rows as u64),
             "rows",
         )
         .into());
@@ -125,6 +129,7 @@ fn build_report_with_resources_and_snapshot(
         solar_context.rows.clear();
         detail_counts.append_notices(&mut notices);
     }
+    let overview = build_overview(bundle, &context, &comparison, &snapshot);
 
     let mut report = SessionReport {
         completeness: if full_detail {
@@ -132,6 +137,7 @@ fn build_report_with_resources_and_snapshot(
         } else {
             ReportCompleteness::BoundedOverview
         },
+        overview,
         context,
         evidence,
         comparison: project_comparison(comparison, full_detail),
@@ -151,6 +157,129 @@ fn build_report_with_resources_and_snapshot(
         }
     }
     Ok(report)
+}
+
+fn build_overview(
+    bundle: &BundleContents,
+    context: &SessionContext,
+    comparison: &PairedComparisonAnalysis,
+    snapshot: &ReportSnapshotContext,
+) -> ReportOverview {
+    let observed_directions = comparison
+        .strata
+        .iter()
+        .fold(Vec::new(), |mut directions, row| {
+            if !directions.contains(&row.stratum.direction) {
+                directions.push(row.stratum.direction);
+            }
+            directions
+        });
+    let limitations = build_overview_limitations(comparison);
+
+    ReportOverview {
+        scope: ReportOverviewScope {
+            session_id: context.session_id.clone(),
+            station: context.station.clone(),
+            goal: Some(context.goal),
+            experiment_mode: Some(context.experiment_mode),
+            bands: context.bands.clone(),
+            antenna_labels: bundle
+                .antennas
+                .antennas
+                .iter()
+                .map(|antenna| antenna.label.clone())
+                .collect(),
+            observed_directions,
+            delta_orientation: comparison.delta_orientation.clone(),
+        },
+        lifecycle: ReportOverviewLifecycle {
+            checkpoint_revision: snapshot.checkpoint_revision,
+            state: snapshot
+                .lifecycle
+                .map(ReportOverviewLifecycleState::Recorded)
+                .unwrap_or_default(),
+        },
+        comparison_availability: comparison.availability,
+        strata: comparison
+            .strata
+            .iter()
+            .map(project_overview_stratum)
+            .collect(),
+        limitations,
+    }
+}
+
+fn project_overview_stratum(
+    summary: &antennabench_analysis::PairedStratumSummary,
+) -> ReportOverviewStratum {
+    let path_delta = match (
+        summary.minimum_delta_right_minus_left_db,
+        summary.median_path_delta_right_minus_left_db,
+        summary.maximum_delta_right_minus_left_db,
+    ) {
+        (Some(minimum), Some(median_path), Some(maximum)) => ReportOverviewPathDelta::Available {
+            minimum_delta_right_minus_left_db: minimum,
+            median_path_delta_right_minus_left_db: median_path,
+            maximum_delta_right_minus_left_db: maximum,
+        },
+        _ => ReportOverviewPathDelta::Unavailable,
+    };
+
+    ReportOverviewStratum {
+        stratum: summary.stratum.clone(),
+        paired_row_count: summary.paired_row_count,
+        unique_path_count: summary.unique_path_count,
+        contributing_block_count: summary.contributing_block_count,
+        left_then_right_block_count: summary.left_then_right_block_count,
+        right_then_left_block_count: summary.right_then_left_block_count,
+        unmatched_left_count: summary.unmatched_left_count,
+        unmatched_right_count: summary.unmatched_right_count,
+        missing_snr_left_count: summary.missing_snr_left_count,
+        missing_snr_right_count: summary.missing_snr_right_count,
+        exact_duplicate_count: summary.exact_duplicate_count,
+        conflicting_duplicate_group_count: summary.conflicting_duplicate_group_count,
+        path_delta,
+    }
+}
+
+fn build_overview_limitations(
+    comparison: &PairedComparisonAnalysis,
+) -> Vec<ReportOverviewLimitation> {
+    use antennabench_analysis::ComparisonAvailability;
+
+    let mut limitations = match comparison.availability {
+        ComparisonAvailability::NotApplicable => {
+            vec![ReportOverviewLimitation::ComparisonNotApplicable]
+        }
+        ComparisonAvailability::UnsupportedComparisonShape => {
+            vec![ReportOverviewLimitation::UnsupportedComparisonShape]
+        }
+        ComparisonAvailability::NoEligibleBlocks => {
+            vec![ReportOverviewLimitation::NoEligibleBlocks]
+        }
+        ComparisonAvailability::NoMatchedPaths => vec![ReportOverviewLimitation::NoMatchedPaths],
+        ComparisonAvailability::DescriptivePairsAvailable => Vec::new(),
+    };
+    let diagnostics = comparison.diagnostics;
+    if diagnostics.unmatched_left_count > 0 || diagnostics.unmatched_right_count > 0 {
+        limitations.push(ReportOverviewLimitation::UnmatchedPaths {
+            left_count: diagnostics.unmatched_left_count,
+            right_count: diagnostics.unmatched_right_count,
+        });
+    }
+    if diagnostics.missing_snr_left_count > 0 || diagnostics.missing_snr_right_count > 0 {
+        limitations.push(ReportOverviewLimitation::MissingSnr {
+            left_count: diagnostics.missing_snr_left_count,
+            right_count: diagnostics.missing_snr_right_count,
+        });
+    }
+    if diagnostics.exact_duplicate_count > 0 || diagnostics.conflicting_duplicate_group_count > 0 {
+        limitations.push(ReportOverviewLimitation::DuplicateEvidence {
+            exact_count: diagnostics.exact_duplicate_count,
+            conflicting_group_count: diagnostics.conflicting_duplicate_group_count,
+        });
+    }
+    limitations
 }
 
 fn project_comparison(

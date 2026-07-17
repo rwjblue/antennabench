@@ -65,6 +65,15 @@ can show coverage by antenna, band, and slot; same-path SNR differences;
 unmatched observations; time and switching-order context; and available path
 distance or direction.
 
+Its renderer-neutral overview states the session scope, recorded lifecycle
+state, comparison availability, and the fixed named delta orientation before
+any presentation chooses a reading order. Each descriptive overview fact stays
+separate by transmit/receive direction, band, normalized mode, observation
+kind, and source. Headline deltas use medians of same-path medians, not a
+pooled average of observations. When a comparison or path delta is unavailable,
+the report records that state and its typed limitations rather than inventing a
+zero or conclusion.
+
 It also says what is missing. Intended order is shown separately from observed
 antenna use. A cycle switched before its 110.592-second transmission completed
 has unknown antenna attribution. A missing decode is not treated as a

@@ -1,8 +1,8 @@
 use antennabench_analysis::{
     AnalysisError, ComparisonAvailability, ComparisonBlock, ComparisonDiagnostics,
-    ComparisonTimelineRow, DeltaOrientation, EligibilityExclusionCount, EvidenceQuality,
-    ExclusionCount, ObservationCounts, PairedObservationRow, PairedPathSummary,
-    PairedStratumSummary, PathOverlapRow, SnrStatistics, SolarContextAnalysis,
+    ComparisonStratum, ComparisonTimelineRow, DeltaOrientation, EligibilityExclusionCount,
+    EvidenceQuality, ExclusionCount, ObservationCounts, PairedObservationRow, PairedPathSummary,
+    PairedStratumSummary, PathDirection, PathOverlapRow, SnrStatistics, SolarContextAnalysis,
 };
 use antennabench_core::{
     AlignedSlotStatus, Antenna, AntennaControlDispositionV5, AntennaControlOutputV5,
@@ -19,6 +19,8 @@ use crate::ReportResourceError;
 pub struct SessionReport {
     #[serde(default, skip_serializing_if = "ReportCompleteness::is_full_detail")]
     pub completeness: ReportCompleteness,
+    #[serde(default)]
+    pub overview: ReportOverview,
     pub context: SessionContext,
     pub evidence: EvidenceSections,
     pub comparison: ReportComparisonData,
@@ -29,6 +31,128 @@ pub struct SessionReport {
     pub snapshot: ReportSnapshotContext,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub eligibility_exclusions: Vec<EligibilityExclusionCount>,
+}
+
+/// A concise, renderer-neutral projection of the session questions and the
+/// descriptive paired evidence available to answer them.
+///
+/// This deliberately contains no conclusion, score, threshold, or winner.
+/// Detailed report data remains available elsewhere on [`SessionReport`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverview {
+    pub scope: ReportOverviewScope,
+    pub lifecycle: ReportOverviewLifecycle,
+    pub comparison_availability: ComparisonAvailability,
+    pub strata: Vec<ReportOverviewStratum>,
+    pub limitations: Vec<ReportOverviewLimitation>,
+}
+
+impl Default for ReportOverview {
+    fn default() -> Self {
+        Self {
+            scope: ReportOverviewScope::default(),
+            lifecycle: ReportOverviewLifecycle::default(),
+            comparison_availability: ComparisonAvailability::NotApplicable,
+            strata: Vec::new(),
+            limitations: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverviewScope {
+    pub session_id: String,
+    pub station: StationContext,
+    pub goal: Option<SessionGoal>,
+    pub experiment_mode: Option<ExperimentMode>,
+    pub bands: Vec<Band>,
+    pub antenna_labels: Vec<String>,
+    pub observed_directions: Vec<PathDirection>,
+    pub delta_orientation: Option<DeltaOrientation>,
+}
+
+impl Default for ReportOverviewScope {
+    fn default() -> Self {
+        Self {
+            session_id: String::new(),
+            station: StationContext {
+                callsign: String::new(),
+                grid: String::new(),
+                power_watts: None,
+            },
+            goal: None,
+            experiment_mode: None,
+            bands: Vec::new(),
+            antenna_labels: Vec::new(),
+            observed_directions: Vec::new(),
+            delta_orientation: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportOverviewLifecycle {
+    pub checkpoint_revision: Option<u64>,
+    pub state: ReportOverviewLifecycleState,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportOverviewLifecycleState {
+    #[default]
+    NotRecorded,
+    Recorded(SessionLifecycleV2),
+}
+
+/// A single existing comparison stratum, projected without pooling across any
+/// stratum key. The delta range is derived from existing path summaries.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverviewStratum {
+    pub stratum: ComparisonStratum,
+    pub paired_row_count: usize,
+    pub unique_path_count: usize,
+    pub contributing_block_count: usize,
+    pub left_then_right_block_count: usize,
+    pub right_then_left_block_count: usize,
+    pub unmatched_left_count: usize,
+    pub unmatched_right_count: usize,
+    pub missing_snr_left_count: usize,
+    pub missing_snr_right_count: usize,
+    pub exact_duplicate_count: usize,
+    pub conflicting_duplicate_group_count: usize,
+    pub path_delta: ReportOverviewPathDelta,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "availability")]
+pub enum ReportOverviewPathDelta {
+    Unavailable,
+    Available {
+        minimum_delta_right_minus_left_db: f64,
+        median_path_delta_right_minus_left_db: f64,
+        maximum_delta_right_minus_left_db: f64,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum ReportOverviewLimitation {
+    ComparisonNotApplicable,
+    UnsupportedComparisonShape,
+    NoEligibleBlocks,
+    NoMatchedPaths,
+    UnmatchedPaths {
+        left_count: usize,
+        right_count: usize,
+    },
+    MissingSnr {
+        left_count: usize,
+        right_count: usize,
+    },
+    DuplicateEvidence {
+        exact_count: usize,
+        conflicting_group_count: usize,
+    },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

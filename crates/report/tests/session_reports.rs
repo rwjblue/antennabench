@@ -17,6 +17,41 @@ fn reports_the_minimal_whole_station_fixture() {
 
     insta::assert_json_snapshot!(report, @r#"
     {
+      "overview": {
+        "scope": {
+          "session_id": "session-2026-07-09-n1rwj-20m",
+          "station": {
+            "callsign": "N1RWJ",
+            "grid": "FN42",
+            "power_watts": 5.0
+          },
+          "goal": "general_coverage",
+          "experiment_mode": "whole_station_ab",
+          "bands": [
+            "20m"
+          ],
+          "antenna_labels": [
+            "A",
+            "B"
+          ],
+          "observed_directions": [],
+          "delta_orientation": {
+            "minuend_label": "B",
+            "subtrahend_label": "A"
+          }
+        },
+        "lifecycle": {
+          "checkpoint_revision": null,
+          "state": "not_recorded"
+        },
+        "comparison_availability": "no_eligible_blocks",
+        "strata": [],
+        "limitations": [
+          {
+            "kind": "no_eligible_blocks"
+          }
+        ]
+      },
       "context": {
         "session_id": "session-2026-07-09-n1rwj-20m",
         "station": {
@@ -627,6 +662,41 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
 
     insta::assert_json_snapshot!(report, @r#"
     {
+      "overview": {
+        "scope": {
+          "session_id": "session-wsjtx-import-hardening",
+          "station": {
+            "callsign": "N1RWJ",
+            "grid": "FN42",
+            "power_watts": 5.0
+          },
+          "goal": "general_coverage",
+          "experiment_mode": "whole_station_ab",
+          "bands": [
+            "20m"
+          ],
+          "antenna_labels": [
+            "A",
+            "B"
+          ],
+          "observed_directions": [],
+          "delta_orientation": {
+            "minuend_label": "B",
+            "subtrahend_label": "A"
+          }
+        },
+        "lifecycle": {
+          "checkpoint_revision": null,
+          "state": "not_recorded"
+        },
+        "comparison_availability": "no_matched_paths",
+        "strata": [],
+        "limitations": [
+          {
+            "kind": "no_matched_paths"
+          }
+        ]
+      },
       "context": {
         "session_id": "session-wsjtx-import-hardening",
         "station": {
@@ -1171,6 +1241,194 @@ fn reports_the_analysis_rich_whole_station_fixture() {
 
     insta::assert_json_snapshot!(report, @r#"
     {
+      "overview": {
+        "scope": {
+          "session_id": "session-2026-07-12-n1rwj-analysis-rich",
+          "station": {
+            "callsign": "N1RWJ",
+            "grid": "FN42",
+            "power_watts": 5.0
+          },
+          "goal": "general_coverage",
+          "experiment_mode": "whole_station_ab",
+          "bands": [
+            "40m",
+            "20m"
+          ],
+          "antenna_labels": [
+            "A",
+            "B"
+          ],
+          "observed_directions": [
+            "transmit",
+            "receive"
+          ],
+          "delta_orientation": {
+            "minuend_label": "B",
+            "subtrahend_label": "A"
+          }
+        },
+        "lifecycle": {
+          "checkpoint_revision": null,
+          "state": "not_recorded"
+        },
+        "comparison_availability": "no_matched_paths",
+        "strata": [
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 1,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 1,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            }
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "imported_spot",
+              "source": "imported_file"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 1,
+            "missing_snr_left_count": 1,
+            "missing_snr_right_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            }
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 1,
+            "unmatched_right_count": 1,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            }
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "imported_spot",
+              "source": "imported_file"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 1,
+            "unmatched_right_count": 1,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            }
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 1,
+            "unmatched_right_count": 1,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            }
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 1,
+            "unmatched_right_count": 1,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            }
+          }
+        ],
+        "limitations": [
+          {
+            "kind": "no_matched_paths"
+          },
+          {
+            "kind": "unmatched_paths",
+            "left_count": 5,
+            "right_count": 5
+          },
+          {
+            "kind": "missing_snr",
+            "left_count": 1,
+            "right_count": 1
+          }
+        ]
+      },
       "context": {
         "session_id": "session-2026-07-12-n1rwj-analysis-rich",
         "station": {
