@@ -13,7 +13,8 @@ use crate::{
     AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary, EligibilityExclusionCategory,
     EligibilityExclusionCount, EligibilityScope, EvidenceEligibility, EvidenceQuality,
     EvidenceSummary, ExclusionCount, ObservationCounts, ObservationExclusionReason,
-    ObservationKindCount, SlotEvidenceSummary, SnrStatistics, ANALYSIS_RESOURCE_LIMITS,
+    ObservationExclusionRecord, ObservationKindCount, SlotEvidenceSummary, SnrStatistics,
+    ANALYSIS_RESOURCE_LIMITS,
 };
 
 const MINIMUM_USABLE_CONFIDENCE: f32 = 0.70;
@@ -288,6 +289,32 @@ pub fn summarize_bundle_with_resources(
     let comparison =
         analyze_paired_comparison(&analysis_bundle, &alignment.slots, &observations, &budget)?;
     let solar_context = derive_solar_context(&analysis_bundle, &comparison, &budget)?;
+    let mut exclusion_records = observations
+        .iter()
+        .filter_map(|classified| {
+            let ObservationDisposition::Excluded(reason) = classified.disposition else {
+                return None;
+            };
+            Some(ObservationExclusionRecord {
+                observation_id: classified.observation.observation_id.clone(),
+                reason,
+                timestamp: classified.observation.meta.timestamp,
+                band: classified.observation.band,
+                observation_kind: classified.observation.observation_kind,
+                source: classified.observation.meta.source,
+                mode: classified.observation.mode.clone(),
+                slot_id: classified.assignment.slot_id.clone(),
+                assigned_label: classified.assignment.slot_label.clone(),
+                assignment_confidence: classified.assignment.confidence,
+            })
+        })
+        .collect::<Vec<_>>();
+    exclusion_records.sort_by(|left, right| left.observation_id.cmp(&right.observation_id));
+    budget.collection(
+        AnalysisResourceStage::Aggregate,
+        "exclusion_records",
+        exclusion_records.len(),
+    )?;
     for (role, entries) in [
         ("comparison_blocks", comparison.blocks.len()),
         ("comparison_overlap_rows", comparison.overlap_rows.len()),
@@ -308,6 +335,7 @@ pub fn summarize_bundle_with_resources(
         slots,
         comparison,
         solar_context,
+        exclusion_records,
         eligibility: plan.eligibility,
     })
 }
@@ -551,6 +579,12 @@ fn summarize_slot(
         planned_label: slot.planned_label.clone(),
         actual_label: slot.actual_label.clone(),
         status: slot.status,
+        starts_at: slot.starts_at,
+        ends_at: slot.ends_at,
+        usable_start: slot.usable_start,
+        switch_event_id: slot.switch_event_id.clone(),
+        switch_timestamp: slot.switch_timestamp,
+        switch_delay_seconds: slot.switch_delay_seconds,
         evidence: aggregate(
             observations.iter().copied().filter(|classified| {
                 classified.assignment.slot_id.as_deref() == Some(slot.slot_id.as_str())

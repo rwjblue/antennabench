@@ -143,6 +143,9 @@ fn keeps_missing_unmatched_ambiguous_duplicate_and_conflict_diagnostics_visible(
     let mut conflict_b = conflict_a.clone();
     conflict_b.observation_id = "conflict-b".to_string();
     conflict_b.snr_db = Some(-14.0);
+    let mut guard_exclusion = tx_observation(&bundle, "guard-exclusion", 0, "K7GUARD", Some(-16.0));
+    guard_exclusion.meta.timestamp = bundle.schedule.slots[0].starts_at + Duration::seconds(1);
+    guard_exclusion.mode = Some("FT8".to_string());
     bundle.observations = vec![
         tx_observation(&bundle, "paired-left", 0, "K1PAIR", Some(-20.0)),
         tx_observation(&bundle, "paired-right", 1, "K1PAIR", Some(-18.0)),
@@ -157,9 +160,16 @@ fn keeps_missing_unmatched_ambiguous_duplicate_and_conflict_diagnostics_visible(
         conflict_a,
         conflict_b,
         tx_observation(&bundle, "conflict-right", 1, "K6CONFLICT", Some(-13.0)),
+        guard_exclusion,
     ];
 
-    let comparison = summary(bundle).comparison;
+    let summary = summary(bundle);
+    assert_eq!(summary.exclusion_records.len(), 1);
+    assert_eq!(
+        summary.exclusion_records[0].observation_id,
+        "guard-exclusion"
+    );
+    let comparison = summary.comparison;
     let diagnostics = comparison.diagnostics;
 
     assert_eq!(diagnostics.paired_row_count, 2);
@@ -170,6 +180,13 @@ fn keeps_missing_unmatched_ambiguous_duplicate_and_conflict_diagnostics_visible(
     assert_eq!(diagnostics.exact_duplicate_count, 1);
     assert_eq!(diagnostics.conflicting_duplicate_group_count, 1);
     assert_eq!(comparison.overlap_rows.len(), 6);
+    let excluded_only = comparison
+        .strata
+        .iter()
+        .find(|stratum| stratum.stratum.mode.as_str() == "FT8")
+        .expect("an exclusion-only valid stratum remains answerable as unavailable");
+    assert_eq!(excluded_only.paired_row_count, 0);
+    assert_eq!(excluded_only.excluded_observation_count, 1);
 }
 
 #[test]

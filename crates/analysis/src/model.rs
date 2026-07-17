@@ -27,8 +27,27 @@ pub struct AnalysisSummary {
     pub slots: Vec<SlotEvidenceSummary>,
     pub comparison: PairedComparisonAnalysis,
     pub solar_context: SolarContextAnalysis,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclusion_records: Vec<ObservationExclusionRecord>,
     #[serde(default, skip_serializing_if = "EvidenceEligibility::is_empty")]
     pub eligibility: EvidenceEligibility,
+}
+
+/// Record-level accounting for an observation excluded by the existing
+/// eligibility and alignment rules. The durable observation remains the source
+/// of truth; this projection makes the exact disposition auditable in reports.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservationExclusionRecord {
+    pub observation_id: String,
+    pub reason: ObservationExclusionReason,
+    pub timestamp: DateTime<Utc>,
+    pub band: Band,
+    pub observation_kind: ObservationKind,
+    pub source: RecordSource,
+    pub mode: Option<String>,
+    pub slot_id: Option<String>,
+    pub assigned_label: Option<String>,
+    pub assignment_confidence: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -203,6 +222,12 @@ pub struct SlotEvidenceSummary {
     pub planned_label: String,
     pub actual_label: Option<String>,
     pub status: AlignedSlotStatus,
+    pub starts_at: DateTime<Utc>,
+    pub ends_at: DateTime<Utc>,
+    pub usable_start: DateTime<Utc>,
+    pub switch_event_id: Option<String>,
+    pub switch_timestamp: Option<DateTime<Utc>>,
+    pub switch_delay_seconds: Option<i64>,
     pub evidence: EvidenceSummary,
 }
 
@@ -456,6 +481,7 @@ pub struct PairedStratumSummary {
     pub unmatched_right_count: usize,
     pub missing_snr_left_count: usize,
     pub missing_snr_right_count: usize,
+    pub excluded_observation_count: usize,
     pub exact_duplicate_count: usize,
     pub conflicting_duplicate_group_count: usize,
     pub minimum_delta_right_minus_left_db: Option<f64>,

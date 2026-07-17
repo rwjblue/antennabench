@@ -2,16 +2,17 @@ use std::path::PathBuf;
 
 use antennabench_analysis::{ComparisonAvailability, EvidenceQuality, ObservationCounts};
 use antennabench_core::{
-    normalize_bundle, AntennaControlDispositionV5, AntennaControlOutputEncodingV5,
-    AntennaControlOutputV5, AntennaControlRoleV5, Band, ExperimentMode, ObservationKind,
-    RecordSource, SessionLifecycleV2, WsprCycleDirection,
+    normalize_bundle, AlignedSlotStatus, AntennaControlDispositionV5,
+    AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlRoleV5, Band,
+    ExperimentMode, ObservationKind, RecordSource, SessionLifecycleV2, WsprCycleDirection,
 };
 use antennabench_report::{
     build_report, render_standalone_html, ReportAdapterEvidence, ReportAntennaControlAttempt,
-    ReportAzimuthSector, ReportDistanceBin, ReportImportedEvidence, ReportLifecycleEvent,
-    ReportLifecycleEventKind, ReportNotice, ReportOverviewLimitation, ReportOverviewLocationCell,
-    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
-    SessionReport,
+    ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection, ReportEventCorrectionAction,
+    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
+    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLimitation,
+    ReportOverviewLocationCell, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
+    ReportWsprReadinessBasis, SessionReport,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -97,6 +98,7 @@ fn renders_revision_lifecycle_and_recorded_adapter_gap_disclosures() {
             occurred_at: "2026-07-14T22:00:00Z".parse().unwrap(),
             detail: Some("recovered <without inventing evidence>".into()),
         }],
+        operator_events: Vec::new(),
         wspr_cycles: Vec::new(),
         antenna_control_attempts: Vec::new(),
         adapter_evidence: ReportAdapterEvidence {
@@ -154,6 +156,7 @@ fn renders_successful_public_collection_without_turning_a_source_boundary_into_a
         checkpoint_revision: Some(19),
         lifecycle: Some(SessionLifecycleV2::Ended),
         lifecycle_events: Vec::new(),
+        operator_events: Vec::new(),
         wspr_cycles: Vec::new(),
         antenna_control_attempts: Vec::new(),
         adapter_evidence: ReportAdapterEvidence {
@@ -225,6 +228,7 @@ fn renders_readiness_basis_and_bounded_command_diagnostics() {
         checkpoint_revision: Some(18),
         lifecycle: Some(SessionLifecycleV2::Running),
         lifecycle_events: Vec::new(),
+        operator_events: Vec::new(),
         wspr_cycles: vec![ReportWsprCycle {
             intent_id: "intent-1".into(),
             sequence_number: 1,
@@ -717,6 +721,130 @@ fn renders_derived_solar_context_with_method_and_non_causal_caveat() {
     }
     assert!(!html.contains("solar score"));
     assert!(!html.contains("caused the difference"));
+}
+
+#[test]
+fn run_quality_state_matrix_has_exact_accessible_audit_equivalents() {
+    let mut report = canonical_report();
+    let rows = &mut report.overview.timeline;
+    rows[0].status = AlignedSlotStatus::Switched;
+    rows[1].status = AlignedSlotStatus::LateSwitch;
+    rows[2].status = AlignedSlotStatus::UnknownActualState;
+    rows[2].actual_antenna = None;
+    rows[2].attribution = Some(ReportWsprAttribution::UnknownAntennaOccupancy);
+    rows[3].status = AlignedSlotStatus::Missed;
+    rows[4].status = AlignedSlotStatus::Bad;
+    rows[5].readiness_basis = Some(ReportWsprReadinessBasis::CommandVerified);
+    rows[5].attribution = Some(ReportWsprAttribution::Attributable);
+    let corrected_at = rows[5].planned_starts_at + Duration::seconds(12);
+    let correction = ReportOperatorEvent {
+        event_id: "event-correction-audit".into(),
+        occurred_at: corrected_at,
+        slot_id: None,
+        affected_slot_id: Some(rows[5].item_id.clone()),
+        kind: ReportOperatorEventKind::EventCorrected,
+        detail: Some("Actual antenna corrected from operator log".into()),
+        correction: Some(ReportEventCorrection {
+            target_event_id: "event-original-audit".into(),
+            action: ReportEventCorrectionAction::Replaced,
+            reason: "Operator reviewed the station log".into(),
+            applied: true,
+        }),
+    };
+    rows[5].event_history.push(correction.clone());
+    report.snapshot.operator_events.push(correction);
+    let rejected_correction = ReportOperatorEvent {
+        event_id: "event-rejected-correction".into(),
+        occurred_at: rows[0].planned_starts_at + Duration::seconds(8),
+        slot_id: None,
+        affected_slot_id: Some(rows[0].item_id.clone()),
+        kind: ReportOperatorEventKind::EventCorrected,
+        detail: None,
+        correction: Some(ReportEventCorrection {
+            target_event_id: "missing-target".into(),
+            action: ReportEventCorrectionAction::Retracted,
+            reason: "Target was not present".into(),
+            applied: false,
+        }),
+    };
+    rows[0].event_history.push(rejected_correction.clone());
+    report.snapshot.operator_events.push(rejected_correction);
+    let interrupted_at = rows[6].planned_starts_at + Duration::seconds(20);
+    report.snapshot.lifecycle = Some(SessionLifecycleV2::Abandoned);
+    report.snapshot.lifecycle_events.extend([
+        ReportLifecycleEvent {
+            kind: ReportLifecycleEventKind::Interrupted,
+            occurred_at: interrupted_at,
+            detail: Some("Power interruption".into()),
+        },
+        ReportLifecycleEvent {
+            kind: ReportLifecycleEventKind::Resumed,
+            occurred_at: interrupted_at + Duration::seconds(40),
+            detail: Some("Power restored".into()),
+        },
+        ReportLifecycleEvent {
+            kind: ReportLifecycleEventKind::Abandoned,
+            occurred_at: rows[7].planned_ends_at,
+            detail: Some("Run abandoned after recurrence".into()),
+        },
+    ]);
+    report.snapshot.adapter_evidence.evidence_complete = false;
+    report.snapshot.adapter_evidence.gap_count = 1;
+    report.snapshot.adapter_evidence.malformed_count = 2;
+    report.snapshot.adapter_evidence.duplicate_count = 3;
+    report.snapshot.adapter_evidence.conflict_count = 1;
+
+    let html = render_standalone_html(&report).unwrap();
+
+    for state in [
+        "Switched",
+        "Late switch",
+        "Unknown occupancy",
+        "Missed",
+        "Bad",
+        "Corrected",
+        "Interrupted",
+        "Resumed",
+        "Abandoned",
+        "Command verified",
+        "Full antenna occupancy recorded",
+        "Explicit acquisition gap",
+        "2 malformed",
+        "3 duplicate",
+        "1 conflict",
+    ] {
+        assert!(html.contains(state), "missing matrix state: {state}");
+    }
+    for exact in [
+        "event-correction-audit",
+        "event-original-audit",
+        "event-rejected-correction",
+        "not applied",
+        "Actual antenna corrected from operator log",
+        "Operator reviewed the station log",
+        "Power interruption",
+        "Power restored",
+        "Run abandoned after recurrence",
+        "Complete operator note and correction history",
+        "Every excluded observation retained by the report projection",
+    ] {
+        assert!(html.contains(exact), "missing exact audit detail: {exact}");
+    }
+    for class in [
+        "state-late",
+        "state-missed",
+        "state-bad",
+        "state-unknown",
+        "state-interrupted",
+        "state-corrected",
+    ] {
+        assert!(html.contains(class), "missing non-color state: {class}");
+    }
+    assert_eq!(
+        html.matches("<details class=\"state-corrected\">").count(),
+        1
+    );
+    assert!(html.contains("@media print{.answerability-table{display:block}"));
 }
 
 fn canonical_report() -> SessionReport {
