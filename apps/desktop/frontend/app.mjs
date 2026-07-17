@@ -132,7 +132,7 @@ function mount(root, browserWindow) {
     reportRevision,
     reportSummary,
     reportRefreshButton,
-    reportExportButton,
+    reportCompactExportButton, reportFullExportButton,
     reportFeedback,
     reportFeedbackMessage,
     reportFeedbackDetail,
@@ -476,8 +476,11 @@ function mount(root, browserWindow) {
   });
 
   reportRefreshButton.addEventListener("click", () => controller.refreshReport());
-  reportExportButton.addEventListener("click", async () => {
-    await controller.exportReport();
+  reportCompactExportButton.addEventListener("click", async () => {
+    await controller.exportReport("compact_summary_html");
+  });
+  reportFullExportButton.addEventListener("click", async () => {
+    await controller.exportReport("full_evidence_html");
   });
 
   syncSignalPlanFields(setupForm);

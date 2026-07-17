@@ -7,12 +7,12 @@ use antennabench_core::{
     ExperimentMode, ObservationKind, RecordSource, SessionLifecycleV2, WsprCycleDirection,
 };
 use antennabench_report::{
-    build_report, render_standalone_html, ReportAdapterEvidence, ReportAntennaControlAttempt,
-    ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection, ReportEventCorrectionAction,
-    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
-    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLimitation,
-    ReportOverviewLocationCell, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
-    ReportWsprReadinessBasis, SessionReport,
+    build_report, render_compact_summary_html, render_standalone_html, ReportAdapterEvidence,
+    ReportAntennaControlAttempt, ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection,
+    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
+    ReportOverviewLimitation, ReportOverviewLocationCell, ReportSnapshotContext,
+    ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis, SessionReport,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -85,6 +85,116 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     assert!(first.contains("<details class=\"audit-disclosure\">"));
     assert!(first.contains("details:not([open])>:not(summary){display:none!important}"));
     assert!(first.contains("break-after:page"));
+}
+
+#[test]
+fn compact_summary_reuses_full_report_facts_without_audit_detail() {
+    let mut report = paired_report(true);
+    report.snapshot.checkpoint_revision = Some(27);
+    report
+        .snapshot
+        .antenna_control_attempts
+        .push(ReportAntennaControlAttempt {
+            record_id: "compact-omitted-command".into(),
+            role: AntennaControlRoleV5::Verification,
+            controller_profile_name: "test switch".into(),
+            controller_profile_revision: "v1".into(),
+            resolved_program: "/bin/test-switch".into(),
+            resolved_arguments: vec!["--secret-audit-argument".into()],
+            intent_id: "intent-1".into(),
+            antenna: "A".into(),
+            target: "relay-a".into(),
+            mode: ExperimentMode::WholeStationAb,
+            started_at: "2026-07-14T22:00:00Z".parse().unwrap(),
+            completed_at: "2026-07-14T22:00:01Z".parse().unwrap(),
+            elapsed_milliseconds: 1_000,
+            disposition: AntennaControlDispositionV5::Exit { code: 0 },
+            stdout: AntennaControlOutputV5 {
+                encoding: AntennaControlOutputEncodingV5::Utf8,
+                data: "controller audit output".into(),
+                truncated: false,
+            },
+            stderr: AntennaControlOutputV5 {
+                encoding: AntennaControlOutputEncodingV5::Utf8,
+                data: String::new(),
+                truncated: false,
+            },
+        });
+
+    let full = render_standalone_html(&report).unwrap();
+    let first = render_compact_summary_html(&report).unwrap();
+    let second = render_compact_summary_html(&report).unwrap();
+
+    assert_eq!(first, second, "compact bytes are deterministic");
+    assert!(first.contains("AntennaBench compact share summary"));
+    assert!(first.contains("Not the full audit report"));
+    assert!(first.contains("Content-Security-Policy"));
+    assert!(first.contains("default-src 'none'"));
+    assert!(first.contains(".compact-summary .overview{break-after:auto}"));
+    assert!(first.contains(".compact-summary .question-section{break-before:auto}"));
+    assert!(!first.contains("<script"));
+    assert!(!first.contains("http://"));
+    assert!(!first.contains("https://"));
+    assert!(!first.contains("src=\""));
+
+    let scope_fact = format!(
+        "Station <strong>{}</strong> at <strong>{}</strong>",
+        report.overview.scope.station.callsign, report.overview.scope.station.grid
+    );
+    assert!(full.contains(&scope_fact));
+    assert!(first.contains(&scope_fact));
+    for shared_fact in [
+        "Delta orientation:",
+        "Supported by this run",
+        "Not established by this run",
+        "Same-path signal",
+        "Reach and unique paths",
+        "Run quality and answerability",
+    ] {
+        assert!(full.contains(shared_fact), "full output lost {shared_fact}");
+        assert!(
+            first.contains(shared_fact),
+            "compact output lost {shared_fact}"
+        );
+    }
+    assert!(first.contains("committed revision <strong>27</strong>"));
+    let stratum = &report.overview.strata[0];
+    let count_fact = format!(
+        "{} / {}",
+        stratum.unique_path_count, stratum.paired_row_count
+    );
+    assert!(full.contains(&count_fact));
+    assert!(first.contains(&count_fact));
+    assert!(first.contains("no rows are sampled here"));
+    for omitted in [
+        "Audit appendix",
+        "Antenna-control command attempts",
+        "controller audit output",
+        "--secret-audit-argument",
+        "Derived solar context",
+        "Paired difference data",
+    ] {
+        assert!(!first.contains(omitted), "compact output leaked {omitted}");
+    }
+}
+
+#[test]
+fn compact_summary_escapes_unavailable_and_bounded_reports() {
+    let mut unavailable = canonical_report();
+    unavailable.overview.scope.session_id = "<compact & session>".into();
+    unavailable.overview.scope.station.callsign = "<call>".into();
+    unavailable.overview.strata.clear();
+    let unavailable_html = render_compact_summary_html(&unavailable).unwrap();
+    assert!(unavailable_html.contains("&lt;compact &amp; session&gt;"));
+    assert!(unavailable_html.contains("No comparison strata are available"));
+    assert!(!unavailable_html.contains("<compact & session>"));
+
+    let mut bounded = paired_report(true);
+    bounded.completeness = antennabench_report::ReportCompleteness::BoundedOverview;
+    bounded.comparison.paired_rows.clear();
+    let bounded_html = render_compact_summary_html(&bounded).unwrap();
+    assert!(bounded_html.contains("Bounded overview"));
+    assert!(bounded_html.contains("no rows are sampled"));
 }
 
 #[test]

@@ -1198,6 +1198,7 @@ mod tests {
         assert_eq!(exported.revision, ended.revision);
         assert!(exported.presentation_id > 0);
         assert!(exported.report_path.exists());
+        assert!(exported.compact_summary_path.exists());
         assert!(exported.report_html.contains(&format!(
             "<dt>Checkpoint revision</dt><dd>{}</dd>",
             ended.revision
@@ -1215,6 +1216,19 @@ mod tests {
         assert!(exported
             .report_html
             .contains("Unknown — antenna changed during transmission"));
+        assert!(exported
+            .compact_summary_html
+            .contains("AntennaBench compact share summary"));
+        assert!(exported.compact_summary_html.contains(&format!(
+            "committed revision <strong>{}</strong>",
+            ended.revision
+        )));
+        assert!(exported
+            .compact_summary_html
+            .contains("full evidence report and lossless session bundle"));
+        assert!(!exported
+            .compact_summary_html
+            .contains("Complete operator note and correction history"));
         for expected in [
             "Run quality and answerability",
             "Planned versus actual",

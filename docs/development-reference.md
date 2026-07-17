@@ -257,9 +257,12 @@ Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, answer-first section order,
 question anchors, native audit disclosures, closed-disclosure print rules,
 responsive text alternatives, accessible chart tables, and all report sections.
-Separate hostile-string, single-antenna/unavailable, bounded-overview, and
-empty-data cases pin escaping, visible limitations and omissions, and honest
-unavailable states without making network requests.
+The compact-summary renderer consumes that same committed `SessionReport`
+instance and is separately pinned for displayed-fact equivalence, omission of
+audit-only detail, compact print rules, escaping, unavailable, and
+bounded-overview behavior. Separate hostile-string, single-antenna/unavailable,
+bounded-overview, and empty-data cases pin escaping, visible limitations and
+omissions, and honest unavailable states without making network requests.
 The run-quality state matrix additionally pins ordinary, late, unknown-
 occupancy, missed, bad, corrected, interrupted/resumed, abandoned,
 command-verified, explicit acquisition-gap, malformed/conflict/duplicate, and
@@ -288,6 +291,7 @@ To generate the canonical sample as an untracked verification artifact:
 
 ```bash
 cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-sample.html
+cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-compact-summary.html --compact-summary
 ```
 
 For documentation-only changes, inspect the rendered intent and verify the diff
@@ -373,8 +377,9 @@ the production manual conductor through start, a lost-response retry, explicit
 actual-antenna confirmation, missed/bad/note/correction evidence, an operator
 interruption/resume, synthetic WSJT-X raw evidence plus observation, a bounded
 adapter gap, a torn-write failpoint, process recovery, final resume/end, report
-refresh, exact standalone HTML export, checkpointed bundle export, collision
-rejection, and reopen. It asserts revision identity, retry idempotency, raw hex,
+refresh, exact full-evidence and compact-summary HTML exports from one
+presentation, checkpointed bundle export, collision rejection, and reopen. It
+asserts revision identity, retry idempotency, raw hex,
 effective corrections, explicit gap disclosure, terminal lifecycle, exported
 checkpoint equality, and deterministic report identity. Focused scenarios also
 cover cancellation, stale revisions, replacement, malformed JSON, and the

@@ -294,7 +294,7 @@ test("transfer renderer covers lifecycle/schema eligibility and feedback outcome
 test("report renderer covers unavailable, refreshing, ready, exporting, error, and frame identity", () => {
   const e = elements([
     "reportStatus", "reportPlaceholder", "reportViewer", "reportFrame",
-    "reportRefreshButton", "reportExportButton", "reportFeedback",
+    "reportRefreshButton", "reportCompactExportButton", "reportFullExportButton", "reportFeedback",
     "reportFeedbackMessage", "reportFeedbackDetail", "reportBundleName",
     "reportRevision", "reportSummary",
   ]);
@@ -323,7 +323,8 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   state.reportStatus = "ready";
   state.reportExportStatus = "loading";
   renderReport(e, state);
-  assert.equal(e.reportExportButton.textContent, "Exporting…");
+  assert.equal(e.reportCompactExportButton.textContent, "Exporting…");
+  assert.equal(e.reportFullExportButton.textContent, "Exporting…");
   state.reportExportStatus = "error";
   state.reportExportError = { message: "cannot export", detail: "destination exists" };
   renderReport(e, state);
