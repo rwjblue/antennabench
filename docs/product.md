@@ -1,150 +1,131 @@
-# Product Overview
+# How AntennaBench Works
 
-AntennaBench helps radio operators run more trustworthy antenna experiments.
-It turns an A/B test from a collection of log files and handwritten switch
-times into a guided session with a durable record and a report that stays close
-to the evidence.
+AntennaBench helps radio operators run antenna comparisons that are repeatable,
+auditable, and honest about uncertainty. The first supported workflow uses WSPR,
+whose fixed two-minute cadence makes it practical to alternate antennas often
+while propagation is changing.
 
-The first focus is WSPR, where changing propagation and different reporting
-paths make casual comparisons easy to overstate. AntennaBench helps control the
-experiment and makes its limitations visible.
+The app does not reduce an experiment to a single “winner.” It keeps the plan,
+operator actions, observations, missing data, and corrections separate, then
+builds a report that stays close to that evidence.
 
-## What You Do
+## Before The Run
 
-Before starting, describe the station and antennas and choose whether to test
-transmit, receive, or both. BOTH is the default. One repetition visits every
-configured antenna once in each selected direction, and setup shows the
-resulting number of two-minute WSPR periods plus the ideal minimum time. Four
-default BOTH repetitions with two antennas are 16 periods, or 32 ideal minutes.
-Setup also identifies automatic bidirectional public spots as coming from
-WSPR.live, with an offline opt-out available as a secondary choice. Operators
-using this default online path enable WSJT-X **Upload spots** and keep WSJT-X
-online. AntennaBench collects the rows returned for its configured request
-windows on a best-effort basis; the upstream mirror does not provide an
-independent completeness guarantee. There are
-no setup-time timestamps or manual-switch deadlines. During the session, begin
-the physical antenna change and press the named antenna's ready button once the
-change is complete. AntennaBench does not ask when switching began or measure
-its duration. The readiness action selects the next eligible even-minute WSPR
-cycle and closes the prior antenna-occupancy interval at that recorded time.
+Create a session by entering:
 
-Active Run leads with one current instruction and one primary action. Notes,
-cycle skipping, corrections, receiver configuration, public-spot status, and
-session internals remain available without competing with the next physical
-step. Short contextual help is available beside selected unfamiliar concepts;
-required instructions, validation, safety, and recovery guidance remain visible
-without opening it.
+- station details such as callsign, Maidenhead grid, and transmit power;
+- one or more antenna labels and optional installation notes (two or more for
+  an A/B comparison);
+- the band, experiment direction, and number of complete repetitions; and
+- whether AntennaBench should gather delayed public WSPR spots from WSPR.live.
 
-Setup can optionally select a reusable local direct-process antenna controller,
-map each antenna to an opaque target, and preview every normalized invocation.
-On macOS/Linux a deterministic one-line tokenizer is available; Windows uses
-an explicit program and ordered arguments. No shell or shell expansion is
-used. During Active Run the operator may request switch and optional
-verification commands, inspect bounded diagnostics, retry explicitly, edit and
-reattach the local profile, or continue manually. Regardless of command
-success, the named antenna-ready action remains the authority that arms the
-cycle.
+The default **Both (TX + RX)** mode schedules one receive period and one transmit
+period for every antenna in each repetition. Setup shows the resulting number of
+WSPR cycles and the ideal minimum duration before creating the session.
 
-Local WSJT-X UDP reception is an optional direct/local source when WSPR.live is
-enabled, and is required before a receive-capable run only when WSPR.live is
-disabled. It remains useful offline and may run alongside the delayed/public
-source; their provenance and analysis strata stay separate. Before each period, Active Run separately
-identifies any antenna change and whether WSJT-X Enable Tx must be turned on or
-off. WSPR.live TX and RX spots are gathered automatically by default for WSPR
-plans. Successful configured-window collection is presented as best effort;
-recorded network or adapter failures remain explicit and do not prevent
-exporting already recorded session evidence.
+When using WSPR.live, enable **Upload spots** in WSJT-X and keep WSJT-X online.
+Local WSJT-X UDP reception is optional on that path and can provide separately
+attributed direct evidence. For an offline receive-capable run, local WSJT-X
+reception is required.
 
-When the run is over, AntennaBench builds a local report and can export:
+## During The Run
 
-- a standalone HTML report for reading or sharing;
-- the complete session bundle for archiving, reopening, or future analysis.
+AntennaBench presents one current instruction at a time:
 
-## What The Report Says
+1. Switch to the named antenna.
+2. Set WSJT-X transmit enable as instructed for that period.
+3. Press the named antenna’s **ready** action after the physical change is
+   complete.
 
-The report describes the evidence before it draws attention to differences. It
-can show coverage by antenna, band, and slot; same-path SNR differences;
-unmatched observations; time and switching-order context; and available path
-distance or direction.
+AntennaBench then selects the next eligible even-minute WSPR cycle. There are no
+setup-time timestamps or switch deadlines. The recorded readiness action—not the
+planned schedule—determines when the antenna is known to be in use.
 
-Its renderer-neutral overview states the session scope, recorded lifecycle
-state, comparison availability, and the fixed named delta orientation before
-any presentation chooses a reading order. Each descriptive overview fact stays
-separate by transmit/receive direction, band, normalized mode, observation
-kind, and source. Headline deltas use medians of same-path medians, not a
-pooled average of observations. When a comparison or path delta is unavailable,
-the report records that state and its typed limitations rather than inventing a
-zero or conclusion.
+During the run you can mark a missed or bad cycle, add notes, record corrections,
+interrupt and resume the session, or continue manually after an optional adapter
+or controller fails. Earlier evidence is retained rather than silently rewritten.
 
-The standalone HTML turns that overview into the first reading page. It shows
-no more than four scope facts, the full named delta orientation, one concise
-row per retained comparison stratum, and explicit supported/not-established
-statements before detailed diagnostics. Stable question links lead to
-same-path signal, reach, distance/direction, run quality, and the audit
-appendix. Native disclosures keep lifecycle, schedule, antenna, controller,
-raw paired-row, solar, and per-slot evidence available without making the
-default report one uninterrupted audit table. Required failures, unavailable
-states, bounded-overview omissions, acquisition gaps, and important
-limitations remain visible while those disclosures are closed.
+## Evidence Sources
 
-For each retained stratum, the same-path view shows one zero-centered dot for
-each unique remote path’s `right − left` median, plus a distinct median of
-those path medians. Its accessible table carries the same exact values and
-paired-row/block counts. The reach view separately shows unique finite paths
-seen left-only, on both antennas, and right-only. Unmatched paths remain
-operational evidence, never zero-SNR measurements; missing SNR, duplicates,
-and conflicts remain separately accounted for and auditable. These report-owned
-projections are bounded before rendering, so the HTML never groups unbounded
-raw records to create the headline views.
+A session can contain several kinds of evidence without mixing their meaning:
 
-It also says what is missing. Intended order is shown separately from observed
-antenna use. A cycle switched before its 110.592-second transmission completed
-has unknown antenna attribution. A missing decode is not treated as a
-zero-strength signal. Conflicting, damaged, or ineligible records remain
-disclosed instead of quietly improving the result.
+- **WSPR.live public spots** are gathered automatically by default for configured
+  WSPR windows. Collection is best effort; the upstream mirror does not provide
+  an independent completeness guarantee.
+- **Local WSJT-X decodes** arrive directly over the loopback interface and remain
+  distinct from delayed public data.
+- **Imported WSPR or Reverse Beacon Network data** supports bounded historical or
+  controlled non-WSPR analysis.
+- **Operator facts** include readiness actions, missed or bad cycles, notes,
+  interruptions, and corrections.
 
-AntennaBench does not currently declare a winning antenna. Evidence may be
-interesting while still being too sparse or imbalanced for that claim.
+Every source retains its provenance. A network or adapter failure is recorded as
+a gap and does not prevent export of evidence that is already safe on disk.
 
-## Local First
+## Reading The Report
 
-Creating, conducting, reviewing, and exporting a session works without an
-account. The [session bundle](bundle-format.md) on your computer is the durable
-experiment record; the report is derived from it and can be regenerated.
+The report starts with the scope and quality of the experiment, then shows the
+available comparisons. Depending on the session, it can include:
 
-The desktop app keeps working sessions in its platform-standard application
-data directory and remembers the last station details for the next setup.
-Those preferences are convenience state, not session evidence. Export creates
-the portable bundle you choose to archive or move elsewhere. Setup can ask the
-macOS system for one foreground location to estimate a six-character station
-grid. The request occurs only after pressing **Use current location** and may
-show the system permission prompt. AntennaBench stores the resulting grid,
-never the raw coordinates, and manual entry remains available after denial,
-restriction, timeout, or another lookup failure.
+- coverage by antenna, band, direction, and cycle;
+- a zero-centered same-path view with one median difference per unique remote
+  path and a separate median across those paths;
+- reach counts for paths observed on the left comparison side only, both sides,
+  or the right side only;
+- switching-order and timing context; and
+- available path distance, direction, and solar context.
 
-Optional data services receive only the inputs disclosed for that integration.
-Hosted sharing is planned as an explicit copy for convenience, not as a new
-source of truth or a requirement for using the desktop app.
+Each comparison stays separate by transmit/receive direction, band, mode,
+observation kind, and source. The visible same-path view and its accessible table
+use the same exact path values and paired-evidence counts. Unmatched paths remain
+reach evidence, not zero-SNR measurements.
 
-## Where It Fits Today
+A missing decode is not a zero-strength signal. A cycle switched before the WSPR
+transmission finished may have unknown antenna attribution. Conflicting, damaged,
+or ineligible records remain visible instead of being discarded in a way that
+improves the result.
 
-The primary workflow is a whole-station WSPR A/B comparison with manual antenna
-switching. The data model also supports TX-focused, RX-focused, and
-single-antenna profiling sessions. Controlled CW and RTTY comparisons can use
-typed signal plans and offline Reverse Beacon Network imports, but remain a
-more technical path.
+AntennaBench currently provides descriptive evidence, not an automatic verdict.
+“Insufficient data” is a useful outcome when the session does not support a
+stronger claim.
 
-Portable session evidence can now distinguish an operator-confirmed WSPR cycle
-from a cycle authorized by independent command verification, and reports show
-bounded switch/verification attempts and failures. AntennaBench now supports
-optional local operator-triggered switch and verification profiles while
-keeping executable configuration outside portable bundles. Automatic
-switching and command-verified arming remain later work. Manual operation
-remains the complete default workflow.
+## Local-First By Design
 
-Automatic winner selection and hosted publishing are not yet available. See
-[Project Status](../README.md#project-status) for the concise
-current state and the [Roadmap](roadmap.md) for direction.
+Creating, conducting, reviewing, and exporting a session requires no account.
+The [session bundle](bundle-format.md) on your computer is the durable record; the
+report is derived from it and can be regenerated.
 
-For the detailed evidence rules, operational boundaries, and selected hosted
-design, see the [Product Design Reference](product-design-reference.md).
+Working sessions and reusable station preferences live in the platform-standard
+application-data directory. Preferences are convenience state, not experiment
+evidence. Export creates the portable bundle or standalone HTML report that you
+choose to keep or share.
+
+On macOS, **Use current location** requests one foreground location only after you
+press it. AntennaBench converts that location to a six-character Maidenhead grid,
+stores the grid, and does not retain the raw coordinates. Manual entry remains
+available if permission is denied or the lookup fails.
+
+## Optional Controller Assistance
+
+Advanced operators can attach a machine-local program that switches an antenna
+and optionally verifies the resulting state. This is an operator-triggered aid,
+not automatic control: the named **ready** action still confirms every cycle, and
+manual operation remains available after any command failure.
+
+Executable profiles and antenna mappings stay on the local computer. Portable
+bundles may retain the commands and bounded diagnostics that actually ran, so
+review them for paths, usernames, addresses, or credentials before sharing. See
+[Local Antenna Controller Profiles](antenna-controller-profiles.md).
+
+## Available Today
+
+The desktop app can create and reopen sessions, run manual WSPR comparisons,
+collect optional WSJT-X and WSPR.live evidence, import supported WSPR and RBN
+data, recover interrupted sessions, render local reports, and export reports or
+verified bundle copies.
+
+A signed end-user release, automated antenna conclusions, automatic controller
+operation, and hosted report publishing are not yet available. See the
+[roadmap](roadmap.md) for current direction and the
+[Product Design Reference](product-design-reference.md) for implementation-level
+product invariants.

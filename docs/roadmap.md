@@ -1,56 +1,50 @@
 # Roadmap
 
-Last reviewed: 2026-07-15
+Last reviewed: 2026-07-17
 
-The roadmap describes product outcomes, not every implementation task. GitHub
-Issues carry the detailed scope, dependencies, and acceptance criteria.
+This page summarizes product outcomes. GitHub Issues contain the implementation
+scope, dependencies, and acceptance criteria for individual changes.
 
-## Available Today
+## Available Now
 
-AntennaBench has a complete local manual/no-rig workflow for repeatable WSPR
-sessions:
+AntennaBench has a complete local, manual workflow for repeatable WSPR sessions:
 
-- review station, antenna, and intended cycle order before creating a bundle;
-- conduct operator-paced cycles with one readiness action after each antenna
-  change, actual WSPR timing, occupancy, notes, and corrections;
+- review the station, antennas, direction, and cycle order before creating a
+  session;
+- conduct operator-paced cycles with actual WSPR timing, notes, missed or bad
+  cycles, and corrections;
 - recover an interrupted run without rewriting its evidence history;
-- optionally collect bounded direct/local WSJT-X evidence and automatically
-  gather default-on bidirectional WSPR.live public spots;
+- optionally collect local WSJT-X evidence and delayed WSPR.live public spots;
 - import supported WSPR.live JSON and Reverse Beacon Network archives;
 - inspect conservative descriptive reports; and
 - export standalone HTML or a verified copy of the complete session bundle.
 
-The repository also builds verified macOS release inputs for Apple silicon and
-Intel, and contains an admission-disabled hosted foundation. Neither is yet a
-public end-user service.
+The repository can also build verified macOS release inputs for Apple silicon and
+Intel. There is not yet a signed public download. The hosted foundation is a
+non-public, admission-disabled prototype and is not part of the current product.
 
-## Toward A Public Preview
+## Next: A Trustworthy macOS Preview
 
-The next outcome is a trustworthy macOS preview that people can install and use
-in real antenna sessions. That includes:
+The next product outcome is an installable preview that operators can use in real
+antenna sessions. That work includes:
 
-- signing, notarization, publication, and release verification;
+- signing, notarization, publication, and independent release verification;
 - maintainer field sessions and external operator feedback;
-- clearer in-product guidance and report comprehension checks; and
-- fixes discovered through real-world use without weakening the evidence
-  model.
+- clearer in-product guidance and report-comprehension checks; and
+- fixes discovered through real use without weakening the evidence model.
 
-The manual workflow remains the baseline. Optional integrations should improve
-collection without making a network service, rig, or account necessary.
+Manual operation remains the baseline. Optional integrations should improve data
+collection without making an account, network service, rig, or controller a
+requirement.
 
-## Later
+## Later Possibilities
 
-Possible later tracks include:
+Later work may include calibrated uncertainty and carefully validated
+comparative conclusions, broader rig observation or control, live or scheduled
+RBN acquisition, cross-session search when a measured use case justifies it,
+optional private-to-unlisted report sharing, native WSPR operation, and
+mobile-specific workflows.
 
-- calibrated uncertainty and carefully validated comparative conclusions;
-- optional rig observation or control;
-- live or scheduled RBN acquisition if an appropriate filtered source exists;
-- rebuildable local search and indexes after a concrete cross-session or
-  measured large-session query justifies them;
-- optional private-to-unlisted hosted report sharing;
-- native WSPR or mobile-specific operation; and
-- public discovery and callsign-oriented browsing.
-
-“Winner” language remains out of scope until the project has a validated
-experimental-design and inference contract. Hosted sharing remains optional and
-never replaces the local session bundle as the source of truth.
+Automatic “winner” language remains out of scope until the project has a
+validated experiment-design and inference contract. Hosted sharing, when added,
+will remain optional and will not replace the local session bundle.

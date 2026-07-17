@@ -1,70 +1,91 @@
-# AntennaBench
+<p align="center">
+  <img src="apps/desktop/frontend/mark.svg" width="112" alt="AntennaBench logo">
+</p>
 
-Run repeatable antenna experiments without losing the story behind the data.
+<h1 align="center">AntennaBench</h1>
 
-AntennaBench is a local-first desktop app for planning antenna comparisons,
-guiding the operator through each change, collecting WSPR observations, and
-turning the session into an evidence-focused report. It keeps planned settings,
-confirmed actions, missed slots, corrections, and source data distinct so a
-clean-looking chart cannot hide a messy experiment.
+<p align="center"><strong>Run repeatable antenna comparisons and keep the evidence behind every result.</strong></p>
 
-No account or hosted service is required. Your portable session bundle remains
-the source of truth.
+Antenna tests are easy to start and surprisingly easy to overstate. Propagation
+changes, receiver populations shift, switches happen late, and missing spots can
+look like measurements when they are not.
 
-## A Session In Four Steps
+AntennaBench is a local-first macOS desktop app that turns an antenna comparison
+into a guided experiment. It helps you plan an interleaved WSPR run, prompts each
+antenna change, collects attributed observations, and builds a report that shows
+both the result and the limits of the evidence.
 
-1. **Plan** — enter station details, name the antennas, and choose their
-   repeatable order.
-2. **Run** — switch at your own pace; after each antenna is ready, AntennaBench
-   selects the next valid WSPR cycle and records how long that antenna was in
-   use.
-3. **Collect** — optionally receive local WSJT-X decodes; WSPR.live public
-   spots are gathered automatically by default. Reverse Beacon Network imports
-   support controlled non-WSPR experiments.
-4. **Review** — inspect a conservative local report, then export the report or
-   the complete session bundle.
+No account or hosted service is required. The portable session bundle on your
+computer remains the durable experiment record.
 
-AntennaBench shows missing, imbalanced, or conflicting evidence instead of
-manufacturing an antenna winner. “Insufficient data” is a useful result when
-the session does not support a stronger claim.
+<p align="center">
+  <img src="docs/assets/workflow.svg" width="960" alt="AntennaBench workflow: plan the comparison, run guided antenna changes, collect attributed observations, and review an evidence-first report">
+</p>
+
+## What AntennaBench Gives You
+
+- **A repeatable run plan.** Define the station, antennas, band, direction, and
+  number of repetitions before the experiment starts.
+- **Operator-paced guidance.** Switch when ready; AntennaBench chooses the next
+  valid WSPR cycle and records what actually happened rather than assuming the
+  plan was followed perfectly.
+- **Attributed evidence.** Keep local WSJT-X decodes, WSPR.live public spots,
+  supported imports, notes, missed cycles, and corrections distinct.
+- **Conservative reports.** Compare matched paths, inspect coverage and
+  imbalance, and see why a stronger claim may not be supported. A missing spot
+  is never silently treated as a zero-strength signal.
+- **Portable records.** Export a standalone HTML report for reading or the full
+  session bundle for archiving, reopening, and future analysis.
+
+Optional local controller profiles can assist with antenna switching, but manual
+operation remains the complete default workflow.
 
 ## Project Status
 
-AntennaBench is an early preview under active development. There is not yet a
-signed end-user release; today it is run from source on macOS.
+> [!IMPORTANT]
+> AntennaBench is an early preview under active development. There is not yet a
+> signed end-user download. The current desktop app is run from source on macOS
+> 15 or later.
 
-The desktop workflow can create and reopen sessions, conduct manual/no-rig WSPR
+The local workflow can create and reopen sessions, conduct manual WSPR
 comparisons, collect optional WSJT-X and WSPR.live evidence, import bounded WSPR
-and RBN data, render local reports, and export both reports and verified bundle
-copies. Rig control, automated winner selection, and hosted report publishing
-are not available yet.
+and Reverse Beacon Network data, render local reports, and export verified
+reports and bundles. Automatic winner selection and hosted report publishing are
+not available.
 
-## Try The Desktop App
+See the [roadmap](docs/roadmap.md) for the current direction.
 
-Install Xcode Command Line Tools and [Mise](https://mise.jdx.dev/), then run:
+## Run From Source
+
+Install the Xcode Command Line Tools and [Mise](https://mise.jdx.dev/), then run:
 
 ```bash
 xcode-select --install
+git clone https://github.com/rwjblue/antennabench.git
+cd antennabench
 mise install
 mise run desktop:dev
 ```
 
-The first build may take a while. `desktop:dev` launches a local Tauri app; stop
-it with Control-C. See [Development](docs/development.md) for tests, supported
-tool versions, and the rest of the contributor workflow.
+The first setup downloads the pinned tools, and the first build compiles the
+application. Stop the development process with Control-C. See the
+[development guide](docs/development.md) for tests, repository conventions, and
+additional commands.
 
-## Learn More
+## Documentation
 
-- [Product overview](docs/product.md) explains the intended workflow and the
-  evidence standards behind it.
-- [Session bundles](docs/bundle-format.md) gives a short, user-facing tour of
-  the portable experiment record.
-- [Documentation index](docs/README.md) links to architecture, development,
-  operations, and technical references.
-- [Examples](examples/README.md) contains optional integrations and controller
-  programs that can be adapted to a local station.
-- [Roadmap](docs/roadmap.md) describes the current direction; GitHub Issues
-  track individual unfinished work items.
+For operators and evaluators:
+
+- [How AntennaBench works](docs/product.md)
+- [Session bundles and exported reports](docs/bundle-format.md)
+- [Why WSPR is the default—and when to use RBN](docs/why-not-just-use-rbn.md)
+- [Local antenna controller profiles](docs/antenna-controller-profiles.md)
+
+For contributors and maintainers:
+
+- [Documentation index](docs/README.md)
+- [Development guide](docs/development.md)
+- [Architecture overview](docs/architecture.md)
 
 ## License
 

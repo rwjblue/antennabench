@@ -1,11 +1,16 @@
-# Work Tracking
+# Internal Work Tracking And Agent Handoffs
 
-GitHub Issues are AntennaBench's durable source of truth for unfinished work
-and open decisions. This guide explains how a human should read and maintain
-that work. [Decision 0003](decisions/0003-github-issues-are-the-durable-work-tracker.md)
-records the durable rationale, while the
-[Development Technical Reference](development-reference.md) defines the agent
-execution rules.
+> [!IMPORTANT]
+> **Audience:** repository maintainers and coding agents. This page defines issue
+> operations, agent handoff boundaries, and completion evidence. It is not product
+> documentation or general contributor onboarding. Repository-local agent rules
+> in [AGENTS.md](../AGENTS.md) take precedence for agent execution.
+
+GitHub Issues are AntennaBench’s durable record for unfinished work and open
+decisions. [Decision 0003](decisions/0003-github-issues-are-the-durable-work-tracker.md)
+records the rationale, while the
+[Development Technical Reference](development-reference.md) records additional
+agent execution and verification details.
 
 ## Tracking Layers
 
@@ -15,8 +20,8 @@ Each tracking layer answers a different question:
   later. It is not a task list.
 - A GitHub milestone groups issues that deliver one recognizable outcome and
   exposes aggregate progress.
-- A tracking issue explains the dependency graph, focused child issues, and
-  exit criteria for a milestone or major sub-track.
+- A tracking issue explains the dependency graph, focused child issues, and exit
+  criteria for a milestone or major sub-track.
 - A focused implementation, decision, owner-action, or human-validation issue
   owns one bounded outcome and its acceptance evidence.
 - An ADR records a durable decision after the choice is settled. It does not
@@ -108,8 +113,8 @@ unless explicitly sanitized and approved.
 
 ## Completion Evidence
 
-Implementation issues close only after their work lands. Their completion
-record includes:
+Implementation issues close only after their work lands. Their completion record
+includes:
 
 - delivered behavior;
 - Jujutsu change or commit and, when applicable, pull request;
