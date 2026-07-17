@@ -13,6 +13,18 @@ the trusted capture time and mutation envelope, validates the complete batch,
 appends in a fixed order, synchronizes every changed stream, and promotes one
 checkpoint.
 
+The public live-session facade and its hook, failpoint, mutation, receipt,
+recovery-report, and typed-error surface remain in `storage::live`. Private
+implementation ownership is split by invariant: `mutation` prepares, validates,
+accounts for, appends, and recognizes idempotent v2/v3/v5 mutations;
+`checkpoint` loads committed prefixes and constructs, publishes, reopens, and
+exactly verifies checkpoints; `recovery` resolves pending plan generations,
+stream tails, checkpoint temporary files, and recovery artifacts;
+`attachments` verifies and durably copies content-addressed files; and
+`durability` owns the platform-specific sync, replace, publish, and capability
+probe primitives. These modules are internal seams behind the same synchronous
+facade, not additional persistence authorities.
+
 Schema-v1 bundles remain immutable inputs. They must be explicitly upgraded to
 a checkpointed schema in a new `.session.antennabundle` before these APIs will mutate
 them.

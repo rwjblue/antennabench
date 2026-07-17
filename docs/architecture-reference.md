@@ -262,7 +262,11 @@ plan generation and coherent prefix of every stream.
 One Rust-owned writer lock, checkpoint/digest comparison, durable mutation IDs,
 and explicit tail recovery prevent cooperative concurrent writes, retry
 duplication, and silent overwrite of external changes. Checkpointed reads and
-exports consume one revision rather than racing live files.
+exports consume one revision rather than racing live files. The storage crate
+keeps one public live-session facade while private `mutation`, `checkpoint`,
+`recovery`, `attachments`, and `durability` modules own those independently
+testable invariants; platform replacement primitives and recovery mechanics do
+not leak into desktop callers.
 Static v2 creation, read, attachment verification, lossless copy, and explicit
 v1 upgrade are implemented. Pure schema-v2 lifecycle validation, append-ordered
 correction reduction, explicit actual-antenna projection, and conservative
