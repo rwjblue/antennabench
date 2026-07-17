@@ -6,6 +6,7 @@ mod operator_events;
 mod semantics;
 mod v2;
 mod v3;
+mod v5_antenna_control;
 mod validation;
 pub mod wspr;
 
@@ -17,6 +18,7 @@ pub use operator_events::*;
 pub use semantics::*;
 pub use v2::*;
 pub use v3::*;
+pub use v5_antenna_control::*;
 pub use validation::*;
 pub use wspr::*;
 

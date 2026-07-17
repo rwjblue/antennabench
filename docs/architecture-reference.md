@@ -12,7 +12,11 @@ source of truth; everything else is derived from it.
 Current crates:
 
 - `crates/core`: versioned schema-v1 through schema-v5 wire types, a shared current
-  projection, schedule alignment, normalization, and validation.
+  projection, schedule alignment, normalization, and validation. The legacy
+  signal-plan/event compatibility model remains in `v3`, while the schema-v5
+  antenna-control policy, invocation evidence, readiness validation, and
+  v3/v4-to-v5 projection are owned by the cohesive `v5_antenna_control` core
+  boundary; both retain the established root-level API names.
 - `crates/storage`: dispatched read/write, non-destructive upgrade, verified
   attachment, and lossless-copy APIs for `.session.wsprabundle` v1 and
   `.session.antennabundle` v2/v3/v4 directories.
