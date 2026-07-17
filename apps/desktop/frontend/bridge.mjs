@@ -26,8 +26,8 @@ export function invokeRefreshActiveSessionReport(invoke) {
   return invoke("refresh_active_session_report");
 }
 
-export function invokeExportActiveSessionReport(invoke) {
-  return invoke("export_active_session_report");
+export function invokeExportActiveSessionReport(invoke, format) {
+  return invoke("export_active_session_report", { format });
 }
 
 export function invokeExportSession(invoke) {
@@ -85,4 +85,3 @@ export function invokeAttachSessionAntennaController(invoke, request) {
 export function invokeRunSessionAntennaController(invoke, request) {
   return invoke("run_active_session_antenna_controller", { request });
 }
-

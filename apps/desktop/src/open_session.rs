@@ -17,11 +17,11 @@ use antennabench_core::{
     V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
-    build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence,
-    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportEventCorrection,
-    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
-    ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind, ReportSnapshotContext,
-    ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
+    build_report_with_snapshot, render_compact_summary_html, render_standalone_html,
+    ReportAdapterEvidence, ReportAntennaControlAttempt, ReportCompleteness, ReportError,
+    ReportEventCorrection, ReportEventCorrectionAction, ReportImportedEvidence,
+    ReportLifecycleEvent, ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind,
+    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::{Deserialize, Serialize};
@@ -125,6 +125,8 @@ pub(crate) struct ReportPresentation {
     lifecycle: Option<SessionLifecycleV2>,
     completeness: ReportCompleteness,
     report_html: String,
+    #[serde(skip)]
+    compact_summary_html: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -169,7 +171,18 @@ pub(crate) enum ExportReportOutcome {
         #[serde(rename = "fileName")]
         file_name: String,
         revision: Option<u64>,
+        format: ReportExportFormat,
     },
+}
+
+/// The two derived HTML artifacts available from one committed report snapshot.
+/// The session bundle uses its separate lossless export command.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ReportExportFormat {
+    CompactSummaryHtml,
+    #[default]
+    FullEvidenceHtml,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1146,6 +1159,17 @@ fn suggested_report_name(source: &Path) -> String {
         )
 }
 
+fn suggested_compact_summary_name(source: &Path) -> String {
+    source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| bundle_suffix(name).map(|suffix| name.trim_end_matches(suffix)))
+        .map_or_else(
+            || "antennabench-compact-summary.html".into(),
+            |stem| format!("{stem}-compact-summary.html"),
+        )
+}
+
 fn export_bundle(
     source: &Path,
     destination: &Path,
@@ -1235,6 +1259,7 @@ fn prepare_presentation(snapshot: &LoadedSnapshot) -> Result<ReportPresentation,
         snapshot.report_snapshot.clone(),
     )?;
     let report_html = render_standalone_html(&report)?;
+    let compact_summary_html = render_compact_summary_html(&report)?;
     Ok(ReportPresentation {
         presentation_id: 0,
         session_id: snapshot.bundle.manifest.session_id.clone(),
@@ -1242,6 +1267,7 @@ fn prepare_presentation(snapshot: &LoadedSnapshot) -> Result<ReportPresentation,
         lifecycle: snapshot.lifecycle,
         completeness: report.completeness,
         report_html,
+        compact_summary_html,
     })
 }
 
@@ -1373,6 +1399,7 @@ where
 
 fn export_active_report_with_selection<F>(
     state: &ActiveSessionState,
+    format: ReportExportFormat,
     select: F,
 ) -> Result<ExportReportOutcome, SessionErrorPayload>
 where
@@ -1417,8 +1444,12 @@ where
                 format!("{}: {error}", destination.display()),
             )
         })?;
+    let html = match format {
+        ReportExportFormat::CompactSummaryHtml => &presentation.compact_summary_html,
+        ReportExportFormat::FullEvidenceHtml => &presentation.report_html,
+    };
     if let Err(error) = file
-        .write_all(presentation.report_html.as_bytes())
+        .write_all(html.as_bytes())
         .and_then(|()| file.sync_all())
     {
         drop(file);
@@ -1440,6 +1471,7 @@ where
     Ok(ExportReportOutcome::Exported {
         file_name,
         revision: presentation.revision,
+        format,
     })
 }
 
@@ -1660,15 +1692,33 @@ pub(crate) async fn export_active_session(
 pub(crate) async fn export_active_session_report(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    format: Option<ReportExportFormat>,
 ) -> Result<ExportReportOutcome, SessionErrorPayload> {
-    export_active_report_with_selection(state.inner(), |source| {
+    let format = format.unwrap_or_default();
+    export_active_report_with_selection(state.inner(), format, |source| {
         let mut dialog = app
             .dialog()
             .file()
-            .set_title("Export the coherent AntennaBench report snapshot")
-            .set_file_name(suggested_report_name(source))
+            .set_title(match format {
+                ReportExportFormat::CompactSummaryHtml => {
+                    "Export compact AntennaBench share summary (not the full audit report)"
+                }
+                ReportExportFormat::FullEvidenceHtml => {
+                    "Export full AntennaBench evidence report snapshot"
+                }
+            })
+            .set_file_name(match format {
+                ReportExportFormat::CompactSummaryHtml => suggested_compact_summary_name(source),
+                ReportExportFormat::FullEvidenceHtml => suggested_report_name(source),
+            })
             .set_can_create_directories(true)
-            .add_filter("Standalone HTML report", &["html"]);
+            .add_filter(
+                match format {
+                    ReportExportFormat::CompactSummaryHtml => "Compact summary HTML",
+                    ReportExportFormat::FullEvidenceHtml => "Full evidence HTML report",
+                },
+                &["html"],
+            );
         if let Some(parent) = source.parent() {
             dialog = dialog.set_directory(parent);
         }
@@ -1703,10 +1753,12 @@ pub(crate) fn refresh_active_session_report(
 #[derive(Debug)]
 pub(crate) struct E2eExportedSnapshots {
     pub(crate) report_path: PathBuf,
+    pub(crate) compact_summary_path: PathBuf,
     pub(crate) bundle_path: PathBuf,
     pub(crate) revision: u64,
     pub(crate) presentation_id: u64,
     pub(crate) report_html: String,
+    pub(crate) compact_summary_html: String,
 }
 
 #[cfg(test)]
@@ -1727,18 +1779,46 @@ pub(crate) fn export_e2e_snapshots(
     let presentation = refresh_active_session_report_for(state).expect("coherent report refresh");
     let revision = presentation.revision.expect("schema-v2 report revision");
     let report_path = root.join("complete-workflow-report.html");
+    let compact_summary_path = root.join("complete-workflow-compact-summary.html");
     let bundle_path = root.join(format!("complete-workflow-export{V2_BUNDLE_SUFFIX}"));
     let report_outcome =
-        export_active_report_with_selection(state, |_| Ok(Some(report_path.clone())))
-            .expect("standalone report export");
+        export_active_report_with_selection(state, ReportExportFormat::FullEvidenceHtml, |_| {
+            Ok(Some(report_path.clone()))
+        })
+        .expect("standalone report export");
     assert!(matches!(
         report_outcome,
         ExportReportOutcome::Exported {
             revision: Some(exported),
+            format: ReportExportFormat::FullEvidenceHtml,
             ..
         } if exported == revision
     ));
-    assert!(export_active_report_with_selection(state, |_| Ok(Some(report_path.clone()))).is_err());
+    assert!(export_active_report_with_selection(
+        state,
+        ReportExportFormat::FullEvidenceHtml,
+        |_| Ok(Some(report_path.clone())),
+    )
+    .is_err());
+    let compact_summary_outcome =
+        export_active_report_with_selection(state, ReportExportFormat::CompactSummaryHtml, |_| {
+            Ok(Some(compact_summary_path.clone()))
+        })
+        .expect("compact share summary export");
+    assert!(matches!(
+        compact_summary_outcome,
+        ExportReportOutcome::Exported {
+            revision: Some(exported),
+            format: ReportExportFormat::CompactSummaryHtml,
+            ..
+        } if exported == revision
+    ));
+    assert!(export_active_report_with_selection(
+        state,
+        ReportExportFormat::CompactSummaryHtml,
+        |_| Ok(Some(compact_summary_path.clone())),
+    )
+    .is_err());
     let bundle_outcome =
         export_active_session_with_selection(state, |_| Ok(Some(bundle_path.clone())))
             .expect("lossless checkpoint export");
@@ -1756,12 +1836,18 @@ pub(crate) fn export_e2e_snapshots(
         std::fs::read_to_string(&report_path).expect("exported HTML"),
         presentation.report_html
     );
+    assert_eq!(
+        std::fs::read_to_string(&compact_summary_path).expect("exported compact HTML"),
+        presentation.compact_summary_html
+    );
     E2eExportedSnapshots {
         report_path,
+        compact_summary_path,
         bundle_path,
         revision,
         presentation_id: presentation.presentation_id,
         report_html: presentation.report_html,
+        compact_summary_html: presentation.compact_summary_html,
     }
 }
 
@@ -1778,8 +1864,9 @@ mod tests {
         active_session_report_for, check_ipc_payload, copy_error_payload,
         export_active_report_with_selection, export_active_session_with_selection, export_bundle,
         open_bundle, open_session_with_selection, refresh_active_session_report_for,
-        report_error_payload, ActiveSessionState, ExportReportOutcome, ExportSessionOutcome,
-        OpenSessionOutcome, SessionErrorKind, SessionErrorPayload, REPORT_DOCUMENT_IPC_BYTES,
+        report_error_payload, suggested_compact_summary_name, suggested_report_name,
+        ActiveSessionState, ExportReportOutcome, ExportSessionOutcome, OpenSessionOutcome,
+        ReportExportFormat, SessionErrorKind, SessionErrorPayload, REPORT_DOCUMENT_IPC_BYTES,
     };
 
     fn canonical_fixture() -> std::path::PathBuf {
@@ -1944,6 +2031,10 @@ mod tests {
         check_ipc_payload(&payload, bytes + 1, "test_summary").unwrap();
 
         open_session_with_selection(&state, || Ok(Some(canonical_fixture()))).unwrap();
+        let presentation = active_session_report_for(&state).unwrap();
+        let serialized = serde_json::to_value(&presentation).unwrap();
+        assert!(serialized.get("reportHtml").is_some());
+        assert!(serialized.get("compactSummaryHtml").is_none());
         state
             .0
             .lock()
@@ -1980,6 +2071,22 @@ mod tests {
     }
 
     #[test]
+    fn compact_and_full_html_suggested_names_are_unambiguous() {
+        let bundle = Path::new("/tmp/field-day.session.wsprabundle");
+        assert_eq!(suggested_report_name(bundle), "field-day-report.html");
+        assert_eq!(
+            suggested_compact_summary_name(bundle),
+            "field-day-compact-summary.html"
+        );
+        let unknown = Path::new("/tmp/no-recognized-suffix");
+        assert_eq!(suggested_report_name(unknown), "antennabench-report.html");
+        assert_eq!(
+            suggested_compact_summary_name(unknown),
+            "antennabench-compact-summary.html"
+        );
+    }
+
+    #[test]
     fn v2_report_refresh_and_exports_share_one_committed_revision() {
         let temp = TempDir::new().unwrap();
         let source = temp.path().join("live.session.antennabundle");
@@ -2013,14 +2120,18 @@ mod tests {
         assert_eq!(unchanged.presentation_id, first.presentation_id);
 
         let html_destination = temp.path().join("snapshot.html");
-        let exported =
-            export_active_report_with_selection(&state, |_| Ok(Some(html_destination.clone())))
-                .unwrap();
+        let exported = export_active_report_with_selection(
+            &state,
+            ReportExportFormat::FullEvidenceHtml,
+            |_| Ok(Some(html_destination.clone())),
+        )
+        .unwrap();
         assert_eq!(
             exported,
             ExportReportOutcome::Exported {
                 file_name: "snapshot.html".into(),
                 revision: first.revision,
+                format: ReportExportFormat::FullEvidenceHtml,
             }
         );
         assert_eq!(
@@ -2028,9 +2139,43 @@ mod tests {
             first.report_html
         );
         assert_eq!(
-            export_active_report_with_selection(&state, |_| Ok(Some(html_destination.clone())))
-                .unwrap_err()
-                .kind,
+            export_active_report_with_selection(
+                &state,
+                ReportExportFormat::FullEvidenceHtml,
+                |_| Ok(Some(html_destination.clone())),
+            )
+            .unwrap_err()
+            .kind,
+            SessionErrorKind::Destination
+        );
+
+        let compact_destination = temp.path().join("snapshot-compact-summary.html");
+        let compact_exported = export_active_report_with_selection(
+            &state,
+            ReportExportFormat::CompactSummaryHtml,
+            |_| Ok(Some(compact_destination.clone())),
+        )
+        .unwrap();
+        assert_eq!(
+            compact_exported,
+            ExportReportOutcome::Exported {
+                file_name: "snapshot-compact-summary.html".into(),
+                revision: first.revision,
+                format: ReportExportFormat::CompactSummaryHtml,
+            }
+        );
+        assert_eq!(
+            fs::read_to_string(&compact_destination).unwrap(),
+            first.compact_summary_html
+        );
+        assert_eq!(
+            export_active_report_with_selection(
+                &state,
+                ReportExportFormat::CompactSummaryHtml,
+                |_| Ok(Some(compact_destination.clone())),
+            )
+            .unwrap_err()
+            .kind,
             SessionErrorKind::Destination
         );
 

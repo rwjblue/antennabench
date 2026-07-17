@@ -49,9 +49,9 @@ operation remains the complete default workflow.
 
 The local workflow can create and reopen sessions, conduct manual WSPR
 comparisons, collect optional WSJT-X and WSPR.live evidence, import bounded WSPR
-and Reverse Beacon Network data, render local reports, and export verified
-reports and bundles. Automatic winner selection and hosted report publishing are
-not available.
+and Reverse Beacon Network data, render local reports, and export compact
+printable summaries, full evidence reports, and verified bundles. Automatic
+winner selection and hosted report publishing are not available.
 
 See the [roadmap](docs/roadmap.md) for the current direction.
 

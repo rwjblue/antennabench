@@ -346,7 +346,7 @@ export function renderTransfer(elements, state) {
   const exportLoading = state.exportStatus === "loading";
   const importLoading = state.importStatus === "loading";
   exportButton.disabled = state.session === null || state.openStatus === "loading" || exportLoading;
-  exportButton.textContent = state.session === null ? "Open a bundle first" : exportLoading ? "Exporting…" : "Export copy";
+  exportButton.textContent = state.session === null ? "Open a bundle first" : exportLoading ? "Exporting…" : "Export lossless bundle";
   importWsprLiveButton.disabled = state.session?.lifecycle !== "running" || importLoading;
   importWsprLiveButton.textContent = state.session?.lifecycle !== "running"
     ? "Open a running session first" : importLoading ? "Importing…" : "Choose WSPR.live JSON";
@@ -368,7 +368,7 @@ export function renderTransfer(elements, state) {
 export function renderReport(elements, state) {
   const {
     reportStatus, reportPlaceholder, reportViewer, reportFrame, reportRefreshButton,
-    reportExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
+    reportCompactExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
     reportBundleName, reportRevision, reportSummary,
   } = elements;
   const hasSession = state.session !== null;
@@ -384,9 +384,11 @@ export function renderReport(elements, state) {
   reportViewer.hidden = !hasSession;
   reportFrame.hidden = !hasReport;
   reportRefreshButton.disabled = reportBusy;
-  reportExportButton.disabled = reportBusy || !hasReport;
+  reportCompactExportButton.disabled = reportBusy || !hasReport;
+  reportFullExportButton.disabled = reportBusy || !hasReport;
   reportRefreshButton.textContent = state.reportStatus === "refreshing" ? "Refreshing…" : "Refresh committed snapshot";
-  reportExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export this HTML snapshot";
+  reportCompactExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export compact summary HTML";
+  reportFullExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export full evidence HTML";
   renderFeedback(reportFeedback, reportFeedbackMessage, reportFeedbackDetail, reportFeedbackModel(state));
   if (!hasSession) return;
   reportBundleName.textContent = state.session.bundleName;
@@ -594,11 +596,11 @@ function importFeedbackModel(state) {
 
 function reportFeedbackModel(state) {
   if (state.reportStatus === "refreshing") return { kind: "loading", message: "Building one verified committed snapshot…", detail: "The prior coherent report remains visible until the new revision is verified." };
-  if (state.reportExportStatus === "loading") return { kind: "loading", message: "Exporting the visible standalone HTML snapshot…", detail: "The destination is created without overwriting an existing file." };
+  if (state.reportExportStatus === "loading") return { kind: "loading", message: "Exporting the committed HTML snapshot…", detail: "Choose compact summary HTML for printing/lightweight sharing or full evidence HTML for the complete audit report. The destination is created without overwriting an existing file." };
   if (state.reportExportError) return { kind: "error", ...state.reportExportError };
   if (state.reportError) return { kind: "error", ...state.reportError };
   if (state.reportExportNotice === "cancelled") return { kind: "cancelled", message: "Report export cancelled.", detail: "The visible coherent report was retained." };
-  if (state.reportExportNotice) return { kind: "ready", message: "The standalone report snapshot was exported.", detail: state.reportExportNotice };
+  if (state.reportExportNotice) return { kind: "ready", message: "The committed report artifact was exported.", detail: state.reportExportNotice };
   return null;
 }
 

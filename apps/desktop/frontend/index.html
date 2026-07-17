@@ -386,7 +386,7 @@
               <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report without changing the source.</p></div><button class="primary-action" type="button" data-open-session>Choose bundle</button></article>
               <article><div><span>Recovery import</span><h2>Add a saved WSPR.live response</h2><p>If automatic acquisition was interrupted, select a <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> JSON response for the active session. AntennaBench validates it against the session before importing any spots.</p></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Open a running session first</button></article>
               <article><div><span>Import evidence</span><h2>Add an RBN daily ZIP archive</h2><p>Select an official <a href="https://www.reversebeacon.net/raw_data/" target="_blank" rel="noreferrer">Reverse Beacon Network daily archive</a>. AntennaBench performs no download: it filters the selected local ZIP to the session callsign, experiment window, and bands, then preserves the exact ZIP in the bundle.</p></div><button class="secondary-action" type="button" data-import-rbn disabled>Open a session first</button></article>
-              <article><div><span>Export</span><h2>Copy the active bundle</h2><p>Preserve the original durable files and attachments losslessly.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
+              <article><div><span>Lossless export</span><h2>Export the complete session bundle</h2><p>Preserve the original durable files and attachments losslessly. This is the authoritative session record.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
             </div>
             <div class="open-feedback" data-open-feedback hidden role="status" aria-live="polite">
               <span class="feedback-mark" aria-hidden="true"></span>
@@ -419,7 +419,8 @@
               </div>
               <div class="conductor-actions report-actions">
                 <button type="button" data-report-refresh>Refresh committed snapshot</button>
-                <button type="button" data-report-export>Export this HTML snapshot</button>
+                <button type="button" data-report-export-compact>Export compact summary HTML</button>
+                <button type="button" data-report-export-full>Export full evidence HTML</button>
               </div>
               <div class="open-feedback" data-report-feedback hidden role="status" aria-live="polite">
                 <span class="feedback-mark" aria-hidden="true"></span>

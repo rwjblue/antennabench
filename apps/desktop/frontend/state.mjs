@@ -514,11 +514,14 @@ export function beginReportExport(state) {
 }
 
 export function reportExportSucceeded(state, outcome) {
+  const label = outcome.format === "compact_summary_html"
+    ? "compact summary"
+    : "full evidence report";
   return {
     ...state,
     reportExportStatus: "ready",
     reportExportError: null,
-    reportExportNotice: `${outcome.fileName} · revision ${outcome.revision ?? "legacy"}`,
+    reportExportNotice: `${label}: ${outcome.fileName} · revision ${outcome.revision ?? "legacy"}`,
   };
 }
 

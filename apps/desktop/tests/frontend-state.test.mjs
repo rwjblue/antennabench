@@ -1081,7 +1081,9 @@ test("revision-keyed report refresh retains coherent prior output on failure and
   const exported = reportExportSucceeded(exporting, {
     fileName: "snapshot.html",
     revision: 4,
+    format: "compact_summary_html",
   });
+  assert.match(exported.reportExportNotice, /compact summary/);
   assert.equal(updateReportFrame(frame, exporting), false);
   assert.equal(updateReportFrame(frame, cancelled), false);
   assert.equal(updateReportFrame(frame, exported), false);
@@ -1256,7 +1258,7 @@ test("the frontend invokes only the narrow session commands", async () => {
   const report = await invokeActiveSessionReport(invoke);
   const exported = await invokeExportSession(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
-  const reportExported = await invokeExportActiveSessionReport(invoke);
+  const reportExported = await invokeExportActiveSessionReport(invoke, "full_evidence_html");
   const imported = await invokeImportActiveSessionWsprLive(invoke);
   const rbnImported = await invokeImportActiveSessionRbn(invoke);
 
@@ -1265,7 +1267,7 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["active_session_report"],
     ["export_active_session"],
     ["refresh_active_session_report"],
-    ["export_active_session_report"],
+    ["export_active_session_report", { format: "full_evidence_html" }],
     ["import_active_session_wspr_live"],
     ["import_active_session_rbn"],
   ]);

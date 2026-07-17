@@ -8,14 +8,19 @@ Bundles are ordinary directories ending in `.session.antennabundle`. You can cop
 one to another computer, archive it with station records, or reopen it in a later
 version of AntennaBench.
 
-## Bundle Or HTML Report?
+## Bundle, Compact Summary, Or Full HTML Report?
 
 Export the **session bundle** when you want the reusable experiment record. It can
 be reopened, rechecked, and used to regenerate reports.
 
-Export the **standalone HTML report** when someone only needs a convenient,
-read-only view of the session. The report is derived from the bundle and does not
-replace it.
+Export the **compact summary HTML** for a printable one- or two-page local
+share summary. It carries the scoped descriptive answer, same-path and reach
+facts, run quality, limitations, and the committed session revision, while
+intentionally directing readers to the complete audit evidence.
+
+Export the **full evidence HTML** when someone needs the convenient,
+read-only report with its complete audit appendix. Both HTML exports are derived
+from the same committed report revision; neither replaces the bundle.
 
 ## What A Bundle Keeps
 
