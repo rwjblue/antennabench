@@ -1972,24 +1972,63 @@ pub(crate) mod tests {
     }
 
     fn fake_command(behavior: &str) -> AntennaControlCommandV5 {
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/fake-antenna-controller.mjs");
-        let executable_name = if cfg!(windows) { "node.exe" } else { "node" };
-        let node = std::env::var_os("PATH")
-            .and_then(|path| {
-                std::env::split_paths(&path)
-                    .map(|directory| directory.join(executable_name))
-                    .find(|candidate| candidate.is_file())
-            })
-            .unwrap_or_else(|| PathBuf::from(executable_name))
+        let executable = std::env::current_exe()
+            .expect("the controller-process fixture can reuse the current test executable")
             .display()
             .to_string();
+        let module = module_path!();
+        let module = module
+            .split_once("::")
+            .map_or(module, |(_, relative)| relative);
+        let fixture = format!("{module}::fake_controller_{}", behavior.replace('-', "_"));
         AntennaControlCommandV5 {
-            program_template: node.clone(),
-            argument_templates: vec![fixture.display().to_string(), behavior.into()],
-            resolved_program: node,
-            resolved_arguments: vec![fixture.display().to_string(), behavior.into()],
+            program_template: executable.clone(),
+            argument_templates: vec![
+                "--ignored".into(),
+                "--exact".into(),
+                fixture.clone(),
+                "--nocapture".into(),
+            ],
+            resolved_program: executable,
+            resolved_arguments: vec![
+                "--ignored".into(),
+                "--exact".into(),
+                fixture,
+                "--nocapture".into(),
+            ],
         }
+    }
+
+    #[test]
+    #[ignore = "child-process fixture"]
+    fn fake_controller_exit_zero() {
+        println!("switched");
+    }
+
+    #[test]
+    #[ignore = "child-process fixture"]
+    fn fake_controller_exit_nonzero() {
+        std::process::exit(7);
+    }
+
+    #[test]
+    #[ignore = "child-process fixture"]
+    fn fake_controller_binary() {
+        std::io::stdout().write_all(&[0xff, 0x00]).unwrap();
+    }
+
+    #[test]
+    #[ignore = "child-process fixture"]
+    fn fake_controller_flood() {
+        std::io::stdout()
+            .write_all(&vec![b'x'; COMMAND_OUTPUT_MAX_BYTES + 1])
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "child-process fixture"]
+    fn fake_controller_timeout() {
+        thread::sleep(StdDuration::from_secs(60));
     }
 
     fn fake_template(behavior: &str) -> ControllerCommandTemplate {
@@ -2051,7 +2090,7 @@ pub(crate) mod tests {
             zero.disposition,
             AntennaControlDispositionV5::Exit { code: 0 }
         );
-        assert_eq!(zero.stdout.data, "switched\n");
+        assert!(zero.stdout.data.contains("switched\n"));
 
         let nonzero = execute_process(
             &fake_command("exit-nonzero"),
