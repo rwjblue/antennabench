@@ -61,6 +61,8 @@ tool versions, and the rest of the contributor workflow.
   the portable experiment record.
 - [Documentation index](docs/README.md) links to architecture, development,
   operations, and technical references.
+- [Examples](examples/README.md) contains optional integrations and controller
+  programs that can be adapted to a local station.
 - [Roadmap](docs/roadmap.md) describes the current direction; GitHub Issues
   track individual unfinished work items.
 

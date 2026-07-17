@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Test dependency-free integration examples"
+
+set -euo pipefail
+
+node --test examples/rig-control/elecraft-k4/k4-cat.test.mjs

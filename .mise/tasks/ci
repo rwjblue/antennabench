@@ -11,6 +11,7 @@ mise run desktop:e2e
 mise run desktop:frontend-test
 mise run desktop:release-test
 mise run hosted:test
+mise run examples:test
 mise run fmt
 mise run lint
 mise run test
