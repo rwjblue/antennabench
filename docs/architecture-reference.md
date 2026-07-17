@@ -405,6 +405,16 @@ only effective explicit confirmations populate actual state. Competing
 confirmation/missed/bad facts stay visibly conflicting and conservatively
 unresolved.
 
+The conductor command façade is intentionally thin. Its private Rust modules
+separate view/diagnostic/recovery projection, typed v2/v3/v5 operator-action
+translation, WSPR timing/readiness/occupancy and signal-state projection, and
+live-session checkpoint orchestration with error mapping. Schema dispatch
+remains explicit at the live-session boundary. Controller assistance receives
+only a token-authorisation port for a displayed session revision: it has no
+generic checkpoint, process, or webview authority. That seam is reserved for a
+future Rust coordinator; it does not start timers, background work, or automatic
+commands.
+
 The allowlisted `active_session_wsjtx_status`,
 `start_active_session_wsjtx`, and `stop_active_session_wsjtx` commands expose
 only bounded status and loopback receiver intent. A Rust-owned task holds the

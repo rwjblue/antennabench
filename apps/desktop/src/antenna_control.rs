@@ -30,7 +30,7 @@ use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use crate::{
-    conductor::{live_error_payload, ConductorSessionState},
+    conductor::{live_error_payload, ConductorSessionState, ControllerActionPort},
     open_session::{
         active_session_source, check_ipc_payload, with_foreground_operation, ActiveSessionState,
         SessionErrorKind, SessionErrorPayload,
@@ -1734,7 +1734,7 @@ pub(crate) fn run_active_session_antenna_controller(
                 )
             })?;
         }
-        conductor_state.authorize_action_token(
+        conductor_state.authorize_controller_action(
             &request.action_token,
             &bundle.manifest.session_id,
             request.expected_revision,

@@ -382,6 +382,12 @@ The composed scenario records its fixed seed and result inside the temporary
 scenario root; if an assertion panics, that exact root is copied to
 `target/desktop-e2e-failures/<seed>/` before temporary cleanup.
 
+The focused conductor Rust tests exercise the same private view, translation,
+timing, and checkpoint-orchestration boundaries used by the command façade.
+They retain explicit schema-v2 versus schema-v3/v4/v5 dispatch, deterministic
+clock control, recovery, lost acknowledgement, stale request, and idempotent
+retry coverage without creating background execution.
+
 On the 2026-07-13 macOS development machine, the warm task completed in 0.42 s.
 The prior issue #18 foreground smoke took 3 min 49 s from application relaunch
 through cleanup (2 min 49 s from opening the first picker through the final
