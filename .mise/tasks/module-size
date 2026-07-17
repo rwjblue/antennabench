@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Enforce the ratcheting Rust module-size budget"
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$repo_root"
+
+node --test scripts/validate-module-size.test.mjs
+node scripts/validate-module-size.mjs
