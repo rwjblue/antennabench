@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "default_budget": 1200,
+  "allowlist_slack": 10,
+  "allowlist": {
+    "apps/desktop/src/antenna_control.rs": 1821,
+    "apps/desktop/src/open_session.rs": 1751,
+    "apps/desktop/src/wsjtx_session.rs": 1360,
+    "crates/report/src/html.rs": 2636,
+    "crates/storage/src/live.rs": 2012,
+    "crates/storage/src/v2.rs": 1407,
+    "crates/wsjtx/src/wspr_live.rs": 1346
+  }
+}
