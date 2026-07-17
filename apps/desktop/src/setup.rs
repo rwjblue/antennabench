@@ -1,8 +1,6 @@
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-    sync::Mutex,
-};
+#[cfg(test)]
+use std::path::{Path, PathBuf};
+use std::{collections::BTreeMap, sync::Mutex};
 
 use antennabench_core::{
     upgrade_v2_bundle_model, validate_bundle_report, validate_signal_plan_schedule_v3,
@@ -11,8 +9,9 @@ use antennabench_core::{
     BundleV3Contents, BundleValidationProfile, ExperimentMode, PlanGenerationV2, PlannedSlot,
     Schedule, SessionGoal, SessionLifecycleV2, SessionStateV2, SignalCollectionProfileV3,
     SignalModeV3, Station, WsprCycleDirection, WsprCycleIntentV3, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
 };
+#[cfg(test)]
+use antennabench_core::{SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX};
 use antennabench_storage::{BundleStore, LivePersistenceHooks, SystemLivePersistenceHooks};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
