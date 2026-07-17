@@ -52,6 +52,11 @@ band, or another context value can change while the antenna label stays the
 same. A controller program may decide that a request is already satisfied and
 return successfully without changing hardware.
 
+The durable experiment mode is part of every invocation context. Direction
+alone cannot distinguish an RX-focused session from the receive intention of a
+whole-station comparison, while a controller may need that distinction to
+select the correct receive and transmit paths.
+
 ## Direct Process Contract
 
 Commands execute directly as one program and an argument array. AntennaBench
@@ -76,6 +81,7 @@ The first template contract provides these placeholders:
 | --- | --- |
 | `{antenna}` | configured AntennaBench antenna label |
 | `{target}` | opaque controller target mapped to that antenna |
+| `{mode}` | durable experiment mode: `whole_station_ab`, `tx_focused`, `rx_focused`, or `single_antenna_profiling` |
 | `{direction}` | `receive` or `transmit` |
 | `{band}` | bundle band identifier such as `20m` |
 | `{frequency_hz}` | exact planned frequency when present, otherwise an empty string |
@@ -148,8 +154,8 @@ including attempts that fail before the child starts. The record retains:
 - switch or verification role and controller profile name/revision;
 - original program and argument templates;
 - resolved program and indexed argument array;
-- antenna, target, direction, band, optional frequency, sequence, intention,
-  session, and callsign context;
+- antenna, target, experiment mode, direction, band, optional frequency,
+  sequence, intention, session, and callsign context;
 - start and completion time and elapsed duration;
 - exit code, spawn error, signal termination, or timeout disposition; and
 - bounded stdout and stderr with encoding and explicit truncation state.
