@@ -1,81 +1,79 @@
 # Session Bundles
 
-An AntennaBench session bundle is the portable record of one antenna
-experiment. It keeps the plan, what the operator actually did, the observations
-collected, and the information needed to explain a report.
+An AntennaBench session bundle is the portable record of one antenna experiment.
+It keeps what you planned, what actually happened, the observations that were
+collected, and the information needed to explain the report.
 
-Bundles are ordinary directories ending in `.session.antennabundle`. You can
-copy one to another computer, archive it with your other station records, or
-reopen it in a later version of AntennaBench. The app can also export a
-standalone HTML report for someone who only needs to see the results.
+Bundles are ordinary directories ending in `.session.antennabundle`. You can copy
+one to another computer, archive it with station records, or reopen it in a later
+version of AntennaBench.
 
-## Why Keep A Bundle?
+## Bundle Or HTML Report?
 
-An antenna report is only as useful as the evidence behind it. AntennaBench
-does not reduce a session to a winner or a few chart values. The bundle keeps:
+Export the **session bundle** when you want the reusable experiment record. It can
+be reopened, rechecked, and used to regenerate reports.
 
-- the station, antennas, and schedule you entered;
-- confirmations, missed or bad slots, notes, and later corrections;
-- operator-confirmed or command-verified WSPR readiness plus bounded command
-  attempts when present;
-- local decodes and imported public reports;
-- original adapter input when it is needed for provenance;
-- enough metadata to reproduce the analysis and disclose missing evidence.
+Export the **standalone HTML report** when someone only needs a convenient,
+read-only view of the session. The report is derived from the bundle and does not
+replace it.
 
-The bundle is the source of truth. Reports, charts, and search indexes can be
-rebuilt from it; they do not replace it.
+## What A Bundle Keeps
+
+A bundle can include:
+
+- station details, antenna descriptions, and the intended run order;
+- readiness actions, missed or bad cycles, notes, interruptions, and corrections;
+- local decodes and attributed public reports;
+- original imported inputs when they are needed to establish provenance;
+- optional controller attempts and bounded diagnostics; and
+- enough metadata to reproduce the supported analysis and explain missing data.
+
+AntennaBench keeps these fact types distinct. It does not turn a planned switch
+into a confirmed switch, treat a missing spot as a zero, or hide a correction by
+rewriting the original record.
 
 ## What Is Inside?
 
-You do not need to understand the files to use AntennaBench, but the layout is
-deliberately inspectable. A typical bundle contains:
+You do not need to inspect the files to use AntennaBench, but the layout is
+intentionally readable:
 
 ```text
 my-test.session.antennabundle/
-  manifest.json          identifies the session and format version
+  manifest.json          session identity and format version
   station.json           station details
   antennas.json          antenna labels and installation notes
-  schedule.json          the planned experiment
-  events.jsonl           what happened while the session ran
+  schedule.json          the intended experiment
+  events.jsonl           operator actions and corrections
   observations.jsonl     decodes and public reports
-  adapter-records.jsonl  retained input and import outcomes
+  adapter-records.jsonl  attributed import and collection records
   session-state.json     the latest durable checkpoint
   attachments/           larger original inputs, stored by content hash
 ```
 
-The `.jsonl` files are append-oriented streams: each line is one record. This
-lets AntennaBench preserve corrections and recovery history instead of quietly
-rewriting earlier evidence.
+The `.jsonl` files store one record per line. New facts and corrections are
+appended so the history remains inspectable.
 
-## Versions
+## Compatibility
 
-New AntennaBench sessions use schema v5. It retains schema-v4 receive/transmit
-direction and adds portable antenna-control policy, typed invocation evidence,
-and an explicit readiness basis. Signal plans remain optional, so
-routine WSPR sessions and controlled CW/RTTY sessions share the same durable
-envelope. Schema-v1 through schema-v4 bundles remain bounded-readable and
-losslessly exportable. Explicit upgrade maps historical ready actions to
-operator-confirmed and invents no commands. The
-storage boundary dispatches explicitly by schema version so compatibility
-readers can be retained once released user formats exist; pre-release v1/v2
-fixtures are not a compatibility promise.
+New sessions currently use bundle schema v5. AntennaBench has explicit readers
+and upgrade paths for earlier pre-release bundle versions; it does not silently
+rewrite an older bundle in place. Use the app’s open, upgrade, and export paths
+rather than editing bundle files by hand.
 
-## Working With Bundles Safely
+## Handling Bundles Safely
 
-- Use AntennaBench to create and update an active session. Editing stream or
-  checkpoint files by hand can make their recorded identities and digests
-  disagree.
-- Keep the bundle export when you want the reusable experiment record. Export
-  HTML when you want a convenient, read-only report to share.
-- Treat imported source attachments as evidence. AntennaBench verifies their
-  recorded sizes and SHA-256 digests when reading them.
-- A bundle can retain resolved command diagnostics, but it never carries or
-  activates local executable profiles, antenna mappings, or timeouts.
-- A report may exclude a damaged or ambiguous record while still explaining
-  the problem. It will not silently turn missing evidence into a result.
+- Keep the bundle when you may want to revisit or reanalyze the experiment.
+- Use AntennaBench to modify an active session. Manual edits can make recorded
+  identities, lengths, and digests disagree.
+- Treat imported attachments as evidence. AntennaBench verifies their recorded
+  size and SHA-256 digest when reading them.
+- Review bundles before sharing. Notes, imported source material, and controller
+  diagnostics can contain station details, local paths, usernames, addresses, or
+  other sensitive text.
+- A damaged or ambiguous record may be excluded from a comparison while the
+  report still explains the problem. It is not silently converted into a result.
 
-## Technical Reference
-
-Building an importer, inspecting validation behavior, or working on the
-storage layer? See the [Bundle Format Technical Reference](bundle-format-reference.md)
-for complete layouts, record semantics, upgrades, resource limits, and APIs.
+Building an importer or working on storage internals? See the
+[Bundle Format Technical Reference](bundle-format-reference.md) for complete
+layouts, record semantics, upgrades, validation profiles, resource limits, and
+APIs.
