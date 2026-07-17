@@ -1,13 +1,1 @@
-name: Temporary WSPR receiver census (retired)
-
-on:
-  workflow_dispatch:
-
-permissions: {}
-
-jobs:
-  retired:
-    if: ${{ false }}
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Temporary research workflow retired after data capture."
+# This branch is retained only as a record of the temporary bounded census run.
