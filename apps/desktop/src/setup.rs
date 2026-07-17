@@ -1,6 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -9,19 +8,15 @@ use antennabench_core::{
     upgrade_v2_bundle_model, validate_bundle_report, validate_signal_plan_schedule_v3,
     AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, BundleDiagnostic,
     BundleDiagnosticSeverity, BundleFileRole, BundleFilesV2, BundleManifestV2, BundleV2Contents,
-    BundleV3Contents, BundleValidationProfile, CounterbalanceBlockIdV3, ExperimentMode,
-    PlanGenerationV2, PlannedSlot, Schedule, SessionGoal, SessionLifecycleV2, SessionStateV2,
-    SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3,
-    SignalPlanV3, SignalVariantIdV3, Station, WsprCycleDirection, WsprCycleIntentV3,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
+    BundleV3Contents, BundleValidationProfile, ExperimentMode, PlanGenerationV2, PlannedSlot,
+    Schedule, SessionGoal, SessionLifecycleV2, SessionStateV2, SignalCollectionProfileV3,
+    SignalModeV3, Station, WsprCycleDirection, WsprCycleIntentV3, SCHEMA_VERSION_V2,
+    SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
 };
-use antennabench_storage::{
-    BundleStore, BundleStoreError, LivePersistenceError, LivePersistenceHooks,
-    SystemLivePersistenceHooks,
-};
+use antennabench_storage::{BundleStore, LivePersistenceHooks, SystemLivePersistenceHooks};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::antenna_control::{
     activate_setup_controller, controller_profiles_for_app, prepare_setup_controller,
@@ -29,10 +24,22 @@ use crate::antenna_control::{
     SetupControllerReview,
 };
 use crate::open_session::{
-    activate_created_bundle, with_foreground_operation, ActiveSessionState, OpenedSession,
-    SessionErrorKind, SessionErrorPayload,
+    ActiveSessionState, OpenedSession, SessionErrorKind, SessionErrorPayload,
 };
 use crate::wsjtx_session::WsjtxSessionState;
+
+mod bundle;
+mod creation;
+mod preferences;
+
+use bundle::{build_v3_setup_bundle, planned_wspr_cycles, setup_plan_review_v3, use_latest_schema};
+use creation::{
+    create_with_selection, creation_error, reviewed_setup_controller, reviewed_station_preferences,
+};
+use preferences::{
+    automatic_session_destination, read_station_preferences, resolved_app_data_dir,
+    write_station_preferences,
+};
 
 const SETUP_REVIEW_IPC_BYTES: u64 = 512 * 1024;
 const SETUP_DRAFT_IPC_BYTES: u64 = 256 * 1024;
@@ -48,15 +55,6 @@ struct PendingSetup {
     review_id: String,
     bundle: BundleV3Contents,
     controller: Option<PreparedSetupController>,
-}
-
-fn station_preferences(bundle: &BundleV3Contents) -> StationPreferences {
-    StationPreferences {
-        callsign: bundle.station.callsign.clone(),
-        grid: bundle.station.grid.clone(),
-        power_watts: bundle.station.power_watts.map(|value| value.to_string()),
-        operator_notes: bundle.station.operator_notes.clone(),
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -218,65 +216,6 @@ struct SetupSlotReview {
     antenna_label: String,
     direction: Option<WsprCycleDirection>,
     signal: Option<SetupSlotSignalReview>,
-}
-
-fn planned_wspr_cycles(
-    antenna_labels: &[&String],
-    mode: ExperimentMode,
-    repetitions: u32,
-) -> Vec<(String, WsprCycleDirection)> {
-    let forward = antenna_labels
-        .iter()
-        .map(|label| (*label).clone())
-        .collect::<Vec<_>>();
-    let reverse = forward.iter().rev().cloned().collect::<Vec<_>>();
-    let mut cycles = Vec::new();
-    for repetition in 0..repetitions {
-        let (first, second) = if repetition.is_multiple_of(2) {
-            (&forward, &reverse)
-        } else {
-            (&reverse, &forward)
-        };
-        match mode {
-            ExperimentMode::WholeStationAb | ExperimentMode::SingleAntennaProfiling => {
-                cycles.extend(
-                    first
-                        .iter()
-                        .cloned()
-                        .map(|label| (label, WsprCycleDirection::Receive)),
-                );
-                cycles.extend(
-                    second
-                        .iter()
-                        .cloned()
-                        .map(|label| (label, WsprCycleDirection::Transmit)),
-                );
-            }
-            ExperimentMode::TxFocused => cycles.extend(
-                first
-                    .iter()
-                    .cloned()
-                    .map(|label| (label, WsprCycleDirection::Transmit)),
-            ),
-            ExperimentMode::RxFocused => cycles.extend(
-                first
-                    .iter()
-                    .cloned()
-                    .map(|label| (label, WsprCycleDirection::Receive)),
-            ),
-        }
-    }
-    cycles
-}
-
-fn use_latest_schema(bundle: &mut BundleV3Contents) {
-    bundle.manifest.schema_version = SCHEMA_VERSION_V5;
-    bundle.session_state.schema_version = SCHEMA_VERSION_V5;
-    bundle.station.schema_version = SCHEMA_VERSION_V5;
-    bundle.antennas.schema_version = SCHEMA_VERSION_V5;
-    bundle.schedule.schema_version = SCHEMA_VERSION_V5;
-    bundle.schedule.antenna_control = Some(antennabench_core::AntennaControlPolicyV5::Manual);
-    bundle.analysis.schema_version = SCHEMA_VERSION_V5;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -922,196 +861,6 @@ fn setup_diagnostic_from_core(diagnostic: &BundleDiagnostic) -> SetupDiagnostic 
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build_v3_setup_bundle(
-    bundle: BundleV2Contents,
-    plan: ParsedSignalPlan,
-    antenna_labels: &[String],
-    blocks: u32,
-    band: Band,
-    hooks: &dyn LivePersistenceHooks,
-) -> Result<BundleV3Contents, SessionErrorPayload> {
-    let mut bundle = upgrade_v2_bundle_model(bundle);
-    let signal_plan_id = SignalPlanIdV3::new("primary").expect("fixed plan identity is valid");
-    let variants = plan
-        .frequencies_hz
-        .iter()
-        .enumerate()
-        .map(|(index, frequency_hz)| {
-            Ok((
-                SignalVariantIdV3::new(format!("f-{}", index + 1)).map_err(|_| {
-                    SessionErrorPayload::report_pipeline("generated frequency identity is invalid")
-                })?,
-                *frequency_hz,
-            ))
-        })
-        .collect::<Result<Vec<_>, SessionErrorPayload>>()?;
-    let block_size = antenna_labels
-        .len()
-        .checked_mul(variants.len())
-        .ok_or_else(|| SessionErrorPayload::report_pipeline("signal schedule size overflowed"))?;
-    let mut intents = Vec::with_capacity(
-        block_size
-            .checked_mul(usize::try_from(blocks).unwrap_or(usize::MAX))
-            .ok_or_else(|| {
-                SessionErrorPayload::report_pipeline("signal schedule size overflowed")
-            })?,
-    );
-    for block_index in 0..blocks {
-        let block_id =
-            CounterbalanceBlockIdV3::new(format!("block-{}", block_index + 1)).map_err(|_| {
-                SessionErrorPayload::report_pipeline("generated counterbalance identity is invalid")
-            })?;
-        let mut pairs = Vec::with_capacity(block_size);
-        for (antenna_index, antenna_label) in antenna_labels.iter().enumerate() {
-            for (variant_index, (variant_id, frequency_hz)) in variants.iter().enumerate() {
-                let forward = antenna_index * variants.len() + variant_index;
-                let position = if block_index % 2 == 0 {
-                    forward
-                } else {
-                    block_size - 1 - forward
-                };
-                pairs.push((
-                    position,
-                    antenna_label.clone(),
-                    variant_id.clone(),
-                    *frequency_hz,
-                ));
-            }
-        }
-        pairs.sort_by_key(|(position, _, _, _)| *position);
-        for (position, antenna_label, frequency_variant_id, frequency_hz) in pairs {
-            let sequence_number = u32::try_from(intents.len() + 1).map_err(|_| {
-                SessionErrorPayload::report_pipeline("signal slot count overflowed")
-            })?;
-            intents.push(WsprCycleIntentV3 {
-                intent_id: hooks.new_id("intent"),
-                sequence_number,
-                band,
-                antenna_label,
-                direction: Some(WsprCycleDirection::Transmit),
-                signal: Some(SignalAllocationV3 {
-                    signal_plan_id: signal_plan_id.clone(),
-                    frequency_hz,
-                    frequency_variant_id,
-                    counterbalance_block_id: block_id.clone(),
-                    counterbalance_position: u16::try_from(position).map_err(|_| {
-                        SessionErrorPayload::report_pipeline(
-                            "counterbalance position exceeds the supported range",
-                        )
-                    })?,
-                }),
-            });
-        }
-    }
-    bundle.schedule.signal_plans = vec![SignalPlanV3 {
-        signal_plan_id,
-        mode: plan.mode,
-        planned_power_watts: plan.planned_power_watts,
-        transmitted_callsign: plan.transmitted_callsign,
-        differing_identity_validated: plan.differing_identity_validated,
-        cadence: SignalCadenceV3 {
-            message: plan.message,
-            repetition_count: plan.repetition_count,
-            key_speed_wpm: plan.key_speed_wpm,
-            transmit_seconds: plan.transmit_seconds,
-            interval_seconds: plan.interval_seconds,
-        },
-        collection_profile: plan.collection_profile,
-    }];
-    bundle.schedule.slots.clear();
-    bundle.schedule.wspr_cycle_intents = intents;
-    Ok(bundle)
-}
-
-fn setup_plan_review_v3(
-    bundle: &BundleV3Contents,
-    antenna_controller: Option<SetupControllerReview>,
-) -> SetupPlanReview {
-    let signal_plan = bundle.schedule.signal_plans.first();
-    SetupPlanReview {
-        schema_version: bundle.manifest.schema_version,
-        session_id: bundle.manifest.session_id.clone(),
-        created_at: bundle.manifest.created_at,
-        station: SetupStationReview {
-            callsign: bundle.station.callsign.clone(),
-            grid: bundle.station.grid.clone(),
-            power_watts: bundle.station.power_watts,
-            operator_notes: bundle.station.operator_notes.clone(),
-        },
-        antennas: bundle
-            .antennas
-            .antennas
-            .iter()
-            .map(|antenna| SetupAntennaReview {
-                label: antenna.label.clone(),
-                context: antenna_context(antenna),
-            })
-            .collect(),
-        mode: bundle.schedule.mode,
-        goal: bundle.schedule.goal,
-        wspr_live_acquisition_enabled: bundle.session_state.wspr_live_acquisition_enabled,
-        signal_plan: signal_plan.map(|plan| SetupSignalPlanReview {
-            mode: plan.mode,
-            collection_profile: plan.collection_profile,
-            planned_power_watts: plan.planned_power_watts,
-            transmitted_callsign: plan.transmitted_callsign.clone(),
-            message: plan.cadence.message.clone(),
-            repetition_count: plan.cadence.repetition_count,
-            key_speed_wpm: plan.cadence.key_speed_wpm,
-            transmit_seconds: plan.cadence.transmit_seconds,
-            interval_seconds: plan.cadence.interval_seconds,
-            frequencies_hz: bundle
-                .schedule
-                .wspr_cycle_intents
-                .iter()
-                .filter_map(|intent| intent.signal.as_ref().map(|signal| signal.frequency_hz))
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect(),
-        }),
-        slots: bundle
-            .schedule
-            .wspr_cycle_intents
-            .iter()
-            .map(|intent| SetupSlotReview {
-                slot_id: intent.intent_id.clone(),
-                sequence_number: intent.sequence_number,
-                band: intent.band,
-                antenna_label: intent.antenna_label.clone(),
-                direction: intent.direction,
-                signal: intent.signal.as_ref().map(|signal| SetupSlotSignalReview {
-                    frequency_hz: signal.frequency_hz,
-                    frequency_variant_id: signal.frequency_variant_id.as_str().into(),
-                    counterbalance_block_id: signal.counterbalance_block_id.as_str().into(),
-                    counterbalance_position: signal.counterbalance_position,
-                }),
-            })
-            .collect(),
-        antenna_controller,
-    }
-}
-
-fn antenna_context(antenna: &Antenna) -> String {
-    let mut context = Vec::new();
-    if !antenna.facets.is_empty() {
-        context.push(antenna.facets.join(", "));
-    }
-    if let Some(height) = antenna.height_m {
-        context.push(format!("{height} m high"));
-    }
-    if let Some(orientation) = antenna.orientation_degrees {
-        context.push(format!("{orientation}° orientation"));
-    }
-    if let Some(feedline) = &antenna.feedline {
-        context.push(format!("feedline: {feedline}"));
-    }
-    if let Some(notes) = &antenna.notes {
-        context.push(notes.clone());
-    }
-    context.join(" · ")
-}
-
 fn check_review_ipc(review: &SetupReview) -> Result<(), SessionErrorPayload> {
     let bytes = serde_json::to_vec(review).map_err(|error| {
         SessionErrorPayload::report_pipeline(format!("setup review serialization failed: {error}"))
@@ -1128,250 +877,6 @@ fn check_review_ipc(review: &SetupReview) -> Result<(), SessionErrorPayload> {
     } else {
         Ok(())
     }
-}
-
-fn safe_callsign(bundle: &BundleV3Contents) -> String {
-    let callsign = bundle
-        .station
-        .callsign
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>();
-    callsign.trim_matches('-').to_string()
-}
-
-fn automatic_session_destination(
-    app_data_dir: &Path,
-    bundle: &BundleV3Contents,
-) -> Result<PathBuf, SessionErrorPayload> {
-    let sessions_dir = app_data_dir.join("sessions");
-    fs::create_dir_all(&sessions_dir).map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Filesystem,
-            "The AntennaBench sessions directory could not be prepared.",
-            format!("{}: {error}", sessions_dir.display()),
-        )
-    })?;
-    let timestamp = bundle.manifest.created_at.format("%Y%m%dT%H%M%SZ");
-    let base = format!("{}-{timestamp}", safe_callsign(bundle));
-    for attempt in 1..=10_000 {
-        let suffix = if attempt == 1 {
-            String::new()
-        } else {
-            format!("-{attempt}")
-        };
-        let destination = sessions_dir.join(format!("{base}{suffix}{V2_BUNDLE_SUFFIX}"));
-        if !destination.exists() {
-            return Ok(destination);
-        }
-    }
-    Err(SessionErrorPayload::new(
-        SessionErrorKind::Destination,
-        "A collision-free session name could not be allocated.",
-        sessions_dir.display().to_string(),
-    ))
-}
-
-fn station_preferences_path(app_data_dir: &Path) -> PathBuf {
-    app_data_dir.join("station-preferences.json")
-}
-
-fn read_station_preferences(
-    app_data_dir: &Path,
-) -> Result<Option<StationPreferences>, SessionErrorPayload> {
-    let path = station_preferences_path(app_data_dir);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(SessionErrorPayload::new(
-                SessionErrorKind::Filesystem,
-                "Saved station details could not be read.",
-                format!("{}: {error}", path.display()),
-            ))
-        }
-    };
-    serde_json::from_slice(&bytes).map(Some).map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Validation,
-            "Saved station details are not valid.",
-            format!("{}: {error}", path.display()),
-        )
-    })
-}
-
-fn write_station_preferences(
-    app_data_dir: &Path,
-    preferences: &StationPreferences,
-) -> Result<(), SessionErrorPayload> {
-    fs::create_dir_all(app_data_dir).map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Filesystem,
-            "Saved station details could not be prepared.",
-            format!("{}: {error}", app_data_dir.display()),
-        )
-    })?;
-    let path = station_preferences_path(app_data_dir);
-    let bytes = serde_json::to_vec_pretty(preferences).map_err(|error| {
-        SessionErrorPayload::report_pipeline(format!(
-            "station preferences serialization failed: {error}"
-        ))
-    })?;
-    fs::write(&path, bytes).map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Filesystem,
-            "Saved station details could not be updated.",
-            format!("{}: {error}", path.display()),
-        )
-    })
-}
-
-fn resolved_app_data_dir(app: &AppHandle) -> Result<PathBuf, SessionErrorPayload> {
-    app.path().app_data_dir().map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Filesystem,
-            "The system application-data directory is unavailable.",
-            error.to_string(),
-        )
-    })
-}
-
-fn reviewed_station_preferences(
-    state: &SetupSessionState,
-    review_id: &str,
-) -> Result<StationPreferences, SessionErrorPayload> {
-    state
-        .0
-        .lock()
-        .map_err(|_| SessionErrorPayload::report_pipeline("setup review state is unavailable"))?
-        .as_ref()
-        .filter(|pending| pending.review_id == review_id)
-        .map(|pending| station_preferences(&pending.bundle))
-        .ok_or_else(|| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Validation,
-                "Review the current setup before creating its bundle.",
-                "the supplied setup review is missing or stale",
-            )
-        })
-}
-
-fn reviewed_setup_controller(
-    state: &SetupSessionState,
-    review_id: &str,
-) -> Result<Option<PreparedSetupController>, SessionErrorPayload> {
-    state
-        .0
-        .lock()
-        .map_err(|_| SessionErrorPayload::report_pipeline("setup review state is unavailable"))?
-        .as_ref()
-        .filter(|pending| pending.review_id == review_id)
-        .map(|pending| pending.controller.clone())
-        .ok_or_else(|| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Validation,
-                "Review the current setup before creating its bundle.",
-                "the supplied setup review is missing or stale",
-            )
-        })
-}
-
-fn validate_destination(path: &Path) -> Result<(), SessionErrorPayload> {
-    if path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.ends_with(V2_BUNDLE_SUFFIX))
-    {
-        Ok(())
-    } else {
-        Err(SessionErrorPayload::new(
-            SessionErrorKind::Destination,
-            "Keep the new session's .session.antennabundle suffix.",
-            path.display().to_string(),
-        ))
-    }
-}
-
-fn creation_error(error: LivePersistenceError) -> SessionErrorPayload {
-    match error {
-        LivePersistenceError::Store(BundleStoreError::DestinationExists { path }) => {
-            SessionErrorPayload::new(
-                SessionErrorKind::Destination,
-                "A file or directory already exists at that destination.",
-                path.display().to_string(),
-            )
-        }
-        LivePersistenceError::Store(BundleStoreError::Validation { source }) => {
-            SessionErrorPayload::new(
-                SessionErrorKind::Validation,
-                "The reviewed session no longer passes strict creation validation.",
-                source.to_string(),
-            )
-        }
-        LivePersistenceError::Capability { message } => SessionErrorPayload::new(
-            SessionErrorKind::Filesystem,
-            "The selected filesystem cannot provide durable live sessions.",
-            message,
-        ),
-        LivePersistenceError::WriterBusy => SessionErrorPayload::new(
-            SessionErrorKind::Busy,
-            "The new session is already in use.",
-            "another writer owns the session lock",
-        ),
-        error => SessionErrorPayload::new(
-            SessionErrorKind::Filesystem,
-            "The new session bundle could not be created.",
-            error.to_string(),
-        ),
-    }
-}
-
-fn create_with_selection(
-    setup_state: &SetupSessionState,
-    active_state: &ActiveSessionState,
-    review_id: &str,
-    select: impl FnOnce(&BundleV3Contents) -> Result<Option<PathBuf>, SessionErrorPayload>,
-) -> Result<CreateSessionOutcome, SessionErrorPayload> {
-    with_foreground_operation(active_state, || {
-        let pending = setup_state
-            .0
-            .lock()
-            .map_err(|_| SessionErrorPayload::report_pipeline("setup review state is unavailable"))?
-            .clone()
-            .filter(|pending| pending.review_id == review_id)
-            .ok_or_else(|| {
-                SessionErrorPayload::new(
-                    SessionErrorKind::Validation,
-                    "Review the current setup before creating its bundle.",
-                    "the supplied setup review is missing or stale",
-                )
-            })?;
-        let Some(destination) = select(&pending.bundle)? else {
-            return Ok(CreateSessionOutcome::Cancelled);
-        };
-        validate_destination(&destination)?;
-        let store = BundleStore::new(&destination);
-        store
-            .create_v3_checkpointed(&pending.bundle)
-            .map_err(creation_error)?;
-        let session = activate_created_bundle(active_state, destination)?;
-        let mut reviewed = setup_state.0.lock().map_err(|_| {
-            SessionErrorPayload::report_pipeline("setup review state is unavailable")
-        })?;
-        if reviewed
-            .as_ref()
-            .is_some_and(|current| current.review_id == review_id)
-        {
-            *reviewed = None;
-        }
-        Ok(CreateSessionOutcome::Created { session })
-    })
 }
 
 #[tauri::command]

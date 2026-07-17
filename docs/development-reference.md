@@ -20,6 +20,12 @@ Project-local instructions live in `AGENTS.md`. Future agent planning artifacts
 under `docs/superpowers/` are ignored and should remain local unless a user
 explicitly asks to preserve them elsewhere.
 
+The desktop setup implementation is intentionally divided into private
+draft/review, bundle-construction, preferences/destination, and committed-
+creation modules. Keep Tauri command names and frontend payloads in the thin
+setup façade; normalization, filesystem access, clocks, identities, and review
+token authority remain Rust-owned.
+
 ## Work Tracking
 
 GitHub Issues are the durable source of truth for unfinished work and open

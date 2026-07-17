@@ -374,6 +374,17 @@ updates those preferences after successful creation, and makes the reopened
 bundle active. The webview sees no path, only a review identity, preferences,
 and the active-session summary.
 
+Desktop setup keeps these responsibilities in four private Rust boundaries:
+draft/review owns wire parsing, field diagnostics, review-size checks, and the
+retained exact candidate; bundle construction owns schema-v5 defaults,
+deterministic WSPR direction/order expansion, signal-plan counterbalancing,
+and controller preview projection; preferences/destination owns the private
+station form record plus collision-safe app-data naming; and committed creation
+owns review-token admission, checkpointed publication, typed failures,
+cancellation, activation, and candidate consumption. The command façade only
+composes those boundaries. This keeps the reviewed plan—not frontend state—the
+single authority connecting controller association and preview to activation.
+
 The allowlisted `request_station_location` command owns the macOS Core Location
 boundary. It is invoked only from the explicit setup button, requests
 foreground/when-in-use authorization only while status is not determined, and
