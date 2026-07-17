@@ -1,8 +1,11 @@
 # Architecture Overview
 
+> **Audience:** contributors who need the system shape. Crate-level APIs and wire
+> details are in the [Architecture Technical Reference](architecture-reference.md).
+
 AntennaBench is built around one rule: the session bundle is the durable
-experiment record. User interfaces, reports, charts, indexes, and optional
-hosted copies are projections of that bundle and can be rebuilt.
+experiment record. User interfaces, reports, charts, indexes, and optional hosted
+copies are derived views that can be rebuilt.
 
 ## System Shape
 
@@ -23,56 +26,47 @@ operator + optional data sources
  optional explicit hosted copy
 ```
 
-The desktop frontend presents forms and results. Rust owns filesystem access,
-bundle interpretation, validation, clocks and identities, adapter input,
-analysis, and report rendering. This keeps browser code from becoming a second
-experiment model or receiving general access to the host computer.
+The static frontend presents forms and results. Rust owns filesystem access,
+bundle interpretation, validation, trusted clocks and identities, adapter input,
+analysis, and report rendering. This keeps the webview from becoming a second
+experiment model or receiving broad access to the host computer.
 
 ## Main Components
 
-- **Core and storage** define bundle versions, validation, normalization,
-  upgrades, checkpointed writes, recovery, and verified exports.
-- **Adapters** translate WSJT-X, WSPR.live, Reverse Beacon Network, and NOAA
-  inputs into attributed evidence without making any source mandatory.
-- **Analysis** aligns observations with the schedule and derives conservative,
-  descriptive comparison data.
-- **Reporting** turns that typed analysis into a deterministic standalone HTML
-  document with accessible table equivalents.
-- **Desktop** guides setup and conduction, coordinates adapters, and exposes
+- **Core and storage** define bundle versions, validation, upgrades, checkpointed
+  writes, recovery, and verified exports.
+- **Adapters** translate WSJT-X, WSPR.live, Reverse Beacon Network, and NOAA inputs
+  into attributed evidence without making any source mandatory.
+- **Analysis** aligns observations with what actually happened and derives
+  conservative descriptive comparisons.
+- **Reporting** turns that analysis into deterministic standalone HTML with text
+  and table equivalents for visual summaries.
+- **Desktop** guides setup and active runs, coordinates adapters, and exposes
   reports and exports through narrowly scoped Rust commands.
 - **Hosted foundation** is an optional, currently admission-disabled sharing
   boundary. Local sessions do not depend on it.
 
-## Important Boundaries
+## Boundaries That Protect The Evidence
 
-Planned settings, confirmed operator actions, adapter observations, and public
-reports are different fact classes. AntennaBench does not silently substitute
-one for another.
+**Plan, action, and observation are different facts.** Planned settings do not
+prove that a switch happened. Operator actions do not become decoder
+observations. Missing public data does not become a zero.
 
-Schema-v5 antenna-control evidence follows the same boundary. Portable bundles
-may describe command-control policy and retain resolved invocation evidence,
-but never contain executable profiles, target mappings, or timeouts that grant
-local authority. The desktop can explicitly attach and arm a revisioned
-machine-local profile for one active session. Rust derives the pending
-intention context and directly spawns only that profile's program plus argument
-array; the webview never supplies an executable at invocation time.
-Command attempt records and an optional command-verified ready event cross one
-storage checkpoint; a failed attempt can remain auditable without advancing
-antenna occupancy.
+**Active sessions use coherent revisions.** A report or export reads one verified
+checkpoint, so it cannot combine files from different moments in a run.
 
-An active session is committed in checkpointed revisions. A report and its
-exports use one verified revision, so they cannot accidentally combine files
-from different moments in a live run.
+**External inputs are attributed and bounded.** An optional adapter that fails or
+exceeds its limits records a scoped gap. It does not stop manual operation or
+safe export of evidence already on disk.
 
-External inputs are bounded and attributed. A failing or oversized optional
-adapter stops its own intake and records a completeness gap; it does not stop
-manual conduction or lossless export.
+**Executable controller profiles stay local.** A portable bundle can retain
+commands and diagnostics that actually ran, but it cannot contain or reactivate
+the local executable profile and antenna mapping that granted process authority.
 
-The hosted system receives a copy only after an explicit publishing action. It
-is not synchronization, and hosted state never becomes session evidence.
-
-## Technical Reference
+**Hosted data is a copy, never synchronization.** A future publishing action may
+send an explicit copy for sharing. Hosted state does not become experiment
+evidence and never replaces the local bundle.
 
 See the [Architecture Technical Reference](architecture-reference.md) for
-crate-level APIs, data flow, validation and resource behavior, desktop command
-boundaries, adapter contracts, and hosted trust details.
+crate-level APIs, adapter contracts, resource behavior, desktop command
+boundaries, and hosted trust details.
