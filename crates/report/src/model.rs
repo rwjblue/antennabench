@@ -1,8 +1,9 @@
 use antennabench_analysis::{
-    AnalysisError, ComparisonAvailability, ComparisonBlock, ComparisonDiagnostics,
-    ComparisonStratum, ComparisonTimelineRow, DeltaOrientation, EligibilityExclusionCount,
-    EvidenceQuality, ExclusionCount, ObservationCounts, PairedObservationRow, PairedPathSummary,
-    PairedStratumSummary, PathDirection, PathOverlapRow, SnrStatistics, SolarContextAnalysis,
+    AnalysisError, ComparisonAvailability, ComparisonBlock, ComparisonBlockEligibility,
+    ComparisonDiagnostics, ComparisonStratum, ComparisonTimelineRow, DeltaOrientation,
+    EligibilityExclusionCount, EvidenceQuality, ExclusionCount, ObservationCounts,
+    ObservationExclusionRecord, PairedObservationRow, PairedPathSummary, PairedStratumSummary,
+    PathDirection, PathOverlapRow, SnrStatistics, SolarContextAnalysis,
 };
 use antennabench_core::{
     AlignedSlotStatus, Antenna, AntennaControlDispositionV5, AntennaControlOutputV5,
@@ -31,6 +32,8 @@ pub struct SessionReport {
     pub snapshot: ReportSnapshotContext,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub eligibility_exclusions: Vec<EligibilityExclusionCount>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclusion_records: Vec<ObservationExclusionRecord>,
 }
 
 /// A concise, renderer-neutral projection of the session questions and the
@@ -44,6 +47,8 @@ pub struct ReportOverview {
     pub lifecycle: ReportOverviewLifecycle,
     pub comparison_availability: ComparisonAvailability,
     pub strata: Vec<ReportOverviewStratum>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timeline: Vec<ReportRunTimelineRow>,
     pub limitations: Vec<ReportOverviewLimitation>,
 }
 
@@ -54,6 +59,7 @@ impl Default for ReportOverview {
             lifecycle: ReportOverviewLifecycle::default(),
             comparison_availability: ComparisonAvailability::NotApplicable,
             strata: Vec::new(),
+            timeline: Vec::new(),
             limitations: Vec::new(),
         }
     }
@@ -109,6 +115,7 @@ pub enum ReportOverviewLifecycleState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReportOverviewStratum {
     pub stratum: ComparisonStratum,
+    pub availability: ReportStratumAvailability,
     pub paired_row_count: usize,
     pub unique_path_count: usize,
     pub contributing_block_count: usize,
@@ -118,6 +125,7 @@ pub struct ReportOverviewStratum {
     pub unmatched_right_count: usize,
     pub missing_snr_left_count: usize,
     pub missing_snr_right_count: usize,
+    pub excluded_observation_count: usize,
     pub exact_duplicate_count: usize,
     pub conflicting_duplicate_group_count: usize,
     pub path_delta: ReportOverviewPathDelta,
@@ -133,6 +141,41 @@ pub struct ReportOverviewStratum {
     /// distance bin or azimuth sector.
     #[serde(default)]
     pub location_context: ReportOverviewLocationContext,
+}
+
+/// Typed answerability for one already-separated comparison stratum. These
+/// states describe availability only; they are not evidence-strength grades.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportStratumAvailability {
+    DescriptivePairsAvailable,
+    NoFinitePairedPaths,
+}
+
+/// Compact planned-versus-actual row retained even in bounded-overview mode.
+/// The renderer may summarize it visually, while `event_history` supplies the
+/// exact accessible note and correction trail for the row.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportRunTimelineRow {
+    pub item_id: String,
+    pub sequence_number: u32,
+    pub block_index: Option<usize>,
+    pub block_eligibility: Option<ComparisonBlockEligibility>,
+    pub band: Band,
+    pub direction: Option<WsprCycleDirection>,
+    pub planned_antenna: String,
+    pub actual_antenna: Option<String>,
+    pub planned_starts_at: DateTime<Utc>,
+    pub planned_ends_at: DateTime<Utc>,
+    pub actual_starts_at: Option<DateTime<Utc>>,
+    pub actual_ends_at: Option<DateTime<Utc>>,
+    pub readiness_basis: Option<ReportWsprReadinessBasis>,
+    pub attribution: Option<ReportWsprAttribution>,
+    pub status: AlignedSlotStatus,
+    pub total_observation_count: usize,
+    pub usable_observation_count: usize,
+    pub excluded_observation_count: usize,
+    pub event_history: Vec<ReportOperatorEvent>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -274,6 +317,8 @@ pub struct ReportSnapshotContext {
     pub lifecycle: Option<SessionLifecycleV2>,
     pub lifecycle_events: Vec<ReportLifecycleEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub operator_events: Vec<ReportOperatorEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub wspr_cycles: Vec<ReportWsprCycle>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub antenna_control_attempts: Vec<ReportAntennaControlAttempt>,
@@ -285,10 +330,57 @@ impl ReportSnapshotContext {
         self.checkpoint_revision.is_none()
             && self.lifecycle.is_none()
             && self.lifecycle_events.is_empty()
+            && self.operator_events.is_empty()
             && self.wspr_cycles.is_empty()
             && self.antenna_control_attempts.is_empty()
             && self.adapter_evidence.record_count == 0
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportOperatorEvent {
+    pub event_id: String,
+    pub occurred_at: DateTime<Utc>,
+    pub slot_id: Option<String>,
+    pub affected_slot_id: Option<String>,
+    pub kind: ReportOperatorEventKind,
+    pub detail: Option<String>,
+    pub correction: Option<ReportEventCorrection>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportOperatorEventKind {
+    SessionStarted,
+    SessionInterrupted,
+    InterruptionDetected,
+    SessionResumed,
+    SessionEnded,
+    SessionAbandoned,
+    AntennaSwitchStarted,
+    WsprCycleArmed,
+    AntennaStateConfirmed,
+    SignalStateConfirmed,
+    SlotMissed,
+    SlotBad,
+    NoteAdded,
+    EventCorrected,
+    Switched,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportEventCorrection {
+    pub target_event_id: String,
+    pub action: ReportEventCorrectionAction,
+    pub reason: String,
+    pub applied: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportEventCorrectionAction {
+    Retracted,
+    Replaced,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -535,6 +627,12 @@ pub struct SlotEvidenceSection {
     pub planned_label: String,
     pub actual_label: Option<String>,
     pub status: AlignedSlotStatus,
+    pub starts_at: DateTime<Utc>,
+    pub ends_at: DateTime<Utc>,
+    pub usable_start: DateTime<Utc>,
+    pub switch_event_id: Option<String>,
+    pub switch_timestamp: Option<DateTime<Utc>>,
+    pub switch_delay_seconds: Option<i64>,
     pub evidence: ReportEvidenceSummary,
 }
 
@@ -591,6 +689,8 @@ pub enum ReportDetailFamily {
     AntennaEvidence,
     BandEvidence,
     SlotEvidence,
+    ExclusionRecords,
+    OperatorEvents,
     ComparisonBlocks,
     PathOverlap,
     ComparisonTimeline,

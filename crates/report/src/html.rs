@@ -4,10 +4,10 @@ use std::{
 };
 
 use antennabench_analysis::{
-    ComparisonAvailability, ComparisonOrder, ComparisonSide, ComparisonStratum,
-    ComparisonTimelineRow, EligibilityExclusionCategory, EligibilityScope, EvidenceQuality,
-    ObservationCounts, ObservationExclusionReason, PairedObservationRow, PathDirection,
-    SnrStatistics, SolarEndpointContext, SolarLightState, SolarPositionResult,
+    ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder, ComparisonSide,
+    ComparisonStratum, ComparisonTimelineRow, EligibilityExclusionCategory, EligibilityScope,
+    EvidenceQuality, ObservationCounts, ObservationExclusionReason, PairedObservationRow,
+    PathDirection, SnrStatistics, SolarEndpointContext, SolarLightState, SolarPositionResult,
 };
 use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
@@ -19,9 +19,10 @@ use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, BandEvidenceSection,
     ReportAzimuthSector, ReportCancellationToken, ReportDetailFamily, ReportDistanceBin,
     ReportError, ReportEvidenceSummary, ReportImportedEvidence, ReportLifecycleEventKind,
-    ReportNotice, ReportOverviewLifecycleState, ReportOverviewLimitation,
-    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportOverviewStratum,
-    ReportPathLocationAvailability, ReportResourceLimits, ReportResourceStage, SessionReport,
+    ReportNotice, ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLifecycleState,
+    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
+    ReportOverviewStratum, ReportPathLocationAvailability, ReportResourceLimits,
+    ReportResourceStage, ReportRunTimelineRow, ReportStratumAvailability, SessionReport,
     SlotEvidenceSection, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
@@ -41,6 +42,9 @@ const STYLES: &str = r#"
 @media(max-width:620px){.path-strip-row{grid-template-columns:1fr}.reach-strip{grid-template-columns:1fr}.reach-strip span{border-right:0;border-bottom:1px solid var(--paper)}.reach-strip span:last-child{border-bottom:0}}
 .location-fill{height:100%;background:#315da8;border-radius:999px}.azimuth-track{position:relative;height:1rem;background:linear-gradient(90deg,#e1e6ef 0 24.8%,#cbd5e7 25% 25.2%,#e1e6ef 25.4% 49.8%,#cbd5e7 50% 50.2%,#e1e6ef 50.4% 74.8%,#cbd5e7 75% 75.2%,#e1e6ef 75.4% 100%);border-radius:999px}.azimuth-marker{position:absolute;top:.1rem;width:.45rem;height:.8rem;background:#b35c00;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}
 .location-context{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.45rem;margin:.55rem 0}.location-context-cell{min-height:5.2rem;padding:.5rem .6rem;border:1px solid var(--line);border-radius:.45rem;background:var(--soft)}.location-context-cell strong,.location-context-cell small{display:block}.location-context-cell small{color:var(--muted)}.location-context-cell.empty-cell{border-style:dashed}.location-context-table td:first-child{min-width:12rem}
+.answerability-table td:first-child{min-width:14rem}.run-timeline{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.55rem;margin:.55rem 0}.run-timeline details{margin:0;border:2px solid var(--line);border-radius:.5rem;background:var(--paper)}.run-timeline summary{padding:.55rem .65rem;cursor:pointer;font-weight:700}.run-timeline .timeline-detail{padding:.1rem .65rem .65rem;border-top:1px solid var(--line)}.timeline-state{display:inline-block;min-width:1.45rem;margin-right:.25rem;text-align:center}.state-late{border-style:dashed!important}.state-missed{border-left-color:#805500!important}.state-bad{border-left-color:#8a2f2f!important;border-style:double!important}.state-unknown{border-style:dotted!important}.state-interrupted{border-top-color:#633c91!important;border-bottom-color:#633c91!important}.state-corrected{border-width:3px!important}.lifecycle-strip{display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0}.lifecycle-chip{padding:.25rem .45rem;border:1px solid var(--line);border-radius:.35rem;background:var(--soft);font-size:.82rem}.lifecycle-chip strong{margin-right:.2rem}.audit-event-list{margin:.4rem 0;padding-left:1.2rem}.audit-event-list li+li{margin-top:.25rem}
+@media(max-width:620px){.run-timeline{grid-template-columns:1fr}.answerability-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.answerability-table tr{display:block;margin:.5rem 0;border:1px solid var(--line);border-radius:.45rem}.answerability-table td{display:grid;grid-template-columns:minmax(8rem,42%) 1fr;gap:.5rem}.answerability-table td::before{content:attr(data-label);color:var(--muted);font-size:.72rem;font-weight:700;text-transform:uppercase}.answerability-table td:first-child{min-width:0}}
+@media print{.answerability-table{display:block}.answerability-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.answerability-table tbody{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}.answerability-table tr{display:grid;grid-template-columns:1fr 1fr;align-content:start;break-inside:avoid;border:1px solid var(--line);border-radius:.45rem}.answerability-table td{display:grid;grid-template-columns:minmax(6.5rem,44%) 1fr;gap:.35rem;padding:.28rem .4rem}.answerability-table td::before{content:attr(data-label);color:var(--muted);font-size:7.5pt;font-weight:700;text-transform:uppercase}.answerability-table td:first-child{grid-column:1/-1;min-width:0}.answerability-table td:nth-child(2){grid-column:1/-1}.answerability-table td:nth-last-child(-n+2){border-bottom:0}}
 "#;
 
 /// Renders a deterministic, standalone HTML document from renderer-neutral
@@ -585,7 +589,14 @@ fn fixed_azimuth_sector_label(sector: ReportAzimuthSector) -> &'static str {
 }
 
 fn render_run_quality_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
-    out.push_str("<section id=\"run-quality\" class=\"question-section\" aria-labelledby=\"run-quality-title\"><div class=\"panel\"><h2 id=\"run-quality-title\">Run quality</h2><p class=\"muted\">Required omissions, unavailable states, and validation exclusions stay visible without opening an audit disclosure.</p></div>");
+    out.push_str("<section id=\"run-quality\" class=\"question-section\" aria-labelledby=\"run-quality-title\"><div class=\"panel\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">Availability is reported from typed evidence states and raw counts. It is not a run-quality score or a strength grade.</p>");
+    render_answerability(out, report);
+    out.push_str("</div><div class=\"panel\"><h2>Planned versus actual</h2><p class=\"muted\">Symbols, words, and border styles distinguish state without relying on color. Open a row for exact times, readiness, attribution, counts, notes, and corrections.</p>");
+    render_lifecycle_strip(out, report);
+    render_run_timeline(out, report);
+    out.push_str("</div>");
+    render_acquisition_summary(out, report);
+    render_exclusion_summary(out, report);
     render_notices(out, &report.notices);
     render_eligibility(out, report);
     out.push_str("<div class=\"panel\"><details class=\"audit-disclosure\"><summary>Review overall, antenna, and band evidence accounting</summary><div class=\"disclosure-body\">");
@@ -597,6 +608,264 @@ fn render_run_quality_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionR
     out.push_str("</div></details></div></section>");
 }
 
+fn render_answerability(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    if report.overview.strata.is_empty() {
+        write_html!(
+            out,
+            "<p class=\"empty\"><strong>{}.</strong> {}</p>",
+            comparison_availability_label(report.overview.comparison_availability),
+            comparison_availability_text(report.overview.comparison_availability)
+        );
+        return;
+    }
+    out.push_str("<div class=\"table-wrap\"><table class=\"answerability-table\"><caption>Answerability by separate comparison stratum</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Availability</th><th scope=\"col\">Unique paired paths</th><th scope=\"col\">Paired rows</th><th scope=\"col\">Blocks</th><th scope=\"col\">A→B / B→A</th><th scope=\"col\">Unmatched L / R</th><th scope=\"col\">Missing SNR L / R</th><th scope=\"col\">Excluded</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
+    for row in &report.overview.strata {
+        let availability = match row.availability {
+            ReportStratumAvailability::DescriptivePairsAvailable => {
+                "Answerable — descriptive pairs available"
+            }
+            ReportStratumAvailability::NoFinitePairedPaths => {
+                "Unavailable — no finite same-path pair"
+            }
+        };
+        write_html!(out, "<tr><td data-label=\"Stratum\">{}</td><td data-label=\"Availability\">{}</td><td data-label=\"Unique paired paths\">{}</td><td data-label=\"Paired rows\">{}</td><td data-label=\"Blocks\">{}</td><td data-label=\"A→B / B→A\">{} / {}</td><td data-label=\"Unmatched L / R\">{} / {}</td><td data-label=\"Missing SNR L / R\">{} / {}</td><td data-label=\"Excluded\">{}</td><td data-label=\"Duplicates\">{}</td><td data-label=\"Conflicts\">{}</td></tr>", comparison_stratum(&row.stratum), availability, row.unique_path_count, row.paired_row_count, row.contributing_block_count, row.left_then_right_block_count, row.right_then_left_block_count, row.unmatched_left_count, row.unmatched_right_count, row.missing_snr_left_count, row.missing_snr_right_count, row.excluded_observation_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+    }
+    out.push_str("</tbody></table></div><p class=\"muted\">Unmatched paths, missing values, exclusions, duplicates, and conflicts remain separate facts. They are not converted into zero-SNR samples.</p>");
+}
+
+fn render_lifecycle_strip(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    if report.snapshot.lifecycle_events.is_empty() {
+        return;
+    }
+    out.push_str("<div class=\"lifecycle-strip\" aria-label=\"Lifecycle sequence\">");
+    for event in &report.snapshot.lifecycle_events {
+        let symbol = match event.kind {
+            ReportLifecycleEventKind::Interrupted
+            | ReportLifecycleEventKind::InterruptionDetected => "!",
+            ReportLifecycleEventKind::Resumed => "↻",
+            ReportLifecycleEventKind::Abandoned => "×",
+            ReportLifecycleEventKind::Ended => "■",
+            ReportLifecycleEventKind::Started => "▶",
+        };
+        write_html!(
+            out,
+            "<span class=\"lifecycle-chip\"><strong aria-hidden=\"true\">{}</strong>{} · {}</span>",
+            symbol,
+            lifecycle_event(event.kind),
+            timestamp(event.occurred_at)
+        );
+    }
+    out.push_str("</div>");
+}
+
+fn render_run_timeline(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    if report.overview.timeline.is_empty() {
+        out.push_str("<p class=\"empty\">No valid planned cycle or slot rows are available for the compact timeline.</p>");
+        return;
+    }
+    out.push_str("<div class=\"run-timeline\">");
+    for row in &report.overview.timeline {
+        let (class, state, symbol) = timeline_compact_state(row, report);
+        write_html!(out, "<details class=\"state-{}\"><summary><span class=\"timeline-state\" aria-hidden=\"true\">{}</span>#{} {} → {}<br><small>{} · {} usable / {} excluded</small></summary><div class=\"timeline-detail\"><dl class=\"facts\">", class, symbol, row.sequence_number, escape_html(&row.planned_antenna), escape_html(row.actual_antenna.as_deref().unwrap_or("Not recorded")), state, row.usable_observation_count, row.excluded_observation_count);
+        fact(out, "Item", &row.item_id);
+        fact(out, "State", state);
+        fact(
+            out,
+            "Band / direction",
+            &format!(
+                "{} / {}",
+                band(row.band),
+                row.direction.map(wspr_direction).unwrap_or("Not recorded")
+            ),
+        );
+        fact(
+            out,
+            "Block",
+            &row.block_index.map_or_else(
+                || "Not applicable".into(),
+                |index| {
+                    format!(
+                        "{}; {}",
+                        index + 1,
+                        row.block_eligibility
+                            .map(block_eligibility)
+                            .unwrap_or("Not recorded")
+                    )
+                },
+            ),
+        );
+        fact(
+            out,
+            "Planned window",
+            &format!(
+                "{} – {}",
+                timestamp(row.planned_starts_at),
+                timestamp(row.planned_ends_at)
+            ),
+        );
+        fact(
+            out,
+            "Actual window",
+            &match (row.actual_starts_at, row.actual_ends_at) {
+                (Some(start), Some(end)) => format!("{} – {}", timestamp(start), timestamp(end)),
+                (Some(start), None) => format!("{} – end not recorded", timestamp(start)),
+                _ => "Not recorded".into(),
+            },
+        );
+        fact(
+            out,
+            "Readiness",
+            row.readiness_basis
+                .map(wspr_readiness)
+                .unwrap_or("Not recorded"),
+        );
+        fact(
+            out,
+            "Attribution",
+            row.attribution
+                .map(wspr_attribution)
+                .unwrap_or("Not recorded"),
+        );
+        fact(
+            out,
+            "Evidence",
+            &format!(
+                "{} total; {} usable; {} excluded",
+                row.total_observation_count,
+                row.usable_observation_count,
+                row.excluded_observation_count
+            ),
+        );
+        out.push_str("</dl>");
+        render_timeline_events(out, &row.event_history);
+        out.push_str("</div></details>");
+    }
+    out.push_str("</div>");
+}
+
+fn timeline_compact_state(
+    row: &ReportRunTimelineRow,
+    report: &SessionReport,
+) -> (&'static str, &'static str, &'static str) {
+    if row.event_history.iter().any(|event| {
+        event.kind == ReportOperatorEventKind::EventCorrected
+            && event
+                .correction
+                .as_ref()
+                .is_some_and(|correction| correction.applied)
+    }) {
+        return ("corrected", "Corrected", "✓");
+    }
+    if report.snapshot.lifecycle_events.iter().any(|event| {
+        matches!(
+            event.kind,
+            ReportLifecycleEventKind::Interrupted | ReportLifecycleEventKind::InterruptionDetected
+        ) && event.occurred_at >= row.planned_starts_at
+            && event.occurred_at < row.planned_ends_at
+    }) {
+        return ("interrupted", "Interrupted", "!");
+    }
+    match row.status {
+        AlignedSlotStatus::Missed => ("missed", "Missed", "—"),
+        AlignedSlotStatus::Bad | AlignedSlotStatus::ConflictingEvidence => {
+            ("bad", slot_status(row.status), "×")
+        }
+        AlignedSlotStatus::UnknownActualState => ("unknown", "Unknown occupancy", "?"),
+        AlignedSlotStatus::LateSwitch => ("late", "Late switch", "△"),
+        _ if row.attribution == Some(crate::ReportWsprAttribution::UnknownAntennaOccupancy) => {
+            ("unknown", "Unknown occupancy", "?")
+        }
+        _ if row.attribution == Some(crate::ReportWsprAttribution::Skipped) => {
+            ("missed", "Skipped", "—")
+        }
+        _ => ("ordinary", slot_status(row.status), "●"),
+    }
+}
+
+fn render_timeline_events(out: &mut CheckedHtmlWriter<'_>, events: &[ReportOperatorEvent]) {
+    if events.is_empty() {
+        out.push_str(
+            "<p class=\"muted\">No slot-specific operator note or correction is recorded.</p>",
+        );
+        return;
+    }
+    out.push_str("<ul class=\"audit-event-list\">");
+    for event in events {
+        write_html!(
+            out,
+            "<li><code>{}</code> · {} · {}",
+            escape_html(&event.event_id),
+            timestamp(event.occurred_at),
+            operator_event_kind(event.kind)
+        );
+        if let Some(detail) = &event.detail {
+            write_html!(out, " · {}", escape_html(detail));
+        }
+        if let Some(correction) = &event.correction {
+            write_html!(
+                out,
+                " · {} <code>{}</code>: {} ({})",
+                correction_action(correction.action),
+                escape_html(&correction.target_event_id),
+                escape_html(&correction.reason),
+                if correction.applied {
+                    "applied"
+                } else {
+                    "not applied"
+                }
+            );
+        }
+        out.push_str("</li>");
+    }
+    out.push_str("</ul>");
+}
+
+fn render_acquisition_summary(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let evidence = &report.snapshot.adapter_evidence;
+    out.push_str("<section class=\"panel\" aria-labelledby=\"acquisition-quality-title\"><h2 id=\"acquisition-quality-title\">Acquisition status</h2>");
+    if evidence
+        .imports
+        .iter()
+        .any(|import| import.provider_id == "wspr-live")
+        && evidence.evidence_complete
+    {
+        out.push_str("<p><strong>Best-effort public collection completed for the requested windows.</strong> AntennaBench retained the spots returned by the configured WSPR.live queries. The upstream mirror does not provide an independent completeness guarantee.</p>");
+    } else if evidence.gap_count > 0 {
+        write_html!(out, "<p class=\"notice critical\"><strong>Explicit acquisition gap:</strong> {} recorded gap{}; retained unrelated valid evidence remains usable. Inspect provider windows and durable adapter records in the audit appendix.</p>", evidence.gap_count, plural_suffix(evidence.gap_count));
+    } else if !evidence.evidence_complete {
+        out.push_str("<p class=\"notice critical\"><strong>Recorded acquisition is incomplete.</strong> No durable gap count is available; inspect provider windows and lifecycle records for the recorded reason.</p>");
+    } else if evidence.record_count > 0 {
+        out.push_str("<p>No explicit acquisition gap is recorded. Adapter row dispositions remain available in the audit appendix.</p>");
+    } else {
+        out.push_str("<p class=\"empty\">No adapter or import acquisition record is available; no completeness claim is inferred.</p>");
+    }
+    out.push_str("</section>");
+}
+
+fn render_exclusion_summary(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<section class=\"panel\" aria-labelledby=\"exclusion-summary-title\"><h2 id=\"exclusion-summary-title\">Exclusion summary</h2><p class=\"notice\">Affected evidence is excluded only from calculations that require it. Unrelated valid evidence remains usable.</p>");
+    if report.evidence.overall.exclusions.is_empty() {
+        out.push_str("<p class=\"empty\">No observation exclusions are recorded.</p>");
+    } else {
+        out.push_str("<div class=\"table-wrap\"><table><caption>Observation exclusions by existing reason</caption><thead><tr><th scope=\"col\">Reason</th><th scope=\"col\">Count</th></tr></thead><tbody>");
+        for exclusion in &report.evidence.overall.exclusions {
+            write_html!(
+                out,
+                "<tr><td>{}</td><td>{}</td></tr>",
+                exclusion_reason(exclusion.reason),
+                exclusion.count
+            );
+        }
+        out.push_str("</tbody></table></div>");
+    }
+    if !report.exclusion_records.is_empty() {
+        out.push_str("<details class=\"audit-disclosure\"><summary>Review exact excluded observation records</summary><div class=\"disclosure-body\">");
+        render_exclusion_records(out, report);
+        out.push_str("</div></details>");
+    }
+    out.push_str("</section>");
+}
+
 fn render_audit_appendix(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<section id=\"audit-appendix\" class=\"panel question-section\" aria-labelledby=\"audit-title\"><h2 id=\"audit-title\">Audit appendix</h2><p class=\"muted\">Open only the supporting detail needed for review. Closed disclosures remain closed in default print output.</p>");
     if snapshot_has_detail(report) {
@@ -606,7 +875,8 @@ fn render_audit_appendix(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport
     }
     out.push_str("<details class=\"audit-disclosure\"><summary>Review station, antenna, and planned schedule detail</summary><div class=\"disclosure-body\">");
     render_context(out, report);
-    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review comparison data-quality timeline</summary><div class=\"disclosure-body\">");
+    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review comparison blocks and data-quality timeline</summary><div class=\"disclosure-body\">");
+    render_comparison_blocks(out, report);
     render_comparison_timeline(out, report);
     out.push_str("</div></details></section>");
 }
@@ -741,6 +1011,29 @@ fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         }
         out.push_str("</tbody></table></div>");
     }
+    if !snapshot.operator_events.is_empty() {
+        out.push_str("<div class=\"table-wrap\"><table><caption>Complete operator note and correction history</caption><thead><tr><th scope=\"col\">Event</th><th scope=\"col\">Time</th><th scope=\"col\">Recorded slot</th><th scope=\"col\">Affected slot</th><th scope=\"col\">Kind</th><th scope=\"col\">Detail</th><th scope=\"col\">Correction</th></tr></thead><tbody>");
+        for event in &snapshot.operator_events {
+            let correction = event.correction.as_ref().map_or_else(
+                || "None".to_string(),
+                |correction| {
+                    format!(
+                        "{} {}: {} ({})",
+                        correction_action(correction.action),
+                        correction.target_event_id,
+                        correction.reason,
+                        if correction.applied {
+                            "applied"
+                        } else {
+                            "not applied"
+                        }
+                    )
+                },
+            );
+            write_html!(out, "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", escape_html(&event.event_id), timestamp(event.occurred_at), escape_html(event.slot_id.as_deref().unwrap_or("Not recorded")), escape_html(event.affected_slot_id.as_deref().unwrap_or("Not recorded")), operator_event_kind(event.kind), escape_html(event.detail.as_deref().unwrap_or("Not recorded")), escape_html(&correction));
+        }
+        out.push_str("</tbody></table></div>");
+    }
     if !snapshot.wspr_cycles.is_empty() {
         out.push_str("<div class=\"table-wrap\"><table><caption>Intended WSPR order and observed antenna use</caption><thead><tr><th scope=\"col\">Sequence</th><th scope=\"col\">Band</th><th scope=\"col\">Direction</th><th scope=\"col\">Intended antenna</th><th scope=\"col\">Observed antenna</th><th scope=\"col\">Readiness basis</th><th scope=\"col\">Ready</th><th scope=\"col\">Period start</th><th scope=\"col\">Period end</th><th scope=\"col\">Attribution</th></tr></thead><tbody>");
         for cycle in &snapshot.wspr_cycles {
@@ -800,6 +1093,7 @@ fn snapshot_has_detail(report: &SessionReport) -> bool {
     snapshot.checkpoint_revision.is_some()
         || snapshot.lifecycle.is_some()
         || !snapshot.lifecycle_events.is_empty()
+        || !snapshot.operator_events.is_empty()
         || !snapshot.wspr_cycles.is_empty()
         || !snapshot.antenna_control_attempts.is_empty()
         || snapshot.adapter_evidence.record_count > 0
@@ -926,6 +1220,18 @@ fn render_eligibility(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
         );
     }
     out.push_str("</tbody></table></div></section>");
+}
+
+fn render_exclusion_records(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    if report.exclusion_records.is_empty() {
+        out.push_str("<p class=\"empty\">Record-level exclusion detail is unavailable or omitted by the bounded overview.</p>");
+        return;
+    }
+    out.push_str("<div class=\"table-wrap\"><table><caption>Every excluded observation retained by the report projection</caption><thead><tr><th scope=\"col\">Observation</th><th scope=\"col\">Reason</th><th scope=\"col\">Time</th><th scope=\"col\">Band</th><th scope=\"col\">Kind / source</th><th scope=\"col\">Mode</th><th scope=\"col\">Slot / label</th><th scope=\"col\">Confidence</th></tr></thead><tbody>");
+    for record in &report.exclusion_records {
+        write_html!(out, "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{} / {}</td><td>{}</td><td>{} / {}</td><td>{}</td></tr>", escape_html(&record.observation_id), exclusion_reason(record.reason), timestamp(record.timestamp), band(record.band), observation_kind(record.observation_kind), record_source(record.source), escape_html(record.mode.as_deref().unwrap_or("Not recorded")), escape_html(record.slot_id.as_deref().unwrap_or("Not assigned")), escape_html(record.assigned_label.as_deref().unwrap_or("Not assigned")), format_number(f64::from(record.assignment_confidence)));
+    }
+    out.push_str("</tbody></table></div>");
 }
 
 fn eligibility_category(value: EligibilityExclusionCategory) -> &'static str {
@@ -1204,6 +1510,19 @@ fn render_comparison_timeline(out: &mut CheckedHtmlWriter<'_>, report: &SessionR
     out.push_str("</div><div class=\"table-wrap\"><table><caption>Data-quality timeline details</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Eligible</th><th scope=\"col\">Sequence</th><th scope=\"col\">Slot</th><th scope=\"col\">Starts</th><th scope=\"col\">Band</th><th scope=\"col\">Actual label</th><th scope=\"col\">Side</th><th scope=\"col\">Status</th><th scope=\"col\">Total</th><th scope=\"col\">Usable</th><th scope=\"col\">Excluded</th><th scope=\"col\">Missing SNR</th><th scope=\"col\">Missing/invalid mode</th><th scope=\"col\">Ambiguous</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
     for row in &report.comparison.timeline_rows {
         timeline_table_row(out, row);
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_comparison_blocks(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    out.push_str("<h3>Comparison block inventory</h3>");
+    if report.comparison.blocks.is_empty() {
+        out.push_str("<p class=\"empty\">No comparison block rows are available.</p>");
+        return;
+    }
+    out.push_str("<div class=\"table-wrap\"><table><caption>Exact adjacent same-band block construction</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Band</th><th scope=\"col\">First slot</th><th scope=\"col\">First actual / status</th><th scope=\"col\">Second slot</th><th scope=\"col\">Second actual / status</th><th scope=\"col\">Order</th><th scope=\"col\">Eligibility</th></tr></thead><tbody>");
+    for block in &report.comparison.blocks {
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{} · #{} · {}</td><td>{} / {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", block.block_index + 1, band(block.band), escape_html(&block.first_slot_id), block.first_sequence_number, timestamp(block.first_starts_at), escape_html(block.first_label.as_deref().unwrap_or("Not recorded")), slot_status(block.first_status), block.second_slot_id.as_ref().map(|id| format!("{} · #{} · {}", id, block.second_sequence_number.unwrap_or_default(), block.second_starts_at.map(timestamp).unwrap_or_else(|| "Not recorded".into()))).map(|value| escape_html(&value)).unwrap_or_else(|| "Not recorded".into()), escape_html(&format!("{} / {}", block.second_label.as_deref().unwrap_or("Not recorded"), block.second_status.map(slot_status).unwrap_or("Not recorded"))), block.order.map(comparison_order).unwrap_or("Unavailable"), block_eligibility(block.eligibility));
     }
     out.push_str("</tbody></table></div>");
 }
@@ -1588,7 +1907,7 @@ fn render_slot_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) 
     if report.evidence.slots.is_empty() {
         out.push_str("<p class=\"empty\">No per-slot evidence is available.</p>");
     } else {
-        out.push_str("<div class=\"table-wrap\"><table><caption>Evidence details by slot</caption><thead><tr><th scope=\"col\">Sequence</th><th scope=\"col\">Slot</th><th scope=\"col\">Band</th><th scope=\"col\">Planned / actual</th><th scope=\"col\">Status</th><th scope=\"col\">Counts</th><th scope=\"col\">Exclusions</th><th scope=\"col\">SNR</th></tr></thead><tbody>");
+        out.push_str("<div class=\"table-wrap\"><table><caption>Evidence details by slot</caption><thead><tr><th scope=\"col\">Sequence</th><th scope=\"col\">Slot</th><th scope=\"col\">Band</th><th scope=\"col\">Planned / actual</th><th scope=\"col\">Status</th><th scope=\"col\">Window / usable start</th><th scope=\"col\">Switch audit</th><th scope=\"col\">Counts</th><th scope=\"col\">Exclusions</th><th scope=\"col\">SNR</th></tr></thead><tbody>");
         for row in &report.evidence.slots {
             slot_evidence_row(out, row);
         }
@@ -1740,7 +2059,19 @@ fn band_evidence_row(out: &mut CheckedHtmlWriter<'_>, row: &BandEvidenceSection)
 
 fn slot_evidence_row(out: &mut CheckedHtmlWriter<'_>, row: &SlotEvidenceSection) {
     let actual = row.actual_label.as_deref().unwrap_or("Not recorded");
-    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{} / {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.sequence_number, escape_html(&row.slot_id), band(row.band), escape_html(&row.planned_label), escape_html(actual), slot_status(row.status), counts_text(row.evidence.observation_counts), exclusions_text(&row.evidence), snr_text(row.evidence.snr));
+    let switch = match (
+        row.switch_event_id.as_deref(),
+        row.switch_timestamp,
+        row.switch_delay_seconds,
+    ) {
+        (Some(event_id), Some(timestamp_value), Some(delay)) => format!(
+            "{} at {}; {delay} s from start",
+            event_id,
+            timestamp(timestamp_value)
+        ),
+        _ => "Not recorded".into(),
+    };
+    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{} / {}</td><td>{}</td><td>{} – {}; usable {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.sequence_number, escape_html(&row.slot_id), band(row.band), escape_html(&row.planned_label), escape_html(actual), slot_status(row.status), timestamp(row.starts_at), timestamp(row.ends_at), timestamp(row.usable_start), escape_html(&switch), counts_text(row.evidence.observation_counts), exclusions_text(&row.evidence), snr_text(row.evidence.snr));
 }
 
 fn snr_cells(snr: Option<SnrStatistics>) -> String {
@@ -1976,6 +2307,67 @@ fn record_source(value: RecordSource) -> &'static str {
     }
 }
 
+fn block_eligibility(value: ComparisonBlockEligibility) -> &'static str {
+    match value {
+        ComparisonBlockEligibility::Eligible => "Eligible",
+        ComparisonBlockEligibility::AmbiguousSequenceOrder => "Ambiguous sequence order",
+        ComparisonBlockEligibility::IncompleteSameBandRun => "Incomplete same-band run",
+        ComparisonBlockEligibility::MissingActualLabel => "Missing actual antenna",
+        ComparisonBlockEligibility::RepeatedLabel => "Repeated actual antenna",
+        ComparisonBlockEligibility::UnsupportedLabel => "Unsupported actual antenna",
+    }
+}
+
+fn wspr_direction(value: WsprCycleDirection) -> &'static str {
+    match value {
+        WsprCycleDirection::Receive => "Receive",
+        WsprCycleDirection::Transmit => "Transmit",
+    }
+}
+
+fn wspr_readiness(value: crate::ReportWsprReadinessBasis) -> &'static str {
+    match value {
+        crate::ReportWsprReadinessBasis::OperatorConfirmed => "Operator confirmed",
+        crate::ReportWsprReadinessBasis::CommandVerified => "Command verified",
+    }
+}
+
+fn wspr_attribution(value: crate::ReportWsprAttribution) -> &'static str {
+    match value {
+        crate::ReportWsprAttribution::Pending => "Not yet run",
+        crate::ReportWsprAttribution::Skipped => "Skipped by operator",
+        crate::ReportWsprAttribution::Attributable => "Full antenna occupancy recorded",
+        crate::ReportWsprAttribution::UnknownAntennaOccupancy => "Unknown antenna occupancy",
+    }
+}
+
+fn operator_event_kind(value: ReportOperatorEventKind) -> &'static str {
+    match value {
+        ReportOperatorEventKind::SessionStarted => "Session started",
+        ReportOperatorEventKind::SessionInterrupted => "Session interrupted",
+        ReportOperatorEventKind::InterruptionDetected => "Interruption detected",
+        ReportOperatorEventKind::SessionResumed => "Session resumed",
+        ReportOperatorEventKind::SessionEnded => "Session ended",
+        ReportOperatorEventKind::SessionAbandoned => "Session abandoned",
+        ReportOperatorEventKind::AntennaSwitchStarted => "Antenna switch started",
+        ReportOperatorEventKind::WsprCycleArmed => "WSPR cycle armed",
+        ReportOperatorEventKind::AntennaStateConfirmed => "Antenna state confirmed",
+        ReportOperatorEventKind::SignalStateConfirmed => "Signal state confirmed",
+        ReportOperatorEventKind::SlotMissed => "Slot missed",
+        ReportOperatorEventKind::SlotBad => "Slot bad",
+        ReportOperatorEventKind::NoteAdded => "Note added",
+        ReportOperatorEventKind::EventCorrected => "Event corrected",
+        ReportOperatorEventKind::Switched => "Switched",
+    }
+}
+
+fn correction_action(value: crate::ReportEventCorrectionAction) -> &'static str {
+    match value {
+        crate::ReportEventCorrectionAction::Retracted => "Retracted",
+        crate::ReportEventCorrectionAction::Replaced => "Replaced",
+    }
+}
+
 fn import_source_boundary(import: &ReportImportedEvidence) -> &'static str {
     if import.provider_id == "wspr-live" {
         "best-effort WSPR.live request-window collection; upstream mirror has no independent completeness guarantee"
@@ -2058,6 +2450,8 @@ fn detail_family(value: ReportDetailFamily) -> &'static str {
         ReportDetailFamily::AntennaEvidence => "antenna evidence",
         ReportDetailFamily::BandEvidence => "band evidence",
         ReportDetailFamily::SlotEvidence => "slot evidence",
+        ReportDetailFamily::ExclusionRecords => "excluded observation",
+        ReportDetailFamily::OperatorEvents => "operator-event audit",
         ReportDetailFamily::ComparisonBlocks => "comparison block",
         ReportDetailFamily::PathOverlap => "path overlap",
         ReportDetailFamily::ComparisonTimeline => "comparison timeline",

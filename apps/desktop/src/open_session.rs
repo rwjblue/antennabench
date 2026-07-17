@@ -8,17 +8,20 @@ use std::{
 
 use antennabench_analysis::AnalysisError;
 use antennabench_core::{
-    normalize_bundle, project_wspr_run_v3, AdapterDisposition, AdapterInput, AdapterRecordV2, Band,
-    BundleContents, BundleV3Contents, BundleValidationError, BundleValidationReport,
+    normalize_bundle, project_wspr_run_v3, reduce_operator_events_v2, reduce_operator_events_v3,
+    AdapterDisposition, AdapterInput, AdapterRecordV2, Band, BundleContents, BundleV3Contents,
+    BundleValidationError, BundleValidationReport, CorrectableOperatorEventPayloadV2,
+    CorrectableOperatorEventPayloadV3, EventCorrectionActionV2, EventCorrectionActionV3,
     OperatorEventPayloadV2, OperatorEventPayloadV3, SessionLifecycleV2, WsprReadinessBasisV5,
     SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, V1_BUNDLE_SUFFIX,
     V2_BUNDLE_SUFFIX,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_standalone_html, ReportAdapterEvidence,
-    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportImportedEvidence,
-    ReportLifecycleEvent, ReportLifecycleEventKind, ReportSnapshotContext, ReportWsprAttribution,
-    ReportWsprCycle, ReportWsprReadinessBasis,
+    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportEventCorrection,
+    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind, ReportSnapshotContext,
+    ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::{Deserialize, Serialize};
@@ -585,6 +588,7 @@ fn report_snapshot(bundle: &antennabench_core::BundleV2Contents) -> ReportSnapsh
         checkpoint_revision: Some(bundle.session_state.revision),
         lifecycle: Some(bundle.session_state.lifecycle),
         lifecycle_events,
+        operator_events: project_operator_events_v2(&bundle.events),
         wspr_cycles: Vec::new(),
         antenna_control_attempts: Vec::new(),
         adapter_evidence: adapter,
@@ -715,9 +719,325 @@ fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
         checkpoint_revision: Some(bundle.session_state.revision),
         lifecycle: Some(bundle.session_state.lifecycle),
         lifecycle_events,
+        operator_events: project_operator_events_v3(&bundle.events),
         wspr_cycles,
         antenna_control_attempts,
         adapter_evidence: adapter,
+    }
+}
+
+fn project_operator_events_v2(
+    events: &[antennabench_core::OperatorEventV2],
+) -> Vec<ReportOperatorEvent> {
+    let rejected = reduce_operator_events_v2(SessionLifecycleV2::Ready, events)
+        .diagnostics
+        .into_iter()
+        .map(|diagnostic| diagnostic.event_id)
+        .collect::<std::collections::HashSet<_>>();
+    events
+        .iter()
+        .map(|event| {
+            let (kind, detail, correction, replacement_slot) = match &event.payload {
+                OperatorEventPayloadV2::SessionStarted { note } => (
+                    ReportOperatorEventKind::SessionStarted,
+                    note.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::SessionInterrupted { reason } => (
+                    ReportOperatorEventKind::SessionInterrupted,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::InterruptionDetected { reason } => (
+                    ReportOperatorEventKind::InterruptionDetected,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::SessionResumed { note } => (
+                    ReportOperatorEventKind::SessionResumed,
+                    note.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::SessionEnded { reason } => (
+                    ReportOperatorEventKind::SessionEnded,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::SessionAbandoned { reason } => (
+                    ReportOperatorEventKind::SessionAbandoned,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::AntennaStateConfirmed {
+                    antenna_label,
+                    note,
+                } => (
+                    ReportOperatorEventKind::AntennaStateConfirmed,
+                    Some(match note {
+                        Some(note) => format!("Actual antenna {antenna_label}; {note}"),
+                        None => format!("Actual antenna {antenna_label}"),
+                    }),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::SlotMissed { reason } => (
+                    ReportOperatorEventKind::SlotMissed,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::SlotBad { reason } => (
+                    ReportOperatorEventKind::SlotBad,
+                    Some(reason.clone()),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::NoteAdded { note } => (
+                    ReportOperatorEventKind::NoteAdded,
+                    Some(note.clone()),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV2::EventCorrected {
+                    target_event_id,
+                    correction,
+                    reason,
+                } => {
+                    let (action, detail, slot) = match correction {
+                        EventCorrectionActionV2::Retract => {
+                            (ReportEventCorrectionAction::Retracted, None, None)
+                        }
+                        EventCorrectionActionV2::Replace { replacement } => (
+                            ReportEventCorrectionAction::Replaced,
+                            Some(correctable_detail_v2(&replacement.payload)),
+                            replacement.slot_id.clone(),
+                        ),
+                    };
+                    (
+                        ReportOperatorEventKind::EventCorrected,
+                        detail,
+                        Some(ReportEventCorrection {
+                            target_event_id: target_event_id.clone(),
+                            action,
+                            reason: reason.clone(),
+                            applied: !rejected.contains(&event.event_id),
+                        }),
+                        slot,
+                    )
+                }
+            };
+            let affected_slot_id = replacement_slot.or_else(|| {
+                correction.as_ref().and_then(|correction| {
+                    events
+                        .iter()
+                        .find(|candidate| candidate.event_id == correction.target_event_id)
+                        .and_then(|candidate| candidate.slot_id.clone())
+                })
+            });
+            ReportOperatorEvent {
+                event_id: event.event_id.clone(),
+                occurred_at: event.occurred_at,
+                slot_id: event.slot_id.clone(),
+                affected_slot_id: affected_slot_id.or_else(|| event.slot_id.clone()),
+                kind,
+                detail,
+                correction,
+            }
+        })
+        .collect()
+}
+
+fn project_operator_events_v3(
+    events: &[antennabench_core::OperatorEventV3],
+) -> Vec<ReportOperatorEvent> {
+    let rejected = reduce_operator_events_v3(SessionLifecycleV2::Ready, events)
+        .diagnostics
+        .into_iter()
+        .map(|diagnostic| diagnostic.event_id)
+        .collect::<std::collections::HashSet<_>>();
+    events
+        .iter()
+        .map(|event| {
+            let (kind, detail, correction, replacement_slot) = match &event.payload {
+                OperatorEventPayloadV3::SessionStarted { note } => (
+                    ReportOperatorEventKind::SessionStarted,
+                    note.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::SessionInterrupted { reason } => (
+                    ReportOperatorEventKind::SessionInterrupted,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::InterruptionDetected { reason } => (
+                    ReportOperatorEventKind::InterruptionDetected,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::SessionResumed { note } => (
+                    ReportOperatorEventKind::SessionResumed,
+                    note.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::SessionEnded { reason } => (
+                    ReportOperatorEventKind::SessionEnded,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::SessionAbandoned { reason } => (
+                    ReportOperatorEventKind::SessionAbandoned,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::AntennaSwitchStarted { note } => (
+                    ReportOperatorEventKind::AntennaSwitchStarted,
+                    note.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::WsprCycleArmed {
+                    antenna_label,
+                    cycle_starts_at,
+                    readiness,
+                } => (
+                    ReportOperatorEventKind::WsprCycleArmed,
+                    Some(format!(
+                        "{antenna_label} armed for {cycle_starts_at}; readiness {readiness:?}"
+                    )),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::AntennaStateConfirmed {
+                    antenna_label,
+                    note,
+                } => (
+                    ReportOperatorEventKind::AntennaStateConfirmed,
+                    Some(match note {
+                        Some(note) => format!("Actual antenna {antenna_label}; {note}"),
+                        None => format!("Actual antenna {antenna_label}"),
+                    }),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::SignalStateConfirmed { confirmation } => (
+                    ReportOperatorEventKind::SignalStateConfirmed,
+                    Some(format!("Signal-state confirmation {confirmation:?}")),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::SlotMissed { reason } => (
+                    ReportOperatorEventKind::SlotMissed,
+                    reason.clone(),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::SlotBad { reason } => (
+                    ReportOperatorEventKind::SlotBad,
+                    Some(reason.clone()),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::NoteAdded { note } => (
+                    ReportOperatorEventKind::NoteAdded,
+                    Some(note.clone()),
+                    None,
+                    None,
+                ),
+                OperatorEventPayloadV3::EventCorrected {
+                    target_event_id,
+                    correction,
+                    reason,
+                } => {
+                    let (action, detail, slot) = match correction {
+                        EventCorrectionActionV3::Retract => {
+                            (ReportEventCorrectionAction::Retracted, None, None)
+                        }
+                        EventCorrectionActionV3::Replace { replacement } => (
+                            ReportEventCorrectionAction::Replaced,
+                            Some(correctable_detail_v3(&replacement.payload)),
+                            replacement.slot_id.clone(),
+                        ),
+                    };
+                    (
+                        ReportOperatorEventKind::EventCorrected,
+                        detail,
+                        Some(ReportEventCorrection {
+                            target_event_id: target_event_id.clone(),
+                            action,
+                            reason: reason.clone(),
+                            applied: !rejected.contains(&event.event_id),
+                        }),
+                        slot,
+                    )
+                }
+            };
+            let affected_slot_id = replacement_slot.or_else(|| {
+                correction.as_ref().and_then(|correction| {
+                    events
+                        .iter()
+                        .find(|candidate| candidate.event_id == correction.target_event_id)
+                        .and_then(|candidate| candidate.slot_id.clone())
+                })
+            });
+            ReportOperatorEvent {
+                event_id: event.event_id.clone(),
+                occurred_at: event.occurred_at,
+                slot_id: event.slot_id.clone(),
+                affected_slot_id: affected_slot_id.or_else(|| event.slot_id.clone()),
+                kind,
+                detail,
+                correction,
+            }
+        })
+        .collect()
+}
+
+fn correctable_detail_v2(payload: &CorrectableOperatorEventPayloadV2) -> String {
+    match payload {
+        CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
+            antenna_label,
+            note,
+        } => note.as_ref().map_or_else(
+            || format!("Actual antenna {antenna_label}"),
+            |note| format!("Actual antenna {antenna_label}; {note}"),
+        ),
+        CorrectableOperatorEventPayloadV2::SlotMissed { reason } => {
+            reason.clone().unwrap_or_else(|| "Slot missed".into())
+        }
+        CorrectableOperatorEventPayloadV2::SlotBad { reason } => reason.clone(),
+        CorrectableOperatorEventPayloadV2::NoteAdded { note } => note.clone(),
+    }
+}
+
+fn correctable_detail_v3(payload: &CorrectableOperatorEventPayloadV3) -> String {
+    match payload {
+        CorrectableOperatorEventPayloadV3::AntennaStateConfirmed {
+            antenna_label,
+            note,
+        } => note.as_ref().map_or_else(
+            || format!("Actual antenna {antenna_label}"),
+            |note| format!("Actual antenna {antenna_label}; {note}"),
+        ),
+        CorrectableOperatorEventPayloadV3::SignalStateConfirmed { confirmation } => {
+            format!("Signal-state confirmation {confirmation:?}")
+        }
+        CorrectableOperatorEventPayloadV3::SlotMissed { reason } => {
+            reason.clone().unwrap_or_else(|| "Slot missed".into())
+        }
+        CorrectableOperatorEventPayloadV3::SlotBad { reason } => reason.clone(),
+        CorrectableOperatorEventPayloadV3::NoteAdded { note } => note.clone(),
     }
 }
 

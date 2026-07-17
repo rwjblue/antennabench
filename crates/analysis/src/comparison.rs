@@ -61,6 +61,7 @@ pub(crate) fn analyze_paired_comparison(
     }
 
     let mut timeline_rows = build_timeline_rows(&blocks, &left_label, &right_label);
+    let mut exclusions_by_stratum = BTreeMap::<StratumKey, usize>::new();
     let slot_locations = timeline_rows
         .iter()
         .enumerate()
@@ -87,6 +88,25 @@ pub(crate) fn analyze_paired_comparison(
         )?;
         if matches!(classified.disposition, ObservationDisposition::Excluded(_)) {
             diagnostics.excluded_observation_count += 1;
+            if let (Some((direction, _)), Some(mode)) = (
+                path_identity(bundle, classified.observation),
+                classified
+                    .observation
+                    .mode
+                    .as_deref()
+                    .and_then(SignalMode::normalize),
+            ) {
+                let stratum = ComparisonStratum {
+                    direction,
+                    band: classified.observation.band,
+                    mode,
+                    observation_kind: classified.observation.observation_kind,
+                    source: classified.observation.meta.source,
+                };
+                *exclusions_by_stratum
+                    .entry(stratum_key(&stratum))
+                    .or_default() += 1;
+            }
         }
         let Some(slot_id) = classified.assignment.slot_id.as_deref() else {
             continue;
@@ -274,7 +294,14 @@ pub(crate) fn analyze_paired_comparison(
         .map(|((key, remote_path), row)| row.finish(stratum_from_key(&key), remote_path))
         .collect::<Vec<_>>();
     let path_summaries = build_path_summaries(&paired_rows);
-    let strata = build_strata(stratum_accumulators, &path_summaries);
+    for key in exclusions_by_stratum.keys() {
+        stratum_accumulators.entry(key.clone()).or_default();
+    }
+    let strata = build_strata(
+        stratum_accumulators,
+        &path_summaries,
+        &exclusions_by_stratum,
+    );
     diagnostics.paired_row_count = paired_rows.len();
     diagnostics.unique_path_count = paired_rows
         .iter()
@@ -706,6 +733,7 @@ fn build_path_summaries(rows: &[PairedObservationRow]) -> Vec<PairedPathSummary>
 fn build_strata(
     accumulators: BTreeMap<StratumKey, StratumAccumulator>,
     paths: &[PairedPathSummary],
+    exclusions_by_stratum: &BTreeMap<StratumKey, usize>,
 ) -> Vec<PairedStratumSummary> {
     accumulators
         .into_iter()
@@ -736,6 +764,10 @@ fn build_strata(
                 unmatched_right_count: accumulator.unmatched_right_count,
                 missing_snr_left_count: accumulator.missing_snr_left_count,
                 missing_snr_right_count: accumulator.missing_snr_right_count,
+                excluded_observation_count: exclusions_by_stratum
+                    .get(&key)
+                    .copied()
+                    .unwrap_or_default(),
                 exact_duplicate_count: accumulator.exact_duplicate_count,
                 conflicting_duplicate_group_count: accumulator.conflicting_duplicate_group_count,
                 minimum_delta_right_minus_left_db: accumulator.deltas.first().copied(),

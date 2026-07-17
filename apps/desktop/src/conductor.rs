@@ -1215,6 +1215,24 @@ mod tests {
         assert!(exported
             .report_html
             .contains("Unknown — antenna changed during transmission"));
+        for expected in [
+            "Run quality and answerability",
+            "Planned versus actual",
+            "Explicit acquisition gap",
+            "Complete operator note and correction history",
+            "Corrected",
+            "corrected after inspecting the switch",
+            "first actual-state entry selected the wrong label",
+            "planned operator pause",
+            "operator returned",
+            "state-corrected",
+            "state-interrupted",
+        ] {
+            assert!(
+                exported.report_html.contains(expected),
+                "missing run-quality audit evidence: {expected}"
+            );
+        }
 
         let exported_store = BundleStore::new(&exported.bundle_path);
         let reopened_bundle = exported_store.read_v3_checkpointed().unwrap();

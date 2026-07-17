@@ -4,7 +4,7 @@ use antennabench_analysis::{
 };
 use antennabench_core::{
     codes, validate_bundle_report, BundleContents, BundleFileRole, BundleRecordKind,
-    BundleValidationReport, ObservationKind, PlannedSlot,
+    BundleValidationReport, ObservationKind, OperatorEventType, PlannedSlot,
 };
 use chrono::Duration;
 use std::collections::BTreeMap;
@@ -14,12 +14,13 @@ use crate::{
     BandEvidenceCountRow, BandEvidenceSection, CountingWriter, EvidenceSections,
     ReportAzimuthSector, ReportCancellationToken, ReportChartData, ReportComparisonData,
     ReportCompleteness, ReportDetailFamily, ReportDistanceBin, ReportError, ReportEvidenceSummary,
-    ReportNotice, ReportOverview, ReportOverviewLifecycle, ReportOverviewLifecycleState,
-    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewLocationContext,
-    ReportOverviewLocationPath, ReportOverviewPathDelta, ReportOverviewPathMedianDelta,
-    ReportOverviewReach, ReportOverviewScope, ReportOverviewStratum,
-    ReportPathLocationAvailability, ReportResourceLimits, ReportResourceStage,
-    ReportSnapshotContext, ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange,
+    ReportNotice, ReportOperatorEvent, ReportOperatorEventKind, ReportOverview,
+    ReportOverviewLifecycle, ReportOverviewLifecycleState, ReportOverviewLimitation,
+    ReportOverviewLocationCell, ReportOverviewLocationContext, ReportOverviewLocationPath,
+    ReportOverviewPathDelta, ReportOverviewPathMedianDelta, ReportOverviewReach,
+    ReportOverviewScope, ReportOverviewStratum, ReportPathLocationAvailability,
+    ReportResourceLimits, ReportResourceStage, ReportRunTimelineRow, ReportSnapshotContext,
+    ReportStratumAvailability, ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange,
     SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection, StationContext,
     UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
@@ -77,6 +78,10 @@ fn build_report_with_resources_and_snapshot(
         ReportResourceStage::Projection,
         "report_projection",
     )?;
+    let mut snapshot = snapshot;
+    if snapshot.operator_events.is_empty() {
+        snapshot.operator_events = project_legacy_operator_events(bundle);
+    }
     let summary =
         summarize_bundle_with_resources(bundle, validation, limits.analysis, cancellation)?;
     let detail_counts = DetailCounts::new(bundle, &summary, &snapshot);
@@ -87,7 +92,9 @@ fn build_report_with_resources_and_snapshot(
     // azimuth sectors, in addition to one location-status row per paired path.
     let required_overview_rows = summary.eligibility.exclusions.len()
         + summary.comparison.strata.len() * 13
-        + summary.comparison.path_summaries.len();
+        + summary.comparison.path_summaries.len()
+        + summary.slots.len()
+        + snapshot.operator_events.len();
     if required_overview_rows as u64 > limits.rows {
         return Err(report_resource_error(
             "resource.report.rows",
@@ -100,6 +107,14 @@ fn build_report_with_resources_and_snapshot(
         .into());
     }
     let full_detail = detail_counts.total_rows() <= limits.rows;
+    let context = build_context(bundle, &summary.bands, validation, full_detail);
+    let overview = build_overview(
+        bundle,
+        &context,
+        &summary.comparison,
+        &summary.slots,
+        &snapshot,
+    );
     let AnalysisSummary {
         session_id: _,
         evidence_quality,
@@ -109,10 +124,9 @@ fn build_report_with_resources_and_snapshot(
         slots,
         comparison,
         mut solar_context,
+        mut exclusion_records,
         eligibility,
     } = summary;
-
-    let context = build_context(bundle, &bands, validation, full_detail);
     let (antenna_evidence, band_evidence, slot_evidence) = if full_detail {
         (
             antennas.into_iter().map(project_antenna).collect(),
@@ -137,9 +151,9 @@ fn build_report_with_resources_and_snapshot(
     let mut notices = build_notices(&context, &evidence);
     if !full_detail {
         solar_context.rows.clear();
+        exclusion_records.clear();
         detail_counts.append_notices(&mut notices);
     }
-    let overview = build_overview(bundle, &context, &comparison, &snapshot);
 
     let mut report = SessionReport {
         completeness: if full_detail {
@@ -156,6 +170,7 @@ fn build_report_with_resources_and_snapshot(
         notices,
         snapshot,
         eligibility_exclusions: eligibility.exclusions,
+        exclusion_records,
     };
     check_cancelled(cancellation, ReportResourceStage::Serialize, "report_model")?;
     if let Err(error) = check_model_size(&report, limits.model_bytes) {
@@ -173,6 +188,7 @@ fn build_overview(
     bundle: &BundleContents,
     context: &SessionContext,
     comparison: &PairedComparisonAnalysis,
+    slots: &[SlotEvidenceSummary],
     snapshot: &ReportSnapshotContext,
 ) -> ReportOverview {
     let observed_directions = comparison
@@ -215,6 +231,7 @@ fn build_overview(
             .iter()
             .map(|summary| project_overview_stratum(summary, comparison))
             .collect(),
+        timeline: build_run_timeline(bundle, comparison, slots, snapshot),
         limitations,
     }
 }
@@ -263,6 +280,11 @@ fn project_overview_stratum(
 
     ReportOverviewStratum {
         stratum: summary.stratum.clone(),
+        availability: if summary.paired_row_count > 0 {
+            ReportStratumAvailability::DescriptivePairsAvailable
+        } else {
+            ReportStratumAvailability::NoFinitePairedPaths
+        },
         paired_row_count: summary.paired_row_count,
         unique_path_count: summary.unique_path_count,
         contributing_block_count: summary.contributing_block_count,
@@ -272,6 +294,7 @@ fn project_overview_stratum(
         unmatched_right_count: summary.unmatched_right_count,
         missing_snr_left_count: summary.missing_snr_left_count,
         missing_snr_right_count: summary.missing_snr_right_count,
+        excluded_observation_count: summary.excluded_observation_count,
         exact_duplicate_count: summary.exact_duplicate_count,
         conflicting_duplicate_group_count: summary.conflicting_duplicate_group_count,
         path_delta,
@@ -279,6 +302,94 @@ fn project_overview_stratum(
         reach,
         location_context,
     }
+}
+
+fn build_run_timeline(
+    bundle: &BundleContents,
+    comparison: &PairedComparisonAnalysis,
+    slots: &[SlotEvidenceSummary],
+    snapshot: &ReportSnapshotContext,
+) -> Vec<ReportRunTimelineRow> {
+    slots
+        .iter()
+        .filter_map(|slot| {
+            let planned = bundle
+                .schedule
+                .slots
+                .iter()
+                .find(|planned| planned.slot_id == slot.slot_id)?;
+            let comparison_row = comparison
+                .timeline_rows
+                .iter()
+                .find(|row| row.slot_id == slot.slot_id);
+            let cycle = snapshot
+                .wspr_cycles
+                .iter()
+                .find(|cycle| cycle.intent_id == slot.slot_id);
+            let block_index = comparison_row.map(|row| row.block_index);
+            let block_eligibility = block_index.and_then(|index| {
+                comparison
+                    .blocks
+                    .iter()
+                    .find(|block| block.block_index == index)
+                    .map(|block| block.eligibility)
+            });
+            Some(ReportRunTimelineRow {
+                item_id: slot.slot_id.clone(),
+                sequence_number: slot.sequence_number,
+                block_index,
+                block_eligibility,
+                band: slot.band,
+                direction: cycle.and_then(|cycle| cycle.direction),
+                planned_antenna: slot.planned_label.clone(),
+                actual_antenna: cycle
+                    .and_then(|cycle| cycle.actual_antenna.clone())
+                    .or_else(|| slot.actual_label.clone()),
+                planned_starts_at: planned.starts_at,
+                planned_ends_at: planned.starts_at
+                    + Duration::seconds(i64::from(planned.duration_seconds)),
+                actual_starts_at: cycle
+                    .and_then(|cycle| cycle.starts_at)
+                    .or(slot.switch_timestamp),
+                actual_ends_at: cycle.and_then(|cycle| cycle.transmission_ends_at),
+                readiness_basis: cycle.and_then(|cycle| cycle.readiness_basis),
+                attribution: cycle.map(|cycle| cycle.attribution),
+                status: slot.status,
+                total_observation_count: slot.evidence.observation_counts.total,
+                usable_observation_count: slot.evidence.observation_counts.usable,
+                excluded_observation_count: slot.evidence.observation_counts.excluded,
+                event_history: snapshot
+                    .operator_events
+                    .iter()
+                    .filter(|event| event.affected_slot_id.as_deref() == Some(&slot.slot_id))
+                    .cloned()
+                    .collect(),
+            })
+        })
+        .collect()
+}
+
+fn project_legacy_operator_events(bundle: &BundleContents) -> Vec<ReportOperatorEvent> {
+    bundle
+        .events
+        .iter()
+        .map(|event| ReportOperatorEvent {
+            event_id: event.event_id.clone(),
+            occurred_at: event.meta.timestamp,
+            slot_id: event.slot_id.clone(),
+            affected_slot_id: event.slot_id.clone(),
+            kind: match event.event_type {
+                OperatorEventType::SessionStarted => ReportOperatorEventKind::SessionStarted,
+                OperatorEventType::Switched => ReportOperatorEventKind::Switched,
+                OperatorEventType::MissedSlot => ReportOperatorEventKind::SlotMissed,
+                OperatorEventType::BadSlot => ReportOperatorEventKind::SlotBad,
+                OperatorEventType::NoteAdded => ReportOperatorEventKind::NoteAdded,
+                OperatorEventType::SessionEnded => ReportOperatorEventKind::SessionEnded,
+            },
+            detail: event.note.clone(),
+            correction: None,
+        })
+        .collect()
 }
 
 fn project_location_context(
@@ -687,6 +798,14 @@ impl DetailCounts {
                 (ReportDetailFamily::BandEvidence, summary.bands.len()),
                 (ReportDetailFamily::SlotEvidence, summary.slots.len()),
                 (
+                    ReportDetailFamily::ExclusionRecords,
+                    summary.exclusion_records.len(),
+                ),
+                (
+                    ReportDetailFamily::OperatorEvents,
+                    snapshot.operator_events.len(),
+                ),
+                (
                     ReportDetailFamily::ComparisonBlocks,
                     comparison.blocks.len(),
                 ),
@@ -741,6 +860,7 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     report.evidence.antennas.clear();
     report.evidence.bands.clear();
     report.evidence.slots.clear();
+    report.exclusion_records.clear();
     report.comparison.blocks.clear();
     report.comparison.overlap_rows.clear();
     report.comparison.timeline_rows.clear();
@@ -750,6 +870,7 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     report.comparison.strata.clear();
     report.chart_data = ReportChartData::default();
     report.snapshot.lifecycle_events.clear();
+    report.snapshot.operator_events.clear();
     report.snapshot.wspr_cycles.clear();
     report.snapshot.antenna_control_attempts.clear();
     report
@@ -813,6 +934,12 @@ fn project_slot(summary: SlotEvidenceSummary) -> SlotEvidenceSection {
         planned_label: summary.planned_label,
         actual_label: summary.actual_label,
         status: summary.status,
+        starts_at: summary.starts_at,
+        ends_at: summary.ends_at,
+        usable_start: summary.usable_start,
+        switch_event_id: summary.switch_event_id,
+        switch_timestamp: summary.switch_timestamp,
+        switch_delay_seconds: summary.switch_delay_seconds,
         evidence: project_evidence(summary.evidence),
     }
 }

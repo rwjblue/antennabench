@@ -34,7 +34,10 @@ fn reports_the_minimal_whole_station_fixture() {
             "A",
             "B"
           ],
-          "observed_directions": [],
+          "observed_directions": [
+            "transmit",
+            "receive"
+          ],
           "delta_orientation": {
             "minuend_label": "B",
             "subtrahend_label": "A"
@@ -45,7 +48,358 @@ fn reports_the_minimal_whole_station_fixture() {
           "state": "not_recorded"
         },
         "comparison_availability": "no_eligible_blocks",
-        "strata": [],
+        "strata": [
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "availability": "no_finite_paired_paths",
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 2,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 0,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 0
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
+            }
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "availability": "no_finite_paired_paths",
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 1,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 0,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 0
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
+            }
+          }
+        ],
+        "timeline": [
+          {
+            "item_id": "slot-001",
+            "sequence_number": 1,
+            "block_index": 0,
+            "block_eligibility": "missing_actual_label",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": "A",
+            "planned_starts_at": "2026-07-09T20:00:00Z",
+            "planned_ends_at": "2026-07-09T20:02:00Z",
+            "actual_starts_at": "2026-07-09T20:00:03Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-001",
+                "occurred_at": "2026-07-09T20:00:03Z",
+                "slot_id": "slot-001",
+                "affected_slot_id": "slot-001",
+                "kind": "switched",
+                "detail": "A connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-002",
+            "sequence_number": 2,
+            "block_index": 0,
+            "block_eligibility": "missing_actual_label",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "B",
+            "actual_antenna": null,
+            "planned_starts_at": "2026-07-09T20:02:00Z",
+            "planned_ends_at": "2026-07-09T20:04:00Z",
+            "actual_starts_at": null,
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "bad",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "event_history": [
+              {
+                "event_id": "event-002",
+                "occurred_at": "2026-07-09T20:02:20Z",
+                "slot_id": "slot-002",
+                "affected_slot_id": "slot-002",
+                "kind": "slot_bad",
+                "detail": "High SWR during B slot",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-003",
+            "sequence_number": 3,
+            "block_index": 1,
+            "block_eligibility": "missing_actual_label",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": null,
+            "planned_starts_at": "2026-07-09T20:04:00Z",
+            "planned_ends_at": "2026-07-09T20:06:00Z",
+            "actual_starts_at": null,
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "missed",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "event_history": [
+              {
+                "event_id": "event-003",
+                "occurred_at": "2026-07-09T20:04:00Z",
+                "slot_id": "slot-003",
+                "affected_slot_id": "slot-003",
+                "kind": "slot_missed",
+                "detail": "Operator missed the A switch prompt",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-004",
+            "sequence_number": 4,
+            "block_index": 1,
+            "block_eligibility": "missing_actual_label",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "B",
+            "actual_antenna": "B",
+            "planned_starts_at": "2026-07-09T20:06:00Z",
+            "planned_ends_at": "2026-07-09T20:08:00Z",
+            "actual_starts_at": "2026-07-09T20:06:25Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "late_switch",
+            "total_observation_count": 2,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 1,
+            "event_history": [
+              {
+                "event_id": "event-004",
+                "occurred_at": "2026-07-09T20:06:25Z",
+                "slot_id": "slot-004",
+                "affected_slot_id": "slot-004",
+                "kind": "switched",
+                "detail": "B connected late",
+                "correction": null
+              }
+            ]
+          }
+        ],
         "limitations": [
           {
             "kind": "no_eligible_blocks"
@@ -271,6 +625,12 @@ fn reports_the_minimal_whole_station_fixture() {
             "planned_label": "A",
             "actual_label": "A",
             "status": "switched",
+            "starts_at": "2026-07-09T20:00:00Z",
+            "ends_at": "2026-07-09T20:02:00Z",
+            "usable_start": "2026-07-09T20:00:15Z",
+            "switch_event_id": "event-001",
+            "switch_timestamp": "2026-07-09T20:00:03Z",
+            "switch_delay_seconds": 3,
             "evidence": {
               "observation_counts": {
                 "total": 1,
@@ -299,6 +659,12 @@ fn reports_the_minimal_whole_station_fixture() {
             "planned_label": "B",
             "actual_label": null,
             "status": "bad",
+            "starts_at": "2026-07-09T20:02:00Z",
+            "ends_at": "2026-07-09T20:04:00Z",
+            "usable_start": "2026-07-09T20:02:15Z",
+            "switch_event_id": null,
+            "switch_timestamp": null,
+            "switch_delay_seconds": null,
             "evidence": {
               "observation_counts": {
                 "total": 1,
@@ -326,6 +692,12 @@ fn reports_the_minimal_whole_station_fixture() {
             "planned_label": "A",
             "actual_label": null,
             "status": "missed",
+            "starts_at": "2026-07-09T20:04:00Z",
+            "ends_at": "2026-07-09T20:06:00Z",
+            "usable_start": "2026-07-09T20:04:15Z",
+            "switch_event_id": null,
+            "switch_timestamp": null,
+            "switch_delay_seconds": null,
             "evidence": {
               "observation_counts": {
                 "total": 1,
@@ -353,6 +725,12 @@ fn reports_the_minimal_whole_station_fixture() {
             "planned_label": "B",
             "actual_label": "B",
             "status": "late_switch",
+            "starts_at": "2026-07-09T20:06:00Z",
+            "ends_at": "2026-07-09T20:08:00Z",
+            "usable_start": "2026-07-09T20:06:25Z",
+            "switch_event_id": "event-004",
+            "switch_timestamp": "2026-07-09T20:06:25Z",
+            "switch_delay_seconds": 25,
             "evidence": {
               "observation_counts": {
                 "total": 2,
@@ -522,7 +900,56 @@ fn reports_the_minimal_whole_station_fixture() {
         ],
         "paired_rows": [],
         "path_summaries": [],
-        "strata": []
+        "strata": [
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 2,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "minimum_delta_right_minus_left_db": null,
+            "median_path_delta_right_minus_left_db": null,
+            "maximum_delta_right_minus_left_db": null
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 1,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "minimum_delta_right_minus_left_db": null,
+            "median_path_delta_right_minus_left_db": null,
+            "maximum_delta_right_minus_left_db": null
+          }
+        ]
       },
       "solar_context": {
         "algorithm": {
@@ -627,7 +1054,99 @@ fn reports_the_minimal_whole_station_fixture() {
           }
         ]
       },
-      "notices": []
+      "notices": [],
+      "snapshot": {
+        "checkpoint_revision": null,
+        "lifecycle": null,
+        "lifecycle_events": [],
+        "operator_events": [
+          {
+            "event_id": "event-001",
+            "occurred_at": "2026-07-09T20:00:03Z",
+            "slot_id": "slot-001",
+            "affected_slot_id": "slot-001",
+            "kind": "switched",
+            "detail": "A connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-002",
+            "occurred_at": "2026-07-09T20:02:20Z",
+            "slot_id": "slot-002",
+            "affected_slot_id": "slot-002",
+            "kind": "slot_bad",
+            "detail": "High SWR during B slot",
+            "correction": null
+          },
+          {
+            "event_id": "event-003",
+            "occurred_at": "2026-07-09T20:04:00Z",
+            "slot_id": "slot-003",
+            "affected_slot_id": "slot-003",
+            "kind": "slot_missed",
+            "detail": "Operator missed the A switch prompt",
+            "correction": null
+          },
+          {
+            "event_id": "event-004",
+            "occurred_at": "2026-07-09T20:06:25Z",
+            "slot_id": "slot-004",
+            "affected_slot_id": "slot-004",
+            "kind": "switched",
+            "detail": "B connected late",
+            "correction": null
+          }
+        ],
+        "adapter_evidence": {
+          "record_count": 0,
+          "accepted_count": 0,
+          "malformed_count": 0,
+          "unsupported_count": 0,
+          "filtered_count": 0,
+          "duplicate_count": 0,
+          "partially_normalized_count": 0,
+          "gap_count": 0,
+          "evidence_complete": true
+        }
+      },
+      "exclusion_records": [
+        {
+          "observation_id": "obs-002",
+          "reason": "bad_slot",
+          "timestamp": "2026-07-09T20:02:50Z",
+          "band": "20m",
+          "observation_kind": "public_report",
+          "source": "wsprnet",
+          "mode": "WSPR",
+          "slot_id": "slot-002",
+          "assigned_label": null,
+          "assignment_confidence": 0.0
+        },
+        {
+          "observation_id": "obs-003",
+          "reason": "missed_slot",
+          "timestamp": "2026-07-09T20:04:40Z",
+          "band": "20m",
+          "observation_kind": "local_decode",
+          "source": "wsjtx_log",
+          "mode": "WSPR",
+          "slot_id": "slot-003",
+          "assigned_label": null,
+          "assignment_confidence": 0.0
+        },
+        {
+          "observation_id": "obs-004",
+          "reason": "before_observed_switch",
+          "timestamp": "2026-07-09T20:06:10Z",
+          "band": "20m",
+          "observation_kind": "public_report",
+          "source": "wsprnet",
+          "mode": "WSPR",
+          "slot_id": "slot-004",
+          "assigned_label": null,
+          "assignment_confidence": 0.1
+        }
+      ]
     }
     "#);
 }
@@ -679,7 +1198,9 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "A",
             "B"
           ],
-          "observed_directions": [],
+          "observed_directions": [
+            "receive"
+          ],
           "delta_orientation": {
             "minuend_label": "B",
             "subtrahend_label": "A"
@@ -690,7 +1211,327 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
           "state": "not_recorded"
         },
         "comparison_availability": "no_matched_paths",
-        "strata": [],
+        "strata": [
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "availability": "no_finite_paired_paths",
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 1,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 0,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 0
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
+            }
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "availability": "no_finite_paired_paths",
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 2,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "path_delta": {
+              "availability": "unavailable"
+            },
+            "path_median_deltas": [],
+            "reach": {
+              "left_only_unique_path_count": 0,
+              "both_unique_path_count": 0,
+              "right_only_unique_path_count": 0
+            },
+            "location_context": {
+              "paths": [],
+              "distance_bins": [
+                {
+                  "category": "under500_km",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km500_to1499",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km1500_to2999",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "km3000_and_above",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "azimuth_sectors": [
+                {
+                  "category": "north",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_east",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "south_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                },
+                {
+                  "category": "north_west",
+                  "unique_located_path_count": 0,
+                  "paired_row_count": 0,
+                  "median_path_delta_right_minus_left_db": null
+                }
+              ],
+              "missing_location_path_count": 0,
+              "inconsistent_location_path_count": 0
+            }
+          }
+        ],
+        "timeline": [
+          {
+            "item_id": "slot-001",
+            "sequence_number": 1,
+            "block_index": 0,
+            "block_eligibility": "eligible",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": "A",
+            "planned_starts_at": "2026-07-09T19:00:00Z",
+            "planned_ends_at": "2026-07-09T19:02:00Z",
+            "actual_starts_at": "2026-07-09T19:00:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "event_history": [
+              {
+                "event_id": "event-001",
+                "occurred_at": "2026-07-09T19:00:00Z",
+                "slot_id": "slot-001",
+                "affected_slot_id": "slot-001",
+                "kind": "switched",
+                "detail": null,
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-002",
+            "sequence_number": 2,
+            "block_index": 0,
+            "block_eligibility": "eligible",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "B",
+            "actual_antenna": "B",
+            "planned_starts_at": "2026-07-09T19:02:00Z",
+            "planned_ends_at": "2026-07-09T19:04:00Z",
+            "actual_starts_at": "2026-07-09T19:02:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 1,
+            "event_history": [
+              {
+                "event_id": "event-002",
+                "occurred_at": "2026-07-09T19:02:00Z",
+                "slot_id": "slot-002",
+                "affected_slot_id": "slot-002",
+                "kind": "switched",
+                "detail": null,
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-003",
+            "sequence_number": 3,
+            "block_index": 1,
+            "block_eligibility": "incomplete_same_band_run",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": "A",
+            "planned_starts_at": "2026-07-09T19:26:00Z",
+            "planned_ends_at": "2026-07-09T19:28:00Z",
+            "actual_starts_at": "2026-07-09T19:26:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 0,
+            "usable_observation_count": 0,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-003",
+                "occurred_at": "2026-07-09T19:26:00Z",
+                "slot_id": "slot-003",
+                "affected_slot_id": "slot-003",
+                "kind": "switched",
+                "detail": null,
+                "correction": null
+              }
+            ]
+          }
+        ],
         "limitations": [
           {
             "kind": "no_matched_paths"
@@ -903,6 +1744,12 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "planned_label": "A",
             "actual_label": "A",
             "status": "switched",
+            "starts_at": "2026-07-09T19:00:00Z",
+            "ends_at": "2026-07-09T19:02:00Z",
+            "usable_start": "2026-07-09T19:00:15Z",
+            "switch_event_id": "event-001",
+            "switch_timestamp": "2026-07-09T19:00:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 1,
@@ -930,6 +1777,12 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "planned_label": "B",
             "actual_label": "B",
             "status": "switched",
+            "starts_at": "2026-07-09T19:02:00Z",
+            "ends_at": "2026-07-09T19:04:00Z",
+            "usable_start": "2026-07-09T19:02:15Z",
+            "switch_event_id": "event-002",
+            "switch_timestamp": "2026-07-09T19:02:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 1,
@@ -957,6 +1810,12 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "planned_label": "A",
             "actual_label": "A",
             "status": "switched",
+            "starts_at": "2026-07-09T19:26:00Z",
+            "ends_at": "2026-07-09T19:28:00Z",
+            "usable_start": "2026-07-09T19:26:15Z",
+            "switch_event_id": "event-003",
+            "switch_timestamp": "2026-07-09T19:26:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 0,
@@ -1096,7 +1955,56 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
         ],
         "paired_rows": [],
         "path_summaries": [],
-        "strata": []
+        "strata": [
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 1,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "minimum_delta_right_minus_left_db": null,
+            "median_path_delta_right_minus_left_db": null,
+            "maximum_delta_right_minus_left_db": null
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "paired_row_count": 0,
+            "unique_path_count": 0,
+            "contributing_block_count": 0,
+            "left_then_right_block_count": 0,
+            "right_then_left_block_count": 0,
+            "unmatched_left_count": 0,
+            "unmatched_right_count": 0,
+            "missing_snr_left_count": 0,
+            "missing_snr_right_count": 0,
+            "excluded_observation_count": 2,
+            "exact_duplicate_count": 0,
+            "conflicting_duplicate_group_count": 0,
+            "minimum_delta_right_minus_left_db": null,
+            "median_path_delta_right_minus_left_db": null,
+            "maximum_delta_right_minus_left_db": null
+          }
+        ]
       },
       "solar_context": {
         "algorithm": {
@@ -1192,6 +2100,89 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
       "notices": [
         "no_usable_observations",
         "no_usable_snr_samples"
+      ],
+      "snapshot": {
+        "checkpoint_revision": null,
+        "lifecycle": null,
+        "lifecycle_events": [],
+        "operator_events": [
+          {
+            "event_id": "event-001",
+            "occurred_at": "2026-07-09T19:00:00Z",
+            "slot_id": "slot-001",
+            "affected_slot_id": "slot-001",
+            "kind": "switched",
+            "detail": null,
+            "correction": null
+          },
+          {
+            "event_id": "event-002",
+            "occurred_at": "2026-07-09T19:02:00Z",
+            "slot_id": "slot-002",
+            "affected_slot_id": "slot-002",
+            "kind": "switched",
+            "detail": null,
+            "correction": null
+          },
+          {
+            "event_id": "event-003",
+            "occurred_at": "2026-07-09T19:26:00Z",
+            "slot_id": "slot-003",
+            "affected_slot_id": "slot-003",
+            "kind": "switched",
+            "detail": null,
+            "correction": null
+          }
+        ],
+        "adapter_evidence": {
+          "record_count": 0,
+          "accepted_count": 0,
+          "malformed_count": 0,
+          "unsupported_count": 0,
+          "filtered_count": 0,
+          "duplicate_count": 0,
+          "partially_normalized_count": 0,
+          "gap_count": 0,
+          "evidence_complete": true
+        }
+      },
+      "exclusion_records": [
+        {
+          "observation_id": "edge-cases-obs-000001",
+          "reason": "guard_time",
+          "timestamp": "2026-07-09T19:00:00Z",
+          "band": "20m",
+          "observation_kind": "local_decode",
+          "source": "wsjtx_log",
+          "mode": "WSPR",
+          "slot_id": "slot-001",
+          "assigned_label": "A",
+          "assignment_confidence": 0.25
+        },
+        {
+          "observation_id": "edge-cases-obs-000003",
+          "reason": "guard_time",
+          "timestamp": "2026-07-09T19:02:00Z",
+          "band": "20m",
+          "observation_kind": "local_decode",
+          "source": "wsjtx_log",
+          "mode": "WSPR",
+          "slot_id": "slot-002",
+          "assigned_label": "B",
+          "assignment_confidence": 0.25
+        },
+        {
+          "observation_id": "edge-cases-obs-000015",
+          "reason": "band_mismatch",
+          "timestamp": "2026-07-09T19:26:00Z",
+          "band": "40m",
+          "observation_kind": "local_decode",
+          "source": "wsjtx_log",
+          "mode": "WSPR",
+          "slot_id": null,
+          "assigned_label": null,
+          "assignment_confidence": 0.0
+        }
       ]
     }
     "#);
@@ -1282,6 +2273,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
+            "availability": "no_finite_paired_paths",
             "paired_row_count": 0,
             "unique_path_count": 0,
             "contributing_block_count": 0,
@@ -1291,6 +2283,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 0,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 1,
+            "excluded_observation_count": 1,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
@@ -1392,6 +2385,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
+            "availability": "no_finite_paired_paths",
             "paired_row_count": 0,
             "unique_path_count": 0,
             "contributing_block_count": 0,
@@ -1401,6 +2395,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 1,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
@@ -1502,6 +2497,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "observation_kind": "public_report",
               "source": "wsprnet"
             },
+            "availability": "no_finite_paired_paths",
             "paired_row_count": 0,
             "unique_path_count": 0,
             "contributing_block_count": 0,
@@ -1511,6 +2507,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
@@ -1612,6 +2609,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "observation_kind": "imported_spot",
               "source": "imported_file"
             },
+            "availability": "no_finite_paired_paths",
             "paired_row_count": 0,
             "unique_path_count": 0,
             "contributing_block_count": 0,
@@ -1621,6 +2619,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 1,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
@@ -1722,6 +2721,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },
+            "availability": "no_finite_paired_paths",
             "paired_row_count": 0,
             "unique_path_count": 0,
             "contributing_block_count": 0,
@@ -1731,6 +2731,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
@@ -1832,6 +2833,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "observation_kind": "local_decode",
               "source": "wsjtx_log"
             },
+            "availability": "no_finite_paired_paths",
             "paired_row_count": 0,
             "unique_path_count": 0,
             "contributing_block_count": 0,
@@ -1841,6 +2843,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "path_delta": {
@@ -1933,6 +2936,256 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "missing_location_path_count": 0,
               "inconsistent_location_path_count": 0
             }
+          }
+        ],
+        "timeline": [
+          {
+            "item_id": "slot-001",
+            "sequence_number": 1,
+            "block_index": 0,
+            "block_eligibility": "eligible",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": "A",
+            "planned_starts_at": "2026-07-12T20:00:00Z",
+            "planned_ends_at": "2026-07-12T20:02:00Z",
+            "actual_starts_at": "2026-07-12T20:00:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 2,
+            "usable_observation_count": 2,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-001",
+                "occurred_at": "2026-07-12T20:00:00Z",
+                "slot_id": "slot-001",
+                "affected_slot_id": "slot-001",
+                "kind": "switched",
+                "detail": "A connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-002",
+            "sequence_number": 2,
+            "block_index": 0,
+            "block_eligibility": "eligible",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "B",
+            "actual_antenna": "B",
+            "planned_starts_at": "2026-07-12T20:02:00Z",
+            "planned_ends_at": "2026-07-12T20:04:00Z",
+            "actual_starts_at": "2026-07-12T20:02:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 2,
+            "usable_observation_count": 2,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-002",
+                "occurred_at": "2026-07-12T20:02:00Z",
+                "slot_id": "slot-002",
+                "affected_slot_id": "slot-002",
+                "kind": "switched",
+                "detail": "B connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-003",
+            "sequence_number": 3,
+            "block_index": 1,
+            "block_eligibility": "eligible",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": "A",
+            "planned_starts_at": "2026-07-12T20:04:00Z",
+            "planned_ends_at": "2026-07-12T20:06:00Z",
+            "actual_starts_at": "2026-07-12T20:04:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 2,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 1,
+            "event_history": [
+              {
+                "event_id": "event-003",
+                "occurred_at": "2026-07-12T20:04:00Z",
+                "slot_id": "slot-003",
+                "affected_slot_id": "slot-003",
+                "kind": "switched",
+                "detail": "A connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-004",
+            "sequence_number": 4,
+            "block_index": 1,
+            "block_eligibility": "eligible",
+            "band": "20m",
+            "direction": null,
+            "planned_antenna": "B",
+            "actual_antenna": "B",
+            "planned_starts_at": "2026-07-12T20:06:00Z",
+            "planned_ends_at": "2026-07-12T20:08:00Z",
+            "actual_starts_at": "2026-07-12T20:06:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-004",
+                "occurred_at": "2026-07-12T20:06:00Z",
+                "slot_id": "slot-004",
+                "affected_slot_id": "slot-004",
+                "kind": "switched",
+                "detail": "B connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-005",
+            "sequence_number": 5,
+            "block_index": 2,
+            "block_eligibility": "eligible",
+            "band": "40m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": "A",
+            "planned_starts_at": "2026-07-12T20:08:00Z",
+            "planned_ends_at": "2026-07-12T20:10:00Z",
+            "actual_starts_at": "2026-07-12T20:08:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 2,
+            "usable_observation_count": 2,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-005",
+                "occurred_at": "2026-07-12T20:08:00Z",
+                "slot_id": "slot-005",
+                "affected_slot_id": "slot-005",
+                "kind": "switched",
+                "detail": "A connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-006",
+            "sequence_number": 6,
+            "block_index": 2,
+            "block_eligibility": "eligible",
+            "band": "40m",
+            "direction": null,
+            "planned_antenna": "B",
+            "actual_antenna": "B",
+            "planned_starts_at": "2026-07-12T20:10:00Z",
+            "planned_ends_at": "2026-07-12T20:12:00Z",
+            "actual_starts_at": "2026-07-12T20:10:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 2,
+            "usable_observation_count": 2,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-006",
+                "occurred_at": "2026-07-12T20:10:00Z",
+                "slot_id": "slot-006",
+                "affected_slot_id": "slot-006",
+                "kind": "switched",
+                "detail": "B connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-007",
+            "sequence_number": 7,
+            "block_index": 3,
+            "block_eligibility": "eligible",
+            "band": "40m",
+            "direction": null,
+            "planned_antenna": "A",
+            "actual_antenna": "A",
+            "planned_starts_at": "2026-07-12T20:12:00Z",
+            "planned_ends_at": "2026-07-12T20:14:00Z",
+            "actual_starts_at": "2026-07-12T20:12:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 1,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 0,
+            "event_history": [
+              {
+                "event_id": "event-007",
+                "occurred_at": "2026-07-12T20:12:00Z",
+                "slot_id": "slot-007",
+                "affected_slot_id": "slot-007",
+                "kind": "switched",
+                "detail": "A connected",
+                "correction": null
+              }
+            ]
+          },
+          {
+            "item_id": "slot-008",
+            "sequence_number": 8,
+            "block_index": 3,
+            "block_eligibility": "eligible",
+            "band": "40m",
+            "direction": null,
+            "planned_antenna": "B",
+            "actual_antenna": "B",
+            "planned_starts_at": "2026-07-12T20:14:00Z",
+            "planned_ends_at": "2026-07-12T20:16:00Z",
+            "actual_starts_at": "2026-07-12T20:14:00Z",
+            "actual_ends_at": null,
+            "readiness_basis": null,
+            "attribution": null,
+            "status": "switched",
+            "total_observation_count": 2,
+            "usable_observation_count": 1,
+            "excluded_observation_count": 1,
+            "event_history": [
+              {
+                "event_id": "event-008",
+                "occurred_at": "2026-07-12T20:14:00Z",
+                "slot_id": "slot-008",
+                "affected_slot_id": "slot-008",
+                "kind": "switched",
+                "detail": "B connected",
+                "correction": null
+              }
+            ]
           }
         ],
         "limitations": [
@@ -2235,6 +3488,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "A",
             "actual_label": "A",
             "status": "switched",
+            "starts_at": "2026-07-12T20:00:00Z",
+            "ends_at": "2026-07-12T20:02:00Z",
+            "usable_start": "2026-07-12T20:00:15Z",
+            "switch_event_id": "event-001",
+            "switch_timestamp": "2026-07-12T20:00:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 2,
@@ -2263,6 +3522,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "B",
             "actual_label": "B",
             "status": "switched",
+            "starts_at": "2026-07-12T20:02:00Z",
+            "ends_at": "2026-07-12T20:04:00Z",
+            "usable_start": "2026-07-12T20:02:15Z",
+            "switch_event_id": "event-002",
+            "switch_timestamp": "2026-07-12T20:02:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 2,
@@ -2291,6 +3556,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "A",
             "actual_label": "A",
             "status": "switched",
+            "starts_at": "2026-07-12T20:04:00Z",
+            "ends_at": "2026-07-12T20:06:00Z",
+            "usable_start": "2026-07-12T20:04:15Z",
+            "switch_event_id": "event-003",
+            "switch_timestamp": "2026-07-12T20:04:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 2,
@@ -2324,6 +3595,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "B",
             "actual_label": "B",
             "status": "switched",
+            "starts_at": "2026-07-12T20:06:00Z",
+            "ends_at": "2026-07-12T20:08:00Z",
+            "usable_start": "2026-07-12T20:06:15Z",
+            "switch_event_id": "event-004",
+            "switch_timestamp": "2026-07-12T20:06:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 1,
@@ -2352,6 +3629,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "A",
             "actual_label": "A",
             "status": "switched",
+            "starts_at": "2026-07-12T20:08:00Z",
+            "ends_at": "2026-07-12T20:10:00Z",
+            "usable_start": "2026-07-12T20:08:15Z",
+            "switch_event_id": "event-005",
+            "switch_timestamp": "2026-07-12T20:08:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 2,
@@ -2380,6 +3663,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "B",
             "actual_label": "B",
             "status": "switched",
+            "starts_at": "2026-07-12T20:10:00Z",
+            "ends_at": "2026-07-12T20:12:00Z",
+            "usable_start": "2026-07-12T20:10:15Z",
+            "switch_event_id": "event-006",
+            "switch_timestamp": "2026-07-12T20:10:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 2,
@@ -2408,6 +3697,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "A",
             "actual_label": "A",
             "status": "switched",
+            "starts_at": "2026-07-12T20:12:00Z",
+            "ends_at": "2026-07-12T20:14:00Z",
+            "usable_start": "2026-07-12T20:12:15Z",
+            "switch_event_id": "event-007",
+            "switch_timestamp": "2026-07-12T20:12:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 1,
@@ -2430,6 +3725,12 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "planned_label": "B",
             "actual_label": "B",
             "status": "switched",
+            "starts_at": "2026-07-12T20:14:00Z",
+            "ends_at": "2026-07-12T20:16:00Z",
+            "usable_start": "2026-07-12T20:14:15Z",
+            "switch_event_id": "event-008",
+            "switch_timestamp": "2026-07-12T20:14:00Z",
+            "switch_delay_seconds": 0,
             "evidence": {
               "observation_counts": {
                 "total": 2,
@@ -2948,6 +4249,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 0,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 1,
+            "excluded_observation_count": 1,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "minimum_delta_right_minus_left_db": null,
@@ -2971,6 +4273,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 1,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "minimum_delta_right_minus_left_db": null,
@@ -2994,6 +4297,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "minimum_delta_right_minus_left_db": null,
@@ -3017,6 +4321,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 1,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "minimum_delta_right_minus_left_db": null,
@@ -3040,6 +4345,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "minimum_delta_right_minus_left_db": null,
@@ -3063,6 +4369,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "unmatched_right_count": 1,
             "missing_snr_left_count": 0,
             "missing_snr_right_count": 0,
+            "excluded_observation_count": 0,
             "exact_duplicate_count": 0,
             "conflicting_duplicate_group_count": 0,
             "minimum_delta_right_minus_left_db": null,
@@ -3239,7 +4546,123 @@ fn reports_the_analysis_rich_whole_station_fixture() {
           }
         ]
       },
-      "notices": []
+      "notices": [],
+      "snapshot": {
+        "checkpoint_revision": null,
+        "lifecycle": null,
+        "lifecycle_events": [],
+        "operator_events": [
+          {
+            "event_id": "event-001",
+            "occurred_at": "2026-07-12T20:00:00Z",
+            "slot_id": "slot-001",
+            "affected_slot_id": "slot-001",
+            "kind": "switched",
+            "detail": "A connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-002",
+            "occurred_at": "2026-07-12T20:02:00Z",
+            "slot_id": "slot-002",
+            "affected_slot_id": "slot-002",
+            "kind": "switched",
+            "detail": "B connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-003",
+            "occurred_at": "2026-07-12T20:04:00Z",
+            "slot_id": "slot-003",
+            "affected_slot_id": "slot-003",
+            "kind": "switched",
+            "detail": "A connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-004",
+            "occurred_at": "2026-07-12T20:06:00Z",
+            "slot_id": "slot-004",
+            "affected_slot_id": "slot-004",
+            "kind": "switched",
+            "detail": "B connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-005",
+            "occurred_at": "2026-07-12T20:08:00Z",
+            "slot_id": "slot-005",
+            "affected_slot_id": "slot-005",
+            "kind": "switched",
+            "detail": "A connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-006",
+            "occurred_at": "2026-07-12T20:10:00Z",
+            "slot_id": "slot-006",
+            "affected_slot_id": "slot-006",
+            "kind": "switched",
+            "detail": "B connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-007",
+            "occurred_at": "2026-07-12T20:12:00Z",
+            "slot_id": "slot-007",
+            "affected_slot_id": "slot-007",
+            "kind": "switched",
+            "detail": "A connected",
+            "correction": null
+          },
+          {
+            "event_id": "event-008",
+            "occurred_at": "2026-07-12T20:14:00Z",
+            "slot_id": "slot-008",
+            "affected_slot_id": "slot-008",
+            "kind": "switched",
+            "detail": "B connected",
+            "correction": null
+          }
+        ],
+        "adapter_evidence": {
+          "record_count": 0,
+          "accepted_count": 0,
+          "malformed_count": 0,
+          "unsupported_count": 0,
+          "filtered_count": 0,
+          "duplicate_count": 0,
+          "partially_normalized_count": 0,
+          "gap_count": 0,
+          "evidence_complete": true
+        }
+      },
+      "exclusion_records": [
+        {
+          "observation_id": "obs-005",
+          "reason": "guard_time",
+          "timestamp": "2026-07-12T20:04:10Z",
+          "band": "20m",
+          "observation_kind": "imported_spot",
+          "source": "imported_file",
+          "mode": "WSPR",
+          "slot_id": "slot-003",
+          "assigned_label": "A",
+          "assignment_confidence": 0.25
+        },
+        {
+          "observation_id": "obs-014",
+          "reason": "near_boundary",
+          "timestamp": "2026-07-12T20:15:55Z",
+          "band": "40m",
+          "observation_kind": "public_report",
+          "source": "wsprnet",
+          "mode": "WSPR",
+          "slot_id": "slot-008",
+          "assigned_label": "B",
+          "assignment_confidence": 0.6
+        }
+      ]
     }
     "#);
 }

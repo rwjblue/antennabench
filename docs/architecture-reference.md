@@ -366,6 +366,17 @@ the same revision keeps the same presentation identity. The renderer-neutral
 model and HTML disclose checkpoint revision, lifecycle/interruption history,
 adapter dispositions and acquisition gaps, intended versus observed WSPR use,
 eligibility exclusions, and full-detail versus bounded-overview completeness.
+The answer-first artifact also projects typed per-stratum answerability from
+raw path, row, block-order, missingness, exclusion, duplicate, and conflict
+counts. It does not add a qualitative run grade. A compact planned-versus-
+actual timeline keeps planned and observed antenna state, direction, readiness,
+attribution, alignment status, usable/excluded counts, and exact operator note
+or correction history together. Symbols, text, and border styles carry every
+state independently of color. Observation exclusions are summarized by the
+existing reason vocabulary before a record-level audit table; an exclusion
+continues to affect only the calculation that requires the excluded fact.
+Successful best-effort WSPR.live collection remains distinct from an explicit
+uncollected window or import gap.
 
 ## Desktop Shell Boundary
 

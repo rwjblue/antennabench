@@ -13,10 +13,19 @@ fn report_rows_fall_back_to_a_complete_unsampled_overview() {
     let bundle = minimal_fixture_bundle();
     let validation = validate_bundle_report(&bundle);
     let full = build_report(&bundle).unwrap();
+    let required_overview_rows = full.eligibility_exclusions.len()
+        + full.overview.strata.len() * 13
+        + full.comparison.path_summaries.len()
+        + full.overview.timeline.len()
+        + full.snapshot.operator_events.len();
     let overview = build_report_with_resources(
         &bundle,
         &validation,
-        ReportResourceLimits::testing(1, 8 * 1024 * 1024, 16 * 1024 * 1024),
+        ReportResourceLimits::testing(
+            required_overview_rows as u64,
+            8 * 1024 * 1024,
+            16 * 1024 * 1024,
+        ),
         &ReportCancellationToken::default(),
     )
     .unwrap();
@@ -25,9 +34,11 @@ fn report_rows_fall_back_to_a_complete_unsampled_overview() {
     assert_eq!(overview.evidence.overall, full.evidence.overall);
     assert_eq!(overview.comparison.diagnostics, full.comparison.diagnostics);
     assert_eq!(overview.overview, full.overview);
+    assert_eq!(overview.overview.timeline, full.overview.timeline);
     assert!(overview.context.schedule.slots.is_empty());
     assert!(overview.evidence.slots.is_empty());
     assert!(overview.comparison.paired_rows.is_empty());
+    assert!(overview.exclusion_records.is_empty());
     assert!(overview.notices.iter().any(|notice| matches!(
         notice,
         ReportNotice::DetailOmitted { row_count, .. } if *row_count > 0
@@ -55,7 +66,7 @@ fn report_model_html_and_cancellation_boundaries_are_typed_and_never_partial() {
     let too_small = build_report_with_resources(
         &bundle,
         &validation,
-        ReportResourceLimits::testing(1, 1, 16 * 1024 * 1024),
+        ReportResourceLimits::testing(25_000, 1, 16 * 1024 * 1024),
         &ReportCancellationToken::default(),
     )
     .unwrap_err();

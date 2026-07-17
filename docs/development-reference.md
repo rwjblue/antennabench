@@ -260,6 +260,13 @@ responsive text alternatives, accessible chart tables, and all report sections.
 Separate hostile-string, single-antenna/unavailable, bounded-overview, and
 empty-data cases pin escaping, visible limitations and omissions, and honest
 unavailable states without making network requests.
+The run-quality state matrix additionally pins ordinary, late, unknown-
+occupancy, missed, bad, corrected, interrupted/resumed, abandoned,
+command-verified, explicit acquisition-gap, malformed/conflict/duplicate, and
+bounded-overview presentation. Every compact state is asserted against its
+exact textual timeline detail and retained audit inventory. Bounded overview
+keeps the compact planned-versus-actual rows complete while reporting exact
+omission-family counts for full operator-event and exclusion-record tables.
 Mixed-quality analysis/report tests pair malformed and contradictory observations
 with valid evidence, assert stable eligibility code/category/scope counts, and
 prove unrelated slots and summaries remain usable. Structural antenna ambiguity
