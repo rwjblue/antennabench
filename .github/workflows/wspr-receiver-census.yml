@@ -21,7 +21,7 @@ jobs:
           import json
           import urllib.parse
           import urllib.request
-          from collections import Counter, defaultdict
+          from collections import Counter
           from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
@@ -30,6 +30,9 @@ jobs:
           band_labels = {7: "40m", 14: "20m", 21: "15m"}
           all_hf_bands = (1, 3, 5, 7, 10, 14, 18, 21, 24, 28, 50)
           end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+          start_24 = end - timedelta(hours=24)
+          start_72 = end - timedelta(hours=72)
+          start_168 = end - timedelta(hours=168)
           out = Path("receiver-census")
           out.mkdir()
 
@@ -52,6 +55,19 @@ jobs:
                   raise RuntimeError("WSPR.live returned no rows")
               return rows
 
+          def maidenhead_center(locator: str):
+              loc = locator.strip().upper()
+              if len(loc) < 4:
+                  raise ValueError(locator)
+              lon = -180.0 + (ord(loc[0]) - ord("A")) * 20.0 + int(loc[2]) * 2.0
+              lat = -90.0 + (ord(loc[1]) - ord("A")) * 10.0 + int(loc[3]) * 1.0
+              lon_size, lat_size = 2.0, 1.0
+              if len(loc) >= 6:
+                  lon_size, lat_size = 2.0 / 24.0, 1.0 / 24.0
+                  lon += (ord(loc[4]) - ord("A")) * lon_size
+                  lat += (ord(loc[5]) - ord("A")) * lat_size
+              return lat + lat_size / 2.0, lon + lon_size / 2.0
+
           summary = {
               "generated_at_utc": datetime.now(timezone.utc).isoformat(),
               "end_utc": end.isoformat(),
@@ -62,8 +78,7 @@ jobs:
           }
 
           # One bounded aggregate query per time window, covering all HF WSPR bands.
-          for hours in (24, 72, 168):
-              start = end - timedelta(hours=hours)
+          for hours, start in ((24, start_24), (72, start_72), (168, start_168)):
               query = f"""
           SELECT
             upperUTF8(rx_sign) AS reporter_call,
@@ -106,8 +121,8 @@ jobs:
                   "query": query,
               }
 
-          # A single seven-day query broken down by the popular 40m, 20m, and 15m bands.
-          start = end - timedelta(hours=168)
+          # One seven-day query broken down by 40m, 20m, and 15m. Conditional
+          # aggregates produce exact 24h and 72h subsets without extra service calls.
           popular_band_values = tuple(band_labels)
           band_query = f"""
           SELECT
@@ -116,12 +131,16 @@ jobs:
             upperUTF8(rx_loc) AS reporter_grid,
             any(rx_lat) AS latitude,
             any(rx_lon) AS longitude,
-            count() AS spots,
-            min(time) AS first_seen,
-            max(time) AS last_seen,
-            uniqExact(toDate(time)) AS active_days
+            countIf(time >= toDateTime('{start_24:%Y-%m-%d %H:%M:%S}')) AS spots_24h,
+            countIf(time >= toDateTime('{start_72:%Y-%m-%d %H:%M:%S}')) AS spots_72h,
+            count() AS spots_168h,
+            uniqExactIf(toDate(time), time >= toDateTime('{start_24:%Y-%m-%d %H:%M:%S}')) AS active_days_24h,
+            uniqExactIf(toDate(time), time >= toDateTime('{start_72:%Y-%m-%d %H:%M:%S}')) AS active_days_72h,
+            uniqExact(toDate(time)) AS active_days_168h,
+            min(time) AS first_seen_168h,
+            max(time) AS last_seen_168h
           FROM wspr.rx
-          WHERE time >= toDateTime('{start:%Y-%m-%d %H:%M:%S}')
+          WHERE time >= toDateTime('{start_168:%Y-%m-%d %H:%M:%S}')
             AND time < toDateTime('{end:%Y-%m-%d %H:%M:%S}')
             AND band IN ({','.join(map(str, popular_band_values))})
             AND code = 1
@@ -134,7 +153,7 @@ jobs:
           FORMAT CSVWithNames
           """.strip()
           band_rows = wspr_query(band_query)
-          with (out / "wspr-receivers-by-band-168h.csv").open("w", newline="", encoding="utf-8") as f:
+          with (out / "wspr-receivers-by-band.csv").open("w", newline="", encoding="utf-8") as f:
               writer = csv.DictWriter(f, fieldnames=band_rows[0].keys())
               writer.writeheader()
               writer.writerows(band_rows)
@@ -142,20 +161,24 @@ jobs:
           wspr_band_summary = {}
           for band_value, label in band_labels.items():
               rows = [row for row in band_rows if int(row["band"]) == band_value]
-              wspr_band_summary[label] = {
-                  "band_value": band_value,
-                  "unique_reporter_grid_pairs": len(rows),
-                  "unique_reporter_calls": len({row["reporter_call"] for row in rows}),
-                  "unique_four_character_grids": len({row["reporter_grid"][:4] for row in rows}),
-                  "total_spots": sum(int(row["spots"]) for row in rows),
-                  "persistent_all_7_days": sum(int(row["active_days"]) >= 7 for row in rows),
-              }
-          summary["wspr_popular_band_168h"] = wspr_band_summary
+              windows = {}
+              for hours in (24, 72, 168):
+                  spot_key = f"spots_{hours}h"
+                  day_key = f"active_days_{hours}h"
+                  active = [row for row in rows if int(row[spot_key]) > 0]
+                  windows[str(hours)] = {
+                      "unique_reporter_grid_pairs": len(active),
+                      "unique_reporter_calls": len({row["reporter_call"] for row in active}),
+                      "unique_four_character_grids": len({row["reporter_grid"][:4] for row in active}),
+                      "total_spots": sum(int(row[spot_key]) for row in active),
+                      "persistent_all_days": sum(int(row[day_key]) >= max(1, hours // 24) for row in active),
+                  }
+              wspr_band_summary[label] = {"band_value": band_value, "windows": windows}
+          summary["wspr_popular_bands"] = wspr_band_summary
           summary["wspr_popular_band_query"] = band_query
 
-          # Fetch the official RBN active-node JSON once. Keep the raw response only in
-          # this short-lived research artifact so its schema can be inspected before
-          # generating a reduced, attributed snapshot for documentation.
+          # Fetch the official RBN active-node JSON once and reduce it to the fields
+          # needed for the comparison. A node is counted once per advertised band.
           rbn_text = request_text(rbn_endpoint, "application/json", timeout=90)
           rbn_json = json.loads(rbn_text)
           if not isinstance(rbn_json, list):
@@ -163,10 +186,54 @@ jobs:
           (out / "rbn-active-nodes.json").write_text(
               json.dumps(rbn_json, indent=2, sort_keys=True) + "\n", encoding="utf-8"
           )
+
+          rbn_rows = []
+          rbn_band_counts = Counter()
+          rbn_band_continents = {label: Counter() for label in band_labels.values()}
+          for row in rbn_json:
+              if not isinstance(row, dict) or not row.get("grid") or not row.get("call"):
+                  continue
+              band_field = row.get("band")
+              values = band_field.values() if isinstance(band_field, dict) else band_field if isinstance(band_field, list) else []
+              advertised = sorted({
+                  value[1]
+                  for value in values
+                  if isinstance(value, list) and len(value) >= 2 and isinstance(value[1], str)
+              })
+              try:
+                  lat, lon = maidenhead_center(str(row["grid"]))
+              except (ValueError, IndexError):
+                  continue
+              continent = str(row.get("cont", ""))
+              for label in band_labels.values():
+                  if label in advertised:
+                      rbn_band_counts[label] += 1
+                      rbn_band_continents[label][continent] += 1
+              rbn_rows.append({
+                  "skimmer_call": str(row["call"]).upper(),
+                  "skimmer_grid": str(row["grid"]).upper(),
+                  "latitude": f"{lat:.5f}",
+                  "longitude": f"{lon:.5f}",
+                  "continent": continent,
+                  "advertised_bands": " ".join(advertised),
+                  "last_seen": str(row.get("lst_age", "")),
+                  "spot_policy": str(row.get("sk_opt", "")).replace("<br>", " "),
+                  "skimmer_version": str(row.get("sk_ver", "")),
+              })
+
+          with (out / "rbn-active-nodes-reduced.csv").open("w", newline="", encoding="utf-8") as f:
+              writer = csv.DictWriter(f, fieldnames=rbn_rows[0].keys())
+              writer.writeheader()
+              writer.writerows(sorted(rbn_rows, key=lambda row: row["skimmer_call"]))
+
           summary["rbn_active_nodes"] = {
               "endpoint": rbn_endpoint,
-              "records": len(rbn_json),
-              "sample_keys": sorted({key for row in rbn_json[:20] if isinstance(row, dict) for key in row}),
+              "records_returned": len(rbn_json),
+              "usable_node_grid_pairs": len(rbn_rows),
+              "band_counts": dict(rbn_band_counts),
+              "band_continents": {
+                  label: dict(counter) for label, counter in rbn_band_continents.items()
+              },
           }
 
           (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
