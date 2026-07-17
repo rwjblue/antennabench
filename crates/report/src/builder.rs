@@ -7,15 +7,18 @@ use antennabench_core::{
     BundleValidationReport, ObservationKind, PlannedSlot,
 };
 use chrono::Duration;
+use std::collections::BTreeMap;
 
 use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, AntennaSnrRow,
     BandEvidenceCountRow, BandEvidenceSection, CountingWriter, EvidenceSections,
-    ReportCancellationToken, ReportChartData, ReportComparisonData, ReportCompleteness,
-    ReportDetailFamily, ReportError, ReportEvidenceSummary, ReportNotice, ReportOverview,
-    ReportOverviewLifecycle, ReportOverviewLifecycleState, ReportOverviewLimitation,
-    ReportOverviewPathDelta, ReportOverviewPathMedianDelta, ReportOverviewReach,
-    ReportOverviewScope, ReportOverviewStratum, ReportResourceLimits, ReportResourceStage,
+    ReportAzimuthSector, ReportCancellationToken, ReportChartData, ReportComparisonData,
+    ReportCompleteness, ReportDetailFamily, ReportDistanceBin, ReportError, ReportEvidenceSummary,
+    ReportNotice, ReportOverview, ReportOverviewLifecycle, ReportOverviewLifecycleState,
+    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewLocationContext,
+    ReportOverviewLocationPath, ReportOverviewPathDelta, ReportOverviewPathMedianDelta,
+    ReportOverviewReach, ReportOverviewScope, ReportOverviewStratum,
+    ReportPathLocationAvailability, ReportResourceLimits, ReportResourceStage,
     ReportSnapshotContext, ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange,
     SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection, StationContext,
     UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
@@ -80,8 +83,10 @@ fn build_report_with_resources_and_snapshot(
     // The question-first views retain every path median, rather than sampling
     // them in the renderer. Count those rows up front so a bounded overview is
     // complete or explicitly rejected, never silently partial.
+    // Each stratum retains its headline plus four distance bins and eight
+    // azimuth sectors, in addition to one location-status row per paired path.
     let required_overview_rows = summary.eligibility.exclusions.len()
-        + summary.comparison.strata.len()
+        + summary.comparison.strata.len() * 13
         + summary.comparison.path_summaries.len();
     if required_overview_rows as u64 > limits.rows {
         return Err(report_resource_error(
@@ -254,6 +259,7 @@ fn project_overview_stratum(
             }
             reach
         });
+    let location_context = project_location_context(&summary.stratum, comparison);
 
     ReportOverviewStratum {
         stratum: summary.stratum.clone(),
@@ -271,7 +277,206 @@ fn project_overview_stratum(
         path_delta,
         path_median_deltas,
         reach,
+        location_context,
     }
+}
+
+fn project_location_context(
+    stratum: &antennabench_analysis::ComparisonStratum,
+    comparison: &PairedComparisonAnalysis,
+) -> ReportOverviewLocationContext {
+    let mut rows_by_path =
+        BTreeMap::<&str, Vec<&antennabench_analysis::PairedObservationRow>>::new();
+    for row in comparison
+        .paired_rows
+        .iter()
+        .filter(|row| row.stratum == *stratum)
+    {
+        rows_by_path.entry(&row.remote_path).or_default().push(row);
+    }
+
+    let mut context = ReportOverviewLocationContext {
+        distance_bins: ReportDistanceBin::ALL
+            .into_iter()
+            .map(|category| ReportOverviewLocationCell {
+                category,
+                unique_located_path_count: 0,
+                paired_row_count: 0,
+                median_path_delta_right_minus_left_db: None,
+            })
+            .collect(),
+        azimuth_sectors: ReportAzimuthSector::ALL
+            .into_iter()
+            .map(|category| ReportOverviewLocationCell {
+                category,
+                unique_located_path_count: 0,
+                paired_row_count: 0,
+                median_path_delta_right_minus_left_db: None,
+            })
+            .collect(),
+        ..Default::default()
+    };
+    let mut distance_deltas = vec![Vec::new(); ReportDistanceBin::ALL.len()];
+    let mut azimuth_deltas = vec![Vec::new(); ReportAzimuthSector::ALL.len()];
+
+    for path in comparison
+        .path_summaries
+        .iter()
+        .filter(|path| path.stratum == *stratum)
+    {
+        let rows = rows_by_path
+            .get(path.remote_path.as_str())
+            .expect("every paired path summary has paired rows");
+        let location = consistent_path_location(rows);
+        let (availability, distance_km, azimuth_degrees) = match location {
+            PathLocation::Available {
+                distance_km,
+                azimuth_degrees,
+            } => {
+                let distance_index = distance_bin_index(distance_km);
+                let azimuth_index = azimuth_sector_index(azimuth_degrees);
+                let distance = &mut context.distance_bins[distance_index];
+                distance.unique_located_path_count += 1;
+                distance.paired_row_count += path.paired_row_count;
+                distance_deltas[distance_index].push(path.median_delta_right_minus_left_db);
+                let azimuth = &mut context.azimuth_sectors[azimuth_index];
+                azimuth.unique_located_path_count += 1;
+                azimuth.paired_row_count += path.paired_row_count;
+                azimuth_deltas[azimuth_index].push(path.median_delta_right_minus_left_db);
+                (
+                    ReportPathLocationAvailability::Available,
+                    Some(distance_km),
+                    Some(azimuth_degrees),
+                )
+            }
+            PathLocation::Missing => {
+                context.missing_location_path_count += 1;
+                (ReportPathLocationAvailability::Missing, None, None)
+            }
+            PathLocation::Inconsistent => {
+                context.inconsistent_location_path_count += 1;
+                (ReportPathLocationAvailability::Inconsistent, None, None)
+            }
+        };
+        context.paths.push(ReportOverviewLocationPath {
+            remote_path: path.remote_path.clone(),
+            paired_row_count: path.paired_row_count,
+            median_delta_right_minus_left_db: path.median_delta_right_minus_left_db,
+            availability,
+            distance_km,
+            azimuth_degrees,
+        });
+    }
+
+    for (cell, mut deltas) in context.distance_bins.iter_mut().zip(distance_deltas) {
+        deltas.sort_by(f64::total_cmp);
+        cell.median_path_delta_right_minus_left_db = median(&deltas);
+    }
+    for (cell, mut deltas) in context.azimuth_sectors.iter_mut().zip(azimuth_deltas) {
+        deltas.sort_by(f64::total_cmp);
+        cell.median_path_delta_right_minus_left_db = median(&deltas);
+    }
+    context
+}
+
+enum PathLocation {
+    Available {
+        distance_km: f64,
+        azimuth_degrees: f64,
+    },
+    Missing,
+    Inconsistent,
+}
+
+fn consistent_path_location(rows: &[&antennabench_analysis::PairedObservationRow]) -> PathLocation {
+    let Some(first_row) = rows.first() else {
+        return PathLocation::Missing;
+    };
+    let first = match paired_row_location(first_row) {
+        Ok(location) => location,
+        Err(availability) => return unavailable_path_location(availability),
+    };
+    for row in rows.iter().skip(1) {
+        match paired_row_location(row) {
+            Ok(location) if location == first => {}
+            Ok(_) => return PathLocation::Inconsistent,
+            Err(availability) => return unavailable_path_location(availability),
+        }
+    }
+    PathLocation::Available {
+        distance_km: first.1,
+        azimuth_degrees: first.2,
+    }
+}
+
+fn unavailable_path_location(availability: ReportPathLocationAvailability) -> PathLocation {
+    match availability {
+        ReportPathLocationAvailability::Available => {
+            unreachable!("available location is not unavailable")
+        }
+        ReportPathLocationAvailability::Missing => PathLocation::Missing,
+        ReportPathLocationAvailability::Inconsistent => PathLocation::Inconsistent,
+    }
+}
+
+fn paired_row_location(
+    row: &antennabench_analysis::PairedObservationRow,
+) -> Result<(String, f64, f64), ReportPathLocationAvailability> {
+    let left_grid = normalized_grid(row.left_remote_grid.as_deref())
+        .ok_or(ReportPathLocationAvailability::Missing)?;
+    let right_grid = normalized_grid(row.right_remote_grid.as_deref())
+        .ok_or(ReportPathLocationAvailability::Missing)?;
+    let left_distance =
+        valid_distance(row.left_distance_km).ok_or(ReportPathLocationAvailability::Missing)?;
+    let right_distance =
+        valid_distance(row.right_distance_km).ok_or(ReportPathLocationAvailability::Missing)?;
+    let left_azimuth =
+        valid_azimuth(row.left_azimuth_degrees).ok_or(ReportPathLocationAvailability::Missing)?;
+    let right_azimuth =
+        valid_azimuth(row.right_azimuth_degrees).ok_or(ReportPathLocationAvailability::Missing)?;
+    (left_grid == right_grid
+        && left_distance.to_bits() == right_distance.to_bits()
+        && left_azimuth.to_bits() == right_azimuth.to_bits())
+    .then_some((left_grid, left_distance, left_azimuth))
+    .ok_or(ReportPathLocationAvailability::Inconsistent)
+}
+
+fn normalized_grid(grid: Option<&str>) -> Option<String> {
+    grid.map(str::trim)
+        .filter(|grid| !grid.is_empty())
+        .map(str::to_ascii_uppercase)
+}
+
+fn valid_distance(value: Option<f64>) -> Option<f64> {
+    value.filter(|value| value.is_finite() && *value >= 0.0)
+}
+
+fn valid_azimuth(value: Option<f64>) -> Option<f64> {
+    value.filter(|value| value.is_finite() && *value >= 0.0 && *value < 360.0)
+}
+
+fn distance_bin_index(distance_km: f64) -> usize {
+    match distance_km {
+        value if value < 500.0 => 0,
+        value if value < 1_500.0 => 1,
+        value if value < 3_000.0 => 2,
+        _ => 3,
+    }
+}
+
+fn azimuth_sector_index(azimuth_degrees: f64) -> usize {
+    ((azimuth_degrees + 22.5) / 45.0).floor() as usize % 8
+}
+
+fn median(values: &[f64]) -> Option<f64> {
+    (!values.is_empty()).then(|| {
+        let middle = values.len() / 2;
+        if values.len().is_multiple_of(2) {
+            (values[middle - 1] + values[middle]) / 2.0
+        } else {
+            values[middle]
+        }
+    })
 }
 
 fn build_overview_limitations(

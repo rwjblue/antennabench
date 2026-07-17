@@ -6,9 +6,9 @@ use antennabench_core::{
     ObservationRecord, RecordSource,
 };
 use antennabench_report::{
-    build_report, build_report_with_resources, ReportCancellationToken, ReportError,
-    ReportOverviewLifecycleState, ReportOverviewLimitation, ReportOverviewPathDelta,
-    ReportResourceLimits, SessionReport,
+    build_report, build_report_with_resources, ReportAzimuthSector, ReportCancellationToken,
+    ReportDistanceBin, ReportError, ReportOverviewLifecycleState, ReportOverviewLimitation,
+    ReportOverviewPathDelta, ReportPathLocationAvailability, ReportResourceLimits, SessionReport,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -218,6 +218,79 @@ fn overview_is_independent_of_observation_order_and_keeps_missing_snr_typed() {
 }
 
 #[test]
+fn projects_fixed_distance_and_azimuth_context_once_per_paired_path() {
+    let bundle = location_context_bundle();
+    let report = build_report(&bundle).expect("location context should build");
+    let context = &report.overview.strata[0].location_context;
+
+    assert_eq!(
+        context
+            .distance_bins
+            .iter()
+            .map(|cell| cell.category)
+            .collect::<Vec<_>>(),
+        ReportDistanceBin::ALL
+    );
+    assert_eq!(
+        context
+            .distance_bins
+            .iter()
+            .map(|cell| (cell.unique_located_path_count, cell.paired_row_count))
+            .collect::<Vec<_>>(),
+        vec![(1, 1), (7, 8), (2, 2), (1, 1)],
+        "500, 1500, and 3000 km belong to their upper bins; prolific rows count once"
+    );
+    assert_eq!(
+        context
+            .azimuth_sectors
+            .iter()
+            .map(|cell| cell.category)
+            .collect::<Vec<_>>(),
+        ReportAzimuthSector::ALL
+    );
+    assert_eq!(
+        context
+            .azimuth_sectors
+            .iter()
+            .map(|cell| (cell.unique_located_path_count, cell.paired_row_count))
+            .collect::<Vec<_>>(),
+        vec![
+            (3, 3),
+            (2, 3),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+        ],
+        "every valid 45° boundary has a stable upper-sector assignment and values just below 360° wrap to north"
+    );
+    assert_eq!(
+        context.azimuth_sectors[0].median_path_delta_right_minus_left_db,
+        Some(0.0),
+        "a true zero delta remains a populated cell rather than no evidence"
+    );
+    assert_eq!(context.missing_location_path_count, 1);
+    assert_eq!(context.inconsistent_location_path_count, 1);
+    assert!(context.paths.iter().any(|path| {
+        path.remote_path == "K1MISSING"
+            && path.availability == ReportPathLocationAvailability::Missing
+    }));
+    assert!(context.paths.iter().any(|path| {
+        path.remote_path == "K1INCONSISTENT"
+            && path.availability == ReportPathLocationAvailability::Inconsistent
+    }));
+
+    let mut reordered = bundle;
+    reordered.observations.reverse();
+    assert_eq!(
+        report,
+        build_report(&reordered).expect("input ordering must not change location context")
+    );
+}
+
+#[test]
 fn overview_rows_are_part_of_the_required_bounded_projection() {
     let bundle = paired_bundle();
     let validation = validate_bundle_report(&bundle);
@@ -235,7 +308,7 @@ fn overview_rows_are_part_of_the_required_bounded_projection() {
         ReportError::Resource(ref error)
             if error.diagnostic.code == "resource.report.rows"
                 && error.diagnostic.role == "required_overview_rows"
-                && error.diagnostic.observed == Some(3)
+                && error.diagnostic.observed == Some(15)
     ));
 }
 
@@ -271,6 +344,91 @@ fn paired_bundle() -> BundleContents {
         tx_observation(&bundle, "p2-l", 4, "K2SPARSE", Some(-20.0)),
         tx_observation(&bundle, "p2-r", 5, "K2SPARSE", Some(-24.0)),
     ];
+    normalize_bundle(bundle)
+}
+
+fn location_context_bundle() -> BundleContents {
+    let block_count = 14;
+    let labels = (0..block_count)
+        .flat_map(|_| ["A", "B"])
+        .collect::<Vec<_>>();
+    let mut bundle = bundle_with_layout(&labels);
+    let samples = [
+        ("K1BOUND00", 499.999, 0.0, 0.0),
+        ("K1BOUND01", 500.0, 22.5, 2.0),
+        ("K1BOUND02", 1499.999, 67.5, 2.0),
+        ("K1BOUND03", 1500.0, 112.5, 2.0),
+        ("K1BOUND04", 2999.999, 157.5, 2.0),
+        ("K1BOUND05", 3000.0, 202.5, 2.0),
+        ("K1BOUND06", 500.0, 247.5, 2.0),
+        ("K1BOUND07", 500.0, 292.5, 2.0),
+        ("K1BOUND08", 500.0, 337.5, 2.0),
+        ("K1BOUND09", 500.0, 359.999, 0.0),
+        ("K1PROLIFIC", 500.0, 22.5, 0.0),
+        ("K1PROLIFIC", 500.0, 22.5, 0.0),
+    ];
+    let mut observations = Vec::new();
+    for (block, (remote, distance_km, azimuth_degrees, delta)) in samples.iter().enumerate() {
+        observations.push(located_tx_observation(
+            &bundle,
+            &format!("left-{block}"),
+            block * 2,
+            remote,
+            -20.0,
+            *distance_km,
+            *azimuth_degrees,
+        ));
+        observations.push(located_tx_observation(
+            &bundle,
+            &format!("right-{block}"),
+            block * 2 + 1,
+            remote,
+            -20.0 + *delta,
+            *distance_km,
+            *azimuth_degrees,
+        ));
+    }
+    let missing_block = samples.len();
+    let mut missing_left = tx_observation(
+        &bundle,
+        "missing-left",
+        missing_block * 2,
+        "K1MISSING",
+        Some(-20.0),
+    );
+    let mut missing_right = tx_observation(
+        &bundle,
+        "missing-right",
+        missing_block * 2 + 1,
+        "K1MISSING",
+        Some(-18.0),
+    );
+    missing_left.distance_km = None;
+    missing_left.azimuth_degrees = None;
+    missing_right.distance_km = None;
+    missing_right.azimuth_degrees = None;
+    observations.extend([missing_left, missing_right]);
+
+    let inconsistent_block = missing_block + 1;
+    observations.push(located_tx_observation(
+        &bundle,
+        "inconsistent-left",
+        inconsistent_block * 2,
+        "K1INCONSISTENT",
+        -20.0,
+        500.0,
+        22.5,
+    ));
+    observations.push(located_tx_observation(
+        &bundle,
+        "inconsistent-right",
+        inconsistent_block * 2 + 1,
+        "K1INCONSISTENT",
+        -18.0,
+        501.0,
+        22.5,
+    ));
+    bundle.observations = observations;
     normalize_bundle(bundle)
 }
 
@@ -315,6 +473,21 @@ fn tx_observation(
     observation.slot_id = None;
     observation.slot_label = None;
     observation.slot_confidence = None;
+    observation
+}
+
+fn located_tx_observation(
+    bundle: &BundleContents,
+    id: &str,
+    slot_index: usize,
+    remote: &str,
+    snr_db: f32,
+    distance_km: f64,
+    azimuth_degrees: f64,
+) -> ObservationRecord {
+    let mut observation = tx_observation(bundle, id, slot_index, remote, Some(snr_db));
+    observation.distance_km = Some(distance_km);
+    observation.azimuth_degrees = Some(azimuth_degrees);
     observation
 }
 

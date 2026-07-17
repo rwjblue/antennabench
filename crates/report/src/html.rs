@@ -17,11 +17,12 @@ use chrono::{SecondsFormat, Utc};
 
 use crate::{
     check_cancelled, report_resource_error, AntennaEvidenceSection, BandEvidenceSection,
-    ReportCancellationToken, ReportDetailFamily, ReportError, ReportEvidenceSummary,
-    ReportImportedEvidence, ReportLifecycleEventKind, ReportNotice, ReportOverviewLifecycleState,
-    ReportOverviewLimitation, ReportOverviewPathDelta, ReportOverviewStratum, ReportResourceLimits,
-    ReportResourceStage, SessionReport, SlotEvidenceSection, UsableObservationKindCounts,
-    REPORT_RESOURCE_LIMITS,
+    ReportAzimuthSector, ReportCancellationToken, ReportDetailFamily, ReportDistanceBin,
+    ReportError, ReportEvidenceSummary, ReportImportedEvidence, ReportLifecycleEventKind,
+    ReportNotice, ReportOverviewLifecycleState, ReportOverviewLimitation,
+    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportOverviewStratum,
+    ReportPathLocationAvailability, ReportResourceLimits, ReportResourceStage, SessionReport,
+    SlotEvidenceSection, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
@@ -39,6 +40,7 @@ const STYLES: &str = r#"
 .path-strip{display:grid;gap:.3rem;margin:.55rem 0;padding:.7rem;background:var(--soft);border-radius:.5rem}.path-strip-row{display:grid;grid-template-columns:minmax(7rem,15rem) 1fr 4.5rem;gap:.55rem;align-items:center}.path-strip-track{position:relative;height:1.15rem;background:#e1e6ef;border-radius:.2rem}.path-strip-zero{position:absolute;left:50%;top:0;width:2px;height:100%;background:var(--muted)}.path-strip-dot{position:absolute;top:.2rem;width:.72rem;height:.72rem;background:#315da8;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}.path-strip-median{position:absolute;top:.16rem;width:.82rem;height:.82rem;background:#6d4c9a;border:2px solid var(--paper);transform:translateX(-50%) rotate(45deg)}.path-view-note{margin:.35rem 0;color:var(--muted);font-size:.84rem}.reach-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:hidden;margin:.55rem 0;border:1px solid var(--line);border-radius:.45rem}.reach-strip span{min-height:2.5rem;padding:.4rem .55rem;border-right:1px solid var(--paper);background:#e8effb}.reach-strip span:nth-child(2){background:#e7e3f2}.reach-strip span:last-child{border-right:0;background:#f8ead9}.reach-strip strong{display:block;font-size:1.15rem}.reach-strip small{display:block;color:var(--muted)}
 @media(max-width:620px){.path-strip-row{grid-template-columns:1fr}.reach-strip{grid-template-columns:1fr}.reach-strip span{border-right:0;border-bottom:1px solid var(--paper)}.reach-strip span:last-child{border-bottom:0}}
 .location-fill{height:100%;background:#315da8;border-radius:999px}.azimuth-track{position:relative;height:1rem;background:linear-gradient(90deg,#e1e6ef 0 24.8%,#cbd5e7 25% 25.2%,#e1e6ef 25.4% 49.8%,#cbd5e7 50% 50.2%,#e1e6ef 50.4% 74.8%,#cbd5e7 75% 75.2%,#e1e6ef 75.4% 100%);border-radius:999px}.azimuth-marker{position:absolute;top:.1rem;width:.45rem;height:.8rem;background:#b35c00;border:2px solid var(--paper);border-radius:50%;transform:translateX(-50%)}
+.location-context{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.45rem;margin:.55rem 0}.location-context-cell{min-height:5.2rem;padding:.5rem .6rem;border:1px solid var(--line);border-radius:.45rem;background:var(--soft)}.location-context-cell strong,.location-context-cell small{display:block}.location-context-cell small{color:var(--muted)}.location-context-cell.empty-cell{border-style:dashed}.location-context-table td:first-child{min-width:12rem}
 "#;
 
 /// Renders a deterministic, standalone HTML document from renderer-neutral
@@ -427,11 +429,159 @@ fn plural_suffix(value: usize) -> &'static str {
 }
 
 fn render_distance_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
-    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Distance and direction</h2><p class=\"muted\">Existing geographic and solar context remains descriptive supporting detail.</p><details class=\"audit-disclosure\"><summary>Review distance and azimuth detail</summary><div class=\"disclosure-body\">");
+    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Distance and azimuth</h2><p class=\"notice\">These views describe only paired paths observed in this session. They are not a radiation pattern, propagation model, or causal conclusion about antenna performance in observed or unobserved directions and distances.</p>");
+    render_observed_path_context(out, report);
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review exact paired-row distance and azimuth detail</summary><div class=\"disclosure-body\">");
     render_location_views(out, report);
     out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review derived solar context</summary><div class=\"disclosure-body\">");
     render_solar_context(out, report);
     out.push_str("</div></details></section>");
+}
+
+fn render_observed_path_context(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    if report.overview.strata.is_empty() {
+        out.push_str("<p class=\"empty\">No observed paired paths are available for distance or azimuth context. This is not a near-zero path delta.</p>");
+        return;
+    }
+    out.push_str("<p class=\"muted\">Each located paired path contributes once to one fixed distance bin and one fixed 45° compass sector. The supporting paired-row count stays visible; repeated rows from one endpoint do not increase a cell’s path count.</p>");
+    for (index, stratum) in report.overview.strata.iter().enumerate() {
+        let context = &stratum.location_context;
+        write_html!(
+            out,
+            "<section aria-labelledby=\"path-context-{index}\"><h3 id=\"path-context-{index}\">{}</h3>",
+            comparison_stratum(&stratum.stratum)
+        );
+        write_html!(out, "<p class=\"muted\">{} located paired path{}; {} location unavailable ({} missing, {} inconsistent). Exact left/right values remain in the paired-row audit table.</p>", located_path_count(context), plural_suffix(located_path_count(context)), context.missing_location_path_count + context.inconsistent_location_path_count, context.missing_location_path_count, context.inconsistent_location_path_count);
+        render_location_context_cells(
+            out,
+            "Observed distance",
+            "Fixed distance bins for observed paired paths",
+            &context.distance_bins,
+            distance_bin_label,
+        );
+        render_location_context_cells(
+            out,
+            "Observed azimuth",
+            "Fixed 45° azimuth sectors for observed paired paths",
+            &context.azimuth_sectors,
+            fixed_azimuth_sector_label,
+        );
+        render_location_path_audit(out, &context.paths);
+        out.push_str("</section>");
+    }
+}
+
+fn render_location_context_cells<T: Copy>(
+    out: &mut CheckedHtmlWriter<'_>,
+    heading: &str,
+    caption: &str,
+    cells: &[ReportOverviewLocationCell<T>],
+    label: impl Fn(T) -> &'static str,
+) {
+    write_html!(
+        out,
+        "<h4>{}</h4><div class=\"location-context\" aria-hidden=\"true\">",
+        heading
+    );
+    for cell in cells {
+        let class = if cell.unique_located_path_count == 0 {
+            " empty-cell"
+        } else {
+            ""
+        };
+        write_html!(out, "<div class=\"location-context-cell{}\"><strong>{}</strong><span>{}</span><small>{}</small></div>", class, label(cell.category), location_cell_delta(cell), location_cell_evidence(cell));
+    }
+    out.push_str("</div><div class=\"table-wrap\"><table class=\"location-context-table\">");
+    write_html!(out, "<caption>{}</caption><thead><tr><th scope=\"col\">Bin or sector</th><th scope=\"col\">Unique located paths</th><th scope=\"col\">Supporting paired rows</th><th scope=\"col\">Median path delta</th><th scope=\"col\">Evidence state</th></tr></thead><tbody>", caption);
+    for cell in cells {
+        write_html!(
+            out,
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            label(cell.category),
+            cell.unique_located_path_count,
+            cell.paired_row_count,
+            location_cell_delta(cell),
+            location_cell_evidence(cell)
+        );
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn located_path_count(context: &crate::ReportOverviewLocationContext) -> usize {
+    context
+        .paths
+        .iter()
+        .filter(|path| path.availability == ReportPathLocationAvailability::Available)
+        .count()
+}
+
+fn location_cell_delta<T>(cell: &ReportOverviewLocationCell<T>) -> String {
+    match cell.median_path_delta_right_minus_left_db {
+        Some(delta) if delta.abs() < 0.5 => format!("{} dB (near-zero)", format_signed(delta)),
+        Some(delta) => format!("{} dB", format_signed(delta)),
+        None => "No observed paired paths".into(),
+    }
+}
+
+fn location_cell_evidence<T>(cell: &ReportOverviewLocationCell<T>) -> String {
+    match cell.unique_located_path_count {
+        0 => "No observed paired paths".into(),
+        1 | 2 => format!(
+            "Sparse evidence: {} path(s), {} row(s)",
+            cell.unique_located_path_count, cell.paired_row_count
+        ),
+        _ => format!(
+            "{} path(s), {} row(s)",
+            cell.unique_located_path_count, cell.paired_row_count
+        ),
+    }
+}
+
+fn render_location_path_audit(
+    out: &mut CheckedHtmlWriter<'_>,
+    paths: &[crate::ReportOverviewLocationPath],
+) {
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review paired-path location aggregate audit</summary><div class=\"disclosure-body\"><div class=\"table-wrap\"><table><caption>One location-status record per paired path; raw left/right values remain below in the paired-row audit.</caption><thead><tr><th scope=\"col\">Remote path</th><th scope=\"col\">Paired rows</th><th scope=\"col\">Median path delta</th><th scope=\"col\">Location status</th><th scope=\"col\">Distance</th><th scope=\"col\">Azimuth</th></tr></thead><tbody>");
+    for path in paths {
+        let status = match path.availability {
+            ReportPathLocationAvailability::Available => "Available",
+            ReportPathLocationAvailability::Missing => "Missing",
+            ReportPathLocationAvailability::Inconsistent => "Inconsistent",
+        };
+        write_html!(
+            out,
+            "<tr><td>{}</td><td>{}</td><td>{} dB</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            escape_html(&path.remote_path),
+            path.paired_row_count,
+            format_signed(path.median_delta_right_minus_left_db),
+            status,
+            optional_measure_f64(path.distance_km, "km"),
+            optional_measure_f64(path.azimuth_degrees, "°")
+        );
+    }
+    out.push_str("</tbody></table></div></div></details>");
+}
+
+fn distance_bin_label(bin: ReportDistanceBin) -> &'static str {
+    match bin {
+        ReportDistanceBin::Under500Km => "Under 500 km",
+        ReportDistanceBin::Km500To1499 => "500–1499 km",
+        ReportDistanceBin::Km1500To2999 => "1500–2999 km",
+        ReportDistanceBin::Km3000AndAbove => "3000 km and above",
+    }
+}
+
+fn fixed_azimuth_sector_label(sector: ReportAzimuthSector) -> &'static str {
+    match sector {
+        ReportAzimuthSector::North => "N (337.5°–22.5°)",
+        ReportAzimuthSector::NorthEast => "NE (22.5°–67.5°)",
+        ReportAzimuthSector::East => "E (67.5°–112.5°)",
+        ReportAzimuthSector::SouthEast => "SE (112.5°–157.5°)",
+        ReportAzimuthSector::South => "S (157.5°–202.5°)",
+        ReportAzimuthSector::SouthWest => "SW (202.5°–247.5°)",
+        ReportAzimuthSector::West => "W (247.5°–292.5°)",
+        ReportAzimuthSector::NorthWest => "NW (292.5°–337.5°)",
+    }
 }
 
 fn render_run_quality_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
