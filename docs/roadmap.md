@@ -45,7 +45,8 @@ Possible later tracks include:
 - calibrated uncertainty and carefully validated comparative conclusions;
 - optional rig observation or control;
 - live or scheduled RBN acquisition if an appropriate filtered source exists;
-- rebuildable local search and indexes;
+- rebuildable local search and indexes after a concrete cross-session or
+  measured large-session query justifies them;
 - optional private-to-unlisted hosted report sharing;
 - native WSPR or mobile-specific operation; and
 - public discovery and callsign-oriented browsing.

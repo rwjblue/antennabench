@@ -189,6 +189,16 @@ SQLite indexes, UI state, generated reports, charts, and hosted publishing
 artifacts are derived. They can be rebuilt from the bundle and should not become
 the canonical record of a session.
 
+[Decision 0020](decisions/0020-defer-local-sqlite-until-measured.md) defers a
+production SQLite dependency until an exact query and representative benchmark
+show a material benefit over direct bounded reads. Current desktop operations
+consume one operator-selected coherent bundle and no cross-session catalog
+exists. Any future cache lives outside bundles, keys generations by strong
+committed-revision identity rather than path or session ID, publishes complete
+builds atomically, replaces incompatible schemas instead of migrating them,
+and falls back to the direct bundle path after absence, staleness, corruption,
+or rebuild failure.
+
 Analysis summaries, session reports, and rendered HTML are derived and are not
 persisted in the bundle. `analysis.json` remains bundle metadata rather than a
 serialized analysis summary or report. Report construction and rendering do

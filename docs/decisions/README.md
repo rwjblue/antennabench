@@ -37,6 +37,8 @@ historical references, not tutorials or work trackers; start with the
   Cycles](0018-use-directed-counterbalanced-wspr-cycles.md)
 - [0019: Observe Rig State Before Adding
   Control](0019-observe-rig-state-before-control.md)
+- [0020: Defer Local SQLite Until A Measured Query Requires
+  It](0020-defer-local-sqlite-until-measured.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions
