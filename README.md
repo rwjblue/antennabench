@@ -55,23 +55,6 @@ not available.
 
 See the [roadmap](docs/roadmap.md) for the current direction.
 
-## Run From Source
-
-Install the Xcode Command Line Tools and [Mise](https://mise.jdx.dev/), then run:
-
-```bash
-xcode-select --install
-git clone https://github.com/rwjblue/antennabench.git
-cd antennabench
-mise install
-mise run desktop:dev
-```
-
-The first setup downloads the pinned tools, and the first build compiles the
-application. Stop the development process with Control-C. See the
-[development guide](docs/development.md) for tests, repository conventions, and
-additional commands.
-
 ## Documentation
 
 For operators and evaluators:
@@ -81,17 +64,7 @@ For operators and evaluators:
 - [Why WSPR is the default—and when to use RBN](docs/why-not-just-use-rbn.md)
 - [Local antenna controller profiles](docs/antenna-controller-profiles.md)
 
-For contributors and maintainers:
-
-- [Documentation index](docs/README.md)
-- [Development guide](docs/development.md)
-- [Architecture overview](docs/architecture.md)
-
 ## License
 
 AntennaBench is licensed under the [Apache License, Version 2.0](LICENSE).
 Copyright 2026 Robert Jackson.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in AntennaBench is licensed under the same terms, without
-additional terms or conditions.
