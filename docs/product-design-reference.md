@@ -43,6 +43,14 @@ Manual/no-rig operation is a first-class path. Optional adapters can add
 observed state, but their absence never causes the application to invent an
 actual switch or prevent an operator from conducting a local session.
 
+The first optional rig-integration slice uses fresh status from the configured
+WSJT-X client only to warn about a WSPR mode, band, Enable Tx, or unexpected
+receive-period transmission mismatch. Warnings are advisory and companion
+status is not proof of physical radio or antenna state. Missing or stale status
+leaves the ordinary manual workflow unchanged. Direct frequency, mode, PTT,
+keying, and antenna control are deferred by
+[Decision 0019](decisions/0019-observe-rig-state-before-control.md).
+
 ## Evidence And Report Honesty
 
 The session bundle preserves the experiment record so later analysis can be
@@ -85,9 +93,9 @@ Default mode is whole-station A/B testing. TX-focused, RX-focused, and
 single-antenna profiling modes are part of the data model and can grow from the
 same bundle shape.
 
-WSJT-X companion mode is the expected first integration path. Native WSPR,
-mobile operation, deeper rig control, public search, and hosted publishing are
-later layers.
+WSJT-X companion mode is the first integration path. Its next narrow slice is
+passive setup-warning support; native WSPR, mobile operation, command-capable
+rig control, public search, and hosted publishing are later layers.
 
 ## Bounded Local Operation
 

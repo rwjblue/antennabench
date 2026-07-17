@@ -439,7 +439,13 @@ The durable boundaries are:
   observations; WSJT-X companion mode is first, while native implementations
   may be added later.
 - Rig integration is optional. A session remains runnable with manual switching
-  and no rig adapter.
+  and no rig adapter. The first selected slice derives advisory WSPR setup
+  warnings from fresh status belonging to the already admitted WSJT-X client;
+  it does not treat companion status as physical radio read-back, write rig
+  records, block the conductor, or issue commands. Missing, stale, closed, or
+  replaced-client status is unavailable rather than matching. Direct Hamlib or
+  radio control remains deferred under
+  [Decision 0019](decisions/0019-observe-rig-state-before-control.md).
 - Public-spot and propagation sources preserve provenance and raw or near-raw
   inputs before normalizing supported values into bundle records. The first
   WSPR public-spot boundary preserves each bounded WSPR.live ClickHouse JSON
@@ -498,8 +504,12 @@ attachment back together.
 [Decision 0018](decisions/0018-use-directed-counterbalanced-wspr-cycles.md)
 adds schema-v4 directed WSPR intentions, receive-capable WSJT-X preflight, and
 counterbalanced RX/TX authoring while retaining schema-v3 reads.
-The first optional rig-control milestone is tracked by
-[#14](https://github.com/rwjblue/antennabench/issues/14).
+The first optional rig-integration milestone is passive, advisory WSJT-X status
+comparison under
+[Decision 0019](decisions/0019-observe-rig-state-before-control.md). It is
+tracked by [#14](https://github.com/rwjblue/antennabench/issues/14); any direct
+control requires a separately approved issue. The focused advisory-warning
+implementation is [#107](https://github.com/rwjblue/antennabench/issues/107).
 
 ## Hosted Trust Boundary
 
@@ -570,6 +580,14 @@ one loopback receiver task, admits one configured client identity, persists raw
 generic adapter evidence and linked observations through the schema-v2 writer,
 and exposes bounded status. Tests inject the documented datagrams directly
 below the socket, so routine orchestration verification opens no network socket.
+
+The retained status is also the selected first rig-observation source. Only a
+fresh status from the expected client may be compared with the active WSPR
+intention for advisory mode, band, Enable Tx, or transmitting-state warnings.
+Close, receiver stop, client reset, active-session replacement, or heartbeat
+expiry makes it unavailable. This comparison neither establishes physical rig
+state nor grants command authority; its raw adapter record remains the audit
+evidence and the warning itself is derived.
 
 WSPRDecode carries a time-of-day rather than a date. The adapter reconstructs
 UTC by choosing the closest of the receipt date and its adjacent dates, using

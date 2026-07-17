@@ -33,6 +33,10 @@ historical references, not tutorials or work trackers; start with the
   Plans](0016-use-reusable-counterbalanced-transmit-signal-plans.md)
 - [0017: Use Operator-Paced WSPR
   Cycles](0017-use-operator-paced-wspr-cycles.md)
+- [0018: Use Directed Counterbalanced WSPR
+  Cycles](0018-use-directed-counterbalanced-wspr-cycles.md)
+- [0019: Observe Rig State Before Adding
+  Control](0019-observe-rig-state-before-control.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions
