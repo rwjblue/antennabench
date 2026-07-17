@@ -581,13 +581,15 @@ generic adapter evidence and linked observations through the schema-v2 writer,
 and exposes bounded status. Tests inject the documented datagrams directly
 below the socket, so routine orchestration verification opens no network socket.
 
-The retained status is also the selected first rig-observation source. Only a
-fresh status from the expected client may be compared with the active WSPR
-intention for advisory mode, band, Enable Tx, or transmitting-state warnings.
-Close, receiver stop, client reset, active-session replacement, or heartbeat
-expiry makes it unavailable. This comparison neither establishes physical rig
-state nor grants command authority; its raw adapter record remains the audit
-evidence and the warning itself is derived.
+The retained status is also the first rig-observation source. The desktop
+compares only a fresh status from the expected client with the current WSPR
+instruction and presents advisory mode, band, Enable Tx, or unexpected
+receive-period transmission warnings above the run actions. Close, receiver
+stop, client reset, active-session replacement, or status expiry makes the
+facts unavailable. A later heartbeat does not silently freshen an older status.
+This comparison neither establishes physical rig state nor grants command
+authority; persisted raw adapter input remains the audit evidence and the
+warning itself is derived.
 
 WSPRDecode carries a time-of-day rather than a date. The adapter reconstructs
 UTC by choosing the closest of the receipt date and its adjacent dates, using

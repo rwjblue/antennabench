@@ -12,7 +12,7 @@ use std::{
 
 use antennabench_core::{
     annotate_bundle_observations, project_wspr_run_v3, AdapterDisposition, AdapterInput,
-    AdapterReasonId, AdapterRecordV2, BundleContents, BundleV2Contents, BundleV3Contents,
+    AdapterReasonId, AdapterRecordV2, Band, BundleContents, BundleV2Contents, BundleV3Contents,
     MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecord,
     ObservationRecordV2, Provenance, RecordMetaV2, RecordSource, SessionLifecycleV2,
     WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
@@ -22,9 +22,9 @@ use antennabench_storage::{
     LivePersistenceError, LivePersistenceHooks, SystemLivePersistenceHooks,
 };
 use antennabench_wsjtx::{
-    parse_wsjtx_datagram, LiveIngestConfig, LiveIngestError, LiveIngestOutcome,
-    LiveMessageDisposition, LiveRecordedMessage, LiveWsjtxIngest, ReceivedUdpDatagram,
-    UdpReceiverError, WsjtxUdpReceiver, WsprDecodeDisposition,
+    band_from_frequency_hz, parse_wsjtx_datagram, LiveIngestConfig, LiveIngestError,
+    LiveIngestOutcome, LiveMessageDisposition, LiveRecordedMessage, LiveWsjtxIngest,
+    ReceivedUdpDatagram, UdpReceiverError, WsjtxMessage, WsjtxUdpReceiver, WsprDecodeDisposition,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -90,7 +90,26 @@ pub(crate) struct WsjtxReceiverStatus {
     received_datagrams: u64,
     committed_mutations: u64,
     ignored_datagrams: u64,
+    station_status: Option<WsjtxStationStatus>,
+    setup_warnings: Vec<WsjtxSetupWarning>,
     diagnostic: Option<WsjtxDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WsjtxStationStatus {
+    observed_at: DateTime<Utc>,
+    dial_frequency_hz: u64,
+    mode: String,
+    tx_enabled: bool,
+    transmitting: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WsjtxSetupWarning {
+    code: String,
+    message: String,
 }
 
 impl Default for WsjtxReceiverStatus {
@@ -105,6 +124,8 @@ impl Default for WsjtxReceiverStatus {
             received_datagrams: 0,
             committed_mutations: 0,
             ignored_datagrams: 0,
+            station_status: None,
+            setup_warnings: Vec::new(),
             diagnostic: None,
         }
     }
@@ -245,6 +266,126 @@ fn read_wsjtx_snapshot(store: &BundleStore) -> Result<WsjtxSnapshot, LivePersist
     }
 }
 
+fn setup_warning_target(
+    snapshot: &WsjtxSnapshot,
+    now: DateTime<Utc>,
+) -> Option<(Band, WsprCycleDirection)> {
+    let WsjtxSnapshot::V3(bundle) = snapshot else {
+        return None;
+    };
+    if !matches!(
+        bundle.session_state.lifecycle,
+        SessionLifecycleV2::Ready | SessionLifecycleV2::Running
+    ) {
+        return None;
+    }
+    let projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
+    let upcoming_cycle = projection
+        .cycles
+        .iter()
+        .find(|cycle| cycle.window.transmission_ends_at > now)
+        .map(|cycle| cycle.intent_id.as_str());
+    let intent = upcoming_cycle
+        .and_then(|intent_id| {
+            bundle
+                .schedule
+                .wspr_cycle_intents
+                .iter()
+                .find(|intent| intent.intent_id == intent_id)
+        })
+        .or_else(|| {
+            bundle.schedule.wspr_cycle_intents.iter().find(|intent| {
+                !projection
+                    .cycles
+                    .iter()
+                    .any(|cycle| cycle.intent_id == intent.intent_id)
+                    && !projection
+                        .skipped_intent_ids
+                        .iter()
+                        .any(|intent_id| intent_id == &intent.intent_id)
+            })
+        })?;
+    Some((intent.band, intent.direction?))
+}
+
+fn setup_warnings_for(
+    station: &WsjtxStationStatus,
+    band: Band,
+    direction: WsprCycleDirection,
+) -> Vec<WsjtxSetupWarning> {
+    let mut warnings = Vec::new();
+    if !station.mode.trim().eq_ignore_ascii_case("WSPR") {
+        warnings.push(WsjtxSetupWarning {
+            code: "wsjtx.setup.mode_mismatch".into(),
+            message: format!(
+                "WSJT-X reports mode {:?}; the current instruction requires WSPR.",
+                station.mode
+            ),
+        });
+    }
+    if band_from_frequency_hz(station.dial_frequency_hz) != Some(band) {
+        let band = serde_json::to_value(band)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| format!("{band:?}"));
+        warnings.push(WsjtxSetupWarning {
+            code: "wsjtx.setup.band_mismatch".into(),
+            message: format!(
+                "WSJT-X reports dial frequency {} Hz, outside the instructed {band} band.",
+                station.dial_frequency_hz
+            ),
+        });
+    }
+    match direction {
+        WsprCycleDirection::Receive => {
+            if station.transmitting {
+                warnings.push(WsjtxSetupWarning {
+                    code: "wsjtx.setup.transmitting_during_receive".into(),
+                    message: "WSJT-X reports transmitting during a receive instruction.".into(),
+                });
+            }
+            if station.tx_enabled {
+                warnings.push(WsjtxSetupWarning {
+                    code: "wsjtx.setup.tx_enabled_during_receive".into(),
+                    message:
+                        "WSJT-X reports Enable Tx on; turn it off for this receive instruction."
+                            .into(),
+                });
+            }
+        }
+        WsprCycleDirection::Transmit if !station.tx_enabled => {
+            warnings.push(WsjtxSetupWarning {
+                code: "wsjtx.setup.tx_disabled_during_transmit".into(),
+                message: "WSJT-X reports Enable Tx off; turn it on for this transmit instruction."
+                    .into(),
+            });
+        }
+        WsprCycleDirection::Transmit => {}
+    }
+    warnings
+}
+
+fn project_setup_warnings(
+    snapshot: &WsjtxSnapshot,
+    status: &mut WsjtxReceiverStatus,
+    now: DateTime<Utc>,
+) {
+    status.setup_warnings.clear();
+    let Some(station) = status.station_status.as_ref() else {
+        return;
+    };
+    let stale = now.signed_duration_since(station.observed_at)
+        > Duration::seconds(HEARTBEAT_STALE_AFTER_SECONDS);
+    if status.phase != WsjtxReceiverPhase::Running || stale {
+        status.station_status = None;
+        return;
+    }
+    let Some((band, direction)) = setup_warning_target(snapshot, now) else {
+        return;
+    };
+    status.setup_warnings = setup_warnings_for(station, band, direction);
+}
+
 enum IntakeDecision {
     Continue,
     Stop,
@@ -301,6 +442,8 @@ impl WsjtxSessionState {
                 stops_intake: true,
             });
         }
+        snapshot.station_status = None;
+        snapshot.setup_warnings.clear();
         if let Ok(mut runtime) = self.0.lock() {
             runtime.last_source = Some(source);
             runtime.last_status = Some(snapshot.clone());
@@ -341,6 +484,10 @@ impl WsjtxSessionState {
                     stops_intake: false,
                 });
             }
+        }
+        if status.phase != WsjtxReceiverPhase::Running {
+            status.station_status = None;
+            status.setup_warnings.clear();
         }
         status
     }
@@ -588,9 +735,13 @@ impl WsjtxOrchestrator {
                 status.phase = WsjtxReceiverPhase::Running;
                 status.diagnostic = None;
             });
-            let _ = self
+            let status_message = matches!(parsed.message, WsjtxMessage::Status(_));
+            let outcome = self
                 .ingest
                 .ingest_datagram(&datagram.bytes, datagram.received_at);
+            if outcome.is_ok() {
+                self.sync_station_status(status, datagram.received_at, status_message);
+            }
             return IntakeDecision::Continue;
         }
         if snapshot.lifecycle() != SessionLifecycleV2::Running {
@@ -656,6 +807,7 @@ impl WsjtxOrchestrator {
             status.phase = WsjtxReceiverPhase::Running;
             status.diagnostic = None;
         });
+        let status_message = matches!(parsed.message, WsjtxMessage::Status(_));
         match self
             .ingest
             .ingest_datagram(&datagram.bytes, datagram.received_at)
@@ -672,6 +824,7 @@ impl WsjtxOrchestrator {
                 self.commit_or_stop(mutation, status, None)
             }
             Ok(LiveIngestOutcome::Recorded(message)) => {
+                self.sync_station_status(status, datagram.received_at, status_message);
                 let mutation = self.recorded_mutation(&snapshot, &datagram, *message);
                 self.commit_or_stop(mutation, status, None)
             }
@@ -694,6 +847,36 @@ impl WsjtxOrchestrator {
                 self.stop_for_resource_gap(&snapshot, &datagram, status, error.diagnostic)
             }
         }
+    }
+
+    fn sync_station_status(
+        &self,
+        receiver_status: &Mutex<WsjtxReceiverStatus>,
+        received_at: DateTime<Utc>,
+        received_status_message: bool,
+    ) {
+        let client_status = self
+            .ingest
+            .client_state(&self.expected_client_id)
+            .and_then(|client| client.status.as_ref());
+        update_status(receiver_status, |receiver| {
+            receiver.setup_warnings.clear();
+            receiver.station_status = client_status.and_then(|current| {
+                let observed_at = received_status_message.then_some(received_at).or_else(|| {
+                    receiver
+                        .station_status
+                        .as_ref()
+                        .map(|status| status.observed_at)
+                })?;
+                Some(WsjtxStationStatus {
+                    observed_at,
+                    dial_frequency_hz: current.dial_frequency_hz,
+                    mode: current.mode.clone(),
+                    tx_enabled: current.tx_enabled,
+                    transmitting: current.transmitting,
+                })
+            });
+        });
     }
 
     fn stop_for_resource_gap(
@@ -1135,7 +1318,11 @@ pub(crate) fn active_session_wsjtx_status(
     wsjtx_state: State<'_, WsjtxSessionState>,
 ) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
     let (source, _) = active_session_source(active_state.inner())?;
-    let status = wsjtx_state.status_for_source(&source, Utc::now());
+    let now = Utc::now();
+    let mut status = wsjtx_state.status_for_source(&source, now);
+    if let Ok(snapshot) = read_wsjtx_snapshot(&BundleStore::new(source)) {
+        project_setup_warnings(&snapshot, &mut status, now);
+    }
     check_status_ipc(&status)?;
     Ok(status)
 }
@@ -1285,7 +1472,7 @@ mod tests {
     };
 
     use antennabench_core::{
-        EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
+        Band, EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
         OperatorEventV2, OperatorEventV3, Provenance, RecordMetaV3, RecordSource,
         SessionLifecycleV2, WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
         V2_BUNDLE_SUFFIX, WSPR_TRANSMISSION_MILLISECONDS,
@@ -1299,8 +1486,9 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        IntakeDecision, ReceivedUdpDatagram, WsjtxOrchestrator, WsjtxReceiverPhase,
-        WsjtxReceiverStatus, WsjtxSessionState, WsjtxSnapshot,
+        project_setup_warnings, setup_warnings_for, IntakeDecision, ReceivedUdpDatagram,
+        WsjtxOrchestrator, WsjtxReceiverPhase, WsjtxReceiverStatus, WsjtxSessionState,
+        WsjtxSnapshot, WsjtxStationStatus,
     };
     use crate::{open_session::ActiveSessionState, setup::create_e2e_session};
 
@@ -1467,6 +1655,99 @@ mod tests {
         assert_eq!(after_transmit.schedule.slots.len(), 2);
     }
 
+    #[test]
+    fn setup_warning_matrix_is_advisory_and_does_not_infer_transmission() {
+        let observed_at = Utc.with_ymd_and_hms(2026, 7, 16, 20, 0, 0).unwrap();
+        let mut station = WsjtxStationStatus {
+            observed_at,
+            dial_frequency_hz: 14_095_600,
+            mode: "WSPR".into(),
+            tx_enabled: true,
+            transmitting: false,
+        };
+        assert_eq!(
+            setup_warnings_for(&station, Band::M20, WsprCycleDirection::Receive)
+                .into_iter()
+                .map(|warning| warning.code)
+                .collect::<Vec<_>>(),
+            vec!["wsjtx.setup.tx_enabled_during_receive"]
+        );
+
+        station.mode = "FT8".into();
+        station.dial_frequency_hz = 7_040_000;
+        station.transmitting = true;
+        assert_eq!(
+            setup_warnings_for(&station, Band::M20, WsprCycleDirection::Receive)
+                .into_iter()
+                .map(|warning| warning.code)
+                .collect::<Vec<_>>(),
+            vec![
+                "wsjtx.setup.mode_mismatch",
+                "wsjtx.setup.band_mismatch",
+                "wsjtx.setup.transmitting_during_receive",
+                "wsjtx.setup.tx_enabled_during_receive",
+            ]
+        );
+
+        station.mode = " Wspr ".into();
+        station.dial_frequency_hz = 14_095_600;
+        station.transmitting = false;
+        station.tx_enabled = false;
+        assert_eq!(
+            setup_warnings_for(&station, Band::M20, WsprCycleDirection::Transmit)
+                .into_iter()
+                .map(|warning| warning.code)
+                .collect::<Vec<_>>(),
+            vec!["wsjtx.setup.tx_disabled_during_transmit"]
+        );
+        station.tx_enabled = true;
+        assert!(setup_warnings_for(&station, Band::M20, WsprCycleDirection::Transmit).is_empty());
+    }
+
+    #[test]
+    fn setup_warning_projection_fails_closed_for_stale_and_legacy_status() {
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let created = create_e2e_session(temp.path(), &active);
+        let bundle = BundleStore::new(created.path)
+            .read_v3_checkpointed()
+            .unwrap();
+        let at = Utc.with_ymd_and_hms(2026, 7, 16, 20, 0, 0).unwrap();
+        let mut status = WsjtxReceiverStatus {
+            phase: WsjtxReceiverPhase::Running,
+            station_status: Some(WsjtxStationStatus {
+                observed_at: at,
+                dial_frequency_hz: 14_095_600,
+                mode: "WSPR".into(),
+                tx_enabled: true,
+                transmitting: false,
+            }),
+            ..WsjtxReceiverStatus::default()
+        };
+        project_setup_warnings(&WsjtxSnapshot::V3(bundle), &mut status, at);
+        assert_eq!(
+            status
+                .setup_warnings
+                .iter()
+                .map(|warning| warning.code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["wsjtx.setup.tx_enabled_during_receive"]
+        );
+
+        project_setup_warnings(
+            &WsjtxSnapshot::V2(running_store(&TempDir::new().unwrap()).read_v2().unwrap()),
+            &mut status,
+            at,
+        );
+        assert!(status.setup_warnings.is_empty());
+        project_setup_warnings(
+            &WsjtxSnapshot::V2(running_store(&TempDir::new().unwrap()).read_v2().unwrap()),
+            &mut status,
+            at + chrono::Duration::seconds(46),
+        );
+        assert!(status.station_status.is_none());
+    }
+
     fn running_store(temp: &TempDir) -> BundleStore {
         let upgraded = BundleStore::new(fixture_root())
             .upgrade_v1_to_v2(temp.path().join(format!("upgraded{V2_BUNDLE_SUFFIX}")))
@@ -1595,12 +1876,46 @@ mod tests {
             observation.meta.mutation.mutation_id
         );
         assert_eq!(evidence.meta.mutation.member_count, 2);
+        let status = status.lock().unwrap();
+        let station = status.station_status.as_ref().unwrap();
+        assert_eq!(station.observed_at, at + chrono::Duration::seconds(1));
+        assert_eq!(station.dial_frequency_hz, 14_095_600);
+        assert_eq!(station.mode, "WSPR");
         eprintln!(
             "desktop-e2e result=wsjtx-ingest revision={} adapter_records={} observations={}",
             bundle.session_state.revision,
             bundle.adapter_records.len(),
             bundle.observations.len()
         );
+    }
+
+    #[test]
+    fn close_and_client_generation_reset_clear_observed_station_status() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 15, 3, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = running_store(&temp);
+        let hooks = Arc::new(TestHooks::new(at));
+        let mut orchestrator = orchestrator(store, hooks, None);
+        let status = Mutex::new(WsjtxReceiverStatus::default());
+        let fixtures = fixture_datagrams();
+
+        orchestrator.process(received(fixtures[1].clone(), at), &status);
+        assert!(status.lock().unwrap().station_status.is_some());
+        let mut close = fixtures[0][..22].to_vec();
+        close[8..12].copy_from_slice(&6_u32.to_be_bytes());
+        orchestrator.process(received(close, at + chrono::Duration::seconds(1)), &status);
+        assert!(status.lock().unwrap().station_status.is_none());
+
+        orchestrator.process(
+            received(fixtures[1].clone(), at + chrono::Duration::seconds(2)),
+            &status,
+        );
+        assert!(status.lock().unwrap().station_status.is_some());
+        orchestrator.process(
+            received(fixtures[0].clone(), at + chrono::Duration::seconds(48)),
+            &status,
+        );
+        assert!(status.lock().unwrap().station_status.is_none());
     }
 
     #[test]

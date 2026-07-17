@@ -62,6 +62,7 @@ export const REQUIRED_ELEMENT_SELECTORS = Object.freeze({
   wsjtxPhase: "[data-wsjtx-phase]",
   wsjtxRequirement: "[data-wsjtx-requirement]",
   wsjtxCounts: "[data-wsjtx-counts]",
+  wsjtxSetupWarnings: "[data-wsjtx-setup-warnings]",
   wsjtxDiagnostic: "[data-wsjtx-diagnostic]",
   openButton: "[data-open-session]",
   exportButton: "[data-export-session]",

@@ -128,7 +128,7 @@ function runElements(document) {
     "conductorGuidance", "conductorCountdown", "currentSlot", "nextSlot",
     "evidenceSlot", "evidenceAntenna", "conductorDiagnostics", "conductorEvents",
     "wsjtxForm", "wsjtxStart", "wsjtxStop", "wsjtxRequirement", "wsjtxPhase",
-    "wsjtxCounts", "wsjtxDiagnostic", "wsprLivePhase", "wsprLiveDetail",
+    "wsjtxCounts", "wsjtxSetupWarnings", "wsjtxDiagnostic", "wsprLivePhase", "wsprLiveDetail",
     "wsprLiveDiagnostic", "wsprLiveRetry", "wsprLiveEndWithout",
   ], document);
   e.evidenceForm.submit = new FakeElement("button", document);
@@ -169,7 +169,11 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.lifecycleButtons[0].disabled, true, "start waits for required WSJT-X");
   assert.equal(e.evidenceSlot.children.length, 2);
 
-  state.wsjtx = { phase: "running", bindAddress: "127.0.0.1", receivedDatagrams: 2, committedMutations: 1, ignoredDatagrams: 1 };
+  state.wsjtx = {
+    phase: "running", bindAddress: "127.0.0.1", receivedDatagrams: 2,
+    committedMutations: 1, ignoredDatagrams: 1,
+    setupWarnings: [{ code: "wsjtx.setup.tx_disabled_during_transmit", message: "Turn Enable Tx on." }],
+  };
   state.wsprLiveAcquisitionStatus = "fetching";
   result = renderRun(e, state, document, {
     monotonicNow: () => 1000,
@@ -179,6 +183,10 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.wsjtxPhase.textContent, "Running · 127.0.0.1");
   assert.equal(e.wsprLivePhase.textContent, "Collecting delayed/public spots…");
   assert.match(e.wsjtxCounts.textContent, /Direct\/local active/);
+  assert.equal(e.wsjtxSetupWarnings.hidden, false);
+  assert.equal(e.wsjtxSetupWarnings.children[0].dataset.code, "wsjtx.setup.tx_disabled_during_transmit");
+  assert.equal(e.wsjtxSetupWarnings.children[0].children[1].textContent, "Turn Enable Tx on.");
+  assert.equal(e.lifecycleButtons[2].disabled, false, "advisory warnings do not disable conductor actions");
   assert.equal(e.wsprLiveRetry.disabled, true);
 
   const slot = {

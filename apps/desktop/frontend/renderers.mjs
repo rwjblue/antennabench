@@ -97,7 +97,7 @@ export function renderRun(elements, state, root, options = {}) {
     conductorLifecycle, conductorAntennaInUse, conductorPhase, conductorGuidance,
     conductorCountdown, currentSlot, nextSlot, evidenceSlot, evidenceAntenna,
     lifecycleButtons, conductorDiagnostics, conductorEvents, wsjtxForm, wsjtxStart,
-    wsjtxStop, wsjtxRequirement, wsjtxPhase, wsjtxCounts, wsjtxDiagnostic,
+    wsjtxStop, wsjtxRequirement, wsjtxPhase, wsjtxCounts, wsjtxSetupWarnings, wsjtxDiagnostic,
     wsprLivePhase, wsprLiveDetail, wsprLiveDiagnostic, wsprLiveRetry, wsprLiveEndWithout,
   } = elements;
   const conductorBusy = ["loading", "refreshing", "mutating"].includes(state.conductorStatus);
@@ -192,6 +192,18 @@ export function renderRun(elements, state, root, options = {}) {
     : view.wsjtxRequired
       ? "Direct/local inactive · start this UDP receiver before the receive-capable session."
       : "Direct/local inactive · optional when delayed/public WSPR.live is enabled or the run has no receive periods.";
+  const setupWarnings = state.wsjtx?.setupWarnings ?? [];
+  wsjtxSetupWarnings.replaceChildren(...setupWarnings.map((warning) => {
+    const item = root.createElement("li");
+    item.dataset.code = warning.code;
+    const title = root.createElement("strong");
+    title.textContent = "Check WSJT-X setup";
+    const message = root.createElement("span");
+    message.textContent = warning.message;
+    item.append(title, message);
+    return item;
+  }));
+  wsjtxSetupWarnings.hidden = setupWarnings.length === 0;
   const adapterDiagnostic = state.wsjtxError ?? state.wsjtx?.diagnostic ?? null;
   wsjtxDiagnostic.hidden = adapterDiagnostic === null;
   if (adapterDiagnostic) {

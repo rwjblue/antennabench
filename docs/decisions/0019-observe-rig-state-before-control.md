@@ -4,6 +4,8 @@
 
 Accepted.
 
+Implemented 2026-07-16 by #107.
+
 ## Context
 
 The manual conductor and bounded WSJT-X UDP intake are now implemented. WSJT-X
@@ -62,11 +64,12 @@ Identity, freshness, and lifetime are fail-closed:
 - unavailable or unsupported facts remain distinct from a confirmed match.
 
 Warnings should be derived from the current conductor view and volatile
-receiver state. The already committed raw WSJT-X adapter record is the audit
-evidence; this slice does not duplicate every status into `rig.jsonl`, add a
-schema field, or make a UI warning canonical. If a later independent rig
-adapter produces normalized radio state, it may append a rig record linked to
-its provider evidence under the existing bundle boundary.
+receiver state. When running-session intake persists a status, its existing raw
+WSJT-X adapter record is the audit evidence; a pre-run warning remains
+deliberately volatile. This slice does not duplicate every status into
+`rig.jsonl`, add a schema field, or make a UI warning canonical. If a later
+independent rig adapter produces normalized radio state, it may append a rig
+record linked to its provider evidence under the existing bundle boundary.
 
 ## Deferred Control Contract
 
