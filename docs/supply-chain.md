@@ -6,7 +6,7 @@ repository-owned Action, runner, tool, and dependency-maintenance checks.
 
 ## Routine Pull Requests
 
-Dependabot checks Cargo and GitHub Actions every Monday. Each ecosystem permits
+Dependabot checks Cargo, GitHub Actions, and the root npm workspace every Monday. Each ecosystem permits
 at most five open update pull requests. Patch and minor version updates may be
 grouped; major and security updates remain independent. Updates are never
 merged automatically.
@@ -72,6 +72,21 @@ Adding a package manifest requires, in the same focused change:
 The guard deliberately fails when it discovers a known manifest without a
 matching policy entry. Extend the known-manifest list when adopting an
 ecosystem whose manifest name is not already recognized.
+
+## npm Workspace Policy
+
+The private root workspace explicitly contains `apps/desktop` and
+`apps/hosted`. `package-lock.json` at the repository root is the only permitted
+npm lockfile, and ordinary installs run `npm ci` from that root. Workspace
+manifests own the exact direct versions their source and tests import; the root
+manifest owns orchestration and the reviewed install-script allowlist.
+
+The supply-chain gate rejects an undeclared package manifest, a nested lockfile,
+a non-exact direct version, or disagreement between any workspace manifest and
+the root lock. It also runs a complete `npm audit --audit-level=moderate`,
+matching the pull-request dependency-review boundary. Dependabot's npm entry is
+rooted at `/`, so one reviewed update covers the complete graph. See
+[Decision 0022](decisions/0022-use-one-root-npm-workspace.md).
 
 ## Rust Dependency Policy
 

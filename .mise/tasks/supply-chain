@@ -7,3 +7,4 @@ cd "$repo_root"
 
 node --test scripts/validate-supply-chain.test.mjs
 node scripts/validate-supply-chain.mjs
+npm audit --audit-level=moderate

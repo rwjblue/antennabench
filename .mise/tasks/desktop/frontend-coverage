@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # -*- mode: sh; sh-shell: bash; -*-
-#MISE description="Report dependency-free desktop frontend behavior coverage"
+#MISE description="Report desktop Vitest behavior coverage"
+#MISE depends=["npm:deps"]
 
 set -euo pipefail
 
-node --test --experimental-test-coverage apps/desktop/tests/*.test.mjs
+npm run coverage

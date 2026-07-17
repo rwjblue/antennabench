@@ -5,6 +5,7 @@ import {
   validateDependabotText,
   validateDependencyReviewText,
   validateManifestCoverage,
+  validateNpmWorkspace,
   validateReleaseWorkflowText,
   validateRepository,
   validateUsesText,
@@ -62,6 +63,16 @@ updates:
         update-types:
           - minor
           - patch
+  - package-ecosystem: npm
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      routine:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
 `;
   assert.deepEqual(validateDependabotText(valid), []);
   assert.ok(validateDependabotText(valid.replace("interval: weekly", "interval: monthly")).length);
@@ -70,6 +81,27 @@ updates:
     validateDependabotText(valid.replace("applies-to: version-updates", "applies-to: security-updates"))
       .length,
   );
+});
+
+test("npm policy requires exact workspace pins, one root lock, and lock agreement", () => {
+  const manifests = {
+    "package.json": { private: true, workspaces: ["apps/desktop", "apps/hosted"] },
+    "apps/desktop/package.json": { private: true, devDependencies: { vitest: "4.1.10" } },
+    "apps/hosted/package.json": { private: true, dependencies: { worker: "1.2.3" } },
+  };
+  const lock = {
+    packages: {
+      "": {},
+      "apps/desktop": { devDependencies: { vitest: "4.1.10" } },
+      "apps/hosted": { dependencies: { worker: "1.2.3" } },
+    },
+  };
+  assert.deepEqual(validateNpmWorkspace(manifests, ["package-lock.json"], lock), []);
+  assert.ok(validateNpmWorkspace(manifests, ["apps/hosted/package-lock.json"], lock).length);
+  assert.ok(validateNpmWorkspace({
+    ...manifests,
+    "apps/desktop/package.json": { devDependencies: { vitest: "^4.1.10" } },
+  }, ["package-lock.json"], lock).length);
 });
 
 test("dependency review is pull-request-only and blocks moderate additions", () => {

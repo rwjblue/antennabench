@@ -13,13 +13,15 @@
       "policy": "ADR 0012 and deny.toml"
     },
     {
-      "name": "hosted-npm",
+      "name": "npm-workspace",
       "manifest_globs": [
+        "package.json",
+        "apps/desktop/package.json",
         "apps/hosted/package.json"
       ],
-      "lockfile": "apps/hosted/package-lock.json",
-      "update": "dependabot:npm:/apps/hosted",
-      "policy": "ADR 0012 supply-chain review plus exact package.json and package-lock.json pins"
+      "lockfile": "package-lock.json",
+      "update": "dependabot:npm:/",
+      "policy": "ADR 0012 and ADR 0022 supply-chain review plus exact workspace manifest pins and one root package-lock.json"
     }
   ]
 }

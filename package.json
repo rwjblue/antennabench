@@ -1,0 +1,25 @@
+{
+  "name": "antennabench",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/desktop",
+    "apps/hosted"
+  ],
+  "scripts": {
+    "audit": "npm audit --audit-level=moderate",
+    "build": "npm run build --workspace @antennabench/hosted",
+    "coverage": "npm run coverage --workspace @antennabench/desktop",
+    "policy": "node --test scripts/validate-supply-chain.test.mjs && node scripts/validate-supply-chain.mjs && npm run audit",
+    "test": "npm run test:desktop && npm run test:hosted",
+    "test:desktop": "npm run test --workspace @antennabench/desktop",
+    "test:hosted": "npm run test --workspace @antennabench/hosted",
+    "types:check": "npm run check --workspace @antennabench/hosted"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "sharp@0.34.5": true,
+    "workerd@1.20260710.1": true
+  }
+}

@@ -4,6 +4,8 @@ Date: 2026-07-14
 
 Toolchain policy amended by
 [Decision 0014](0014-use-one-pinned-rust-toolchain.md).
+JavaScript dependency policy amended by
+[Decision 0022](0022-use-one-root-npm-workspace.md).
 
 ## Decision
 

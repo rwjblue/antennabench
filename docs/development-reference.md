@@ -6,11 +6,12 @@ start with the [Development Guide](development.md).
 
 This repo uses Rust, Cargo, and Jujutsu (`jj`).
 
-The desktop shell also uses Tauri 2 and plain JavaScript. Node is used only for
-the frontend's dependency-free state tests, supply-chain policy validation, and
-desktop test timing. No Node package manifest or lockfile exists. Rust, Node,
-and cargo-tauri are exact Mise pins; Cargo-backed tools are installed with their
-published lockfiles.
+The desktop shell also uses Tauri 2 and plain JavaScript. One private root npm
+workspace and lockfile own desktop test tooling and the hosted application's
+dependencies. Node runs Vitest/jsdom tests, hosted build tooling, supply-chain
+policy validation, and desktop test timing; it is not part of the desktop
+production runtime. Rust, Node, and cargo-tauri are exact Mise pins;
+Cargo-backed tools are installed with their published lockfiles.
 
 ## Version Control
 
@@ -303,7 +304,7 @@ The optional hosted foundation is verified independently with:
 mise run hosted:test
 ```
 
-It uses locked npm dependencies, generated Wrangler binding types, fake service
+It uses the locked root npm workspace, generated Wrangler binding types, fake service
 inventory tests, strict TypeScript, and a no-account dry build. The dry build
 uses `--containers-rollout=none` so ordinary CI needs no Docker daemon and does
 not provision or contact Cloudflare. Environment matrix tests pin distinct
@@ -316,12 +317,15 @@ Pull requests and pushes to `main` run three standard GitHub-hosted jobs. Linux
 is the canonical full-quality job on the single pinned toolchain: it verifies
 the Rust pins agree, installs the Linux Tauri prerequisites, and runs the
 remaining `mise run ci` checks, including formatting, Clippy, all workspace
-targets, frontend state tests, and the unattended desktop workflow. The macOS
-and Windows jobs each run the portable workspace tests, frontend state tests,
+targets, Node/jsdom frontend tests, and the unattended desktop workflow. The macOS
+and Windows jobs each run the portable workspace tests, Node/jsdom frontend tests,
 unattended desktop workflow, and `mise run desktop:build` for a native debug
 `--no-bundle` compilation.
 
 Project-local Mise tasks remain the command source of truth on every platform.
+Each job that needs JavaScript dependencies restores an npm cache keyed by the
+single root `package-lock.json`; the file-aware `npm:deps` task performs at most
+one root `npm ci` for the job.
 The portability jobs explicitly select `shell: bash`; on Windows, GitHub Actions
 therefore uses the Bash supplied by Git for Windows instead of the PowerShell
 default. Simple task wrappers intentionally remain Bash. The desktop build and
@@ -356,6 +360,7 @@ pinned Rust, Node, and Tauri CLI versions:
 ```bash
 xcode-select --install
 mise install
+npm ci
 ```
 
 The desktop-specific commands are:
@@ -414,7 +419,7 @@ deterministically.
 `desktop:build` builds a debug application without producing installer bundles,
 and `desktop:dev` launches the static shell with Tauri's development server.
 
-The dependency-free frontend tests import state transitions from `state.mjs`,
+The Node Vitest project imports state transitions from `state.mjs`,
 command contracts from `bridge.mjs`, formatting and derived view models from
 `models.mjs`, and input normalization from `forms.mjs`. Node imports those core
 modules directly without constructing a document or triggering `app.mjs`
@@ -431,13 +436,14 @@ behavior without a window, native picker, live timer, or Tauri runtime. DOM
 lookup is centralized by the fail-fast `elements.mjs` selector inventory.
 `renderers.mjs` gives navigation, setup, active-run, transfer, and report
 presentation separate ownership and consumes only explicit element/root/time
-capabilities. Narrow dependency-free fake elements verify visible/hidden,
-enabled/disabled, dynamic child, feedback, countdown, accessibility, and
+capabilities. The jsdom Vitest project loads the real checked-in HTML and
+element registry, then verifies real selectors, attributes, events, focus,
+class lists, dynamic children, feedback, countdown, accessibility, and
 revision-keyed `srcdoc` behavior.
 
-`desktop:frontend-test` runs those named behavior tests with Node's built-in
-line, branch, and function coverage report; `desktop:frontend-coverage` is the
-explicit report command. Coverage percentages are diagnostic indicators, not
+`desktop:frontend-test` runs the Node and jsdom projects;
+`desktop:frontend-coverage` adds Vitest V8 line, branch, and function reports.
+Coverage percentages are diagnostic indicators, not
 an acceptance threshold: named workflow states and contract edges determine
 adequacy, while uncovered lines guide focused additions. The suite does not
 verify native webview layout, CSS painting, platform focus integration, or
@@ -445,7 +451,7 @@ Tauri's actual injected global. Add a window-level smoke suite only after a
 reproducible defect crosses one of those real-webview boundaries and cannot be
 represented through the current element or platform ports; one such defect is
 evidence for a focused decision, not automatic permission to add WebDriver or
-a frontend dependency.
+a desktop production dependency.
 
 ## Desktop Release Artifact Construction
 

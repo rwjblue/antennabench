@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run types:check && tsc --noEmit && npm run build:development && npm run build:preview && npm run build:production",
+    "build": "npm run check && npm run build:development && npm run build:preview && npm run build:production",
     "build:development": "wrangler deploy --dry-run --env= --containers-rollout=none --outdir dist/development",
     "build:preview": "wrangler deploy --dry-run --env preview --containers-rollout=none --outdir dist/preview",
     "build:production": "wrangler deploy --dry-run --env production --containers-rollout=none --outdir dist/production",
-    "test": "vitest run",
+    "check": "npm run types:check && tsc --noEmit",
+    "test": "vitest run --config ../../vitest.config.mjs --project hosted-worker",
     "types": "wrangler types worker-configuration.d.ts",
     "types:check": "wrangler types --check worker-configuration.d.ts"
   },
@@ -20,11 +21,5 @@
     "typescript": "7.0.2",
     "vitest": "4.1.10",
     "wrangler": "4.111.0"
-  },
-  "allowScripts": {
-    "esbuild@0.28.1": true,
-    "fsevents@2.3.3": true,
-    "sharp@0.34.5": true,
-    "workerd@1.20260710.1": true
   }
 }

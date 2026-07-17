@@ -41,6 +41,8 @@ historical references, not tutorials or work trackers; start with the
   It](0020-defer-local-sqlite-until-measured.md)
 - [0021: Use Command-Verified Antenna
   Control](0021-use-command-verified-antenna-control.md)
+- [0022: Use One Root npm Workspace For JavaScript
+  Tooling](0022-use-one-root-npm-workspace.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions

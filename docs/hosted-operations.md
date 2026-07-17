@@ -37,9 +37,10 @@ required for the maintained contract suite:
 mise run hosted:test
 ```
 
-That task performs a clean locked npm install, fake-binding tests, generated
-binding-type drift checks, strict TypeScript compilation, and a Wrangler dry
-build. `--containers-rollout=none` deliberately bundles and validates the
+That task reuses the clean locked root npm workspace install, then runs the
+hosted Vitest project, generated binding-type drift checks, strict TypeScript
+compilation, and a Wrangler dry build. `--containers-rollout=none` deliberately
+bundles and validates the
 Worker without building the separately declared OCI image. A maintainer with a
 Docker-compatible runtime can additionally run:
 

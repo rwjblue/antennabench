@@ -386,6 +386,12 @@ summary returned for an active session. It does not model bundle contents,
 normalize evidence, analyze observations, render report markup, or persist UI
 state.
 
+The private desktop npm package is a development and test boundary only.
+Vitest and jsdom exercise the native modules and checked-in HTML from the root
+npm workspace, but Tauri's `frontendDist` remains exactly `frontend` with no
+pre-build command. Node modules, test coverage, and generated hosted output are
+not desktop production or release inputs.
+
 The checked-in native ES modules divide that disposable frontend boundary by
 responsibility. `state.mjs` owns workflow state and transitions, `bridge.mjs`
 owns the fixed Tauri command names and payload construction, `models.mjs` owns
