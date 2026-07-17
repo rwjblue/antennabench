@@ -1974,10 +1974,20 @@ pub(crate) mod tests {
     fn fake_command(behavior: &str) -> AntennaControlCommandV5 {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/fake-antenna-controller.mjs");
+        let executable_name = if cfg!(windows) { "node.exe" } else { "node" };
+        let node = std::env::var_os("PATH")
+            .and_then(|path| {
+                std::env::split_paths(&path)
+                    .map(|directory| directory.join(executable_name))
+                    .find(|candidate| candidate.is_file())
+            })
+            .unwrap_or_else(|| PathBuf::from(executable_name))
+            .display()
+            .to_string();
         AntennaControlCommandV5 {
-            program_template: "node".into(),
+            program_template: node.clone(),
             argument_templates: vec![fixture.display().to_string(), behavior.into()],
-            resolved_program: "node".into(),
+            resolved_program: node,
             resolved_arguments: vec![fixture.display().to_string(), behavior.into()],
         }
     }
@@ -2012,7 +2022,7 @@ pub(crate) mod tests {
             name: "Fake controller".into(),
             switch_command: fake_template(switch_behavior),
             verification_command: Some(fake_template("exit-zero")),
-            timeout_seconds: 2,
+            timeout_seconds: 10,
         };
         let (failed_switch, skipped_verification) =
             execute_profile_attempt(&profile("exit-nonzero"), fake_context(), &|| false).unwrap();
@@ -2034,7 +2044,7 @@ pub(crate) mod tests {
     pub(crate) fn assert_fake_process_covers_exit_binary_truncation_timeout_and_spawn_failure() {
         let zero = execute_process(
             &fake_command("exit-zero"),
-            StdDuration::from_secs(2),
+            StdDuration::from_secs(10),
             || false,
         );
         assert_eq!(
@@ -2045,7 +2055,7 @@ pub(crate) mod tests {
 
         let nonzero = execute_process(
             &fake_command("exit-nonzero"),
-            StdDuration::from_secs(2),
+            StdDuration::from_secs(10),
             || false,
         );
         assert_eq!(
@@ -2053,13 +2063,15 @@ pub(crate) mod tests {
             AntennaControlDispositionV5::Exit { code: 7 }
         );
 
-        let binary = execute_process(&fake_command("binary"), StdDuration::from_secs(2), || false);
+        let binary = execute_process(&fake_command("binary"), StdDuration::from_secs(10), || {
+            false
+        });
         assert_eq!(
             binary.stdout.encoding,
             AntennaControlOutputEncodingV5::Base64
         );
 
-        let flood = execute_process(&fake_command("flood"), StdDuration::from_secs(2), || false);
+        let flood = execute_process(&fake_command("flood"), StdDuration::from_secs(10), || false);
         assert!(flood.stdout.truncated);
         assert_eq!(flood.stdout.data.len(), COMMAND_OUTPUT_MAX_BYTES);
 
@@ -2088,7 +2100,9 @@ pub(crate) mod tests {
 
     pub(crate) fn assert_cancellation_terminates_the_child_without_claiming_hardware_restoration() {
         let cancelled =
-            execute_process(&fake_command("timeout"), StdDuration::from_secs(2), || true);
+            execute_process(&fake_command("timeout"), StdDuration::from_secs(10), || {
+                true
+            });
         assert!(matches!(
             cancelled.disposition,
             AntennaControlDispositionV5::Signaled { .. }

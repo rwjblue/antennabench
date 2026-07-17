@@ -153,9 +153,13 @@ async function sendCommands(options, commands) {
     const finish = (error) => {
       if (settled) return;
       settled = true;
-      socket.destroy();
-      if (error) reject(error);
-      else resolve();
+      if (error) {
+        socket.destroy();
+        reject(error);
+      } else {
+        if (!socket.writableEnded) socket.end();
+        resolve();
+      }
     };
 
     socket.setTimeout(options.timeoutMs, () =>
@@ -184,9 +188,13 @@ async function queryState(options, expected, timeoutMs) {
     const finish = (error) => {
       if (settled) return;
       settled = true;
-      socket.destroy();
-      if (error) reject(error);
-      else resolve(actual);
+      if (error) {
+        socket.destroy();
+        reject(error);
+      } else {
+        socket.end();
+        resolve(actual);
+      }
     };
 
     socket.setTimeout(timeoutMs, () =>

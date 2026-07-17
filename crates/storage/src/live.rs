@@ -263,6 +263,18 @@ pub struct LiveSessionV3 {
     frozen: bool,
 }
 
+impl Drop for LiveSessionV2 {
+    fn drop(&mut self) {
+        let _ = File::unlock(&self._lock);
+    }
+}
+
+impl Drop for LiveSessionV3 {
+    fn drop(&mut self) {
+        let _ = File::unlock(&self._lock);
+    }
+}
+
 impl std::fmt::Debug for LiveSessionV3 {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter

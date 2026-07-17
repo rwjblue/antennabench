@@ -27,6 +27,8 @@ async function startFakeK4(initial = { transmit: 1, receive: 5 }) {
   const commands = [];
   const server = createServer((socket) => {
     let buffer = "";
+    // Deadline-driven clients may close while the fake is still flushing a split reply.
+    socket.on("error", () => {});
     socket.on("data", (chunk) => {
       buffer += chunk.toString("ascii");
       const frames = buffer.split(";");
