@@ -4,10 +4,10 @@
 
 set -euo pipefail
 
+mise run module-size
 mise run toolchain
 mise run supply-chain
 mise run dependency-policy
-mise run module-size
 mise run desktop:e2e
 mise run desktop:frontend-test
 mise run desktop:release-test
