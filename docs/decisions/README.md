@@ -45,6 +45,8 @@ historical references, not tutorials or work trackers; start with the
   Tooling](0022-use-one-root-npm-workspace.md)
 - [0023: Use Static Astro For The Project
   Site](0023-use-static-astro-for-the-project-site.md)
+- [0024: Use Version-Owned Core Schema
+  Modules](0024-use-version-owned-core-schema-modules.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions

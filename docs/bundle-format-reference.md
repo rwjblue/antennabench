@@ -137,6 +137,15 @@ operator-triggered or automatic invocation, and whether manual review is
 required. Executable paths, argument templates, antenna target mappings, and
 timeouts are local application configuration and are never plan fields.
 
+[Decision 0024](decisions/0024-use-version-owned-core-schema-modules.md)
+separates durable schema numbers from Rust API ownership. Public version-owned
+types live under the `antennabench_core::v2`, `v3`, and `v5` modules and keep
+their explicit version suffixes; shared APIs use a curated crate-root surface.
+Schema v4 intentionally uses the v3 Rust representation because it added a
+validation and authoring requirement for the optional v3 intention-direction
+field rather than a distinct wire model. Future revisions must document the
+same ownership choice and may not enter the crate root through glob exports.
+
 Each attempted switch or verification may add one typed `rig.jsonl` record.
 It contains the controller profile name/revision, original command templates,
 resolved program and indexed argument array, complete intention context
