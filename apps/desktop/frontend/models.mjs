@@ -333,7 +333,7 @@ export function wsprLiveAcquisitionModel(state) {
     return {
       phase: "Public collection needs attention",
       detail: state.wsprLiveAcquisitionError.message,
-      diagnostic: "",
+      diagnostic: state.wsprLiveAcquisitionError.detail ?? "",
       retry: true,
       endWithout: state.conductor?.phase === "finalizing",
     };
@@ -390,7 +390,7 @@ export function wsprLiveAcquisitionModel(state) {
   return {
     phase: "Public collection needs attention",
     detail: outcome.message || "Automatic public spot collection could not finish.",
-    diagnostic: "",
+    diagnostic: outcome.detail ?? "",
     retry: true,
     endWithout: state.conductor?.phase === "finalizing",
   };

@@ -271,6 +271,50 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
   assert.equal(completed.controller.state.session.reportHtml, "<p>complete</p>");
 });
 
+test("background refresh does not duplicate an in-flight final WSPR.live acquisition", async () => {
+  const state = openSessionSucceeded(initialState("run"), session());
+  state.activeWorkflow = "run";
+  state.conductorStatus = "ready";
+  state.conductor = conductor({ phase: "finalizing" });
+  let resolveAcquisition;
+  const run = harness({
+    advance_active_session_wspr_live: () => new Promise((resolve) => {
+      resolveAcquisition = resolve;
+    }),
+    active_session_conductor: conductor({ phase: "finalizing" }),
+    active_session_antenna_controller: { policy: "manual", attached: false, armed: false, targets: {} },
+    active_session_wsjtx_status: { phase: "running" },
+    refresh_active_session_report: {
+      presentationId: 7,
+      reportHtml: "<p>ended</p>",
+      revision: 7,
+      lifecycle: "ended",
+      completeness: "full_detail",
+    },
+  }, { state });
+
+  const acquisition = run.controller.advanceWsprLive();
+  await new Promise((resolve) => setImmediate(resolve));
+  await run.controller.refreshConductor();
+  assert.equal(
+    run.calls.filter(([command]) => command === "advance_active_session_wspr_live").length,
+    1,
+  );
+
+  resolveAcquisition({
+    status: "completed",
+    session: session({ lifecycle: "ended", revision: 7 }),
+    revision: 7,
+    capturedThrough: "2026-07-16T23:00:00Z",
+  });
+  await acquisition;
+  assert.equal(
+    run.calls.filter(([command]) => command === "advance_active_session_wspr_live").length,
+    1,
+  );
+  assert.equal(run.controller.state.session.reportHtml, "<p>ended</p>");
+});
+
 test("focus, visibility, periodic, countdown, and disposal use injected lifecycle ports", async () => {
   const intervals = [];
   const cleared = [];

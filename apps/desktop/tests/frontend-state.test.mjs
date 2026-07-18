@@ -844,7 +844,7 @@ test("automatic WSPR.live acquisition remains typed and accepts only retry inten
   ]);
 });
 
-test("active-run public spot states stay plain and hide opaque identifiers", () => {
+test("active-run public spot states keep operator copy plain and expose diagnostic detail", () => {
   const conductor = {
     phase: "between_slots",
     now: "2026-07-16T15:00:00Z",
@@ -862,8 +862,10 @@ test("active-run public spot states stay plain and hide opaque identifiers", () 
     { wsprLiveAcquisition: { status: "failed", message: "Collection stopped.", detail: opaque }, conductor },
   ];
   const presentations = states.map(wsprLiveAcquisitionModel);
-  for (const presentation of presentations) {
-    assert.doesNotMatch(JSON.stringify(presentation), new RegExp(opaque));
+  for (const [index, presentation] of presentations.entries()) {
+    if (![1, 8].includes(index)) {
+      assert.doesNotMatch(JSON.stringify(presentation), new RegExp(opaque));
+    }
     assert.doesNotMatch(
       `${presentation.phase} ${presentation.detail}`,
       /becomes eligible|authorize the preceding segment|overlap earlier windows/i,
@@ -883,8 +885,22 @@ test("active-run public spot states stay plain and hide opaque identifiers", () 
   assert.match(presentations[5].detail, /configured request windows/);
   assert.match(presentations[5].detail, /independent completeness guarantee/);
   assert.match(presentations[8].detail, /Collection stopped/);
+  assert.equal(presentations[1].diagnostic, opaque);
+  assert.equal(presentations[8].diagnostic, opaque);
   assert.equal(presentations[8].retry, true);
   assert.doesNotMatch(JSON.stringify(presentations), /unknown completeness|completeness is unknown/i);
+
+  const finalizationFailure = wsprLiveAcquisitionModel({
+    wsprLiveAcquisition: {
+      status: "failed",
+      message: "Public spots were saved, but the session could not end automatically.",
+      detail: "current lifecycle: Running",
+    },
+    conductor: { ...conductor, phase: "finalizing" },
+  });
+  assert.equal(finalizationFailure.diagnostic, "current lifecycle: Running");
+  assert.equal(finalizationFailure.retry, true);
+  assert.equal(finalizationFailure.endWithout, true);
 
   const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
   const runPanel = html.match(/data-panel="run"[\s\S]*?data-panel="transfer"/u)?.[0] ?? "";
