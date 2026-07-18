@@ -655,49 +655,173 @@ fn renders_every_evidence_coverage_value_with_non_comparative_explanation() {
 }
 
 #[test]
-fn renders_every_comparison_availability_before_difference_output() {
-    for (availability, label, explanation) in [
+fn renders_plain_language_headline_for_every_comparison_availability() {
+    for (availability, expected) in [
         (
             ComparisonAvailability::NotApplicable,
-            "Not applicable",
-            "Single-antenna profiling does not create an A/B comparison.",
+            "This session profiled one antenna, so there is no A/B comparison to show.",
         ),
         (
             ComparisonAvailability::UnsupportedComparisonShape,
-            "Unsupported comparison shape",
-            "A paired comparison requires exactly two scheduled antenna labels.",
+            "An A/B comparison needs exactly two antenna labels; this session recorded a different comparison shape. Use exactly two labels for a future A/B session.",
         ),
         (
             ComparisonAvailability::NoEligibleBlocks,
-            "No eligible blocks",
-            "No adjacent same-band block contained one usable actual slot for each label.",
+            "This run did not complete a usable back-to-back pair of cycles on both antennas, so no matched comparison was possible. To make a future run answerable, complete more repetitions.",
         ),
         (
             ComparisonAvailability::NoMatchedPaths,
-            "No matched paths",
-            "Eligible blocks exist, but no remote path had usable signal reports on both antennas within one comparison group.",
-        ),
-        (
-            ComparisonAvailability::DescriptivePairsAvailable,
-            "Descriptive pairs available",
-            "Usable same-path matched pairs are available for descriptive display only.",
+            "Both antennas produced evidence, but no station reported both antennas under matching conditions, so this run cannot compare them. To make a future run more likely to produce matched pairs, run longer or concentrate on one band.",
         ),
     ] {
         let mut report = paired_report(false);
         report.comparison.availability = availability;
         report.overview.comparison_availability = availability;
 
-        let html = render_standalone_html(&report).unwrap();
-        let availability_position = html
-            .find("Comparison availability")
-            .expect("availability should render");
-        let difference_position = html
-            .find("Matched-pair difference distribution")
-            .expect("difference section should render");
+        for html in [
+            render_standalone_html(&report).unwrap(),
+            render_compact_summary_html(&report).unwrap(),
+        ] {
+            let answer = plain_language_answer_from(&html);
+            assert!(answer.contains(expected), "missing headline for {availability:?}");
+            for forbidden in ["winner", "significant", "better antenna", "confidence"] {
+                assert!(
+                    !answer.to_ascii_lowercase().contains(forbidden),
+                    "headline used prohibited claim language: {answer}"
+                );
+            }
+        }
+    }
 
-        assert!(availability_position < difference_position);
-        assert!(html.contains(&format!("<span class=\"badge\">{label}</span>")));
-        assert!(html.contains(explanation));
+    let report = paired_report(true);
+    for html in [
+        render_standalone_html(&report).unwrap(),
+        render_compact_summary_html(&report).unwrap(),
+    ] {
+        let answer = plain_language_answer_from(&html);
+        assert!(answer.contains(
+            "2 stations heard both antennas on TX path · 20 m · WSPR · Local decode · WSJT-X log"
+        ));
+        assert!(answer.contains("the typical (median) difference was 1.5 dB, with B stronger."));
+        assert!(answer.contains("See the per-group table for the observed spread"));
+        assert!(html.contains(
+            "For scale:</strong> a 3 dB difference is the same change as doubling transmit power. Individual WSPR reports are whole-dB values that vary cycle to cycle."
+        ));
+    }
+}
+
+#[test]
+fn zero_median_headline_stays_descriptive_without_implying_equivalence() {
+    let mut report = paired_report(true);
+    let ReportOverviewPathDelta::Available {
+        minimum_delta_right_minus_left_db,
+        maximum_delta_right_minus_left_db,
+        ..
+    } = report.overview.strata[0].path_delta
+    else {
+        panic!("paired report should have an available path delta");
+    };
+    report.overview.strata[0].path_delta = ReportOverviewPathDelta::Available {
+        minimum_delta_right_minus_left_db,
+        median_path_delta_right_minus_left_db: 0.0,
+        maximum_delta_right_minus_left_db,
+    };
+
+    let html = render_standalone_html(&report).unwrap();
+    let answer = plain_language_answer_from(&html);
+
+    assert!(answer.contains("the typical (median) difference was 0 dB"));
+    assert!(answer.contains("no signed difference at the median"));
+    for prohibited in ["equivalent", "too close", "winner", "better antenna"] {
+        assert!(!answer.to_ascii_lowercase().contains(prohibited));
+    }
+}
+
+#[test]
+fn zero_public_wspr_spots_adds_only_setup_guidance() {
+    let normal = render_standalone_html(&canonical_report()).unwrap();
+    assert!(!plain_language_answer_from(&normal).contains("check WSPR upload settings"));
+
+    let mut report = canonical_report();
+    for row in report.overview.strata.iter_mut().filter(|row| {
+        row.stratum.observation_kind == ObservationKind::PublicReport
+            && row.stratum.mode.as_str() == "WSPR"
+    }) {
+        row.paired_row_count = 0;
+        row.unmatched_left_count = 0;
+        row.unmatched_right_count = 0;
+        row.missing_snr_left_count = 0;
+        row.missing_snr_right_count = 0;
+        row.excluded_observation_count = 0;
+    }
+
+    let html = render_standalone_html(&report).unwrap();
+    let answer = plain_language_answer_from(&html);
+
+    assert!(answer.contains(
+        "No public WSPR spots were recorded; check WSPR upload settings before the next run."
+    ));
+    for prohibited in ["winner", "significant", "better antenna", "confidence"] {
+        assert!(!answer.to_ascii_lowercase().contains(prohibited));
+    }
+}
+
+#[test]
+fn keeps_answerability_headlines_short_and_all_diagnostics_disclosed() {
+    let report = paired_report(true);
+    let html = render_standalone_html(&report).unwrap();
+    let table_start = html
+        .find("<table class=\"answerability-table\">")
+        .expect("headline answerability table should render");
+    let table_end = table_start
+        + html[table_start..]
+            .find("</table>")
+            .expect("headline answerability table should close");
+    let headline_table = &html[table_start..table_end];
+
+    assert_eq!(headline_table.matches("<th scope=\"col\">").count(), 4);
+    for heading in [
+        "Comparison group",
+        "Availability",
+        "Matched pairs",
+        "Blocks",
+    ] {
+        assert!(headline_table.contains(&format!("<th scope=\"col\">{heading}</th>")));
+    }
+    for diagnostic in [
+        "Unique matched paths",
+        "Unmatched —",
+        "Missing SNR —",
+        "Excluded",
+        "Duplicates",
+        "Conflicts",
+    ] {
+        assert!(!headline_table.contains(diagnostic));
+    }
+
+    let disclosure_start = html
+        .find("<summary>Review per-group answerability diagnostics</summary>")
+        .expect("diagnostic disclosure should render");
+    assert!(table_end < disclosure_start);
+    let disclosure_end = disclosure_start
+        + html[disclosure_start..]
+            .find("</details>")
+            .expect("diagnostic disclosure should close");
+    let disclosure = &html[disclosure_start..disclosure_end];
+    for diagnostic in [
+        "Detailed answerability diagnostics by comparison group",
+        "Unique matched paths",
+        "A→B / B→A",
+        "Unmatched — A / B",
+        "Missing SNR — A / B",
+        "Excluded",
+        "Duplicates",
+        "Conflicts",
+    ] {
+        assert!(
+            disclosure.contains(diagnostic),
+            "missing diagnostic: {diagnostic}"
+        );
     }
 }
 
@@ -1127,6 +1251,19 @@ fn run_quality_state_matrix_has_exact_accessible_audit_equivalents() {
         1
     );
     assert!(html.contains("@media print{.answerability-table{display:block}"));
+}
+
+fn plain_language_answer_from(html: &str) -> &str {
+    let marker = "<p class=\"answer plain-language-answer\">";
+    let start = html
+        .find(marker)
+        .map(|index| index + marker.len())
+        .expect("plain-language answer should render");
+    let end = start
+        + html[start..]
+            .find("</p>")
+            .expect("plain-language answer should close");
+    &html[start..end]
 }
 
 fn canonical_report() -> SessionReport {

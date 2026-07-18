@@ -65,6 +65,7 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         .sum::<usize>();
 
     out.push_str("<section id=\"what-run-show\" class=\"panel overview\" aria-labelledby=\"what-run-show-title\"><p class=\"eyebrow\">Answer first</p><h2 id=\"what-run-show-title\">What did the run show?</h2>");
+    render_plain_language_answer(out, overview);
     write_html!(
         out,
         "<p class=\"scope-line\">Station <strong>{}</strong> at <strong>{}</strong>; goal: <strong>{}</strong>.</p>",
@@ -87,12 +88,13 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         ),
         None => out.push_str("<p class=\"orientation\"><strong>Delta orientation:</strong> unavailable because this run does not provide a two-label paired orientation.</p>"),
     }
-    write_html!(
-        out,
-        "<p class=\"answer\"><strong>Comparison availability: <span class=\"badge\">{}</span>.</strong> {}</p>",
-        comparison_availability_label(overview.comparison_availability),
-        comparison_availability_text(overview.comparison_availability),
-    );
+    if overview
+        .strata
+        .iter()
+        .any(|row| matches!(row.path_delta, ReportOverviewPathDelta::Available { .. }))
+    {
+        out.push_str("<p class=\"muted delta-scale\"><strong>For scale:</strong> a 3 dB difference is the same change as doubling transmit power. Individual WSPR reports are whole-dB values that vary cycle to cycle.</p>");
+    }
 
     out.push_str("<div class=\"table-wrap\"><table class=\"overview-table\"><caption>Descriptive result by comparison group</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Path delta</th><th scope=\"col\">Paths / matched pairs</th><th scope=\"col\">Blocks <small>(back-to-back cycle pairs, one cycle per antenna)</small></th><th scope=\"col\">Coverage</th></tr></thead><tbody>");
     if overview.strata.is_empty() {
@@ -172,6 +174,128 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     out.push_str("</div>");
     render_visible_acquisition_limitations(out, report, audit_reference);
     out.push_str("</section>");
+}
+fn render_plain_language_answer(out: &mut CheckedHtmlWriter<'_>, overview: &crate::ReportOverview) {
+    write_html!(
+        out,
+        "<p class=\"answer plain-language-answer\">{}</p>",
+        plain_language_answer(overview)
+    );
+}
+fn plain_language_answer(overview: &crate::ReportOverview) -> String {
+    let mut sentences = match overview.comparison_availability {
+        antennabench_analysis::ComparisonAvailability::NotApplicable => vec![
+            "This session profiled one antenna, so there is no A/B comparison to show."
+                .to_string(),
+        ],
+        antennabench_analysis::ComparisonAvailability::UnsupportedComparisonShape => vec![
+            "An A/B comparison needs exactly two antenna labels; this session recorded a different comparison shape. Use exactly two labels for a future A/B session."
+                .to_string(),
+        ],
+        antennabench_analysis::ComparisonAvailability::NoEligibleBlocks => vec![
+            "This run did not complete a usable back-to-back pair of cycles on both antennas, so no matched comparison was possible."
+                .to_string(),
+            "To make a future run answerable, complete more repetitions.".to_string(),
+        ],
+        antennabench_analysis::ComparisonAvailability::NoMatchedPaths => vec![
+            "Both antennas produced evidence, but no station reported both antennas under matching conditions, so this run cannot compare them."
+                .to_string(),
+            "To make a future run more likely to produce matched pairs, run longer or concentrate on one band."
+                .to_string(),
+        ],
+        antennabench_analysis::ComparisonAvailability::DescriptivePairsAvailable => {
+            descriptive_group_sentences(overview)
+        }
+    };
+    if matches!(
+        overview.comparison_availability,
+        antennabench_analysis::ComparisonAvailability::NoEligibleBlocks
+            | antennabench_analysis::ComparisonAvailability::NoMatchedPaths
+    ) && no_public_wspr_spots(overview)
+    {
+        sentences.push(
+            "No public WSPR spots were recorded; check WSPR upload settings before the next run."
+                .to_string(),
+        );
+    }
+    sentences.join(" ")
+}
+fn descriptive_group_sentences(overview: &crate::ReportOverview) -> Vec<String> {
+    let orientation = overview.scope.delta_orientation.as_ref();
+    let mut sentences = overview
+        .strata
+        .iter()
+        .filter_map(|row| {
+            let ReportOverviewPathDelta::Available {
+                median_path_delta_right_minus_left_db,
+                ..
+            } = row.path_delta
+            else {
+                return None;
+            };
+            let station_count = row.unique_path_count;
+            let stations = if station_count == 1 {
+                "station"
+            } else {
+                "stations"
+            };
+            let group = comparison_stratum(&row.stratum);
+            if median_path_delta_right_minus_left_db == 0.0 {
+                return Some(format!(
+                    "{station_count} {stations} heard both antennas on {group}; the typical (median) difference was 0 dB, with no signed difference at the median."
+                ));
+            }
+            match orientation {
+                Some(orientation) => {
+                    let (left_label, right_label) = orientation_antenna_labels(orientation);
+                    let stronger_label = if median_path_delta_right_minus_left_db > 0.0 {
+                        right_label
+                    } else {
+                        left_label
+                    };
+                    Some(format!(
+                        "{station_count} {stations} heard both antennas on {group}; the typical (median) difference was {} dB, with {stronger_label} stronger.",
+                        format_number(median_path_delta_right_minus_left_db.abs())
+                    ))
+                }
+                None => Some(format!(
+                    "{station_count} {stations} heard both antennas on {group}; the typical median signed difference was {} dB.",
+                    format_signed(median_path_delta_right_minus_left_db)
+                )),
+            }
+        })
+        .collect::<Vec<_>>();
+    if sentences.is_empty() {
+        sentences.push(
+            "Matched comparisons are available; review the per-group table for their descriptive results."
+                .to_string(),
+        );
+    } else {
+        sentences.push(
+            "See the per-group table for the observed spread in each comparison group.".to_string(),
+        );
+    }
+    sentences
+}
+fn no_public_wspr_spots(overview: &crate::ReportOverview) -> bool {
+    let public_wspr_groups = overview.strata.iter().filter(|row| {
+        row.stratum.observation_kind == antennabench_core::ObservationKind::PublicReport
+            && row.stratum.mode.as_str() == "WSPR"
+    });
+    let mut found_group = false;
+    for row in public_wspr_groups {
+        found_group = true;
+        let recorded_count = row.paired_row_count
+            + row.unmatched_left_count
+            + row.unmatched_right_count
+            + row.missing_snr_left_count
+            + row.missing_snr_right_count
+            + row.excluded_observation_count;
+        if recorded_count > 0 {
+            return false;
+        }
+    }
+    found_group
 }
 pub(in super::super) fn overview_lifecycle_label(
     state: ReportOverviewLifecycleState,
