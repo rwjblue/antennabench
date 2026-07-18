@@ -1,8 +1,9 @@
 # Elecraft K4 Antenna Control Through QK4
 
-These dependency-free Node programs switch and verify a K4/K4D through a local
-QK4 CAT endpoint. They default to `127.0.0.1:9299`, execute no shell, and write
-small JSON diagnostics for AntennaBench to retain with the invocation record.
+These dependency-free Node programs switch and, when the CAT endpoint supports
+read-back, verify a K4/K4D through a local QK4 CAT endpoint. They default to
+`127.0.0.1:9299`, execute no shell, and write small JSON diagnostics for
+AntennaBench to retain with the invocation record.
 
 The example maps AntennaBench target `1` to KAT4 ANT1 and target `2` to KAT4
 ANT2. For receive, it explicitly selects the same KAT4 port for the main
@@ -15,10 +16,12 @@ receiver rather than assuming the receiver still follows the transmitter.
 | `whole_station_ab` | `AN1;` or `AN2;` | `AR5;` or `AR6;` |
 | `single_antenna_profiling` | `AN1;` or `AN2;` | `AR5;` or `AR6;` |
 
-The switch program sets the required paths and polls CAT read-back. The
-verification program performs a new, read-only poll and exits nonzero unless
-`AN;` and/or `AR;` report the expected state. AntennaBench still treats the two
-program invocations as distinct switch and verification evidence.
+The switch program sends the required SET commands and exits without requesting
+CAT read-back. Its successful exit proves only that the command was written to
+the local CAT connection. The verification program performs a separate,
+read-only poll and exits nonzero unless `AN;` and/or `AR;` report the expected
+state. AntennaBench treats the two program invocations as distinct switch and
+verification evidence.
 
 ## Requirements And Limits
 
@@ -65,12 +68,9 @@ On Windows, select `node.exe` as the program and enter those arguments as
 separate ordered values. No quoting or shell interpolation is required in the
 canonical array.
 
-Before changing hardware, the switch command first proves that the CAT endpoint
-supports authoritative `AN;` and/or `AR;` read-back. This prevents a partial CAT
-bridge from forwarding the SET command and only then failing verification. The
-default internal read-back timeout is two seconds and the switch settles
-for 150 milliseconds before polling. Optional fixed profile arguments can
-override them:
+The switch command settles for 150 milliseconds after writing the SET commands.
+The verification command uses a default two-second read-back timeout. Optional
+fixed profile arguments can override those values:
 
 ```text
 --host 127.0.0.1 --port 9299 --timeout-ms 3000 --settle-ms 250
@@ -80,19 +80,26 @@ Keep AntennaBench's outer process timeout longer than `--timeout-ms`.
 
 ## Manual Test
 
-With QK4 and the radio running, these commands select and then independently
-verify ANT1 for a whole-station receive intention:
+With QK4 and the radio running, this command selects ANT1 for a whole-station
+receive intention:
 
 ```bash
 node examples/rig-control/elecraft-k4/switch.mjs \
   --target 1 --mode whole_station_ab --direction receive
+```
+
+When the CAT endpoint supports `AN;` and `AR;` GET responses, independently
+verify that selection with:
+
+```bash
 node examples/rig-control/elecraft-k4/verify.mjs \
   --target 1 --mode whole_station_ab --direction receive
 ```
 
-Use `--target 2` to select ANT2. A successful command prints one JSON line and
-exits zero. A connection failure, CAT rejection, unexpected read-back, invalid
+Use `--target 2` to select ANT2. A successful switch prints one JSON line with
+`actual` set to `null` and exits zero. A connection or write failure, invalid
 mode/direction combination, or timeout prints JSON to stderr and exits nonzero.
+Verification additionally fails on CAT rejection or unexpected read-back.
 
 ## Command Reference
 
@@ -106,10 +113,10 @@ This example follows the Elecraft K4 Programmer's Reference, revision D12:
 - a response containing `?` is a rejected command.
 
 QK4 v0.7.0-beta.3 forwards antenna SET commands but does not implement `AN;` or
-`AR;` GET responses on its embedded CAT server. The preflight therefore rejects
-that endpoint without changing the antenna. Command-verified automation through
-QK4 requires a release that exposes those read-backs (or another documented,
-authoritative state API).
+`AR;` GET responses on its embedded CAT server. `switch.mjs` can therefore
+request antenna changes through that release, but `verify.mjs` cannot verify
+them. Command-verified automation still requires a future QK4 release that
+exposes those read-backs (or another documented, authoritative state API).
 
 The scripts intentionally do not control PTT, transmit enable, frequency,
 mode, tuner operation, or any other radio setting.

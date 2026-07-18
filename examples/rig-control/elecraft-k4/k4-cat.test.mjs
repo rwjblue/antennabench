@@ -123,7 +123,7 @@ test("mode and intention direction must agree", () => {
   );
 });
 
-test("whole-station switching sets and reads back TX and main RX paths", async (t) => {
+test("whole-station switching sets TX and main RX paths without read-back", async (t) => {
   const fake = await startFakeK4();
   t.after(() => fake.close());
   const configured = options(
@@ -132,17 +132,18 @@ test("whole-station switching sets and reads back TX and main RX paths", async (
     "--port",
     String(fake.port),
     "--settle-ms",
-    "0",
+    "10",
   );
 
   const result = await switchAntenna(configured);
 
-  assert.deepEqual(result.actual, { transmit: 2, receive: 6 });
+  assert.deepEqual(result.expected, { transmit: 2, receive: 6 });
+  assert.equal(result.actual, null);
   assert.deepEqual(fake.state, { transmit: 2, receive: 6 });
   assert(fake.commands.includes("AN2"));
   assert(fake.commands.includes("AR6"));
-  assert(fake.commands.includes("AN"));
-  assert(fake.commands.includes("AR"));
+  assert(!fake.commands.includes("AN"));
+  assert(!fake.commands.includes("AR"));
 });
 
 test("focused modes leave the unrelated antenna path unchanged", async (t) => {
@@ -162,7 +163,7 @@ test("focused modes leave the unrelated antenna path unchanged", async (t) => {
       "--direction",
       "transmit",
       "--settle-ms",
-      "0",
+      "10",
     ]),
   );
   assert.deepEqual(fake.state, { transmit: 2, receive: 5 });
@@ -180,43 +181,42 @@ test("focused modes leave the unrelated antenna path unchanged", async (t) => {
       "--direction",
       "receive",
       "--settle-ms",
-      "0",
+      "10",
     ]),
   );
   assert.deepEqual(fake.state, { transmit: 2, receive: 6 });
 });
 
-test("switching never changes hardware when the bridge cannot read antenna state", async (t) => {
+test("switching succeeds when the bridge cannot read antenna state", async (t) => {
   const fake = await startFakeK4(
     { transmit: 1, receive: 5 },
     { respondToQueries: false },
   );
   t.after(() => fake.close());
 
-  await assert.rejects(
-    switchAntenna(
-      parseOptions([
-        "--host",
-        fake.host,
-        "--port",
-        String(fake.port),
-        "--target",
-        "2",
-        "--mode",
-        "tx_focused",
-        "--direction",
-        "transmit",
-        "--timeout-ms",
-        "150",
-        "--settle-ms",
-        "0",
-      ]),
-    ),
-    /timed out waiting for K4 antenna state/,
+  const result = await switchAntenna(
+    parseOptions([
+      "--host",
+      fake.host,
+      "--port",
+      String(fake.port),
+      "--target",
+      "2",
+      "--mode",
+      "tx_focused",
+      "--direction",
+      "transmit",
+      "--timeout-ms",
+      "150",
+      "--settle-ms",
+      "10",
+    ]),
   );
 
-  assert.deepEqual(fake.state, { transmit: 1, receive: 5 });
-  assert(!fake.commands.includes("AN2"));
+  assert.equal(result.actual, null);
+  assert.deepEqual(fake.state, { transmit: 2, receive: 5 });
+  assert(fake.commands.includes("AN2"));
+  assert(!fake.commands.includes("AN"));
 });
 
 test("verification fails non-ambiguously when read-back never matches", async (t) => {
