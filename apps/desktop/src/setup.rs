@@ -1235,6 +1235,8 @@ mod tests {
         draft.antenna_controller = Some(SetupControllerDraft {
             enabled: true,
             arm_for_session: true,
+            invocation: antennabench_core::AntennaControlInvocationPolicyV5::OperatorTriggered,
+            manual_review_required: true,
             profile: crate::antenna_control::ControllerProfileDraft {
                 profile_id: None,
                 name: "Bench switch".into(),
@@ -1295,6 +1297,8 @@ mod tests {
         SetupControllerDraft {
             enabled: true,
             arm_for_session: false,
+            invocation: antennabench_core::AntennaControlInvocationPolicyV5::OperatorTriggered,
+            manual_review_required: true,
             profile: crate::antenna_control::ControllerProfileDraft {
                 profile_id: None,
                 name: "Bench switch".into(),
@@ -1317,6 +1321,59 @@ mod tests {
                 },
             ],
         }
+    }
+
+    #[test]
+    fn review_freezes_automatic_command_authority_and_requires_verification() {
+        let state = SetupSessionState::default();
+        let mut draft = valid_draft();
+        let mut controller = controller_draft();
+        controller.invocation = antennabench_core::AntennaControlInvocationPolicyV5::Automatic;
+        controller.manual_review_required = false;
+        draft.antenna_controller = Some(controller.clone());
+
+        let rejected = build_review(&state, draft, &FixedHooks::new()).unwrap();
+        assert!(!rejected.valid);
+        assert!(rejected.diagnostics[0]
+            .message
+            .contains("independent verification command"));
+
+        controller.profile.verification_command =
+            Some(crate::antenna_control::ControllerCommandDraft {
+                one_line: "verify {target} {mode} {direction}".into(),
+                program: String::new(),
+                arguments: Vec::new(),
+            });
+        let mut draft = valid_draft();
+        draft.antenna_controller = Some(controller);
+        let accepted = build_review(&state, draft, &FixedHooks::new()).unwrap();
+        assert!(accepted.valid, "diagnostics: {:?}", accepted.diagnostics);
+        let controller = accepted.plan.unwrap().antenna_controller.unwrap();
+        assert_eq!(
+            controller.invocation,
+            antennabench_core::AntennaControlInvocationPolicyV5::Automatic
+        );
+        assert!(!controller.manual_review_required);
+        assert!(controller
+            .authority_summary
+            .contains("authorize the next eligible WSPR boundary"));
+        assert!(matches!(
+            state
+                .0
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .bundle
+                .schedule
+                .antenna_control,
+            Some(
+                antennabench_core::AntennaControlPolicyV5::CommandControlled {
+                    invocation: antennabench_core::AntennaControlInvocationPolicyV5::Automatic,
+                    manual_review_required: false,
+                }
+            )
+        ));
     }
 
     #[test]

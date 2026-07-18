@@ -7,9 +7,9 @@ use antennabench_core::{
 use antennabench_storage::{BundleStore, SystemLivePersistenceHooks};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 
-use crate::antenna_control::AntennaControllerState;
+use crate::antenna_control::{schedule_automatic_coordinator, AntennaControllerState};
 use crate::open_session::{
     active_session_source, storage_error_payload, ActiveSessionState, SessionErrorKind,
     SessionErrorPayload,
@@ -184,6 +184,7 @@ pub(crate) fn active_session_conductor(
 
 #[tauri::command]
 pub(crate) fn mutate_active_session_conductor(
+    app: AppHandle,
     request: ConductorMutationRequest,
     active_state: State<'_, ActiveSessionState>,
     conductor_state: State<'_, ConductorSessionState>,
@@ -220,6 +221,8 @@ pub(crate) fn mutate_active_session_conductor(
             &source,
             "WSJT-X reception stopped because the durable session is not running.",
         );
+    } else {
+        schedule_automatic_coordinator(app);
     }
     Ok(view)
 }
@@ -972,6 +975,12 @@ mod tests {
             Utc.with_ymd_and_hms(2026, 7, 15, 20, 2, 1).unwrap()
         );
         assert_eq!(armed.antenna_in_use.as_deref(), Some("Vertical"));
+        assert!(armed.effective_events.iter().any(|event| {
+            event.kind == "wspr_cycle_armed"
+                && event
+                    .summary
+                    .starts_with("Operator confirmation made Vertical ready")
+        }));
         let confirmed = mutate_conductor_with_hooks(
             &active,
             &conductor,

@@ -13,21 +13,26 @@ use std::{
 };
 
 use antennabench_core::{
-    project_wspr_run_v3, AntennaControlCommandV5, AntennaControlContextV5,
-    AntennaControlDispositionV5, AntennaControlInvocationPolicyV5, AntennaControlInvocationV5,
-    AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlPolicyV5,
-    AntennaControlRoleV5, BundleV3Contents, ExperimentMode, MutationMember, Provenance,
+    next_wspr_cycle_after_ready, project_wspr_run_v3, AntennaControlCommandV5,
+    AntennaControlContextV5, AntennaControlDispositionV5, AntennaControlInvocationPolicyV5,
+    AntennaControlInvocationV5, AntennaControlOutputEncodingV5, AntennaControlOutputV5,
+    AntennaControlPolicyV5, AntennaControlRoleV5, BundleV3Contents, EventTimeBasisV2,
+    ExperimentMode, MutationMember, OperatorEventPayloadV3, OperatorEventV3, Provenance,
     RecordMetaV3, RecordSource, RigRecordV3, SessionLifecycleV2, WsprCycleIntentV3,
-    COMMAND_ARGUMENT_COUNT_MAX, COMMAND_ARGUMENT_MAX_BYTES, COMMAND_INVOCATION_MAX_BYTES,
-    COMMAND_OUTPUT_MAX_BYTES, COMMAND_PROGRAM_MAX_BYTES, COMMAND_TEMPLATE_MAX_BYTES,
-    SCHEMA_VERSION_V5,
+    WsprReadinessBasisV5, COMMAND_ARGUMENT_COUNT_MAX, COMMAND_ARGUMENT_MAX_BYTES,
+    COMMAND_INVOCATION_MAX_BYTES, COMMAND_OUTPUT_MAX_BYTES, COMMAND_PROGRAM_MAX_BYTES,
+    COMMAND_TEMPLATE_MAX_BYTES, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{BundleStore, LiveAntennaControlMutationV5, SystemLivePersistenceHooks};
 use base64::Engine as _;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
+
+mod automation;
+
+pub(crate) use automation::schedule_automatic_coordinator;
 
 use crate::{
     conductor::{live_error_payload, ConductorSessionState, ControllerActionPort},
@@ -57,6 +62,30 @@ pub(crate) struct AntennaControllerState {
 struct ControllerRuntime {
     attached: Option<RuntimeAssociation>,
     last_attempt: Option<ControllerAttemptSummary>,
+    worker_running: bool,
+    automation_status: AutomationStatus,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum AutomationStatus {
+    #[default]
+    Idle,
+    Waiting,
+    Running,
+    AwaitingReview,
+    Blocked,
+}
+
+impl AutomationStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Waiting => "waiting",
+            Self::Running => "running",
+            Self::AwaitingReview => "awaiting_review",
+            Self::Blocked => "blocked",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -138,8 +167,20 @@ pub(crate) struct ControllerTargetDraft {
 pub(crate) struct SetupControllerDraft {
     pub(crate) enabled: bool,
     pub(crate) arm_for_session: bool,
+    #[serde(default = "default_invocation_policy")]
+    pub(crate) invocation: AntennaControlInvocationPolicyV5,
+    #[serde(default = "default_manual_review_required")]
+    pub(crate) manual_review_required: bool,
     pub(crate) profile: ControllerProfileDraft,
     pub(crate) targets: Vec<ControllerTargetDraft>,
+}
+
+fn default_invocation_policy() -> AntennaControlInvocationPolicyV5 {
+    AntennaControlInvocationPolicyV5::OperatorTriggered
+}
+
+fn default_manual_review_required() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,6 +212,9 @@ pub(crate) struct SetupControllerReview {
     pub(crate) profile_name: String,
     pub(crate) timeout_seconds: u8,
     pub(crate) arm_for_session: bool,
+    pub(crate) invocation: AntennaControlInvocationPolicyV5,
+    pub(crate) manual_review_required: bool,
+    pub(crate) authority_summary: &'static str,
     pub(crate) disclosure: &'static str,
     pub(crate) invocations: Vec<ControllerInvocationPreview>,
 }
@@ -213,6 +257,9 @@ pub(crate) struct ControllerCatalogView {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ActiveControllerView {
     policy: &'static str,
+    invocation: Option<AntennaControlInvocationPolicyV5>,
+    manual_review_required: Option<bool>,
+    automation_status: &'static str,
     attached: bool,
     armed: bool,
     profile_id: Option<String>,
@@ -285,6 +332,8 @@ impl AntennaControllerState {
         if let Ok(mut runtime) = self.runtime.lock() {
             runtime.attached = None;
             runtime.last_attempt = None;
+            runtime.worker_running = false;
+            runtime.automation_status = AutomationStatus::Idle;
         }
     }
 
@@ -300,6 +349,13 @@ impl AntennaControllerState {
         let mut runtime = self.runtime.lock().map_err(|_| {
             SessionErrorPayload::report_pipeline("antenna-controller state is unavailable")
         })?;
+        let preserve_last_attempt = runtime.attached.as_ref().is_some_and(|attached| {
+            attached.source == source
+                && attached.session_id == session_id
+                && attached.profile_id == profile.profile_id
+                && attached.profile_revision == profile.revision
+                && attached.targets == targets
+        });
         runtime.attached = Some(RuntimeAssociation {
             source,
             session_id,
@@ -309,7 +365,11 @@ impl AntennaControllerState {
             armed,
             generation,
         });
-        runtime.last_attempt = None;
+        if !preserve_last_attempt {
+            runtime.last_attempt = None;
+        }
+        runtime.worker_running = false;
+        runtime.automation_status = AutomationStatus::Idle;
         Ok(())
     }
 }
@@ -902,10 +962,15 @@ pub(crate) fn prepare_setup_controller(
         return Err("the selected saved controller profile no longer exists".into());
     }
     let profile = normalize_profile(&draft.profile, existing, new_id)?;
+    if !draft.manual_review_required && profile.verification_command.is_none() {
+        return Err(
+            "command-authorized readiness requires an independent verification command".into(),
+        );
+    }
     let targets = validate_targets(bundle, &draft.targets)?;
     bundle.schedule.antenna_control = Some(AntennaControlPolicyV5::CommandControlled {
-        invocation: AntennaControlInvocationPolicyV5::OperatorTriggered,
-        manual_review_required: true,
+        invocation: draft.invocation,
+        manual_review_required: draft.manual_review_required,
     });
     let invocations = bundle
         .schedule
@@ -951,6 +1016,13 @@ pub(crate) fn prepare_setup_controller(
         profile_name: profile.name.clone(),
         timeout_seconds: profile.timeout_seconds,
         arm_for_session: draft.arm_for_session,
+        invocation: draft.invocation,
+        manual_review_required: draft.manual_review_required,
+        authority_summary: if draft.manual_review_required {
+            "Commands prepare and verify each intention; the named operator ready action remains required."
+        } else {
+            "Successful switch and independent verification commands authorize the next eligible WSPR boundary without an operator ready action."
+        },
         disclosure: "Resolved programs, indexed arguments, stdout, and stderr become portable session evidence and may disclose paths, addresses, usernames, or credentials.",
         invocations,
     };
@@ -1316,10 +1388,19 @@ fn committed_outcome(
         .find(|invocation| invocation.role == AntennaControlRoleV5::Verification);
     let switch_success = switch.disposition.is_exit_zero();
     let verification_success = verification.map(|invocation| invocation.disposition.is_exit_zero());
+    let manual_ready_required = matches!(
+        bundle.schedule.antenna_control,
+        Some(AntennaControlPolicyV5::CommandControlled {
+            manual_review_required: true,
+            ..
+        })
+    );
     let detail = if !switch_success {
         "Switch did not exit successfully. No verification ran; manual operation remains available."
     } else if verification_success == Some(false) {
         "Switch exited successfully, but verification did not. Confirm hardware manually or retry explicitly."
+    } else if verification_success == Some(true) && !manual_ready_required {
+        "Switch and verification exited successfully. Command verification armed the next eligible WSPR cycle."
     } else if verification_success == Some(true) {
         "Switch and verification exited successfully. Operator readiness is still required."
     } else {
@@ -1332,9 +1413,55 @@ fn committed_outcome(
         switch_disposition: switch.disposition.clone(),
         verification_disposition: verification.map(|invocation| invocation.disposition.clone()),
         verification_ran: verification.is_some(),
-        manual_ready_required: true,
+        manual_ready_required,
         detail: detail.into(),
         diagnostic,
+    })
+}
+
+fn command_verified_event(
+    bundle: &BundleV3Contents,
+    intent: &WsprCycleIntentV3,
+    switch_record_id: String,
+    verification_record_id: String,
+    ready_at: DateTime<Utc>,
+    event_id: String,
+) -> Result<OperatorEventV3, SessionErrorPayload> {
+    let cycle = next_wspr_cycle_after_ready(ready_at, Duration::seconds(1)).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "The next WSPR cycle could not be calculated after verification.",
+            error.to_string(),
+        )
+    })?;
+    Ok(OperatorEventV3 {
+        meta: RecordMetaV3 {
+            schema_version: SCHEMA_VERSION_V5,
+            session_id: bundle.manifest.session_id.clone(),
+            recorded_at: ready_at,
+            provenance: Provenance::from_legacy(
+                RecordSource::RigAdapter,
+                "local-direct-process-v1",
+            ),
+            mutation: MutationMember {
+                mutation_id: "pending".into(),
+                member_index: 0,
+                member_count: 1,
+            },
+        },
+        event_id,
+        occurred_at: ready_at,
+        time_basis: EventTimeBasisV2::ObservedNow,
+        uncertainty_seconds: None,
+        slot_id: Some(intent.intent_id.clone()),
+        payload: OperatorEventPayloadV3::WsprCycleArmed {
+            antenna_label: intent.antenna_label.clone(),
+            cycle_starts_at: cycle.starts_at,
+            readiness: Some(WsprReadinessBasisV5::CommandVerified {
+                switch_record_id,
+                verification_record_id,
+            }),
+        },
     })
 }
 
@@ -1477,14 +1604,11 @@ pub(crate) fn attach_active_session_antenna_controller(
     }
     if !matches!(
         bundle.schedule.antenna_control.as_ref(),
-        Some(AntennaControlPolicyV5::CommandControlled {
-            invocation: AntennaControlInvocationPolicyV5::OperatorTriggered,
-            manual_review_required: true,
-        })
+        Some(AntennaControlPolicyV5::CommandControlled { .. })
     ) {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Conflict,
-            "This session was not planned for operator-triggered command assistance.",
+            "This session was not planned for command-controlled antenna assistance.",
             "the portable antenna-control policy remains manual",
         ));
     }
@@ -1578,6 +1702,18 @@ fn active_controller_view_for(
             Some(AntennaControlPolicyV5::CommandControlled { .. }) => "command_controlled",
             _ => "manual",
         },
+        invocation: match bundle.schedule.antenna_control.as_ref() {
+            Some(AntennaControlPolicyV5::CommandControlled { invocation, .. }) => Some(*invocation),
+            _ => None,
+        },
+        manual_review_required: match bundle.schedule.antenna_control.as_ref() {
+            Some(AntennaControlPolicyV5::CommandControlled {
+                manual_review_required,
+                ..
+            }) => Some(*manual_review_required),
+            _ => None,
+        },
+        automation_status: runtime.automation_status.as_str(),
         attached: attached.is_some(),
         armed: attached.is_some_and(|attached| attached.armed) && !stale_profile,
         profile_id: profile_id.map(str::to_string),
@@ -1602,6 +1738,21 @@ pub(crate) fn run_active_session_antenna_controller(
     app: AppHandle,
     request: RunControllerRequest,
 ) -> Result<RunControllerOutcome, SessionErrorPayload> {
+    if controller_state
+        .runtime
+        .lock()
+        .map_err(|_| {
+            SessionErrorPayload::report_pipeline("antenna-controller state is unavailable")
+        })?
+        .worker_running
+    {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Busy,
+            "Automatic antenna control is already preparing this intention.",
+            "wait for the current Rust-owned controller process to finish",
+        ));
+    }
+    let coordinator_app = app.clone();
     let outcome = with_foreground_operation(active_state.inner(), || {
         let (source, _) = active_session_source(active_state.inner())?;
         let store = BundleStore::new(&source);
@@ -1615,19 +1766,19 @@ pub(crate) fn run_active_session_antenna_controller(
                 "the active session is not a running schema-v5 session",
             ));
         }
-        if !matches!(
-            bundle.schedule.antenna_control.as_ref(),
+        let manual_review_required = match bundle.schedule.antenna_control.as_ref() {
             Some(AntennaControlPolicyV5::CommandControlled {
-                invocation: AntennaControlInvocationPolicyV5::OperatorTriggered,
-                manual_review_required: true,
-            })
-        ) {
-            return Err(SessionErrorPayload::new(
-                SessionErrorKind::Conflict,
-                "This session does not permit operator-triggered command assistance.",
-                "the portable antenna-control policy is not operator-triggered with manual review",
-            ));
-        }
+                manual_review_required,
+                ..
+            }) => *manual_review_required,
+            _ => {
+                return Err(SessionErrorPayload::new(
+                    SessionErrorKind::Conflict,
+                    "This session was not planned for command-controlled antenna assistance.",
+                    "the portable antenna-control policy is manual",
+                ));
+            }
+        };
         if let Some(outcome) = committed_outcome(&bundle, &request.action_token, &request.intent_id)
         {
             return Ok(outcome);
@@ -1755,18 +1906,42 @@ pub(crate) fn run_active_session_antenna_controller(
         let verification_success = verification
             .as_ref()
             .map(|invocation| invocation.disposition.is_exit_zero());
+        let switch_record_id = format!("rig-{}", Uuid::new_v4());
+        let verification_record_id = verification
+            .as_ref()
+            .map(|_| format!("rig-{}", Uuid::new_v4()));
         let mut rig_records = vec![rig_record(
             &bundle,
-            format!("rig-{}", Uuid::new_v4()),
+            switch_record_id.clone(),
             switch.clone(),
         )];
         if let Some(invocation) = verification.clone() {
             rig_records.push(rig_record(
                 &bundle,
-                format!("rig-{}", Uuid::new_v4()),
+                verification_record_id
+                    .clone()
+                    .expect("verification identity exists with invocation"),
                 invocation,
             ));
         }
+        let armed_event =
+            if !manual_review_required && switch_success && verification_success == Some(true) {
+                Some(command_verified_event(
+                    &bundle,
+                    intent,
+                    switch_record_id,
+                    verification_record_id
+                        .clone()
+                        .expect("successful verification has a record identity"),
+                    verification
+                        .as_ref()
+                        .expect("successful verification has an invocation")
+                        .completed_at,
+                    format!("event-{}", Uuid::new_v4()),
+                )?)
+            } else {
+                None
+            };
         let receipt = {
             let mut writer = store
                 .open_v3_writer_with_hooks(Arc::new(SystemLivePersistenceHooks))
@@ -1776,7 +1951,7 @@ pub(crate) fn run_active_session_antenna_controller(
                     expected_revision: request.expected_revision,
                     mutation_id: request.action_token.clone(),
                     rig_records,
-                    armed_event: None,
+                    armed_event,
                 })
                 .map_err(live_error_payload)?
         };
@@ -1784,6 +1959,8 @@ pub(crate) fn run_active_session_antenna_controller(
             "Switch did not exit successfully. No verification ran; manual operation remains available."
         } else if verification_success == Some(false) {
             "Switch exited successfully, but verification did not. Confirm hardware manually or retry explicitly."
+        } else if verification_success == Some(true) && !manual_review_required {
+            "Switch and verification exited successfully. Command verification armed the next eligible WSPR cycle."
         } else if verification_success == Some(true) {
             "Switch and verification exited successfully. Operator readiness is still required."
         } else {
@@ -1806,7 +1983,7 @@ pub(crate) fn run_active_session_antenna_controller(
             switch_disposition: switch.disposition,
             verification_disposition: verification.map(|invocation| invocation.disposition),
             verification_ran: verification_success.is_some(),
-            manual_ready_required: true,
+            manual_ready_required: manual_review_required,
             detail,
             diagnostic,
         })
@@ -1816,6 +1993,7 @@ pub(crate) fn run_active_session_antenna_controller(
         CONTROLLER_IPC_BYTES,
         "run_active_session_antenna_controller",
     )?;
+    schedule_automatic_coordinator(coordinator_app);
     Ok(outcome)
 }
 

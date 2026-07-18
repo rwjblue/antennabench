@@ -164,6 +164,8 @@ export function readSetupDraft(form) {
     antennaController: controllerEnabled ? {
       enabled: true,
       armForSession: form.querySelector('[data-setup-field="controllerArmForSession"]').checked,
+      invocation: value("controllerInvocation"),
+      manualReviewRequired: form.querySelector('[data-setup-field="controllerManualReviewRequired"]').checked,
       profile: {
         profileId: value("controllerProfileId") || null,
         name: value("controllerProfileName"),

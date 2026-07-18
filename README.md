@@ -43,8 +43,9 @@ computer remains the durable experiment record.
 - **Portable records.** Export a standalone HTML report for reading or the full
   session bundle for archiving, reopening, and future analysis.
 
-Optional local controller profiles can assist with antenna switching, but manual
-operation remains the complete default workflow.
+Optional local controller profiles can assist with or automatically sequence
+antenna switching after explicit Start/Resume. Manual operation and manual
+review remain the complete defaults.
 
 ## Project Status
 

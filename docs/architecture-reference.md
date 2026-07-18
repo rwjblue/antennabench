@@ -453,11 +453,12 @@ The conductor command façade is intentionally thin. Its private Rust modules
 separate view/diagnostic/recovery projection, typed v2/v3/v5 operator-action
 translation, WSPR timing/readiness/occupancy and signal-state projection, and
 live-session checkpoint orchestration with error mapping. Schema dispatch
-remains explicit at the live-session boundary. Controller assistance receives
-only a token-authorisation port for a displayed session revision: it has no
-generic checkpoint, process, or webview authority. That seam is reserved for a
-future Rust coordinator; it does not start timers, background work, or automatic
-commands.
+remains explicit at the live-session boundary. Operator-triggered controller
+assistance receives only a token-authorisation port for a displayed session
+revision. The automatic coordinator instead runs entirely in Rust, owns its
+timer and single-flight process generation, re-derives the current intention
+from each checkpoint, and never grants generic checkpoint or process authority
+to the webview.
 
 The allowlisted `active_session_wsjtx_status`,
 `start_active_session_wsjtx`, and `stop_active_session_wsjtx` commands expose
@@ -597,10 +598,13 @@ implementation is [#107](https://github.com/rwjblue/antennabench/issues/107).
 schema-v5 portable policy, typed bounded rig invocation evidence, readiness
 basis, and atomic rig-plus-event checkpoint foundation. Local executable
 profiles and process authority remain outside portable bundles. The desktop
-implements the operator-triggered/manual-review slice through revisioned
-application-data profiles, volatile per-session arming, direct program-plus-argv
-execution, bounded concurrent output capture, and schema-v5 failure-only rig
-mutations. Automatic coordination remains outside this slice.
+implements operator-triggered and automatic invocation plus review-required and
+command-authorized readiness through revisioned application-data profiles,
+volatile per-session arming, direct program-plus-argv execution, bounded
+concurrent output capture, failure-only rig mutations, and atomic verified
+arming. Automatic work begins only after explicit Start/Resume, waits through
+prior WSPR occupancy, never retries a process, and is revoked by lifecycle,
+session, profile, failure, or shutdown changes.
 
 The allowlisted `antenna_controller_profiles` and
 `save_antenna_controller_profile` commands manage only bounded local profile

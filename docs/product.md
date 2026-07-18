@@ -121,9 +121,12 @@ available if permission is denied or the lookup fails.
 ## Optional Controller Assistance
 
 Advanced operators can attach a machine-local program that switches an antenna
-and optionally verifies the resulting state. This is an operator-triggered aid,
-not automatic control: the named **ready** action still confirms every cycle, and
-manual operation remains available after any command failure.
+and optionally verifies the resulting state. Setup can keep invocation
+operator-triggered or let Rust prepare each intention automatically after an
+explicit Start/Resume. Manual review remains on by default. When it is disabled,
+an independent verification command is required and two successful commands
+atomically authorize the next eligible WSPR boundary. Manual operation remains
+available after any command failure.
 
 Executable profiles and antenna mappings stay on the local computer. Portable
 bundles may retain the commands and bounded diagnostics that actually ran, so
@@ -142,8 +145,8 @@ and serves the repository's generated canonical sample. The site is not an
 account, upload, or hosted-report product, and the desktop remains fully usable
 without it.
 
-A signed end-user release, automated antenna conclusions, automatic controller
-operation, and hosted report publishing are not yet available. See the
+A signed end-user release, automated antenna conclusions, and hosted report
+publishing are not yet available. See the
 [roadmap](roadmap.md) for current direction and the
 [Product Design Reference](product-design-reference.md) for implementation-level
 product invariants.

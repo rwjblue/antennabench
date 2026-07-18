@@ -193,11 +193,21 @@ pub(super) fn build_view_v3(
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label,
                 cycle_starts_at,
-                ..
-            } => (
-                "wspr_cycle_armed",
-                format!("{antenna_label} ready; WSPR cycle armed for {cycle_starts_at}."),
-            ),
+                readiness,
+            } => {
+                let basis = match readiness {
+                    Some(antennabench_core::WsprReadinessBasisV5::CommandVerified { .. }) => {
+                        "Command verification"
+                    }
+                    _ => "Operator confirmation",
+                };
+                (
+                    "wspr_cycle_armed",
+                    format!(
+                        "{basis} made {antenna_label} ready; WSPR cycle armed for {cycle_starts_at}."
+                    ),
+                )
+            }
             _ => continue,
         };
         effective_events.push(ConductorEventView {

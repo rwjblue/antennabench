@@ -347,7 +347,9 @@ test("question cards preserve native keyboard controls and collapse on narrow sc
 
 test("setup serializes explicit local controller policy, profile, and target mappings", () => {
   const setupHtml = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
-  assert.match(setupHtml, /Use a local direct-process controller with operator review/);
+  assert.match(setupHtml, /Use a local direct-process antenna controller/);
+  assert.match(setupHtml, /Automatic after Start \/ Resume/);
+  assert.match(setupHtml, /Require manual review/);
   assert.match(setupHtml, /Imported bundles never attach or run them/);
   assert.match(setupHtml, /may disclose paths, addresses, usernames, or credentials/);
   assert.match(setupHtml, /Switch arguments, one per line/);
@@ -357,6 +359,7 @@ test("setup serializes explicit local controller policy, profile, and target map
     ["mode", "tx_focused"], ["goal", "general_coverage"], ["band", "20m"], ["rounds", "1"],
     ["controllerProfileId", "profile-1"], ["controllerProfileName", "Bench switch"],
     ["controllerTimeoutSeconds", "10"],
+    ["controllerInvocation", "automatic"],
     ["controllerSwitchCommand", "switch --target {target} --mode {mode}"],
     ["controllerVerificationCommand", "verify --target {target}"],
     ["controllerSwitchProgram", ""], ["controllerSwitchArguments", ""],
@@ -377,6 +380,7 @@ test("setup serializes explicit local controller policy, profile, and target map
       if (selector.includes("wsprLiveAcquisitionEnabled")) return { checked: false };
       if (selector.includes("antennaControllerEnabled")) return { checked: true };
       if (selector.includes("controllerArmForSession")) return { checked: true };
+      if (selector.includes("controllerManualReviewRequired")) return { checked: false };
       const field = selector.match(/data-setup-field="([^"]+)"/)?.[1];
       return { value: values.get(field) ?? "" };
     },
@@ -387,6 +391,8 @@ test("setup serializes explicit local controller policy, profile, and target map
   assert.equal(draft.antennaController.profile.profileId, "profile-1");
   assert.equal(draft.antennaController.profile.timeoutSeconds, 10);
   assert.equal(draft.antennaController.armForSession, true);
+  assert.equal(draft.antennaController.invocation, "automatic");
+  assert.equal(draft.antennaController.manualReviewRequired, false);
   assert.deepEqual(draft.antennaController.targets, [
     { antennaLabel: "A", target: "relay A" },
     { antennaLabel: "B", target: "relay B" },

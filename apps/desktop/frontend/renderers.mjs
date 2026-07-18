@@ -89,7 +89,7 @@ export function renderSetup(elements, state, root) {
     ? `${humanizeIdentifier(plan.signalPlan.mode)} · ${humanizeIdentifier(plan.signalPlan.collectionProfile)} · ${plan.signalPlan.frequenciesHz.length} frequencies`
     : `WSPR.live ${plan.wsprLiveAcquisitionEnabled ? "enabled" : "off"}`;
   const controllerSummary = plan.antennaController
-    ? ` · controller ${plan.antennaController.profileName} · operator ready required`
+    ? ` · controller ${plan.antennaController.profileName} · ${humanizeIdentifier(plan.antennaController.invocation)} · ${plan.antennaController.manualReviewRequired ? "operator ready required" : "command-verified readiness"}`
     : " · manual antenna control";
   setupReviewShape.textContent = `${humanizeIdentifier(plan.mode)} · ${humanizeIdentifier(plan.goal)} · ${signalSummary}${controllerSummary}`;
   setupReviewSchedule.textContent = plan.scheduleReview.summary;
@@ -189,7 +189,7 @@ export function renderRun(elements, state, root, options = {}) {
   const controller = state.antennaController;
   const controllerBusy = ["loading", "attaching", "saving", "running"].includes(state.antennaControllerStatus);
   antennaControllerStatus.textContent = controller?.armed
-    ? `${controller.profileName ?? "Local profile"} armed`
+    ? `${controller.profileName ?? "Local profile"} armed · ${humanizeIdentifier(controller.automationStatus ?? "idle")}`
     : controller?.profileId
       ? `${controller.profileName ?? "Saved profile"} not armed`
       : controller?.policy === "command_controlled"
@@ -200,7 +200,9 @@ export function renderRun(elements, state, root, options = {}) {
     ?? controller?.lastAttempt?.detail
     ?? (controller?.staleProfile
       ? "The saved profile changed. Review, attach, and arm its current revision before retrying."
-      : "Commands are optional assistance. The named operator ready action always remains authoritative.");
+      : controller?.manualReviewRequired === false
+        ? "Successful switch and independent verification commands authorize the next eligible WSPR boundary. Manual ready remains available as fallback."
+        : "Successful commands wait for the named operator ready action; manual operation remains available.");
   const controllerDiagnostic = state.antennaControllerOutcome?.diagnostic
     ?? controller?.lastAttempt?.diagnostic
     ?? "";
@@ -209,7 +211,8 @@ export function renderRun(elements, state, root, options = {}) {
   const hasSavedAssociation = Boolean(controller?.profileId);
   antennaControllerAttach.hidden = controller?.policy !== "command_controlled" || !hasSavedAssociation || controller?.armed;
   antennaControllerAttach.disabled = controllerBusy;
-  const canRunController = controller?.armed && view.lifecycle === "running" && Boolean(view.nextIntent);
+  const automaticBusy = ["waiting", "running"].includes(controller?.automationStatus);
+  const canRunController = controller?.armed && !automaticBusy && view.lifecycle === "running" && Boolean(view.nextIntent);
   antennaControllerRun.hidden = !canRunController;
   antennaControllerRun.disabled = controllerBusy;
   antennaControllerRetry.hidden = !canRunController || !controller?.lastAttempt;
