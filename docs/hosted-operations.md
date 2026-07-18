@@ -32,9 +32,9 @@ npm run site:dry-build --workspace @antennabench/hosted
 Worker tests, type drift check, strict TypeScript compilation, and future-
 foundation dry builds. The sample check reruns the canonical fixture through the
 trusted Rust report renderer and byte-compares the result with
-`public/sample-report/index.html`. The social-card check deterministically
-renders `assets-src/social-card.svg` and byte-compares the committed PNG. Astro
-adds no hydration or client JavaScript.
+`public/sample-report/index.html`. The social-card check validates the committed
+PNG signature and dimensions together with its editable SVG design source.
+Astro adds no hydration or client JavaScript.
 
 The static validation checks expected pages and assets, internal links, canonical
 and social metadata, security headers, the site-only Wrangler boundary, exact

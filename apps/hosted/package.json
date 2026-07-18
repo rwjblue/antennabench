@@ -16,8 +16,7 @@
     "site:dry-build": "wrangler deploy --dry-run --config wrangler.site.jsonc --outdir dist/site-deploy",
     "site:sample": "node ../../scripts/generate-hosted-sample.mjs",
     "site:sample:check": "node ../../scripts/generate-hosted-sample.mjs --check",
-    "site:social": "node ../../scripts/generate-hosted-social-card.mjs",
-    "site:social:check": "node ../../scripts/generate-hosted-social-card.mjs --check",
+    "site:social:check": "node ../../scripts/validate-hosted-social-card.mjs",
     "site:types:check": "tsc --noEmit --project tsconfig.site.json",
     "test": "vitest run --config ../../vitest.config.mjs --project hosted-worker",
     "types": "wrangler types worker-configuration.d.ts",
@@ -29,7 +28,6 @@
   "devDependencies": {
     "@types/node": "26.1.1",
     "astro": "7.1.1",
-    "sharp": "0.34.5",
     "typescript": "7.0.2",
     "vitest": "4.1.10",
     "wrangler": "4.111.0"
