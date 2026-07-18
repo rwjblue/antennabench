@@ -5,8 +5,8 @@ use crate::{
     ReportNotice, ReportOperatorEventKind, ReportOverviewStratum, ReportResourceStage,
 };
 use antennabench_analysis::{
-    ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder, ComparisonSide,
-    EvidenceQuality, ObservationExclusionReason, PathDirection,
+    ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder, EvidenceQuality,
+    ObservationExclusionReason, PathDirection,
 };
 use antennabench_core::{
     v3::WsprCycleDirection, AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource,
@@ -217,23 +217,11 @@ pub(super) fn comparison_availability_text(value: ComparisonAvailability) -> &'s
             "No adjacent same-band block contained one usable actual slot for each label."
         }
         ComparisonAvailability::NoMatchedPaths => {
-            "Eligible blocks exist, but no same-stratum remote path had finite SNR under both labels."
+            "Eligible blocks exist, but no remote path had usable signal reports on both antennas within one comparison group."
         }
         ComparisonAvailability::DescriptivePairsAvailable => {
-            "Finite same-path paired rows are available for descriptive display only."
+            "Usable same-path matched pairs are available for descriptive display only."
         }
-    }
-}
-pub(super) fn comparison_side(value: ComparisonSide) -> &'static str {
-    match value {
-        ComparisonSide::Left => "Left",
-        ComparisonSide::Right => "Right",
-    }
-}
-pub(super) fn comparison_order(value: ComparisonOrder) -> &'static str {
-    match value {
-        ComparisonOrder::LeftThenRight => "Left then right",
-        ComparisonOrder::RightThenLeft => "Right then left",
     }
 }
 pub(super) fn comparison_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
@@ -252,11 +240,35 @@ pub(super) fn comparison_strata_list(rows: &[&ReportOverviewStratum]) -> String 
         .collect::<Vec<_>>()
         .join("; ")
 }
-pub(super) fn comparison_strata_label(count: usize) -> String {
+pub(super) fn comparison_groups_label(count: usize) -> String {
     format!(
         "{count} comparison {}",
-        if count == 1 { "stratum" } else { "strata" }
+        if count == 1 { "group" } else { "groups" }
     )
+}
+pub(super) fn report_antenna_labels(report: &crate::SessionReport) -> (String, String) {
+    (
+        escape_html(report.comparison.left_label.as_deref().unwrap_or("Left")),
+        escape_html(report.comparison.right_label.as_deref().unwrap_or("Right")),
+    )
+}
+pub(super) fn orientation_antenna_labels(
+    orientation: &antennabench_analysis::DeltaOrientation,
+) -> (String, String) {
+    (
+        escape_html(&orientation.subtrahend_label),
+        escape_html(&orientation.minuend_label),
+    )
+}
+pub(super) fn labeled_comparison_order(
+    value: ComparisonOrder,
+    left_label: &str,
+    right_label: &str,
+) -> String {
+    match value {
+        ComparisonOrder::LeftThenRight => format!("{left_label} then {right_label}"),
+        ComparisonOrder::RightThenLeft => format!("{right_label} then {left_label}"),
+    }
 }
 pub(super) fn path_direction(value: PathDirection) -> &'static str {
     match value {
@@ -436,7 +448,7 @@ pub(super) fn detail_family(value: ReportDetailFamily) -> &'static str {
         ReportDetailFamily::PairedObservations => "paired observation",
         ReportDetailFamily::SolarContext => "solar-context",
         ReportDetailFamily::PathSummaries => "path summary",
-        ReportDetailFamily::Strata => "comparison stratum",
+        ReportDetailFamily::Strata => "comparison group",
         ReportDetailFamily::Charts => "chart",
     }
 }

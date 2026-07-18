@@ -13,7 +13,7 @@ pub(in super::super) fn render_question_navigation(out: &mut CheckedHtmlWriter<'
     );
 }
 pub(in super::super) fn render_how_to_read(out: &mut CheckedHtmlWriter<'_>) {
-    out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing report is missing evidence, never a zero-strength signal.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never pooled.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul></aside>");
+    out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing report is missing evidence, never a zero-strength signal.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.</li><li>A block is a back-to-back pair of cycles, one per antenna.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul></aside>");
 }
 pub(in super::super) fn render_answer_first_overview(
     out: &mut CheckedHtmlWriter<'_>,
@@ -82,9 +82,8 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     match &scope.delta_orientation {
         Some(orientation) => write_html!(
             out,
-            "<p class=\"orientation\"><strong>Delta orientation:</strong> {} minus {} (right minus left). Every signed value below uses this fixed orientation.</p>",
-            escape_html(&orientation.minuend_label),
-            escape_html(&orientation.subtrahend_label),
+            "<p class=\"orientation\"><strong>Signed values:</strong> Positive values mean {} was stronger; negative values mean {} was stronger.</p>",
+            escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label),
         ),
         None => out.push_str("<p class=\"orientation\"><strong>Delta orientation:</strong> unavailable because this run does not provide a two-label paired orientation.</p>"),
     }
@@ -95,9 +94,9 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         comparison_availability_text(overview.comparison_availability),
     );
 
-    out.push_str("<div class=\"table-wrap\"><table class=\"overview-table\"><caption>Descriptive result by comparison stratum</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Path delta</th><th scope=\"col\">Paths / rows</th><th scope=\"col\">Blocks</th><th scope=\"col\">Coverage</th></tr></thead><tbody>");
+    out.push_str("<div class=\"table-wrap\"><table class=\"overview-table\"><caption>Descriptive result by comparison group</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Path delta</th><th scope=\"col\">Paths / matched pairs</th><th scope=\"col\">Blocks <small>(back-to-back cycle pairs, one cycle per antenna)</small></th><th scope=\"col\">Coverage</th></tr></thead><tbody>");
     if overview.strata.is_empty() {
-        out.push_str("<tr><td data-label=\"Stratum\" colspan=\"5\">No comparison strata are available for this run.</td></tr>");
+        out.push_str("<tr><td data-label=\"Comparison group\" colspan=\"5\">No comparison groups are available for this run.</td></tr>");
     } else {
         for row in overview
             .strata
@@ -124,7 +123,7 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
             };
             write_html!(
                 out,
-                "<tr><td data-label=\"Stratum\">{}</td><td data-label=\"Path delta\">{}</td><td data-label=\"Paths / rows\">{} / {}</td><td data-label=\"Blocks\">{}</td><td data-label=\"Coverage\">{}</td></tr>",
+                "<tr><td data-label=\"Comparison group\">{}</td><td data-label=\"Path delta\">{}</td><td data-label=\"Paths / matched pairs\">{} / {}</td><td data-label=\"Blocks\">{}</td><td data-label=\"Coverage\">{}</td></tr>",
                 comparison_stratum(&row.stratum),
                 delta,
                 row.unique_path_count,
@@ -139,7 +138,7 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
             .filter(|row| row.path_delta == ReportOverviewPathDelta::Unavailable)
             .collect::<Vec<_>>();
         if !unavailable.is_empty() {
-            write_html!(out, "<tr class=\"collapsed-empty-strata\"><td data-label=\"Stratum\">No path delta in {}: {}</td><td data-label=\"Path delta\">Not available</td><td data-label=\"Paths / rows\">Not pooled</td><td data-label=\"Blocks\">Not pooled</td><td data-label=\"Coverage\">Unavailable</td></tr>", comparison_strata_label(unavailable.len()), comparison_strata_list(&unavailable));
+            write_html!(out, "<tr class=\"collapsed-empty-strata\"><td data-label=\"Comparison group\">No path delta in {}: {}</td><td data-label=\"Path delta\">Not available</td><td data-label=\"Paths / matched pairs\">Kept separate</td><td data-label=\"Blocks\">Kept separate</td><td data-label=\"Coverage\">Unavailable</td></tr>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable));
         }
     }
     out.push_str("</tbody></table></div><div class=\"overview-support\"><section aria-labelledby=\"supported-title\"><h3 id=\"supported-title\">Supported by this run</h3><ul>");
@@ -149,11 +148,11 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         comparison_availability_label(overview.comparison_availability),
     );
     if overview.strata.is_empty() {
-        out.push_str("<li>The session scope and availability state remain explicit even without an available comparison stratum.</li>");
+        out.push_str("<li>The session scope and availability state remain explicit even without an available comparison group.</li>");
     } else {
         write_html!(
             out,
-            "<li>{} paired row(s) are retained in {} unpooled stratum row(s).</li>",
+            "<li>{} matched pair(s) are retained in {} separate comparison group(s).</li>",
             paired_rows,
             overview.strata.len(),
         );
@@ -162,7 +161,11 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     if !overview.limitations.is_empty() {
         out.push_str("<section aria-labelledby=\"not-established-title\"><h3 id=\"not-established-title\">Not established by this run</h3><ul>");
         for limitation in &overview.limitations {
-            write_html!(out, "<li>{}</li>", overview_limitation_text(*limitation));
+            write_html!(
+                out,
+                "<li>{}</li>",
+                overview_limitation_text(*limitation, report)
+            );
         }
         out.push_str("</ul></section>");
     }
@@ -178,7 +181,11 @@ pub(in super::super) fn overview_lifecycle_label(
         ReportOverviewLifecycleState::Recorded(value) => lifecycle(value),
     }
 }
-pub(in super::super) fn overview_limitation_text(value: ReportOverviewLimitation) -> String {
+pub(in super::super) fn overview_limitation_text(
+    value: ReportOverviewLimitation,
+    report: &SessionReport,
+) -> String {
+    let (left_label, right_label) = report_antenna_labels(report);
     match value {
         ReportOverviewLimitation::ComparisonNotApplicable => {
             "A/B comparison: not established for single-antenna profiling.".into()
@@ -190,16 +197,18 @@ pub(in super::super) fn overview_limitation_text(value: ReportOverviewLimitation
             "Eligible blocks: none with one usable actual slot for each label.".into()
         }
         ReportOverviewLimitation::NoMatchedPaths => {
-            "Matched paths: no same-stratum path had finite SNR under both labels.".into()
+            "Matched paths: no path had usable signal reports on both antennas within one comparison group.".into()
         }
         ReportOverviewLimitation::UnmatchedPaths {
             left_count,
             right_count,
-        } => format!("Unmatched paths: {left_count} left / {right_count} right."),
+        } => format!(
+            "Unmatched paths: {left_count} {left_label} / {right_count} {right_label}."
+        ),
         ReportOverviewLimitation::MissingSnr {
             left_count,
             right_count,
-        } => format!("Missing SNR: {left_count} left / {right_count} right."),
+        } => format!("Missing SNR: {left_count} {left_label} / {right_count} {right_label}."),
         ReportOverviewLimitation::DuplicateEvidence {
             exact_count,
             conflicting_group_count,

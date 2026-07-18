@@ -150,7 +150,7 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
     assert!(full.contains(&scope_fact));
     assert!(first.contains(&scope_fact));
     for shared_fact in [
-        "Delta orientation:",
+        "Signed values:",
         "Supported by this run",
         "Same-path signal",
         "Reach and unique paths",
@@ -177,7 +177,7 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
         "controller audit output",
         "--secret-audit-argument",
         "Derived solar context",
-        "Paired difference data",
+        "Matched-pair difference data",
     ] {
         assert!(!first.contains(omitted), "compact output leaked {omitted}");
     }
@@ -198,7 +198,7 @@ fn consolidates_standing_caveats_in_one_shared_reading_panel() {
         for caveat in [
             "A missing report is missing evidence, never a zero-strength signal.",
             "This report describes evidence; it does not select a winner or prove one antenna is better.",
-            "Each comparison group (direction × band × mode × kind × source) is analyzed separately and never pooled.",
+            "Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.",
             "Alternating antennas reduces but does not eliminate time and propagation effects.",
         ] {
             assert_eq!(html.matches(caveat).count(), 1, "repeated caveat: {caveat}");
@@ -218,7 +218,7 @@ fn compact_summary_escapes_unavailable_and_bounded_reports() {
     unavailable.overview.strata.clear();
     let unavailable_html = render_compact_summary_html(&unavailable).unwrap();
     assert!(unavailable_html.contains("&lt;compact &amp; session&gt;"));
-    assert!(unavailable_html.contains("No comparison strata are available"));
+    assert!(unavailable_html.contains("No comparison groups are available"));
     assert!(!unavailable_html.contains("<compact & session>"));
 
     let mut bounded = paired_report(true);
@@ -518,6 +518,69 @@ fn escapes_every_untrusted_report_string() {
 }
 
 #[test]
+fn renders_distinct_escaped_antenna_labels_without_mutating_report_data() {
+    let mut report = paired_report(true);
+    let left_label = "<Vertical & 1>";
+    let right_label = "Loop > Beam";
+    report.comparison.left_label = Some(left_label.into());
+    report.comparison.right_label = Some(right_label.into());
+    report.overview.scope.antenna_labels = vec![left_label.into(), right_label.into()];
+    for orientation in [
+        report.comparison.delta_orientation.as_mut(),
+        report.overview.scope.delta_orientation.as_mut(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        orientation.subtrahend_label = left_label.into();
+        orientation.minuend_label = right_label.into();
+    }
+    let before = serde_json::to_vec(&report).unwrap();
+
+    let full = render_standalone_html(&report).unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+
+    assert_eq!(serde_json::to_vec(&report).unwrap(), before);
+    for html in [&full, &compact] {
+        assert!(html.contains(
+            "Positive values mean Loop &gt; Beam was stronger; negative values mean &lt;Vertical &amp; 1&gt; was stronger."
+        ));
+        assert!(html.contains("&lt;Vertical &amp; 1&gt; only"));
+        assert!(html.contains("Loop &gt; Beam only"));
+        assert!(!html.contains(left_label));
+        assert!(!html.contains(right_label));
+    }
+    assert!(full.contains(
+        "<th scope=\"col\">&lt;Vertical &amp; 1&gt; usable</th><th scope=\"col\">Loop &gt; Beam usable</th>"
+    ));
+    assert!(full
+        .contains("<th scope=\"col\">Unmatched — &lt;Vertical &amp; 1&gt; / Loop &gt; Beam</th>"));
+    for expected in [
+        "Unmatched — &lt;Vertical &amp; 1&gt;",
+        "Missing SNR — Loop &gt; Beam",
+        "&lt;Vertical &amp; 1&gt; then Loop &gt; Beam",
+        "Loop &gt; Beam then &lt;Vertical &amp; 1&gt;",
+    ] {
+        assert!(
+            full.contains(expected),
+            "missing labeled audit text: {expected}"
+        );
+    }
+    for legacy in [
+        "Unmatched left",
+        "Unmatched right",
+        "Missing SNR left",
+        "Missing SNR right",
+        "Left then right",
+        "Right then left",
+        "right minus left",
+        "right − left",
+    ] {
+        assert!(!full.contains(legacy), "leaked display-side term: {legacy}");
+    }
+}
+
+#[test]
 fn renders_empty_and_unavailable_data_as_explicit_states() {
     let mut report = canonical_report();
     report.context.scheduled_time_range = None;
@@ -612,12 +675,12 @@ fn renders_every_comparison_availability_before_difference_output() {
         (
             ComparisonAvailability::NoMatchedPaths,
             "No matched paths",
-            "Eligible blocks exist, but no same-stratum remote path had finite SNR under both labels.",
+            "Eligible blocks exist, but no remote path had usable signal reports on both antennas within one comparison group.",
         ),
         (
             ComparisonAvailability::DescriptivePairsAvailable,
             "Descriptive pairs available",
-            "Finite same-path paired rows are available for descriptive display only.",
+            "Usable same-path matched pairs are available for descriptive display only.",
         ),
     ] {
         let mut report = paired_report(false);
@@ -629,7 +692,7 @@ fn renders_every_comparison_availability_before_difference_output() {
             .find("Comparison availability")
             .expect("availability should render");
         let difference_position = html
-            .find("Paired difference distribution")
+            .find("Matched-pair difference distribution")
             .expect("difference section should render");
 
         assert!(availability_position < difference_position);
@@ -665,7 +728,7 @@ fn renders_answer_first_order_unavailable_states_and_visible_limitations() {
     assert!(run_quality < omission);
     assert!(html.find("2 recorded acquisition gaps").unwrap() < first_details);
     assert!(html.contains("Delta orientation:</strong> unavailable"));
-    assert!(html.contains("No comparison strata are available for this run."));
+    assert!(html.contains("No comparison groups are available for this run."));
     assert!(html.contains("A/B comparison: not established for single-antenna profiling."));
     assert!(!html.contains("Winner:"));
     assert!(!html.contains("antenna gain"));
@@ -689,32 +752,32 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
         "Coverage and data-quality counts",
         "Path overlap and missingness",
         "Data-quality timeline",
-        "Paired difference distribution",
-        "Paired SNR over time",
+        "Matched-pair difference distribution",
+        "Matched SNR over time",
         "Distance and azimuth path context",
-        "Stratum descriptive summaries",
+        "Comparison-group descriptive summaries",
     ] {
         assert!(html.contains(section), "missing section: {section}");
     }
     for caption in [
         "Path overlap and missingness data",
         "Data-quality timeline details",
-        "Paired difference data",
-        "Paired SNR over time data",
+        "Matched-pair difference data",
+        "Matched SNR over time data",
         "Observed distance path-context data",
         "Observed azimuth path-context data",
-        "Stratum summary data",
+        "Comparison-group summary data",
     ] {
         assert!(html.contains(&format!("<caption>{caption}</caption>")));
     }
     for fact in [
-        "Delta orientation:",
-        "B minus A (right minus left)",
+        "Signed values:",
+        "Positive values mean B was stronger; negative values mean A was stronger.",
         "TX path · 20 m · WSPR · Local decode · WSJT-X log",
-        "Left then right",
-        "Right then left",
-        "Unmatched left",
-        "Missing SNR left",
+        "A then B",
+        "B then A",
+        "Unmatched — A",
+        "Missing SNR — A",
         "Missing or invalid mode",
         "Exact duplicates collapsed",
         "Conflicting duplicate groups",
@@ -737,15 +800,17 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     let report = paired_report(true);
     let html = render_standalone_html(&report).unwrap();
 
-    assert!(html.contains("each value is <strong>B − A</strong> SNR in dB"));
+    assert!(
+        html.contains("Positive values mean B was stronger; negative values mean A was stronger.")
+    );
     assert_eq!(html.matches("<span class=\"path-strip-dot\"").count(), 2);
     assert_eq!(html.matches("<span class=\"path-strip-median\"").count(), 1);
-    assert!(html.contains("A finite 0 dB dot is retained as a true zero"));
-    assert!(html.contains("<caption>One path-median B − A SNR delta per remote path"));
+    assert!(html.contains("A 0 dB dot is retained as a true zero"));
+    assert!(html.contains("<caption>One path-median signed SNR delta per remote path"));
     assert!(html.contains("<td>K1PAIR</td><td>2</td>"));
     assert!(html.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
-    assert!(html.contains("left-only and right-only paths remain visible"));
-    assert!(html.contains("<caption>Unique finite remote-path reach counts"));
+    assert!(html.contains("A-only and B-only paths remain visible"));
+    assert!(html.contains("<caption>Unique remote-path reach counts"));
     assert!(html.contains(".path-strip-row{grid-template-columns:1fr}"));
     assert!(html.contains("@media print"));
 }
@@ -761,11 +826,11 @@ fn renders_missing_and_unavailable_same_path_states_without_zeroing_them() {
 
     let html = render_standalone_html(&report).unwrap();
 
-    assert!(html
-        .contains("No finite same-path paired evidence is available across 1 comparison stratum"));
-    assert!(html
-        .contains("Missing SNR remains separate (left: 2, right: 1). This is not a 0 dB result"));
-    assert!(html.contains("No finite path-reach evidence in 1 of 1 comparison strata"));
+    assert!(
+        html.contains("No usable same-path signal reports are available across 1 comparison group")
+    );
+    assert!(html.contains("Missing SNR remains separate (A: 2, B: 1). This is not a 0 dB result"));
+    assert!(html.contains("No usable path-reach signal reports in 1 of 1 comparison groups"));
     assert!(!html.contains("absent reach is not zero-SNR evidence"));
 }
 
@@ -775,7 +840,7 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
     let empty_html = render_standalone_html(&empty_report).unwrap();
 
     assert_eq!(empty_report.overview.strata.len(), 8);
-    assert!(empty_html.contains("No path delta in 8 comparison strata"));
+    assert!(empty_html.contains("No path delta in 8 comparison groups"));
     assert_eq!(empty_html.matches("<div class=\"path-strip\"").count(), 0);
     let populated_reach_strata = empty_report
         .overview
@@ -829,17 +894,17 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
             .count(),
         1
     );
-    assert!(mixed_html.contains("No finite same-path paired evidence in 1 of 2 comparison strata"));
-    assert!(mixed_html.contains("No finite path-reach evidence in 1 of 2 comparison strata"));
-    assert!(mixed_html.contains("No located paired paths in 1 of 2 comparison strata"));
+    assert!(mixed_html.contains("No usable same-path signal reports in 1 of 2 comparison groups"));
+    assert!(mixed_html.contains("No usable path-reach signal reports in 1 of 2 comparison groups"));
+    assert!(mixed_html.contains("No located matched paths in 1 of 2 comparison groups"));
     assert!(mixed_html.contains("RX path · 40 m · WSPR · Public report · WSPRnet"));
-    assert!(mixed_html.contains("never pooled"));
+    assert!(mixed_html.contains("never combined"));
 
     let compact_html = render_compact_summary_html(&mixed_report).unwrap();
-    assert!(compact_html.contains("No path delta in 1 comparison stratum"));
-    assert!(compact_html.contains("No finite same-path path-median delta in 1 of 2"));
-    assert!(compact_html.contains("No finite reach evidence in 1 comparison stratum"));
-    assert!(compact_html.contains("never pooled"));
+    assert!(compact_html.contains("No path delta in 1 comparison group"));
+    assert!(compact_html.contains("No usable same-path path-median delta in 1 of 2"));
+    assert!(compact_html.contains("No usable reach evidence in 1 comparison group"));
+    assert!(compact_html.contains("never combined"));
 }
 
 #[test]
@@ -879,7 +944,7 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     assert!(!html.contains("https://"));
 
     let empty = render_standalone_html(&canonical_report()).unwrap();
-    assert!(empty.contains("No paired rows are available for location views."));
+    assert!(empty.contains("No matched pairs are available for location views."));
 }
 
 #[test]

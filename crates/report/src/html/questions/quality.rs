@@ -35,17 +35,18 @@ pub(in super::super) fn render_answerability(
         );
         return;
     }
-    out.push_str("<div class=\"table-wrap\"><table class=\"answerability-table\"><caption>Answerability by separate comparison stratum</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Availability</th><th scope=\"col\">Unique paired paths</th><th scope=\"col\">Paired rows</th><th scope=\"col\">Blocks</th><th scope=\"col\">A→B / B→A</th><th scope=\"col\">Unmatched L / R</th><th scope=\"col\">Missing SNR L / R</th><th scope=\"col\">Excluded</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "<div class=\"table-wrap\"><table class=\"answerability-table\"><caption>Answerability by separate comparison group</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Availability</th><th scope=\"col\">Unique matched paths</th><th scope=\"col\">Matched pairs</th><th scope=\"col\">Blocks</th><th scope=\"col\">{}→{} / {}→{}</th><th scope=\"col\">Unmatched — {} / {}</th><th scope=\"col\">Missing SNR — {} / {}</th><th scope=\"col\">Excluded</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>", left_label, right_label, right_label, left_label, left_label, right_label, left_label, right_label);
     for row in &report.overview.strata {
         let availability = match row.availability {
             ReportStratumAvailability::DescriptivePairsAvailable => {
-                "Answerable — descriptive pairs available"
+                "Answerable — matched pairs available"
             }
             ReportStratumAvailability::NoFinitePairedPaths => {
-                "Unavailable — no finite same-path pair"
+                "Unavailable — no usable same-path pair"
             }
         };
-        write_html!(out, "<tr><td data-label=\"Stratum\">{}</td><td data-label=\"Availability\">{}</td><td data-label=\"Unique paired paths\">{}</td><td data-label=\"Paired rows\">{}</td><td data-label=\"Blocks\">{}</td><td data-label=\"A→B / B→A\">{} / {}</td><td data-label=\"Unmatched L / R\">{} / {}</td><td data-label=\"Missing SNR L / R\">{} / {}</td><td data-label=\"Excluded\">{}</td><td data-label=\"Duplicates\">{}</td><td data-label=\"Conflicts\">{}</td></tr>", comparison_stratum(&row.stratum), availability, row.unique_path_count, row.paired_row_count, row.contributing_block_count, row.left_then_right_block_count, row.right_then_left_block_count, row.unmatched_left_count, row.unmatched_right_count, row.missing_snr_left_count, row.missing_snr_right_count, row.excluded_observation_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+        write_html!(out, "<tr><td data-label=\"Comparison group\">{}</td><td data-label=\"Availability\">{}</td><td data-label=\"Unique matched paths\">{}</td><td data-label=\"Matched pairs\">{}</td><td data-label=\"Blocks\">{}</td><td data-label=\"Antenna order\">{} / {}</td><td data-label=\"Unmatched — {} / {}\">{} / {}</td><td data-label=\"Missing SNR — {} / {}\">{} / {}</td><td data-label=\"Excluded\">{}</td><td data-label=\"Duplicates\">{}</td><td data-label=\"Conflicts\">{}</td></tr>", comparison_stratum(&row.stratum), availability, row.unique_path_count, row.paired_row_count, row.contributing_block_count, row.left_then_right_block_count, row.right_then_left_block_count, left_label, right_label, row.unmatched_left_count, row.unmatched_right_count, left_label, right_label, row.missing_snr_left_count, row.missing_snr_right_count, row.excluded_observation_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
     }
     out.push_str("</tbody></table></div><p class=\"muted\">Unmatched paths, missing values, exclusions, duplicates, and conflicts remain separate facts.</p>");
 }

@@ -2,8 +2,9 @@ use std::fmt::Write as _;
 
 use crate::{ReportLifecycleEventKind, ReportNotice, SessionReport};
 use antennabench_analysis::{
-    ComparisonStratum, ComparisonTimelineRow, EligibilityExclusionCategory, EligibilityScope,
-    PairedObservationRow, SolarEndpointContext, SolarLightState, SolarPositionResult,
+    ComparisonSide, ComparisonStratum, ComparisonTimelineRow, EligibilityExclusionCategory,
+    EligibilityScope, PairedObservationRow, SolarEndpointContext, SolarLightState,
+    SolarPositionResult,
 };
 use antennabench_core::{v2::SessionLifecycleV2, v3::WsprCycleDirection};
 

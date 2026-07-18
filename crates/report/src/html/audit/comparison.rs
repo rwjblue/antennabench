@@ -5,28 +5,41 @@ pub(in super::super) fn render_comparison_diagnostics(
     report: &SessionReport,
 ) {
     let diagnostics = report.comparison.diagnostics;
+    let (left_label, right_label) = report_antenna_labels(report);
     out.push_str("<h3>Coverage and data-quality counts</h3><dl class=\"stat-grid\">");
     comparison_stat(out, "Blocks", diagnostics.block_count);
     comparison_stat(out, "Eligible blocks", diagnostics.eligible_block_count);
     comparison_stat(out, "Invalid blocks", diagnostics.invalid_block_count);
     comparison_stat(
         out,
-        "Left then right",
+        &format!("{left_label} then {right_label}"),
         diagnostics.left_then_right_block_count,
     );
     comparison_stat(
         out,
-        "Right then left",
+        &format!("{right_label} then {left_label}"),
         diagnostics.right_then_left_block_count,
     );
-    comparison_stat(out, "Paired rows", diagnostics.paired_row_count);
+    comparison_stat(out, "Matched pairs", diagnostics.paired_row_count);
     comparison_stat(out, "Unique paths", diagnostics.unique_path_count);
-    comparison_stat(out, "Unmatched left", diagnostics.unmatched_left_count);
-    comparison_stat(out, "Unmatched right", diagnostics.unmatched_right_count);
-    comparison_stat(out, "Missing SNR left", diagnostics.missing_snr_left_count);
     comparison_stat(
         out,
-        "Missing SNR right",
+        &format!("Unmatched — {left_label}"),
+        diagnostics.unmatched_left_count,
+    );
+    comparison_stat(
+        out,
+        &format!("Unmatched — {right_label}"),
+        diagnostics.unmatched_right_count,
+    );
+    comparison_stat(
+        out,
+        &format!("Missing SNR — {left_label}"),
+        diagnostics.missing_snr_left_count,
+    );
+    comparison_stat(
+        out,
+        &format!("Missing SNR — {right_label}"),
         diagnostics.missing_snr_right_count,
     );
     comparison_stat(
@@ -72,14 +85,15 @@ pub(in super::super) fn render_overlap(out: &mut CheckedHtmlWriter<'_>, report: 
         out.push_str("<p class=\"empty\">No path-level overlap rows are available.</p>");
         return;
     }
-    out.push_str("<div class=\"legend\"><span><i class=\"swatch left\"></i>Left finite</span><span><i class=\"swatch right\"></i>Right finite</span></div><div class=\"comparison-chart\" aria-hidden=\"true\">");
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "<div class=\"legend\"><span><i class=\"swatch left\"></i>{} usable</span><span><i class=\"swatch right\"></i>{} usable</span></div><div class=\"comparison-chart\" aria-hidden=\"true\">", left_label, right_label);
     for row in &report.comparison.overlap_rows {
         let total = (row.left_finite_count + row.right_finite_count).max(1) as f64;
         let left_width = row.left_finite_count as f64 / total * 100.0;
         let right_width = row.right_finite_count as f64 / total * 100.0;
         write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"bar-track\"><span class=\"bar left\" style=\"width:{left_width:.3}%\"></span><span class=\"bar right\" style=\"width:{right_width:.3}%\"></span></span><span>{} / {}</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), row.left_finite_count, row.right_finite_count);
     }
-    out.push_str("</div><div class=\"table-wrap\"><table><caption>Path overlap and missingness data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Left finite</th><th scope=\"col\">Right finite</th><th scope=\"col\">Paired</th><th scope=\"col\">Unmatched left</th><th scope=\"col\">Unmatched right</th><th scope=\"col\">Missing SNR left</th><th scope=\"col\">Missing SNR right</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
+    write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Path overlap and missingness data</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Remote path</th><th scope=\"col\">{} usable</th><th scope=\"col\">{} usable</th><th scope=\"col\">Matched</th><th scope=\"col\">Unmatched — {}</th><th scope=\"col\">Unmatched — {}</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>", left_label, right_label, left_label, right_label, left_label, right_label);
     for row in &report.comparison.overlap_rows {
         write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.left_finite_count, row.right_finite_count, row.paired_count, row.unmatched_left_count, row.unmatched_right_count, row.missing_snr_left_count, row.missing_snr_right_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
     }
@@ -116,8 +130,9 @@ pub(in super::super) fn render_comparison_timeline(
         );
     }
     out.push_str("</div><div class=\"table-wrap\"><table><caption>Data-quality timeline details</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Eligible</th><th scope=\"col\">Sequence</th><th scope=\"col\">Slot</th><th scope=\"col\">Starts</th><th scope=\"col\">Band</th><th scope=\"col\">Actual label</th><th scope=\"col\">Side</th><th scope=\"col\">Status</th><th scope=\"col\">Total</th><th scope=\"col\">Usable</th><th scope=\"col\">Excluded</th><th scope=\"col\">Missing SNR</th><th scope=\"col\">Missing/invalid mode</th><th scope=\"col\">Ambiguous</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>");
+    let (left_label, right_label) = report_antenna_labels(report);
     for row in &report.comparison.timeline_rows {
-        timeline_table_row(out, row);
+        timeline_table_row(out, row, &left_label, &right_label);
     }
     out.push_str("</tbody></table></div>");
 }
@@ -130,27 +145,35 @@ pub(in super::super) fn render_comparison_blocks(
         out.push_str("<p class=\"empty\">No comparison block rows are available.</p>");
         return;
     }
+    let (left_label, right_label) = report_antenna_labels(report);
     out.push_str("<div class=\"table-wrap\"><table><caption>Exact adjacent same-band block construction</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Band</th><th scope=\"col\">First slot</th><th scope=\"col\">First actual / status</th><th scope=\"col\">Second slot</th><th scope=\"col\">Second actual / status</th><th scope=\"col\">Order</th><th scope=\"col\">Eligibility</th></tr></thead><tbody>");
     for block in &report.comparison.blocks {
-        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{} · #{} · {}</td><td>{} / {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", block.block_index + 1, band(block.band), escape_html(&block.first_slot_id), block.first_sequence_number, timestamp(block.first_starts_at), escape_html(block.first_label.as_deref().unwrap_or("Not recorded")), slot_status(block.first_status), block.second_slot_id.as_ref().map(|id| format!("{} · #{} · {}", id, block.second_sequence_number.unwrap_or_default(), block.second_starts_at.map(timestamp).unwrap_or_else(|| "Not recorded".into()))).map(|value| escape_html(&value)).unwrap_or_else(|| "Not recorded".into()), escape_html(&format!("{} / {}", block.second_label.as_deref().unwrap_or("Not recorded"), block.second_status.map(slot_status).unwrap_or("Not recorded"))), block.order.map(comparison_order).unwrap_or("Unavailable"), block_eligibility(block.eligibility));
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{} · #{} · {}</td><td>{} / {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", block.block_index + 1, band(block.band), escape_html(&block.first_slot_id), block.first_sequence_number, timestamp(block.first_starts_at), escape_html(block.first_label.as_deref().unwrap_or("Not recorded")), slot_status(block.first_status), block.second_slot_id.as_ref().map(|id| format!("{} · #{} · {}", id, block.second_sequence_number.unwrap_or_default(), block.second_starts_at.map(timestamp).unwrap_or_else(|| "Not recorded".into()))).map(|value| escape_html(&value)).unwrap_or_else(|| "Not recorded".into()), escape_html(&format!("{} / {}", block.second_label.as_deref().unwrap_or("Not recorded"), block.second_status.map(slot_status).unwrap_or("Not recorded"))), block.order.map(|order| labeled_comparison_order(order, &left_label, &right_label)).unwrap_or_else(|| "Unavailable".into()), block_eligibility(block.eligibility));
     }
     out.push_str("</tbody></table></div>");
 }
 pub(in super::super) fn timeline_table_row(
     out: &mut CheckedHtmlWriter<'_>,
     row: &ComparisonTimelineRow,
+    left_label: &str,
+    right_label: &str,
 ) {
-    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.block_index + 1, yes_no(row.block_eligible), row.sequence_number, escape_html(&row.slot_id), timestamp(row.starts_at), band(row.band), escape_html(row.actual_label.as_deref().unwrap_or("Not recorded")), row.side.map(comparison_side).unwrap_or("Unavailable"), slot_status(row.status), row.total_observation_count, row.usable_observation_count, row.excluded_observation_count, row.missing_snr_count, row.missing_or_invalid_mode_count, row.ambiguous_path_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+    let side = match row.side {
+        Some(ComparisonSide::Left) => left_label,
+        Some(ComparisonSide::Right) => right_label,
+        None => "Unavailable",
+    };
+    write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", row.block_index + 1, yes_no(row.block_eligible), row.sequence_number, escape_html(&row.slot_id), timestamp(row.starts_at), band(row.band), escape_html(row.actual_label.as_deref().unwrap_or("Not recorded")), side, slot_status(row.status), row.total_observation_count, row.usable_observation_count, row.excluded_observation_count, row.missing_snr_count, row.missing_or_invalid_mode_count, row.ambiguous_path_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
 }
 pub(in super::super) fn render_paired_differences(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<h3>Paired difference distribution</h3>");
+    out.push_str("<h3>Matched-pair difference distribution</h3>");
     let rows = &report.comparison.paired_rows;
     if rows.is_empty() {
         out.push_str(
-            "<p class=\"empty\">No finite same-path paired differences are available.</p>",
+            "<p class=\"empty\">No usable same-path matched differences are available.</p>",
         );
         return;
     }
@@ -168,9 +191,10 @@ pub(in super::super) fn render_paired_differences(
         };
         write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"comparison-track\"><span class=\"comparison-zero\"></span><span class=\"comparison-delta\" style=\"left:{left:.3}%;width:{width:.3}%\"></span></span><span>{} dB</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), format_signed(row.delta_right_minus_left_db));
     }
-    out.push_str("</div><div class=\"table-wrap\"><table><caption>Paired difference data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left observation</th><th scope=\"col\">Right observation</th><th scope=\"col\">Left slot</th><th scope=\"col\">Right slot</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th><th scope=\"col\">Right − left</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>");
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Matched-pair difference data</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">{} observation</th><th scope=\"col\">{} observation</th><th scope=\"col\">{} slot</th><th scope=\"col\">{} slot</th><th scope=\"col\">{} SNR</th><th scope=\"col\">{} SNR</th><th scope=\"col\">Signed delta</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>", left_label, right_label, left_label, right_label, left_label, right_label);
     for row in rows {
-        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{} s</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), escape_html(&row.left_observation_id), escape_html(&row.right_observation_id), escape_html(&row.left_slot_id), escape_html(&row.right_slot_id), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), row.elapsed_seconds);
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{} s</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, labeled_comparison_order(row.order, &left_label, &right_label), escape_html(&row.left_observation_id), escape_html(&row.right_observation_id), escape_html(&row.left_slot_id), escape_html(&row.right_slot_id), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), row.elapsed_seconds);
     }
     out.push_str("</tbody></table></div>");
 }
@@ -178,10 +202,10 @@ pub(in super::super) fn render_paired_snr_time(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<h3>Paired SNR over time</h3>");
+    out.push_str("<h3>Matched SNR over time</h3>");
     let rows = &report.comparison.paired_rows;
     if rows.is_empty() {
-        out.push_str("<p class=\"empty\">No paired SNR-over-time rows are available.</p>");
+        out.push_str("<p class=\"empty\">No matched SNR-over-time pairs are available.</p>");
         return;
     }
     let minimum = rows
@@ -193,15 +217,16 @@ pub(in super::super) fn render_paired_snr_time(
         .flat_map(|row| [row.left_snr_db, row.right_snr_db])
         .fold(f64::NEG_INFINITY, f64::max);
     let span = (maximum - minimum).max(1.0);
-    out.push_str("<div class=\"legend\"><span><i class=\"swatch left\"></i>Left</span><span><i class=\"swatch right\"></i>Right</span></div><div class=\"comparison-chart\" aria-hidden=\"true\">");
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "<div class=\"legend\"><span><i class=\"swatch left\"></i>{}</span><span><i class=\"swatch right\"></i>{}</span></div><div class=\"comparison-chart\" aria-hidden=\"true\">", left_label, right_label);
     for row in rows {
         let left = (row.left_snr_db - minimum) / span * 100.0;
         let right = (row.right_snr_db - minimum) / span * 100.0;
         write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"snr-pair\"><span class=\"snr-left\" style=\"left:{left:.3}%\"></span><span class=\"snr-right\" style=\"left:{right:.3}%\"></span></span><span>{} / {} dB</span></div>", timestamp(row.left_timestamp), escape_html(&row.remote_path), format_number(row.left_snr_db), format_number(row.right_snr_db));
     }
-    out.push_str("</div><div class=\"table-wrap\"><table><caption>Paired SNR over time data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left time</th><th scope=\"col\">Right time</th><th scope=\"col\">Elapsed</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th></tr></thead><tbody>");
+    write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Matched SNR over time data</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">{} time</th><th scope=\"col\">{} time</th><th scope=\"col\">Elapsed</th><th scope=\"col\">{} SNR</th><th scope=\"col\">{} SNR</th></tr></thead><tbody>", left_label, right_label, left_label, right_label);
     for row in rows {
-        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} s</td><td>{} dB</td><td>{} dB</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), timestamp(row.left_timestamp), timestamp(row.right_timestamp), row.elapsed_seconds, format_number(row.left_snr_db), format_number(row.right_snr_db));
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} s</td><td>{} dB</td><td>{} dB</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, labeled_comparison_order(row.order, &left_label, &right_label), timestamp(row.left_timestamp), timestamp(row.right_timestamp), row.elapsed_seconds, format_number(row.left_snr_db), format_number(row.right_snr_db));
     }
     out.push_str("</tbody></table></div>");
 }
@@ -209,12 +234,13 @@ pub(in super::super) fn render_stratum_summaries(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<h3>Stratum descriptive summaries</h3>");
+    out.push_str("<h3>Comparison-group descriptive summaries</h3>");
     if report.comparison.strata.is_empty() {
-        out.push_str("<p class=\"empty\">No comparison strata are available.</p>");
+        out.push_str("<p class=\"empty\">No comparison groups are available.</p>");
         return;
     }
-    out.push_str("<div class=\"table-wrap\"><table><caption>Stratum summary data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Rows</th><th scope=\"col\">Paths</th><th scope=\"col\">Blocks</th><th scope=\"col\">Left → right</th><th scope=\"col\">Right → left</th><th scope=\"col\">Unmatched L/R</th><th scope=\"col\">Missing SNR L/R</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th><th scope=\"col\">Observed range</th><th scope=\"col\">Median across paths</th></tr></thead><tbody>");
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "<div class=\"table-wrap\"><table><caption>Comparison-group summary data</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Matched pairs</th><th scope=\"col\">Paths</th><th scope=\"col\">Blocks</th><th scope=\"col\">{} → {}</th><th scope=\"col\">{} → {}</th><th scope=\"col\">Unmatched — {} / {}</th><th scope=\"col\">Missing SNR — {} / {}</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th><th scope=\"col\">Observed range</th><th scope=\"col\">Median across paths</th></tr></thead><tbody>", left_label, right_label, right_label, left_label, left_label, right_label, left_label, right_label);
     for row in &report.comparison.strata {
         let range = row
             .minimum_delta_right_minus_left_db

@@ -5,9 +5,9 @@ pub(in super::super) fn render_location_views(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<h3>Distance and azimuth path context</h3><p class=\"notice\">Distance and azimuth describe only the remote paths observed in these paired rows. Missing location stays visible, and geographic concentration limits how broadly these paths represent other distances or directions.</p>");
+    out.push_str("<h3>Distance and azimuth path context</h3><p class=\"notice\">Distance and azimuth describe only the remote paths observed in these matched pairs. Missing location stays visible, and geographic concentration limits how broadly these paths represent other distances or directions.</p>");
     if report.comparison.paired_rows.is_empty() {
-        out.push_str("<p class=\"empty\">No paired rows are available for location views.</p>");
+        out.push_str("<p class=\"empty\">No matched pairs are available for location views.</p>");
         return;
     }
 
@@ -30,8 +30,8 @@ pub(in super::super) fn render_location_views(
             comparison_stratum(stratum)
         );
         render_geographic_coverage(out, &rows);
-        render_distance_view(out, &rows);
-        render_azimuth_view(out, &rows);
+        render_distance_view(out, &rows, report);
+        render_azimuth_view(out, &rows, report);
         out.push_str("</section>");
     }
 }
@@ -49,13 +49,14 @@ pub(in super::super) fn render_solar_context(
     );
     if report.solar_context.rows.is_empty() {
         out.push_str(
-            "<p class=\"empty\">No eligible paired rows are available for solar context.</p>",
+            "<p class=\"empty\">No eligible matched pairs are available for solar context.</p>",
         );
         return;
     }
-    out.push_str("<div class=\"table-wrap\"><table><caption>Derived station and remote-endpoint solar context</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Side</th><th scope=\"col\">Observation</th><th scope=\"col\">UTC time</th><th scope=\"col\">Endpoint</th><th scope=\"col\">Grid</th><th scope=\"col\">Coordinates</th><th scope=\"col\">Elevation</th><th scope=\"col\">Light state</th><th scope=\"col\">Gray line</th></tr></thead><tbody>");
+    let (left_label, right_label) = report_antenna_labels(report);
+    out.push_str("<div class=\"table-wrap\"><table><caption>Derived station and remote-endpoint solar context</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Antenna</th><th scope=\"col\">Observation</th><th scope=\"col\">UTC time</th><th scope=\"col\">Endpoint</th><th scope=\"col\">Grid</th><th scope=\"col\">Coordinates</th><th scope=\"col\">Elevation</th><th scope=\"col\">Light state</th><th scope=\"col\">Gray line</th></tr></thead><tbody>");
     for row in &report.solar_context.rows {
-        for (side, observation) in [("Left", &row.left), ("Right", &row.right)] {
+        for (side, observation) in [(&left_label, &row.left), (&right_label, &row.right)] {
             for endpoint in [&observation.station, &observation.remote] {
                 solar_table_row(out, row, side, observation, endpoint);
             }
@@ -149,6 +150,7 @@ pub(in super::super) fn render_geographic_coverage(
 pub(in super::super) fn render_distance_view(
     out: &mut CheckedHtmlWriter<'_>,
     rows: &[&PairedObservationRow],
+    report: &SessionReport,
 ) {
     out.push_str("<h4>Observed distance</h4>");
     let maximum = rows
@@ -165,15 +167,17 @@ pub(in super::super) fn render_distance_view(
             None => write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"empty\">Location unavailable</span><span>—</span></div>", escape_html(&row.remote_path)),
         }
     }
-    out.push_str("</div><div class=\"table-wrap\"><table><caption>Observed distance path-context data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th><th scope=\"col\">Right − left</th><th scope=\"col\">Left grid</th><th scope=\"col\">Right grid</th><th scope=\"col\">Left distance</th><th scope=\"col\">Right distance</th><th scope=\"col\">Availability</th><th scope=\"col\">Left time</th><th scope=\"col\">Right time</th></tr></thead><tbody>");
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Observed distance path-context data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">{} SNR</th><th scope=\"col\">{} SNR</th><th scope=\"col\">Signed delta</th><th scope=\"col\">{} grid</th><th scope=\"col\">{} grid</th><th scope=\"col\">{} distance</th><th scope=\"col\">{} distance</th><th scope=\"col\">Availability</th><th scope=\"col\">{} time</th><th scope=\"col\">{} time</th></tr></thead><tbody>", left_label, right_label, left_label, right_label, left_label, right_label, left_label, right_label);
     for row in rows {
-        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), optional_text(row.left_remote_grid.as_deref()), optional_text(row.right_remote_grid.as_deref()), optional_measure_f64(row.left_distance_km, "km"), optional_measure_f64(row.right_distance_km, "km"), location_availability(row), timestamp(row.left_timestamp), timestamp(row.right_timestamp));
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, labeled_comparison_order(row.order, &left_label, &right_label), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), optional_text(row.left_remote_grid.as_deref()), optional_text(row.right_remote_grid.as_deref()), optional_measure_f64(row.left_distance_km, "km"), optional_measure_f64(row.right_distance_km, "km"), location_availability(row), timestamp(row.left_timestamp), timestamp(row.right_timestamp));
     }
     out.push_str("</tbody></table></div>");
 }
 pub(in super::super) fn render_azimuth_view(
     out: &mut CheckedHtmlWriter<'_>,
     rows: &[&PairedObservationRow],
+    report: &SessionReport,
 ) {
     out.push_str("<h4>Observed azimuth</h4><div class=\"comparison-chart\" aria-hidden=\"true\">");
     for row in rows {
@@ -185,13 +189,14 @@ pub(in super::super) fn render_azimuth_view(
             None => write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"empty\">Location unavailable</span><span>—</span></div>", escape_html(&row.remote_path)),
         }
     }
-    out.push_str("</div><div class=\"table-wrap\"><table><caption>Observed azimuth path-context data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">Left SNR</th><th scope=\"col\">Right SNR</th><th scope=\"col\">Right − left</th><th scope=\"col\">Left grid</th><th scope=\"col\">Right grid</th><th scope=\"col\">Left azimuth</th><th scope=\"col\">Right azimuth</th><th scope=\"col\">Display sector</th><th scope=\"col\">Availability</th><th scope=\"col\">Left time</th><th scope=\"col\">Right time</th></tr></thead><tbody>");
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Observed azimuth path-context data</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">{} SNR</th><th scope=\"col\">{} SNR</th><th scope=\"col\">Signed delta</th><th scope=\"col\">{} grid</th><th scope=\"col\">{} grid</th><th scope=\"col\">{} azimuth</th><th scope=\"col\">{} azimuth</th><th scope=\"col\">Display sector</th><th scope=\"col\">Availability</th><th scope=\"col\">{} time</th><th scope=\"col\">{} time</th></tr></thead><tbody>", left_label, right_label, left_label, right_label, left_label, right_label, left_label, right_label);
     for row in rows {
         let sector = row_azimuth(row)
             .filter(|_| location_available(row))
             .map(|azimuth| azimuth_sector_label(azimuth_sector_index(azimuth)))
             .unwrap_or("Location unavailable");
-        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, comparison_order(row.order), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), optional_text(row.left_remote_grid.as_deref()), optional_text(row.right_remote_grid.as_deref()), optional_measure_f64(row.left_azimuth_degrees, "°"), optional_measure_f64(row.right_azimuth_degrees, "°"), sector, location_availability(row), timestamp(row.left_timestamp), timestamp(row.right_timestamp));
+        write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} dB</td><td>{} dB</td><td>{} dB</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", comparison_stratum(&row.stratum), escape_html(&row.remote_path), row.block_index + 1, labeled_comparison_order(row.order, &left_label, &right_label), format_number(row.left_snr_db), format_number(row.right_snr_db), format_signed(row.delta_right_minus_left_db), optional_text(row.left_remote_grid.as_deref()), optional_text(row.right_remote_grid.as_deref()), optional_measure_f64(row.left_azimuth_degrees, "°"), optional_measure_f64(row.right_azimuth_degrees, "°"), sector, location_availability(row), timestamp(row.left_timestamp), timestamp(row.right_timestamp));
     }
     out.push_str("</tbody></table></div>");
 }

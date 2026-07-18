@@ -42,7 +42,7 @@ pub(in super::super) fn render_observed_path_context(
             .iter()
             .map(|row| row.location_context.inconsistent_location_path_count)
             .sum::<usize>();
-        write_html!(out, "<p class=\"empty\">No observed paired paths are available for distance or azimuth context across {} ({}). Location unavailable remains separate ({} missing, {} inconsistent). This is not a near-zero path delta.</p>", comparison_strata_label(unavailable.len()), comparison_strata_list(&unavailable), missing, inconsistent);
+        write_html!(out, "<p class=\"empty\">No observed matched paths are available for distance or azimuth context across {} ({}). Location unavailable remains separate ({} missing, {} inconsistent). This is not a near-zero path delta.</p>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable), missing, inconsistent);
         return;
     }
     out.push_str("<p class=\"muted\">Each located paired path contributes once to one fixed distance bin and one fixed 45° compass sector. The supporting paired-row count stays visible; repeated rows from one endpoint do not increase a cell’s path count.</p>");
@@ -53,7 +53,7 @@ pub(in super::super) fn render_observed_path_context(
             "<section aria-labelledby=\"path-context-{index}\"><h3 id=\"path-context-{index}\">{}</h3>",
             comparison_stratum(&stratum.stratum)
         );
-        write_html!(out, "<p class=\"muted\">{} located paired path{}; {} location unavailable ({} missing, {} inconsistent). Exact left/right values remain in the paired-row audit table.</p>", located_path_count(context), plural_suffix(located_path_count(context)), context.missing_location_path_count + context.inconsistent_location_path_count, context.missing_location_path_count, context.inconsistent_location_path_count);
+        write_html!(out, "<p class=\"muted\">{} located matched path{}; {} location unavailable ({} missing, {} inconsistent). Exact per-antenna values remain in the matched-pair audit table.</p>", located_path_count(context), plural_suffix(located_path_count(context)), context.missing_location_path_count + context.inconsistent_location_path_count, context.missing_location_path_count, context.inconsistent_location_path_count);
         render_location_context_cells(
             out,
             "Observed distance",
@@ -80,7 +80,7 @@ pub(in super::super) fn render_observed_path_context(
             .iter()
             .map(|row| row.location_context.inconsistent_location_path_count)
             .sum::<usize>();
-        write_html!(out, "<p class=\"empty collapsed-empty-strata\">No located paired paths in {} of {} comparison strata: {}. Location unavailable remains separate ({} missing, {} inconsistent).</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable), missing, inconsistent);
+        write_html!(out, "<p class=\"empty collapsed-empty-strata\">No located matched paths in {} of {} comparison groups: {}. Location unavailable remains separate ({} missing, {} inconsistent).</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable), missing, inconsistent);
     }
 }
 pub(in super::super) fn render_location_context_cells<T: Copy>(
@@ -104,7 +104,7 @@ pub(in super::super) fn render_location_context_cells<T: Copy>(
         write_html!(out, "<div class=\"location-context-cell{}\"><strong>{}</strong><span>{}</span><small>{}</small></div>", class, label(cell.category), location_cell_delta(cell), location_cell_evidence(cell));
     }
     out.push_str("</div><div class=\"table-wrap\"><table class=\"location-context-table\">");
-    write_html!(out, "<caption>{}</caption><thead><tr><th scope=\"col\">Bin or sector</th><th scope=\"col\">Unique located paths</th><th scope=\"col\">Supporting paired rows</th><th scope=\"col\">Median path delta</th><th scope=\"col\">Evidence state</th></tr></thead><tbody>", caption);
+    write_html!(out, "<caption>{}</caption><thead><tr><th scope=\"col\">Bin or sector</th><th scope=\"col\">Unique located paths</th><th scope=\"col\">Supporting matched pairs</th><th scope=\"col\">Median path delta</th><th scope=\"col\">Evidence state</th></tr></thead><tbody>", caption);
     for cell in cells {
         write_html!(
             out,
@@ -151,7 +151,7 @@ pub(in super::super) fn render_location_path_audit(
     out: &mut CheckedHtmlWriter<'_>,
     paths: &[crate::ReportOverviewLocationPath],
 ) {
-    out.push_str("<details class=\"audit-disclosure\"><summary>Review paired-path location aggregate audit</summary><div class=\"disclosure-body\"><div class=\"table-wrap\"><table><caption>One location-status record per paired path; raw left/right values remain below in the paired-row audit.</caption><thead><tr><th scope=\"col\">Remote path</th><th scope=\"col\">Paired rows</th><th scope=\"col\">Median path delta</th><th scope=\"col\">Location status</th><th scope=\"col\">Distance</th><th scope=\"col\">Azimuth</th></tr></thead><tbody>");
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review matched-path location aggregate audit</summary><div class=\"disclosure-body\"><div class=\"table-wrap\"><table><caption>One location-status record per matched path; raw per-antenna values remain below in the matched-pair audit.</caption><thead><tr><th scope=\"col\">Remote path</th><th scope=\"col\">Matched pairs</th><th scope=\"col\">Median path delta</th><th scope=\"col\">Location status</th><th scope=\"col\">Distance</th><th scope=\"col\">Azimuth</th></tr></thead><tbody>");
     for path in paths {
         let status = match path.availability {
             ReportPathLocationAvailability::Available => "Available",
