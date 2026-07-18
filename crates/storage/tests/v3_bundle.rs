@@ -1,16 +1,21 @@
 use std::{collections::BTreeMap, fs, path::Path};
 
 use antennabench_core::{
-    upgrade_v3_bundle_model_to_v5, AcquisitionChannelId, AdapterId, AdapterInput, AnalysisFile,
-    AnalysisStatus, Antenna, AntennasFile, Band, BundleFilesV3, BundleManifestV3, BundleV3Contents,
-    CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3, EventCorrectionActionV3,
-    EventTimeBasisV2, ExperimentMode, MutationMember, OperatorEventPayloadV3, OperatorEventV3,
-    PlanGenerationV2, PlannedSlotV3, Provenance, ProviderId, RecordMetaV3,
-    ReplacementOperatorEventV3, RigRecordV3, ScheduleV3, SessionGoal, SessionLifecycleV2,
-    SessionStateV3, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3,
-    SignalPlanIdV3, SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station,
-    WsprCycleDirection, WsprCycleIntentV3, WsprReadinessBasisV5, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
+    v2::{
+        AcquisitionChannelId, AdapterId, AdapterInput, EventTimeBasisV2, MutationMember,
+        PlanGenerationV2, Provenance, ProviderId, SessionLifecycleV2, SourceId, V2_BUNDLE_SUFFIX,
+    },
+    v3::{
+        BundleFilesV3, BundleManifestV3, BundleV3Contents, CorrectableOperatorEventPayloadV3,
+        CounterbalanceBlockIdV3, EventCorrectionActionV3, OperatorEventPayloadV3, OperatorEventV3,
+        PlannedSlotV3, RecordMetaV3, ReplacementOperatorEventV3, RigRecordV3, ScheduleV3,
+        SessionStateV3, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3,
+        SignalModeV3, SignalPlanIdV3, SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3,
+        WsprCycleDirection, WsprCycleIntentV3,
+    },
+    v5::{upgrade_v3_bundle_model_to_v5, WsprReadinessBasisV5},
+    AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, ExperimentMode, SessionGoal,
+    Station, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{BundleAttachment, BundleStore, BundleStoreError};
 use chrono::{TimeZone, Utc};
@@ -292,7 +297,7 @@ fn schema_v3_and_v4_upgrade_to_v5_without_inventing_command_evidence() {
         assert_eq!(upgraded.manifest.schema_version, SCHEMA_VERSION_V5);
         assert_eq!(
             upgraded.schedule.antenna_control,
-            Some(antennabench_core::AntennaControlPolicyV5::Manual)
+            Some(antennabench_core::v5::AntennaControlPolicyV5::Manual)
         );
         assert!(upgraded
             .rig

@@ -2,16 +2,21 @@
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeMap, sync::Mutex};
 
-use antennabench_core::{
-    upgrade_v2_bundle_model, validate_bundle_report, validate_signal_plan_schedule_v3,
-    AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, BundleDiagnostic,
-    BundleDiagnosticSeverity, BundleFileRole, BundleFilesV2, BundleManifestV2, BundleV2Contents,
-    BundleV3Contents, BundleValidationProfile, ExperimentMode, PlanGenerationV2, PlannedSlot,
-    Schedule, SessionGoal, SessionLifecycleV2, SessionStateV2, SignalCollectionProfileV3,
-    SignalModeV3, Station, WsprCycleDirection, WsprCycleIntentV3, SCHEMA_VERSION_V2,
-};
 #[cfg(test)]
-use antennabench_core::{SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX};
+use antennabench_core::{v2::V2_BUNDLE_SUFFIX, SCHEMA_VERSION_V5};
+use antennabench_core::{
+    v2::{
+        BundleFilesV2, BundleManifestV2, BundleV2Contents, PlanGenerationV2, SessionLifecycleV2,
+        SessionStateV2,
+    },
+    v3::{
+        upgrade_v2_bundle_model, validate_signal_plan_schedule_v3, BundleV3Contents,
+        SignalCollectionProfileV3, SignalModeV3, WsprCycleDirection, WsprCycleIntentV3,
+    },
+    validate_bundle_report, AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band,
+    BundleDiagnostic, BundleDiagnosticSeverity, BundleFileRole, BundleValidationProfile,
+    ExperimentMode, PlannedSlot, Schedule, SessionGoal, Station, SCHEMA_VERSION_V2,
+};
 use antennabench_storage::{BundleStore, LivePersistenceHooks, SystemLivePersistenceHooks};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -1235,7 +1240,7 @@ mod tests {
         draft.antenna_controller = Some(SetupControllerDraft {
             enabled: true,
             arm_for_session: true,
-            invocation: antennabench_core::AntennaControlInvocationPolicyV5::OperatorTriggered,
+            invocation: antennabench_core::v5::AntennaControlInvocationPolicyV5::OperatorTriggered,
             manual_review_required: true,
             profile: crate::antenna_control::ControllerProfileDraft {
                 profile_id: None,
@@ -1284,9 +1289,9 @@ mod tests {
         assert!(matches!(
             pending.bundle.schedule.antenna_control,
             Some(
-                antennabench_core::AntennaControlPolicyV5::CommandControlled {
+                antennabench_core::v5::AntennaControlPolicyV5::CommandControlled {
                     invocation:
-                        antennabench_core::AntennaControlInvocationPolicyV5::OperatorTriggered,
+                        antennabench_core::v5::AntennaControlInvocationPolicyV5::OperatorTriggered,
                     manual_review_required: true,
                 }
             )
@@ -1297,7 +1302,7 @@ mod tests {
         SetupControllerDraft {
             enabled: true,
             arm_for_session: false,
-            invocation: antennabench_core::AntennaControlInvocationPolicyV5::OperatorTriggered,
+            invocation: antennabench_core::v5::AntennaControlInvocationPolicyV5::OperatorTriggered,
             manual_review_required: true,
             profile: crate::antenna_control::ControllerProfileDraft {
                 profile_id: None,
@@ -1328,7 +1333,7 @@ mod tests {
         let state = SetupSessionState::default();
         let mut draft = valid_draft();
         let mut controller = controller_draft();
-        controller.invocation = antennabench_core::AntennaControlInvocationPolicyV5::Automatic;
+        controller.invocation = antennabench_core::v5::AntennaControlInvocationPolicyV5::Automatic;
         controller.manual_review_required = false;
         draft.antenna_controller = Some(controller.clone());
 
@@ -1351,7 +1356,7 @@ mod tests {
         let controller = accepted.plan.unwrap().antenna_controller.unwrap();
         assert_eq!(
             controller.invocation,
-            antennabench_core::AntennaControlInvocationPolicyV5::Automatic
+            antennabench_core::v5::AntennaControlInvocationPolicyV5::Automatic
         );
         assert!(!controller.manual_review_required);
         assert!(controller
@@ -1368,8 +1373,8 @@ mod tests {
                 .schedule
                 .antenna_control,
             Some(
-                antennabench_core::AntennaControlPolicyV5::CommandControlled {
-                    invocation: antennabench_core::AntennaControlInvocationPolicyV5::Automatic,
+                antennabench_core::v5::AntennaControlPolicyV5::CommandControlled {
+                    invocation: antennabench_core::v5::AntennaControlInvocationPolicyV5::Automatic,
                     manual_review_required: false,
                 }
             )
@@ -1394,7 +1399,7 @@ mod tests {
                 "argument" => {
                     controller.profile.switch_command.one_line = format!(
                         "switch {}",
-                        "x".repeat(antennabench_core::COMMAND_ARGUMENT_MAX_BYTES + 1)
+                        "x".repeat(antennabench_core::v5::COMMAND_ARGUMENT_MAX_BYTES + 1)
                     )
                 }
                 _ => unreachable!(),
@@ -1706,7 +1711,7 @@ mod tests {
         assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V5);
         assert_eq!(
             persisted.schedule.antenna_control,
-            Some(antennabench_core::AntennaControlPolicyV5::Manual)
+            Some(antennabench_core::v5::AntennaControlPolicyV5::Manual)
         );
         assert_eq!(persisted.schedule.signal_plans.len(), 1);
         assert_eq!(persisted.schedule.wspr_cycle_intents.len(), 8);

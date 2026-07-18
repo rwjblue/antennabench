@@ -9,8 +9,8 @@ use antennabench_analysis::{
     EvidenceQuality, ObservationExclusionReason, PathDirection,
 };
 use antennabench_core::{
-    AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
-    WsprCycleDirection,
+    v3::WsprCycleDirection, AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource,
+    SessionGoal,
 };
 use chrono::{SecondsFormat, Utc};
 

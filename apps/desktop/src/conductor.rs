@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use antennabench_core::{
-    SessionLifecycleV2, SignalModeV3, SignalStateConfirmationV3, WsprCycleDirection,
+    v2::SessionLifecycleV2,
+    v3::{SignalModeV3, SignalStateConfirmationV3, WsprCycleDirection},
     SCHEMA_VERSION_V4,
 };
 use antennabench_storage::{BundleStore, SystemLivePersistenceHooks};
@@ -236,9 +237,12 @@ mod tests {
     };
 
     use antennabench_core::{
-        reduce_operator_events_v3, AdapterInput, Band, CorrectableOperatorEventPayloadV3,
-        ExperimentMode, OperatorEventPayloadV3, PlannedSlot, SessionLifecycleV2, SignalModeV3,
-        V2_BUNDLE_SUFFIX,
+        v2::{AdapterInput, SessionLifecycleV2, V2_BUNDLE_SUFFIX},
+        v3::{
+            reduce_operator_events_v3, CorrectableOperatorEventPayloadV3, OperatorEventPayloadV3,
+            SignalModeV3,
+        },
+        Band, ExperimentMode, PlannedSlot,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -1188,7 +1192,7 @@ mod tests {
         assert!(!final_bundle.events.iter().any(|event| {
             matches!(
                 &event.payload,
-                antennabench_core::OperatorEventPayloadV3::NoteAdded { note }
+                antennabench_core::v3::OperatorEventPayloadV3::NoteAdded { note }
                     if note.contains("torn crash mutation")
             )
         }));
@@ -1332,12 +1336,12 @@ mod tests {
     #[test]
     fn conflicting_effective_slot_facts_are_conservative() {
         let confirmed =
-            antennabench_core::CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
+            antennabench_core::v2::CorrectableOperatorEventPayloadV2::AntennaStateConfirmed {
                 antenna_label: "A".into(),
                 note: None,
             };
         let missed =
-            antennabench_core::CorrectableOperatorEventPayloadV2::SlotMissed { reason: None };
+            antennabench_core::v2::CorrectableOperatorEventPayloadV2::SlotMissed { reason: None };
 
         assert_eq!(
             super::slot_evidence(&[&confirmed, &missed]),

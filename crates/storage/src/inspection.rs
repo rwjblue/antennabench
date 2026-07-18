@@ -1,13 +1,13 @@
 use std::{collections::HashSet, path::Path};
 
 use antennabench_core::{
-    codes, validate_bundle_report, AnalysisFile, AntennasFile, BundleContents, BundleDiagnostic,
-    BundleDiagnosticCategory, BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleFileRole,
-    BundleManifest, BundleRecordKind, BundleValidationError, BundleValidationProfile,
-    BundleValidationReport, CurrentBundleContents, ObservationRecord, OperatorEvent,
-    PropagationRecord, RigRecord, Schedule, Station, WsjtXRecord, ALL_TYPED_OPERATIONS,
-    SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
-    WRITE_OPERATIONS,
+    codes, v2::CurrentBundleContents, validate_bundle_report, AnalysisFile, AntennasFile,
+    BundleContents, BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation,
+    BundleDiagnosticSeverity, BundleFileRole, BundleManifest, BundleRecordKind,
+    BundleValidationError, BundleValidationProfile, BundleValidationReport, ObservationRecord,
+    OperatorEvent, PropagationRecord, RigRecord, Schedule, Station, WsjtXRecord,
+    ALL_TYPED_OPERATIONS, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, WRITE_OPERATIONS,
 };
 use serde::{
     de::{DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess, Visitor},

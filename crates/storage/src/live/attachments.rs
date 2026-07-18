@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use antennabench_core::AttachmentReference;
+use antennabench_core::v2::AttachmentReference;
 use sha2::{Digest, Sha256};
 
 use super::{

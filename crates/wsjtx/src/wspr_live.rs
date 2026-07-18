@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use antennabench_core::{
-    AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId,
-    AdapterRecordV2, AttachmentReference, Band, MutationMember, NormalizedRecordKind,
-    NormalizedRecordLink, ObservationKind, ObservationRecordV2, PlannedSlot, Provenance,
-    ProviderId, RecordMetaV2, SourceId, WsprCycleDirection, SCHEMA_VERSION_V2,
+    v2::{
+        AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId,
+        AdapterRecordV2, AttachmentReference, MutationMember, NormalizedRecordKind,
+        NormalizedRecordLink, ObservationRecordV2, Provenance, ProviderId, RecordMetaV2, SourceId,
+    },
+    v3::WsprCycleDirection,
+    Band, ObservationKind, PlannedSlot, SCHEMA_VERSION_V2,
 };
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde_json::Value;

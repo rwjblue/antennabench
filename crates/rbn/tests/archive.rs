@@ -1,6 +1,6 @@
 use std::io::{Cursor, Write};
 
-use antennabench_core::{Band, SignalModeV3};
+use antennabench_core::{v3::SignalModeV3, Band};
 use antennabench_rbn::{
     parse_rbn_csv, parse_rbn_csv_with_limits, parse_rbn_zip, RbnArchiveLimits, RbnImportConfig,
     RbnImportError, RbnRowDisposition, RBN_ARCHIVE_LIMITS,

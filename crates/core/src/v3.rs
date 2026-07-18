@@ -3,9 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::v5_antenna_control::{
-    AntennaControlInvocationV5, AntennaControlPolicyV5, WsprReadinessBasisV5,
-};
+use crate::v5::{AntennaControlInvocationV5, AntennaControlPolicyV5, WsprReadinessBasisV5};
 use crate::{
     AdapterRecordV2, AnalysisFile, AntennasFile, Band, BundleFilesV2, BundleManifestV2,
     BundleV2Contents, CorrectableOperatorEventPayloadV2, CurrentBundleContents, CurrentRecordKind,
@@ -14,6 +12,16 @@ use crate::{
     PropagationRecordV2, Provenance, RecordMetaV2, ReplacementOperatorEventV2, RigRecordV2,
     Schedule, SessionGoal, SessionStateV2, Station, IDENTITY_MAX_BYTES, SCHEMA_VERSION_V2,
     SCHEMA_VERSION_V3,
+};
+
+pub use crate::{
+    operator_events::{
+        reduce_operator_events_v3, EffectiveOperatorEventV3, OperatorEventReductionV3,
+    },
+    wspr::{
+        project_wspr_run_v3, AntennaOccupancyIntervalV3, ArmedWsprCycleV3, WsprRunDiagnosticV3,
+        WsprRunProjectionV3,
+    },
 };
 
 pub type BundleFilesV3 = BundleFilesV2;

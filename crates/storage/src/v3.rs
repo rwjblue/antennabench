@@ -1,13 +1,17 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    codes, project_wspr_run_v3, reduce_operator_events_v3, validate_antenna_control_v5,
-    validate_bundle_report, validate_signal_plan_schedule_v3,
-    validate_signal_state_confirmation_v3, validate_signal_state_event_v3, AdapterInput,
-    BundleManifestV3, BundleV3Contents, BundleValidationProfile, BundleValidationReport,
-    CorrectableOperatorEventPayloadV3, ExperimentMode, OperatorEventPayloadV3, SessionLifecycleV2,
-    SessionStateV3, WsprCycleDirection, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
-    V2_BUNDLE_SUFFIX,
+    codes,
+    v2::{AdapterInput, SessionLifecycleV2, V2_BUNDLE_SUFFIX},
+    v3::{
+        project_wspr_run_v3, reduce_operator_events_v3, validate_signal_plan_schedule_v3,
+        validate_signal_state_confirmation_v3, validate_signal_state_event_v3, BundleManifestV3,
+        BundleV3Contents, CorrectableOperatorEventPayloadV3, OperatorEventPayloadV3,
+        SessionStateV3, WsprCycleDirection,
+    },
+    v5::validate_antenna_control_v5,
+    validate_bundle_report, BundleValidationProfile, BundleValidationReport, ExperimentMode,
+    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 
 use super::{
@@ -382,7 +386,7 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
             || (schema_version >= SCHEMA_VERSION_V5
                 && !matches!(
                     bundle.schedule.antenna_control,
-                    Some(antennabench_core::AntennaControlPolicyV5::Manual)
+                    Some(antennabench_core::v5::AntennaControlPolicyV5::Manual)
                 )))
             && intent.direction.is_none()
         {

@@ -6,10 +6,13 @@ use std::{
 };
 
 use antennabench_core::{
-    validate_bundle_report, validate_lifecycle_transition_v2, validate_machine_identity,
-    validate_operator_event_append_v2, BundleV2Contents, BundleV3Contents, BundleValidationProfile,
-    MutationMember, NormalizedRecordKind, OperatorEventPayloadV2, OperatorEventV2, OperatorEventV3,
-    RecordMetaV2, SessionLifecycleV2, SessionStateV2, SCHEMA_VERSION_V2,
+    v2::{
+        validate_lifecycle_transition_v2, validate_operator_event_append_v2, BundleV2Contents,
+        MutationMember, NormalizedRecordKind, OperatorEventPayloadV2, OperatorEventV2,
+        RecordMetaV2, SessionLifecycleV2, SessionStateV2,
+    },
+    v3::{BundleV3Contents, OperatorEventV3},
+    validate_bundle_report, validate_machine_identity, BundleValidationProfile, SCHEMA_VERSION_V2,
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -624,7 +627,8 @@ pub(super) fn validate_adapter_links(
                 bundle.adapter_records.iter().any(|adapter| {
                     adapter.record_id == *adapter_id
                         && adapter.normalized_records.iter().any(|link| {
-                            link.record_kind == antennabench_core::NormalizedRecordKind::Observation
+                            link.record_kind
+                                == antennabench_core::v2::NormalizedRecordKind::Observation
                                 && link.record_id == observation.observation_id
                         })
                 })
@@ -644,7 +648,7 @@ pub(super) fn validate_adapter_links(
                 bundle.adapter_records.iter().any(|adapter| {
                     adapter.record_id == *adapter_id
                         && adapter.normalized_records.iter().any(|link| {
-                            link.record_kind == antennabench_core::NormalizedRecordKind::Rig
+                            link.record_kind == antennabench_core::v2::NormalizedRecordKind::Rig
                                 && link.record_id == record.record_id
                         })
                 })
@@ -664,7 +668,8 @@ pub(super) fn validate_adapter_links(
                 bundle.adapter_records.iter().any(|adapter| {
                     adapter.record_id == *adapter_id
                         && adapter.normalized_records.iter().any(|link| {
-                            link.record_kind == antennabench_core::NormalizedRecordKind::Propagation
+                            link.record_kind
+                                == antennabench_core::v2::NormalizedRecordKind::Propagation
                                 && link.record_id == record.record_id
                         })
                 })

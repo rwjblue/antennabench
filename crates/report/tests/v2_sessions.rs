@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use antennabench_core::{
-    codes, AlignedSlotStatus, EventTimeBasisV2, MutationMember, OperatorEventPayloadV2,
-    OperatorEventV2,
+    codes,
+    v2::{EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventV2, RecordMetaV2},
+    AlignedSlotStatus,
 };
 use antennabench_report::{build_report, build_report_with_validation, render_standalone_html};
 use antennabench_storage::BundleStore;
@@ -44,7 +45,7 @@ fn v2_conflicting_operator_facts_are_disclosed_and_conservatively_excluded() {
     let mut bundle = baseline_store.read_v2().unwrap();
     let template = bundle.events[0].clone();
     bundle.events.push(OperatorEventV2 {
-        meta: antennabench_core::RecordMetaV2 {
+        meta: RecordMetaV2 {
             mutation: MutationMember {
                 mutation_id: "mutation-conflicting-missed".into(),
                 member_index: 0,

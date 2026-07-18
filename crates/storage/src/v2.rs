@@ -6,12 +6,16 @@ use std::{
 };
 
 use antennabench_core::{
-    codes, validate_bundle_report, validate_machine_identity, AdapterInput, AttachmentReference,
-    BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation, BundleDiagnosticSeverity,
-    BundleFileRole, BundleFilesV2, BundleManifestV2, BundleRecordKind, BundleV2Contents,
-    BundleValidationProfile, BundleValidationReport, CorrectableOperatorEventPayloadV2,
-    SessionLifecycleV2, StreamCheckpointV2, ALL_TYPED_OPERATIONS, ANALYSIS_AND_WRITE_OPERATIONS,
-    SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX, WRITE_OPERATIONS,
+    codes,
+    v2::{
+        AdapterInput, AttachmentReference, BundleFilesV2, BundleManifestV2, BundleV2Contents,
+        CorrectableOperatorEventPayloadV2, SessionLifecycleV2, StreamCheckpointV2,
+        V2_BUNDLE_SUFFIX,
+    },
+    validate_bundle_report, validate_machine_identity, BundleDiagnostic, BundleDiagnosticCategory,
+    BundleDiagnosticLocation, BundleDiagnosticSeverity, BundleFileRole, BundleRecordKind,
+    BundleValidationProfile, BundleValidationReport, ALL_TYPED_OPERATIONS,
+    ANALYSIS_AND_WRITE_OPERATIONS, SCHEMA_VERSION_V2, WRITE_OPERATIONS,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
@@ -253,7 +257,7 @@ impl BundleStore {
     pub(super) fn v2_paths_for_state(
         &self,
         files: &BundleFilesV2,
-        state: &antennabench_core::SessionStateV2,
+        state: &antennabench_core::v2::SessionStateV2,
     ) -> Result<ResolvedBundlePathsV2, BundleStoreError> {
         let mut paths = self.v2_paths(files)?;
         if state.active_plan.generation_id.is_empty()
@@ -846,13 +850,13 @@ fn validate_v2_bundle(
     for adapter in &bundle.adapter_records {
         for link in &adapter.normalized_records {
             let exists = match link.record_kind {
-                antennabench_core::NormalizedRecordKind::Observation => {
+                antennabench_core::v2::NormalizedRecordKind::Observation => {
                     observation_ids.contains(link.record_id.as_str())
                 }
-                antennabench_core::NormalizedRecordKind::Rig => {
+                antennabench_core::v2::NormalizedRecordKind::Rig => {
                     rig_ids.contains(link.record_id.as_str())
                 }
-                antennabench_core::NormalizedRecordKind::Propagation => {
+                antennabench_core::v2::NormalizedRecordKind::Propagation => {
                     propagation_ids.contains(link.record_id.as_str())
                 }
             };
@@ -887,7 +891,7 @@ fn validate_v2_bundle(
         validate_reciprocal_link(
             &bundle.adapter_records,
             &observation.adapter_record_ids,
-            antennabench_core::NormalizedRecordKind::Observation,
+            antennabench_core::v2::NormalizedRecordKind::Observation,
             &observation.observation_id,
             BundleFileRole::Observations,
             &mut diagnostics,
@@ -920,7 +924,7 @@ fn validate_v2_bundle(
         validate_reciprocal_link(
             &bundle.adapter_records,
             &record.adapter_record_ids,
-            antennabench_core::NormalizedRecordKind::Rig,
+            antennabench_core::v2::NormalizedRecordKind::Rig,
             &record.record_id,
             BundleFileRole::Rig,
             &mut diagnostics,
@@ -944,7 +948,7 @@ fn validate_v2_bundle(
         validate_reciprocal_link(
             &bundle.adapter_records,
             &record.adapter_record_ids,
-            antennabench_core::NormalizedRecordKind::Propagation,
+            antennabench_core::v2::NormalizedRecordKind::Propagation,
             &record.record_id,
             BundleFileRole::Propagation,
             &mut diagnostics,
@@ -1041,7 +1045,7 @@ pub(super) fn modeled_duplicate_member_diagnostics(
 }
 
 fn validate_meta(
-    meta: &antennabench_core::RecordMetaV2,
+    meta: &antennabench_core::v2::RecordMetaV2,
     session_id: &str,
     file: BundleFileRole,
     record_id: &str,
@@ -1086,9 +1090,9 @@ fn validate_backlinks(
 }
 
 fn validate_reciprocal_link(
-    adapters: &[antennabench_core::AdapterRecordV2],
+    adapters: &[antennabench_core::v2::AdapterRecordV2],
     adapter_ids: &[String],
-    record_kind: antennabench_core::NormalizedRecordKind,
+    record_kind: antennabench_core::v2::NormalizedRecordKind,
     record_id: &str,
     file: BundleFileRole,
     diagnostics: &mut Vec<BundleDiagnostic>,
@@ -1265,7 +1269,7 @@ fn v2_diagnostic(
 
 fn validate_v2_event_model(bundle: &BundleV2Contents) -> Vec<BundleDiagnostic> {
     let reduction =
-        antennabench_core::reduce_operator_events_v2(SessionLifecycleV2::Ready, &bundle.events);
+        antennabench_core::v2::reduce_operator_events_v2(SessionLifecycleV2::Ready, &bundle.events);
     let mut diagnostics = reduction
         .diagnostics
         .iter()

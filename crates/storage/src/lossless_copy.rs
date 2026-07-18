@@ -6,8 +6,8 @@ use std::{
 use thiserror::Error;
 
 use antennabench_core::{
-    BundleManifestV2, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
-    SCHEMA_VERSION_V5, V1_BUNDLE_SUFFIX,
+    v2::{BundleManifestV2, V1_BUNDLE_SUFFIX},
+    SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 
 use super::{

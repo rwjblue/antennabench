@@ -2,9 +2,14 @@ use std::path::PathBuf;
 
 use antennabench_analysis::{ComparisonAvailability, EvidenceQuality, ObservationCounts};
 use antennabench_core::{
-    normalize_bundle, AlignedSlotStatus, AntennaControlDispositionV5,
-    AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlRoleV5, Band,
-    ExperimentMode, ObservationKind, RecordSource, SessionLifecycleV2, WsprCycleDirection,
+    normalize_bundle,
+    v2::SessionLifecycleV2,
+    v3::WsprCycleDirection,
+    v5::{
+        AntennaControlDispositionV5, AntennaControlOutputEncodingV5, AntennaControlOutputV5,
+        AntennaControlRoleV5,
+    },
+    AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource,
 };
 use antennabench_report::{
     build_report, render_compact_summary_html, render_standalone_html, ReportAdapterEvidence,

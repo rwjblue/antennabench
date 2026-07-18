@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use antennabench_core::{BundleV3Contents, V2_BUNDLE_SUFFIX};
+use antennabench_core::{v2::V2_BUNDLE_SUFFIX, v3::BundleV3Contents};
 use antennabench_storage::{BundleStore, BundleStoreError, LivePersistenceError};
 
 use super::{

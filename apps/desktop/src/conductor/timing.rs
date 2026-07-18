@@ -1,8 +1,8 @@
 //! WSPR timing, readiness, occupancy, intention, and signal-evidence projection rules.
 
 use antennabench_core::{
-    CorrectableOperatorEventPayloadV2, CorrectableOperatorEventPayloadV3, SessionLifecycleV2,
-    WsprCycleDirection,
+    v2::{CorrectableOperatorEventPayloadV2, SessionLifecycleV2},
+    v3::{CorrectableOperatorEventPayloadV3, WsprCycleDirection},
 };
 use antennabench_wsjtx::WSPR_LIVE_INGESTION_GRACE_SECONDS;
 use chrono::{DateTime, Duration, Utc};
@@ -221,7 +221,7 @@ pub(super) fn timing_projection_v3(
     lifecycle: SessionLifecycleV2,
     wspr_live_acquisition_enabled: bool,
     slots: &[ConductorSlotView],
-    next_intent: Option<&antennabench_core::WsprCycleIntentV3>,
+    next_intent: Option<&antennabench_core::v3::WsprCycleIntentV3>,
     switching: bool,
     now: DateTime<Utc>,
 ) -> (

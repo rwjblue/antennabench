@@ -1,11 +1,17 @@
 use antennabench_core::{
-    reduce_operator_events_v3, validate_signal_plan_schedule_v3, validate_signal_state_event_v3,
-    AcquisitionChannelId, AdapterId, Band, CorrectableOperatorEventPayloadV3,
-    CounterbalanceBlockIdV3, EventCorrectionActionV3, EventTimeBasisV2, ExperimentMode,
-    MutationMember, OperatorEventPayloadV3, OperatorEventV3, PlannedSlotV3, Provenance, ProviderId,
-    RecordMetaV3, ReplacementOperatorEventV3, ScheduleV3, SessionGoal, SessionLifecycleV2,
-    SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3,
-    SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3, SourceId, SCHEMA_VERSION_V3,
+    v2::{
+        AcquisitionChannelId, AdapterId, EventTimeBasisV2, MutationMember, Provenance, ProviderId,
+        SessionLifecycleV2, SourceId,
+    },
+    v3::{
+        reduce_operator_events_v3, validate_signal_plan_schedule_v3,
+        validate_signal_state_event_v3, CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3,
+        EventCorrectionActionV3, OperatorEventPayloadV3, OperatorEventV3, PlannedSlotV3,
+        RecordMetaV3, ReplacementOperatorEventV3, ScheduleV3, SignalAllocationV3, SignalCadenceV3,
+        SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3, SignalPlanV3,
+        SignalStateConfirmationV3, SignalVariantIdV3,
+    },
+    Band, ExperimentMode, SessionGoal, SCHEMA_VERSION_V3,
 };
 use chrono::{Duration, TimeZone, Utc};
 

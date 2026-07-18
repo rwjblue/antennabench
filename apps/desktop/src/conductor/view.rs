@@ -3,10 +3,15 @@
 use std::collections::BTreeMap;
 
 use antennabench_core::{
-    project_wspr_run_v3, reduce_operator_events_v2, reduce_operator_events_v3,
-    validate_signal_state_confirmation_v3, BundleV2Contents, BundleV3Contents,
-    CorrectableOperatorEventPayloadV2, CorrectableOperatorEventPayloadV3, OperatorEventPayloadV3,
-    SessionLifecycleV2, SCHEMA_VERSION_V4,
+    v2::{
+        reduce_operator_events_v2, BundleV2Contents, CorrectableOperatorEventPayloadV2,
+        SessionLifecycleV2,
+    },
+    v3::{
+        project_wspr_run_v3, reduce_operator_events_v3, validate_signal_state_confirmation_v3,
+        BundleV3Contents, CorrectableOperatorEventPayloadV3, OperatorEventPayloadV3,
+    },
+    SCHEMA_VERSION_V4,
 };
 use antennabench_storage::{RecoveryDispositionV2, RecoveryReportV2};
 use chrono::{DateTime, Duration, Utc};
@@ -196,9 +201,9 @@ pub(super) fn build_view_v3(
                 readiness,
             } => {
                 let basis = match readiness {
-                    Some(antennabench_core::WsprReadinessBasisV5::CommandVerified { .. }) => {
-                        "Command verification"
-                    }
+                    Some(antennabench_core::v5::WsprReadinessBasisV5::CommandVerified {
+                        ..
+                    }) => "Command verification",
                     _ => "Operator confirmation",
                 };
                 (

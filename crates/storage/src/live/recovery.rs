@@ -4,9 +4,11 @@ use std::{
 };
 
 use antennabench_core::{
-    validate_bundle_report, AntennasFile, AttachmentReference, BundleV2Contents,
-    BundleValidationProfile, PlanGenerationV2, Schedule, SessionLifecycleV2, SessionStateV2,
-    Station, SCHEMA_VERSION_V2,
+    v2::{
+        AttachmentReference, BundleV2Contents, PlanGenerationV2, SessionLifecycleV2, SessionStateV2,
+    },
+    validate_bundle_report, AntennasFile, BundleValidationProfile, Schedule, Station,
+    SCHEMA_VERSION_V2,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

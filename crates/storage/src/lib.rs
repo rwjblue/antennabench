@@ -196,7 +196,7 @@ impl BundleStore {
 
     pub fn read_current(
         &self,
-    ) -> Result<antennabench_core::CurrentBundleContents, BundleStoreError> {
+    ) -> Result<antennabench_core::v2::CurrentBundleContents, BundleStoreError> {
         let (bundle, report) = self.inspect()?.into_current_parts();
         bundle.ok_or_else(|| BundleValidationError::from_report(report).into())
     }

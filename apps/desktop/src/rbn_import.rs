@@ -1,7 +1,7 @@
 use std::{fs, io::Cursor, path::Path};
 
 use antennabench_core::{
-    Band, BundleV3Contents, SessionLifecycleV2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    v2::SessionLifecycleV2, v3::BundleV3Contents, Band, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
     SCHEMA_VERSION_V5,
 };
 use antennabench_rbn::{

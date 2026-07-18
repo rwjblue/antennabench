@@ -6,22 +6,29 @@ use std::{
 };
 
 use antennabench_core::{
-    reduce_operator_events_v3, upgrade_v3_bundle_model_to_v5, AcquisitionChannelId,
-    AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId, AdapterRecordV3, AnalysisFile,
-    AnalysisStatus, Antenna, AntennaControlCommandV5, AntennaControlContextV5,
-    AntennaControlDispositionV5, AntennaControlInvocationPolicyV5, AntennaControlInvocationV5,
-    AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlPolicyV5,
-    AntennaControlRoleV5, AntennasFile, AttachmentReference, Band, BundleFilesV3, BundleManifestV3,
-    BundleV3Contents, CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3,
-    EventCorrectionActionV3, EventTimeBasisV2, ExperimentMode, MutationMember,
-    NormalizedRecordKind, NormalizedRecordLink, ObservationKind, ObservationRecordV3,
-    OperatorEventPayloadV3, OperatorEventV3, PlanGenerationV2, PlannedSlotV3, Provenance,
-    ProviderId, RecordMetaV2, RecordMetaV3, ReplacementOperatorEventV3, RigRecordV3, ScheduleV3,
-    SessionGoal, SessionLifecycleV2, SessionStateV3, SignalAllocationV3, SignalCadenceV3,
-    SignalCollectionProfileV3, SignalModeV3, SignalPlanIdV3, SignalPlanV3,
-    SignalStateConfirmationV3, SignalVariantIdV3, SourceId, Station, WsprCycleDirection,
-    WsprCycleIntentV3, WsprReadinessBasisV5, COMMAND_OUTPUT_MAX_BYTES, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V5, V2_BUNDLE_SUFFIX,
+    v2::{
+        AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId,
+        AttachmentReference, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
+        NormalizedRecordLink, PlanGenerationV2, Provenance, ProviderId, RecordMetaV2,
+        SessionLifecycleV2, SourceId, V2_BUNDLE_SUFFIX,
+    },
+    v3::{
+        reduce_operator_events_v3, AdapterRecordV3, BundleFilesV3, BundleManifestV3,
+        BundleV3Contents, CorrectableOperatorEventPayloadV3, CounterbalanceBlockIdV3,
+        EventCorrectionActionV3, ObservationRecordV3, OperatorEventPayloadV3, OperatorEventV3,
+        PlannedSlotV3, RecordMetaV3, ReplacementOperatorEventV3, RigRecordV3, ScheduleV3,
+        SessionStateV3, SignalAllocationV3, SignalCadenceV3, SignalCollectionProfileV3,
+        SignalModeV3, SignalPlanIdV3, SignalPlanV3, SignalStateConfirmationV3, SignalVariantIdV3,
+        WsprCycleDirection, WsprCycleIntentV3,
+    },
+    v5::{
+        upgrade_v3_bundle_model_to_v5, AntennaControlCommandV5, AntennaControlContextV5,
+        AntennaControlDispositionV5, AntennaControlInvocationPolicyV5, AntennaControlInvocationV5,
+        AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlPolicyV5,
+        AntennaControlRoleV5, WsprReadinessBasisV5, COMMAND_OUTPUT_MAX_BYTES,
+    },
+    AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, ExperimentMode, ObservationKind,
+    SessionGoal, Station, SCHEMA_VERSION_V3, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{
     BundleStore, LiveAntennaControlMutationV5, LiveEventMutationV3, LiveEvidenceMutationV3,
@@ -508,7 +515,7 @@ fn schema_v5_failed_attempt_commits_without_arming_or_occupancy() {
             .is_empty()
     );
     assert!(
-        antennabench_core::project_wspr_run_v3(&reopened.schedule, &reopened.events)
+        antennabench_core::v3::project_wspr_run_v3(&reopened.schedule, &reopened.events)
             .cycles
             .is_empty()
     );

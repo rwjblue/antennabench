@@ -6,14 +6,18 @@ use std::{
 };
 
 use antennabench_core::{
-    upgrade_v2_bundle_model, upgrade_v3_bundle_model_to_v5, validate_machine_identity,
-    AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, BundleContents,
-    BundleFilesV2, BundleManifestV2, BundleV2Contents, BundleValidationError,
-    BundleValidationProfile, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
-    NormalizedRecordLink, ObservationRecordV2, OperatorEventPayloadV2, OperatorEventType,
-    OperatorEventV2, PlanGenerationV2, PropagationRecordV2, Provenance, RecordMeta, RecordMetaV2,
-    RigRecordV2, SessionLifecycleV2, SessionStateV2, StreamCheckpointV2, SCHEMA_VERSION_V1,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, V2_BUNDLE_SUFFIX,
+    v2::{
+        AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, BundleFilesV2,
+        BundleManifestV2, BundleV2Contents, EventTimeBasisV2, MutationMember, NormalizedRecordKind,
+        NormalizedRecordLink, ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2,
+        PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RigRecordV2,
+        SessionLifecycleV2, SessionStateV2, StreamCheckpointV2, V2_BUNDLE_SUFFIX,
+    },
+    v3::upgrade_v2_bundle_model,
+    v5::upgrade_v3_bundle_model_to_v5,
+    validate_machine_identity, BundleContents, BundleValidationError, BundleValidationProfile,
+    OperatorEventType, RecordMeta, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4,
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;

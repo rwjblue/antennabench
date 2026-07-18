@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    project_wspr_run_v3, SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    v2::SessionLifecycleV2, v3::project_wspr_run_v3, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
     SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{

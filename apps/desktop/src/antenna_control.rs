@@ -13,15 +13,21 @@ use std::{
 };
 
 use antennabench_core::{
-    next_wspr_cycle_after_ready, project_wspr_run_v3, AntennaControlCommandV5,
-    AntennaControlContextV5, AntennaControlDispositionV5, AntennaControlInvocationPolicyV5,
-    AntennaControlInvocationV5, AntennaControlOutputEncodingV5, AntennaControlOutputV5,
-    AntennaControlPolicyV5, AntennaControlRoleV5, BundleV3Contents, EventTimeBasisV2,
-    ExperimentMode, MutationMember, OperatorEventPayloadV3, OperatorEventV3, Provenance,
-    RecordMetaV3, RecordSource, RigRecordV3, SessionLifecycleV2, WsprCycleIntentV3,
-    WsprReadinessBasisV5, COMMAND_ARGUMENT_COUNT_MAX, COMMAND_ARGUMENT_MAX_BYTES,
-    COMMAND_INVOCATION_MAX_BYTES, COMMAND_OUTPUT_MAX_BYTES, COMMAND_PROGRAM_MAX_BYTES,
-    COMMAND_TEMPLATE_MAX_BYTES, SCHEMA_VERSION_V5,
+    next_wspr_cycle_after_ready,
+    v2::{EventTimeBasisV2, MutationMember, Provenance, SessionLifecycleV2},
+    v3::{
+        project_wspr_run_v3, BundleV3Contents, OperatorEventPayloadV3, OperatorEventV3,
+        RecordMetaV3, RigRecordV3, WsprCycleIntentV3,
+    },
+    v5::{
+        AntennaControlCommandV5, AntennaControlContextV5, AntennaControlDispositionV5,
+        AntennaControlInvocationPolicyV5, AntennaControlInvocationV5,
+        AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlPolicyV5,
+        AntennaControlRoleV5, WsprReadinessBasisV5, COMMAND_ARGUMENT_COUNT_MAX,
+        COMMAND_ARGUMENT_MAX_BYTES, COMMAND_INVOCATION_MAX_BYTES, COMMAND_OUTPUT_MAX_BYTES,
+        COMMAND_PROGRAM_MAX_BYTES, COMMAND_TEMPLATE_MAX_BYTES,
+    },
+    ExperimentMode, RecordSource, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{BundleStore, LiveAntennaControlMutationV5, SystemLivePersistenceHooks};
 use base64::Engine as _;
@@ -293,7 +299,7 @@ pub(crate) mod tests {
             antenna: "Dipole".into(),
             target: "relay-a".into(),
             mode: ExperimentMode::TxFocused,
-            direction: antennabench_core::WsprCycleDirection::Transmit,
+            direction: antennabench_core::v3::WsprCycleDirection::Transmit,
             band: antennabench_core::Band::M20,
             frequency_hz: Some(14_095_600),
             sequence: 1,

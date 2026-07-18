@@ -8,13 +8,19 @@ use std::{
 
 use antennabench_analysis::AnalysisError;
 use antennabench_core::{
-    normalize_bundle, project_wspr_run_v3, reduce_operator_events_v2, reduce_operator_events_v3,
-    AdapterDisposition, AdapterInput, AdapterRecordV2, Band, BundleContents, BundleV3Contents,
-    BundleValidationError, BundleValidationReport, CorrectableOperatorEventPayloadV2,
-    CorrectableOperatorEventPayloadV3, EventCorrectionActionV2, EventCorrectionActionV3,
-    OperatorEventPayloadV2, OperatorEventPayloadV3, SessionLifecycleV2, WsprReadinessBasisV5,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, V1_BUNDLE_SUFFIX,
-    V2_BUNDLE_SUFFIX,
+    normalize_bundle,
+    v2::{
+        reduce_operator_events_v2, AdapterDisposition, AdapterInput, AdapterRecordV2,
+        CorrectableOperatorEventPayloadV2, EventCorrectionActionV2, OperatorEventPayloadV2,
+        SessionLifecycleV2, V1_BUNDLE_SUFFIX, V2_BUNDLE_SUFFIX,
+    },
+    v3::{
+        project_wspr_run_v3, reduce_operator_events_v3, BundleV3Contents,
+        CorrectableOperatorEventPayloadV3, EventCorrectionActionV3, OperatorEventPayloadV3,
+    },
+    v5::WsprReadinessBasisV5,
+    Band, BundleContents, BundleValidationError, BundleValidationReport, SCHEMA_VERSION_V2,
+    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_compact_summary_html, render_standalone_html,

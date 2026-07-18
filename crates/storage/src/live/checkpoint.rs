@@ -16,8 +16,8 @@ use crate::{
     BundleStore, BundleStoreError,
 };
 use antennabench_core::{
-    AnalysisFile, BundleManifestV2, BundleV2Contents, SessionStateV2, StreamCheckpointV2,
-    SCHEMA_VERSION_V2,
+    v2::{BundleManifestV2, BundleV2Contents, SessionStateV2, StreamCheckpointV2},
+    AnalysisFile, SCHEMA_VERSION_V2,
 };
 
 pub(super) const CHECKPOINT_TEMP: &str = ".session-state.next.json";

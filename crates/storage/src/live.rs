@@ -7,13 +7,19 @@ use std::{
 };
 
 use antennabench_core::{
-    reduce_operator_events_v3, validate_bundle_report, validate_machine_identity, AdapterRecordV2,
-    AntennasFile, AttachmentReference, BundleManifestV2, BundleV2Contents, BundleV3Contents,
-    BundleValidationProfile, EventTimeBasisV2, MutationMember, ObservationRecordV2,
-    OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2, OperatorEventV3,
-    PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
-    RigRecordV2, RigRecordV3, Schedule, SessionLifecycleV2, SessionStateV2, Station,
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    v2::{
+        AdapterRecordV2, AttachmentReference, BundleManifestV2, BundleV2Contents, EventTimeBasisV2,
+        MutationMember, ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2,
+        PlanGenerationV2, PropagationRecordV2, Provenance, RecordMetaV2, RigRecordV2,
+        SessionLifecycleV2, SessionStateV2,
+    },
+    v3::{
+        reduce_operator_events_v3, BundleV3Contents, OperatorEventPayloadV3, OperatorEventV3,
+        RecordMetaV3, RigRecordV3,
+    },
+    validate_bundle_report, validate_machine_identity, AntennasFile, BundleValidationProfile,
+    RecordSource, Schedule, Station, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    SCHEMA_VERSION_V5,
 };
 use chrono::{DateTime, Utc};
 use thiserror::Error;
@@ -351,10 +357,10 @@ impl BundleStore {
             .adapter_records
             .iter()
             .filter_map(|record| match &record.input {
-                antennabench_core::AdapterInput::Attachment { attachment } => {
+                antennabench_core::v2::AdapterInput::Attachment { attachment } => {
                     Some((attachment.sha256.clone(), attachment.clone()))
                 }
-                antennabench_core::AdapterInput::Inline { .. } => None,
+                antennabench_core::v2::AdapterInput::Inline { .. } => None,
             })
             .collect::<BTreeMap<_, _>>();
         let mut referenced_attachments = Vec::new();
@@ -1524,7 +1530,7 @@ impl LiveSessionV3 {
         )?;
         validate_v3_evidence(&self.bundle, &mutation)?;
         for record in &mutation.adapter_records {
-            if let antennabench_core::AdapterInput::Attachment { attachment } = &record.input {
+            if let antennabench_core::v2::AdapterInput::Attachment { attachment } = &record.input {
                 self.store.read_attachment(attachment)?;
             }
         }

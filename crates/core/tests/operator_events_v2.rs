@@ -1,9 +1,12 @@
 use antennabench_core::{
-    reduce_operator_events_v2, validate_lifecycle_transition_v2, validate_operator_event_append_v2,
-    CorrectableOperatorEventPayloadV2, EventCorrectionActionV2, EventTimeBasisV2,
-    LifecycleTransitionErrorV2, MutationMember, OperatorEventAppendErrorV2,
-    OperatorEventDiagnosticCodeV2, OperatorEventPayloadV2, OperatorEventV2, Provenance,
-    RecordMetaV2, RecordSource, ReplacementOperatorEventV2, SessionLifecycleV2, SCHEMA_VERSION_V2,
+    v2::{
+        reduce_operator_events_v2, validate_lifecycle_transition_v2,
+        validate_operator_event_append_v2, CorrectableOperatorEventPayloadV2,
+        EventCorrectionActionV2, EventTimeBasisV2, LifecycleTransitionErrorV2, MutationMember,
+        OperatorEventAppendErrorV2, OperatorEventDiagnosticCodeV2, OperatorEventPayloadV2,
+        OperatorEventV2, Provenance, RecordMetaV2, ReplacementOperatorEventV2, SessionLifecycleV2,
+    },
+    RecordSource, SCHEMA_VERSION_V2,
 };
 use chrono::{TimeZone, Utc};
 

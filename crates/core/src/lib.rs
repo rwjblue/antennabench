@@ -4,23 +4,49 @@ mod model;
 pub mod normalization;
 mod operator_events;
 mod semantics;
-mod v2;
-mod v3;
-mod v5_antenna_control;
+pub mod v2;
+pub mod v3;
+#[path = "v5_antenna_control.rs"]
+pub mod v5;
 mod validation;
-pub mod wspr;
+mod wspr;
 
-pub use alignment::*;
-pub use diagnostics::*;
-pub use model::*;
-pub use normalization::*;
-pub use operator_events::*;
-pub use semantics::*;
-pub use v2::*;
-pub use v3::*;
-pub use v5_antenna_control::*;
-pub use validation::*;
-pub use wspr::*;
+pub use alignment::{
+    align_schedule_slots, apply_slot_assignments, AlignedSlot, AlignedSlotStatus,
+    ObservationSlotAssignment, ScheduleSlotAlignment, SlotAlignmentPolicy, SlotAssignmentReason,
+};
+pub use diagnostics::{
+    codes, BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation,
+    BundleDiagnosticSeverity, BundleRecordKind, BundleValidationProfile, BundleValidationReport,
+    ALL_TYPED_OPERATIONS, ANALYSIS_AND_WRITE_OPERATIONS, WRITE_OPERATIONS,
+};
+pub use model::{
+    AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, BundleContents, BundleFiles,
+    BundleManifest, ExperimentMode, ObservationKind, ObservationRecord, OperatorEvent,
+    OperatorEventType, PlannedSlot, PropagationRecord, RecordMeta, RecordSource, RigRecord,
+    Schedule, SessionGoal, Station, WsjtXRecord,
+};
+pub use normalization::{annotate_bundle_observations, normalize_bundle};
+pub use semantics::{
+    validate_machine_identity, MachineIdentityError, ANTENNA_LABEL_MAX_BYTES, MACHINE_ID_MAX_BYTES,
+};
+pub use validation::{
+    validate_bundle, validate_bundle_report, AlignmentAnnotationField, BundleFileRole,
+    BundleIdKind, BundleValidationError, BundleValidationIssue,
+};
+pub use wspr::{
+    is_wspr_cycle_start, next_wspr_cycle_after_ready, next_wspr_cycle_at_or_after,
+    WsprCycleTimingError, WsprCycleWindow, WSPR_CYCLE_SECONDS, WSPR_NOMINAL_START_OFFSET_SECONDS,
+    WSPR_SYMBOL_COUNT, WSPR_SYMBOL_DURATION_DENOMINATOR, WSPR_SYMBOL_DURATION_NUMERATOR,
+    WSPR_TRANSMISSION_MILLISECONDS,
+};
+
+// Keep implementation modules decoupled while the public API requires callers
+// to name the version owner explicitly.
+pub(crate) use operator_events::*;
+pub(crate) use semantics::semantic_diagnostics;
+pub(crate) use v2::*;
+pub(crate) use v3::*;
 
 /// Schema used by legacy adapter APIs.
 pub const SCHEMA_VERSION: u16 = SCHEMA_VERSION_V1;

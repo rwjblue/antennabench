@@ -10,6 +10,12 @@ use crate::{
     WsjtXRecord, SCHEMA_VERSION_V2,
 };
 
+pub use crate::operator_events::{
+    reduce_operator_events_v2, validate_lifecycle_transition_v2, validate_operator_event_append_v2,
+    EffectiveOperatorEventV2, LifecycleTransitionErrorV2, OperatorEventAppendErrorV2,
+    OperatorEventDiagnosticCodeV2, OperatorEventDiagnosticV2, OperatorEventReductionV2,
+};
+
 pub const V1_BUNDLE_SUFFIX: &str = ".session.wsprabundle";
 pub const V2_BUNDLE_SUFFIX: &str = ".session.antennabundle";
 pub const IDENTITY_MAX_BYTES: usize = 128;

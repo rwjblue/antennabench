@@ -1,6 +1,6 @@
 use antennabench_core::{
-    AcquisitionChannelId, AdapterId, Provenance, ProviderId, RecordSource, SourceId,
-    IDENTITY_MAX_BYTES,
+    v2::{AcquisitionChannelId, AdapterId, Provenance, ProviderId, SourceId, IDENTITY_MAX_BYTES},
+    RecordSource,
 };
 
 #[test]

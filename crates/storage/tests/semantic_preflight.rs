@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use antennabench_core::{codes, BundleValidationProfile, V2_BUNDLE_SUFFIX};
+use antennabench_core::{codes, v2::V2_BUNDLE_SUFFIX, BundleValidationProfile};
 use antennabench_storage::{BundleStore, BundleStoreError};
 
 fn fixture_roots() -> Vec<PathBuf> {

@@ -1,5 +1,6 @@
 use antennabench_core::{
-    AdapterDisposition, AdapterInput, AttachmentReference, Band, ObservationKind,
+    v2::{AdapterDisposition, AdapterInput, AttachmentReference},
+    Band, ObservationKind,
 };
 use antennabench_rbn::{
     parse_rbn_csv, prepare_rbn_import, RbnImportConfig, RbnImportPreparationConfig, RBN_ADAPTER_ID,

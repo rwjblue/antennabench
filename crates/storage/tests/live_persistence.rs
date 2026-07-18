@@ -7,9 +7,12 @@ use std::{
 };
 
 use antennabench_core::{
-    AdapterInput, EventTimeBasisV2, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
-    OperatorEventPayloadV2, OperatorEventV2, Provenance, RecordMetaV2, RecordSource,
-    SessionLifecycleV2, SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
+    v2::{
+        AdapterInput, EventTimeBasisV2, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
+        OperatorEventPayloadV2, OperatorEventV2, Provenance, RecordMetaV2, SessionLifecycleV2,
+        V2_BUNDLE_SUFFIX,
+    },
+    RecordSource, SCHEMA_VERSION_V2,
 };
 use antennabench_storage::{
     BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError, LivePersistenceHooks,

@@ -1,9 +1,13 @@
 use std::collections::BTreeSet;
 
 use antennabench_core::{
-    upgrade_v2_bundle_model, Antenna, Band, BundleV2Contents, BundleV3Contents,
-    CounterbalanceBlockIdV3, ExperimentMode, SignalAllocationV3, SignalCadenceV3, SignalPlanIdV3,
-    SignalPlanV3, SignalVariantIdV3, WsprCycleDirection, WsprCycleIntentV3, SCHEMA_VERSION_V5,
+    v2::BundleV2Contents,
+    v3::{
+        upgrade_v2_bundle_model, BundleV3Contents, CounterbalanceBlockIdV3, SignalAllocationV3,
+        SignalCadenceV3, SignalPlanIdV3, SignalPlanV3, SignalVariantIdV3, WsprCycleDirection,
+        WsprCycleIntentV3,
+    },
+    Antenna, Band, ExperimentMode, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::LivePersistenceHooks;
 
@@ -73,7 +77,7 @@ pub(super) fn use_latest_schema(bundle: &mut BundleV3Contents) {
     bundle.station.schema_version = SCHEMA_VERSION_V5;
     bundle.antennas.schema_version = SCHEMA_VERSION_V5;
     bundle.schedule.schema_version = SCHEMA_VERSION_V5;
-    bundle.schedule.antenna_control = Some(antennabench_core::AntennaControlPolicyV5::Manual);
+    bundle.schedule.antenna_control = Some(antennabench_core::v5::AntennaControlPolicyV5::Manual);
     bundle.analysis.schema_version = SCHEMA_VERSION_V5;
 }
 

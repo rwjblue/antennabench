@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use antennabench_core::{BundleV3Contents, V2_BUNDLE_SUFFIX};
+use antennabench_core::{v2::V2_BUNDLE_SUFFIX, v3::BundleV3Contents};
 use tauri::{AppHandle, Manager};
 
 use super::{SessionErrorKind, SessionErrorPayload, StationPreferences};

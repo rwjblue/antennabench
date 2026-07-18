@@ -1,12 +1,19 @@
 //! Typed operator-action validation and explicit schema-v2/v3/v5 event translation.
 
 use antennabench_core::{
-    next_wspr_cycle_after_ready, CorrectableOperatorEventPayloadV2,
-    CorrectableOperatorEventPayloadV3, EventCorrectionActionV2, EventCorrectionActionV3,
-    EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
-    OperatorEventV2, OperatorEventV3, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
-    ReplacementOperatorEventV2, ReplacementOperatorEventV3, SignalModeV3,
-    SignalStateConfirmationV3, WsprReadinessBasisV5, SCHEMA_VERSION_V2, SCHEMA_VERSION_V5,
+    next_wspr_cycle_after_ready,
+    v2::{
+        CorrectableOperatorEventPayloadV2, EventCorrectionActionV2, EventTimeBasisV2,
+        MutationMember, OperatorEventPayloadV2, OperatorEventV2, Provenance, RecordMetaV2,
+        ReplacementOperatorEventV2,
+    },
+    v3::{
+        CorrectableOperatorEventPayloadV3, EventCorrectionActionV3, OperatorEventPayloadV3,
+        OperatorEventV3, RecordMetaV3, ReplacementOperatorEventV3, SignalModeV3,
+        SignalStateConfirmationV3,
+    },
+    v5::WsprReadinessBasisV5,
+    RecordSource, SCHEMA_VERSION_V2, SCHEMA_VERSION_V5,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;

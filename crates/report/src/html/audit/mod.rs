@@ -5,7 +5,7 @@ use antennabench_analysis::{
     ComparisonStratum, ComparisonTimelineRow, EligibilityExclusionCategory, EligibilityScope,
     PairedObservationRow, SolarEndpointContext, SolarLightState, SolarPositionResult,
 };
-use antennabench_core::{SessionLifecycleV2, WsprCycleDirection};
+use antennabench_core::{v2::SessionLifecycleV2, v3::WsprCycleDirection};
 
 use super::{evidence::evidence_summary, shared::*};
 

@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 
 use antennabench_core::{
-    AdapterDisposition, AttachmentReference, Band, ObservationKind, PlannedSlot, WsprCycleDirection,
+    v2::{AdapterDisposition, AttachmentReference},
+    v3::WsprCycleDirection,
+    Band, ObservationKind, PlannedSlot,
 };
 use antennabench_wsjtx::{
     derive_wspr_live_query_scope, latest_due_wspr_live_acquisition,
@@ -696,7 +698,7 @@ fn automatic_acquisition_uses_https_provenance_without_changing_normalization() 
         ObservationKind::ImportedSpot
     );
     let summary = match &prepared.adapter_records[1].input {
-        antennabench_core::AdapterInput::Inline { data, .. } => {
+        antennabench_core::v2::AdapterInput::Inline { data, .. } => {
             serde_json::from_str::<Value>(data).unwrap()
         }
         _ => panic!("summary must be inline"),

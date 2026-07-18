@@ -8,7 +8,7 @@ use std::{
     sync::Mutex,
 };
 
-use antennabench_core::V2_BUNDLE_SUFFIX;
+use antennabench_core::v2::V2_BUNDLE_SUFFIX;
 use antennabench_storage::LivePersistenceError;
 use chrono::{DateTime, Utc};
 

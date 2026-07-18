@@ -112,7 +112,7 @@ pub(super) fn load_snapshot(
 }
 
 pub(super) fn report_snapshot(
-    bundle: &antennabench_core::BundleV2Contents,
+    bundle: &antennabench_core::v2::BundleV2Contents,
 ) -> ReportSnapshotContext {
     let adapter = report_adapter_evidence(&bundle.adapter_records);
     let lifecycle_events = bundle
@@ -291,7 +291,7 @@ pub(super) fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotCon
 }
 
 pub(super) fn project_operator_events_v2(
-    events: &[antennabench_core::OperatorEventV2],
+    events: &[antennabench_core::v2::OperatorEventV2],
 ) -> Vec<ReportOperatorEvent> {
     let rejected = reduce_operator_events_v2(SessionLifecycleV2::Ready, events)
         .diagnostics
@@ -418,7 +418,7 @@ pub(super) fn project_operator_events_v2(
 }
 
 pub(super) fn project_operator_events_v3(
-    events: &[antennabench_core::OperatorEventV3],
+    events: &[antennabench_core::v3::OperatorEventV3],
 ) -> Vec<ReportOperatorEvent> {
     let rejected = reduce_operator_events_v3(SessionLifecycleV2::Ready, events)
         .diagnostics

@@ -5,11 +5,17 @@ use std::{
 };
 
 use antennabench_core::{
-    project_wspr_run_v3, reduce_operator_events_v2, AdapterInput, AdapterRecordV2,
-    BundleV2Contents, BundleV3Contents, CorrectableOperatorEventPayloadV2, EventTimeBasisV2,
-    MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3, OperatorEventV2,
-    OperatorEventV3, PlannedSlot, Provenance, RecordMetaV2, RecordMetaV3, RecordSource,
-    SessionLifecycleV2, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    v2::{
+        reduce_operator_events_v2, AdapterInput, AdapterRecordV2, BundleV2Contents,
+        CorrectableOperatorEventPayloadV2, EventTimeBasisV2, MutationMember,
+        OperatorEventPayloadV2, OperatorEventV2, Provenance, RecordMetaV2, SessionLifecycleV2,
+    },
+    v3::{
+        project_wspr_run_v3, BundleV3Contents, OperatorEventPayloadV3, OperatorEventV3,
+        RecordMetaV3,
+    },
+    PlannedSlot, RecordSource, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -752,8 +758,9 @@ mod tests {
     use std::{cell::Cell, fs, path::Path};
 
     use antennabench_core::{
-        EventTimeBasisV2, MutationMember, OperatorEventPayloadV3, OperatorEventV3, Provenance,
-        RecordMetaV3, RecordSource, SessionLifecycleV2, WsprCycleDirection,
+        v2::{EventTimeBasisV2, MutationMember, Provenance, SessionLifecycleV2},
+        v3::{OperatorEventPayloadV3, OperatorEventV3, RecordMetaV3, WsprCycleDirection},
+        RecordSource,
     };
     use antennabench_storage::{BundleStore, LiveEventMutationV3};
     use antennabench_wsjtx::{
@@ -840,7 +847,9 @@ mod tests {
                     OperatorEventPayloadV3::WsprCycleArmed {
                         antenna_label: intent.antenna_label.clone(),
                         cycle_starts_at,
-                        readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
+                        readiness: Some(
+                            antennabench_core::v5::WsprReadinessBasisV5::OperatorConfirmed,
+                        ),
                     },
                 )
             },
@@ -916,7 +925,7 @@ mod tests {
                             antenna_label: intent.antenna_label.clone(),
                             cycle_starts_at,
                             readiness: Some(
-                                antennabench_core::WsprReadinessBasisV5::OperatorConfirmed,
+                                antennabench_core::v5::WsprReadinessBasisV5::OperatorConfirmed,
                             ),
                         },
                     )

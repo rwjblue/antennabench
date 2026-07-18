@@ -4,8 +4,12 @@ use std::{
 };
 
 use antennabench_core::{
-    codes, AdapterDisposition, AdapterInput, BundleManifestV2, OperatorEventPayloadV2,
-    SCHEMA_VERSION_V2, V2_BUNDLE_SUFFIX,
+    codes,
+    v2::{
+        AdapterDisposition, AdapterInput, BundleManifestV2, OperatorEventPayloadV2,
+        V2_BUNDLE_SUFFIX,
+    },
+    SCHEMA_VERSION_V2,
 };
 use antennabench_storage::{BundleAttachment, BundleStore, BundleStoreError};
 

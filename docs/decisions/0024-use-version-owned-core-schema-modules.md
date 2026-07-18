@@ -40,7 +40,7 @@ surface:
 | Option | Rust churn estimate | Resulting guardrail |
 | --- | --- | --- |
 | A: explicit flat re-exports | One core file; replace 11 globs with a list covering 169 public declarations; no consumer import edits | Reviewable root, but every future version still expands it |
-| B: version-owned modules | 105 version-owned public symbols occur in 54 other Rust files, representing 545 distinct symbol/file references, plus the core facade | Version ownership is visible at every import and future versions cannot enter the root accidentally |
+| B: version-owned modules | 110 version-owned public symbols occur in 54 other Rust files, representing 545 distinct symbol/file references, plus the core facade | Version ownership is visible at every import and future versions cannot enter the root accidentally |
 | C: document current globs | No Rust files; documentation only | No new guardrail against collisions or accidental public exports |
 
 The Option B count includes 23 desktop files, 16 storage files, six report

@@ -3,7 +3,7 @@ use std::{
     io::{Read, Seek},
 };
 
-use antennabench_core::{Band, SignalModeV3};
+use antennabench_core::{v3::SignalModeV3, Band};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

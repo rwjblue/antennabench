@@ -1,8 +1,9 @@
 use std::{sync::atomic::Ordering, thread, time::Duration as StdDuration};
 
 use antennabench_core::{
-    project_wspr_run_v3, AntennaControlInvocationPolicyV5, AntennaControlPolicyV5,
-    AntennaControlRoleV5, SessionLifecycleV2,
+    v2::SessionLifecycleV2,
+    v3::project_wspr_run_v3,
+    v5::{AntennaControlInvocationPolicyV5, AntennaControlPolicyV5, AntennaControlRoleV5},
 };
 use antennabench_storage::{BundleStore, LiveAntennaControlMutationV5, SystemLivePersistenceHooks};
 use chrono::Utc;
@@ -317,7 +318,7 @@ fn persist_attempt(
     verification_record_id: Option<String>,
     ready_at: Option<chrono::DateTime<Utc>>,
     mutation_id: String,
-    rig_records: Vec<antennabench_core::RigRecordV3>,
+    rig_records: Vec<antennabench_core::v3::RigRecordV3>,
 ) -> Result<(), SessionErrorPayload> {
     let active_state = app.state::<ActiveSessionState>();
     with_foreground_operation(active_state.inner(), || {
@@ -425,7 +426,7 @@ fn controller_context(
 }
 
 fn committed_attempt(
-    bundle: &antennabench_core::BundleV3Contents,
+    bundle: &antennabench_core::v3::BundleV3Contents,
     intent_id: &str,
 ) -> Option<ControllerAttemptSummary> {
     let switch_record = bundle.rig.iter().rev().find(|record| {
@@ -555,9 +556,12 @@ mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
     use antennabench_core::{
-        AntennaControlCommandV5, AntennaControlDispositionV5, AntennaControlInvocationV5,
-        AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlRoleV5,
-        OperatorEventPayloadV3, WsprReadinessBasisV5,
+        v3::OperatorEventPayloadV3,
+        v5::{
+            AntennaControlCommandV5, AntennaControlDispositionV5, AntennaControlInvocationV5,
+            AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlRoleV5,
+            WsprReadinessBasisV5,
+        },
     };
     use antennabench_storage::BundleStore;
     use chrono::{TimeZone, Utc};
@@ -566,8 +570,8 @@ mod tests {
     use crate::{open_session::ActiveSessionState, setup::create_e2e_session};
 
     fn invocation(
-        bundle: &antennabench_core::BundleV3Contents,
-        intent: &antennabench_core::WsprCycleIntentV3,
+        bundle: &antennabench_core::v3::BundleV3Contents,
+        intent: &antennabench_core::v3::WsprCycleIntentV3,
         role: AntennaControlRoleV5,
         completed_at: chrono::DateTime<Utc>,
         disposition: AntennaControlDispositionV5,
@@ -600,7 +604,7 @@ mod tests {
         }
     }
 
-    fn bundle() -> (tempfile::TempDir, antennabench_core::BundleV3Contents) {
+    fn bundle() -> (tempfile::TempDir, antennabench_core::v3::BundleV3Contents) {
         let root = tempfile::tempdir().unwrap();
         let active = ActiveSessionState::default();
         let created = create_e2e_session(root.path(), &active);

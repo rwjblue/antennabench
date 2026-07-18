@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
 
 use antennabench_core::{
-    AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId,
-    AdapterRecordV3, AttachmentReference, MutationMember, NormalizedRecordKind,
-    NormalizedRecordLink, ObservationKind, ObservationRecordV3, Provenance, ProviderId,
-    RecordMetaV2, SourceId, SCHEMA_VERSION_V3,
+    v2::{
+        AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId,
+        AttachmentReference, MutationMember, NormalizedRecordKind, NormalizedRecordLink,
+        Provenance, ProviderId, RecordMetaV2, SourceId,
+    },
+    v3::{AdapterRecordV3, ObservationRecordV3},
+    ObservationKind, SCHEMA_VERSION_V3,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -355,8 +358,8 @@ fn rbn_observation(
         frequency_hz: Some(spot.frequency_hz),
         mode: Some(
             match spot.mode {
-                antennabench_core::SignalModeV3::Cw => "CW",
-                antennabench_core::SignalModeV3::Rtty => "RTTY",
+                antennabench_core::v3::SignalModeV3::Cw => "CW",
+                antennabench_core::v3::SignalModeV3::Rtty => "RTTY",
             }
             .into(),
         ),

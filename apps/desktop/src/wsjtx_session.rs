@@ -11,11 +11,15 @@ use std::{
 };
 
 use antennabench_core::{
-    annotate_bundle_observations, project_wspr_run_v3, AdapterDisposition, AdapterInput,
-    AdapterReasonId, AdapterRecordV2, Band, BundleContents, BundleV2Contents, BundleV3Contents,
-    MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecord,
-    ObservationRecordV2, Provenance, RecordMetaV2, RecordSource, SessionLifecycleV2,
-    WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    annotate_bundle_observations,
+    v2::{
+        AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, BundleV2Contents,
+        MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecordV2,
+        Provenance, RecordMetaV2, SessionLifecycleV2,
+    },
+    v3::{project_wspr_run_v3, BundleV3Contents, WsprCycleDirection},
+    Band, BundleContents, ObservationRecord, RecordSource, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
@@ -1472,10 +1476,12 @@ mod tests {
     };
 
     use antennabench_core::{
-        Band, EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventPayloadV3,
-        OperatorEventV2, OperatorEventV3, Provenance, RecordMetaV3, RecordSource,
-        SessionLifecycleV2, WsprCycleDirection, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-        V2_BUNDLE_SUFFIX, WSPR_TRANSMISSION_MILLISECONDS,
+        v2::{
+            EventTimeBasisV2, MutationMember, OperatorEventPayloadV2, OperatorEventV2, Provenance,
+            SessionLifecycleV2, V2_BUNDLE_SUFFIX,
+        },
+        v3::{OperatorEventPayloadV3, OperatorEventV3, RecordMetaV3, WsprCycleDirection},
+        Band, RecordSource, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, WSPR_TRANSMISSION_MILLISECONDS,
     };
     use antennabench_storage::{
         BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -1590,7 +1596,7 @@ mod tests {
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label: intent.antenna_label,
                 cycle_starts_at,
-                readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
+                readiness: Some(antennabench_core::v5::WsprReadinessBasisV5::OperatorConfirmed),
             },
         ));
         let transmission_ends_at =
@@ -1624,7 +1630,7 @@ mod tests {
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label: second_receive_intent.antenna_label,
                 cycle_starts_at: second_receive_starts_at,
-                readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
+                readiness: Some(antennabench_core::v5::WsprReadinessBasisV5::OperatorConfirmed),
             },
         ));
         let after_second_receive = WsjtxSnapshot::V3(bundle.clone()).current_bundle(
@@ -1649,7 +1655,7 @@ mod tests {
             OperatorEventPayloadV3::WsprCycleArmed {
                 antenna_label: transmit_intent.antenna_label,
                 cycle_starts_at: transmit_starts_at,
-                readiness: Some(antennabench_core::WsprReadinessBasisV5::OperatorConfirmed),
+                readiness: Some(antennabench_core::v5::WsprReadinessBasisV5::OperatorConfirmed),
             },
         ));
         let after_transmit = WsjtxSnapshot::V3(bundle.clone()).current_bundle(
@@ -1946,15 +1952,15 @@ mod tests {
         assert_eq!(bundle.session_state.revision, 6);
         assert_eq!(
             bundle.adapter_records[0].disposition,
-            antennabench_core::AdapterDisposition::Malformed
+            antennabench_core::v2::AdapterDisposition::Malformed
         );
         assert_eq!(
             bundle.adapter_records[1].disposition,
-            antennabench_core::AdapterDisposition::Filtered
+            antennabench_core::v2::AdapterDisposition::Filtered
         );
         assert_eq!(
             bundle.adapter_records[4].disposition,
-            antennabench_core::AdapterDisposition::Duplicate
+            antennabench_core::v2::AdapterDisposition::Duplicate
         );
     }
 
@@ -2016,7 +2022,7 @@ mod tests {
         assert_eq!(bundle.adapter_records.len(), 2);
         assert_eq!(
             bundle.adapter_records[0].disposition,
-            antennabench_core::AdapterDisposition::Filtered
+            antennabench_core::v2::AdapterDisposition::Filtered
         );
         assert_eq!(bundle.adapter_records[1].record_type, "acquisition_gap");
     }

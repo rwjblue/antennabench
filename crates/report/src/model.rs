@@ -6,9 +6,10 @@ use antennabench_analysis::{
     PathDirection, PathOverlapRow, SnrStatistics, SolarContextAnalysis,
 };
 use antennabench_core::{
-    AlignedSlotStatus, Antenna, AntennaControlDispositionV5, AntennaControlOutputV5,
-    AntennaControlRoleV5, Band, ExperimentMode, SessionGoal, SessionLifecycleV2,
-    WsprCycleDirection,
+    v2::SessionLifecycleV2,
+    v3::WsprCycleDirection,
+    v5::{AntennaControlDispositionV5, AntennaControlOutputV5, AntennaControlRoleV5},
+    AlignedSlotStatus, Antenna, Band, ExperimentMode, SessionGoal,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
