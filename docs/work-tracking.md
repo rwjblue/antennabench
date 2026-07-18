@@ -31,20 +31,20 @@ An issue belongs to at most one milestone. Cross-cutting dependencies remain
 linked from issue bodies and tracking checklists. Unmilestoned issues form the
 later backlog; there is no catch-all backlog milestone.
 
-## Milestones
+## Active Milestones
 
 The maintained milestones are outcome-oriented and have no due date unless a
 real scheduling commitment exists:
 
-- `Local Conductor`: validated setup, manual/no-rig operation, bounded live
-  WSJT-X ingestion, coherent reports and exports, and deterministic proof.
 - `Trustworthy macOS Release`: repeatable artifacts, signing and notarization,
   supply-chain gates, repository protections, and release verification.
 - `Field Validation`: feedback policy, report comprehension, maintainer field
   alpha, and external operator beta.
-- `Optional Hosted Sharing`: the optional hosted application, identity,
-  admission, processing, lifecycle, public serving, desktop handoff, and
-  moderation boundary.
+
+The completed `Local Conductor` milestone is closed. The former `Optional
+Hosted Sharing` milestone is also closed: its service implementation issues were
+retired as premature, and unmilestoned issue #10 now holds only the evidence gate
+for a possible future reassessment.
 
 Milestones describe outcomes rather than priority. The roadmap and tracker
 dependency order determine which milestone receives attention now.
@@ -110,6 +110,11 @@ The issue must separate work an agent may prepare from evidence a human must
 provide. Sensitive callsigns, grids, station details, schedules, bundles,
 reports, credentials, or participant notes do not belong in public issue bodies
 unless explicitly sanitized and approved.
+
+Field-test reporters choose what to disclose. Public issues are the durable
+default, while privacy-concerned reporters may contact the maintainer directly.
+The maintained [Field Testing And Feedback](field-testing.md) guide defines the
+minimal public/private handling and deletion policy selected by #76.
 
 ## Completion Evidence
 

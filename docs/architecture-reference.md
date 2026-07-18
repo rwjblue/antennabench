@@ -632,11 +632,10 @@ framing while allowing the same-origin canonical report preview. Ordinary page
 views therefore execute no Worker or client JavaScript and load no third-party
 runtime resource.
 
-The future hosted configuration consumes the same `dist/site` assets and runs
-its preserved Worker first only for `/api/*`. This leaves Astro responsible for
-public pages, reserves `/app` for #73's later authenticated React client, and
-keeps immutable published reports on a separate report origin. Neither site nor
-future hosted state is a dependency of the local desktop workflow.
+The separate `wrangler.jsonc` retains an admission-disabled prototype Worker and
+resource inventory for historical design verification. No authenticated
+`/app`, upload `/api/*`, or user-report origin is planned. Neither the public
+site nor the dormant prototype is a dependency of the local desktop workflow.
 
 [Decision 0023](decisions/0023-use-static-astro-for-the-project-site.md)
 records the deployment, extension, and no-hydration boundaries. The owner-only
@@ -645,55 +644,23 @@ credential, domain, redirect, header, and rollback procedure is in
 
 ## Hosted Trust Boundary
 
-AntennaBench's hosted surface is an optional sharing adapter. Local session
-capture, inspection, analysis, rendering, and export have no hosted dependency.
-An explicit publish operation may send one bounded ZIP transport to a minimal
-Worker API; the service is not a synchronization peer and hosted state never
-replaces the local bundle as evidence.
+Local session capture, inspection, analysis, rendering, and export have no
+hosted dependency. The repository's hosted Worker, R2, D1, Queue, and Container
+configuration is an admission-disabled prototype with fake-service tests; it
+does not define an available or planned service.
 
-The selected service uses static application assets, private R2 quarantine and
-original storage, D1 control metadata, an at-least-once Queue, and the canonical
-Rust pipeline in an egress-disabled scale-to-zero Container. A separate public
-R2 boundary holds only trusted immutable standalone HTML that the visibility
-policy permits to be public. Public views use a custom domain and cache without
-ordinary Worker, D1, Queue, or processor execution.
-
-Hosted ingress applies the fixed `hosted-standard-v1` profile before analysis or
-rendering. It limits the HTTP body, archive entries and paths, compressed and
-expanded bytes, compression ratio, bundle files and records, attachments,
-analysis/report projections, output bytes, and processor time. The hosted
-profile is deliberately lower than local-standard-v1 and may reject a locally
-valid bundle without changing local behavior.
-
-Hosted output is rendered by trusted application code. Bundle-provided HTML,
-JavaScript, templates, and other executable content are never rendering inputs,
-and all operator-authored or imported text is treated as untrusted. Fixed-bundle
-rendering tests and malformed, hostile, oversized, and archive-abuse cases belong
-at this boundary. Exact accepted archive bytes and their entry digests remain
-private and auditable; metadata, diagnostics, report models, and HTML remain
-derived. Write-once objects, idempotency keys, explicit states, reconciliation,
-and cache purge define retry and deletion across services that do not share a
-transaction.
-
-[ADR 0013](decisions/0013-use-an-optional-static-hosted-sharing-adapter.md)
-defines the platform, profile, lifecycle, cost, and verification boundary.
+[ADR 0013](decisions/0013-use-an-optional-static-hosted-sharing-adapter.md) and
 [ADR 0014](decisions/0014-require-account-owned-private-to-unlisted-publishing.md)
-defines the identity and policy boundary. Every upload is owned by one
-verified-email account and begins private. Desktop and web clients share the
-same account and report service while remaining independently complete.
+preserve prior platform and policy research. The implementation issues that
+would have supplied admission, processing, lifecycle, identity, clients, public
+serving, and moderation are closed as not planned. Production resources must
+not be provisioned from those ADRs alone.
 
-Web sessions use narrow secure cookies. Desktop enrollment and recovery occur
-inside the application with email codes; Rust stores a separately revocable
-bearer session through a macOS, Windows, or Linux platform credential-store
-adapter and performs authenticated hosted requests. The webview receives no
-credential or general network authority. A missing or expired hosted session
-never affects local bundle operations.
-
-Only an explicit previewed transition creates immutable unlisted HTML in the
-public bucket. Callsigns have no authorization meaning, raw accepted archives
-remain private without an initial download endpoint, and owner or moderator
-lifecycle actions pass through the authenticated Worker boundary. Unpublishing
-retires the public URL permanently; republishing creates a new immutable URL.
+Issue #10 requires external field evidence and a new owner decision before any
+hosted experiment. A future design must revalidate the smallest useful product,
+client, privacy, abuse, cost, and deletion boundaries. The durable invariant is
+unchanged: a hosted artifact could only be a derived explicit copy and could
+never replace the local bundle or become session evidence.
 
 ## Live WSJT-X Boundary
 

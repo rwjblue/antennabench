@@ -233,8 +233,15 @@ network acquisition. The boundary and RBN collection constraints are selected by
 [Decision 0016](decisions/0016-use-reusable-counterbalanced-transmit-signal-plans.md)
 and tracked in
 [#86](https://github.com/rwjblue/antennabench/issues/86). New WSPR sessions use
-the schema-v4 extension of the same envelope without requiring a controlled
-signal plan; existing schema-v3 sessions remain readable.
+the current schema-v5 envelope, retaining the schema-v4 directed WSPR model
+without requiring a controlled signal plan; existing schema-v3 and schema-v4
+sessions remain readable.
+
+Execution remains manual/keyer-first. AntennaBench may present the typed plan
+and record operator-confirmed actual state, but it does not provide built-in CAT,
+PTT, Morse generation, keyer, waveform, or automatic retry. Any future
+transmitter integration requires new field evidence and a separately approved
+safety boundary.
 
 The active-run surface reads one verified checkpoint revision and derives its
 phase/countdown from a Rust-owned clock plus durable readiness actions. Each
@@ -303,41 +310,19 @@ sleeps.
 
 ## Hosted Sharing
 
-Hosted sharing is an optional extension of the local workflow, not a dependency
-of it. Capture, inspection, analysis, report rendering, standalone HTML export,
-and lossless bundle export remain complete without an account, network
-connection, or hosted service. Publishing is an explicit copy operation for
-convenient sharing; it is not synchronization and hosted state never becomes
-session evidence.
+Hosted sharing is not an active product commitment. Capture, inspection,
+analysis, report rendering, standalone HTML export, and lossless bundle export
+remain the complete product without an account or hosted service. The deployed
+public site is informational and accepts no user uploads.
 
-The selected hosted shape is a static viewer and explanatory site plus a
-minimal publishing API. A bounded ZIP transport is quarantined privately, the
-canonical Rust pipeline validates and renders it in a scale-to-zero isolated
-processor, and trusted immutable report HTML can be served through a cached
-public object boundary. Previously published public reports do not require a
-running application or database lookup for ordinary views.
+The repository retains an admission-disabled Cloudflare prototype and ADRs 0013
+and 0014 as prior design research. The former ZIP admission, Container
+processing, account, lifecycle, cached report, desktop/web client, and moderation
+issues are closed as not planned. Their detailed topology must not be treated as
+approved implementation scope.
 
-Hosted ingress applies its own lower, versioned resource and abuse profile. It
-performs strict structural, semantic, archive/path, and size validation and
-renders entirely with trusted application code. It does not accept or execute
-bundle-provided HTML, JavaScript, CSS, templates, or other executable content;
-operator-authored and imported text remains untrusted data.
-
-The uploaded bundle remains the evidence input. Normalized copies, metadata,
-report pages, charts, and discovery indexes are derived artifacts. Architecture,
-storage, validation, lifecycle, cost, and abuse-control choices follow
-[ADR 0013](decisions/0013-use-an-optional-static-hosted-sharing-adapter.md).
-Identity and publishing policy follow
-[ADR 0014](decisions/0014-require-account-owned-private-to-unlisted-publishing.md).
-Every user upload requires one verified-email account owner and begins private;
-publication is an explicit previewed transition to a non-discoverable unlisted
-URL. Callsigns remain unverified report content and accepted raw archives remain
-private with no hosted download in the first product.
-
-The installed application and website are complete independent clients of the
-same hosted account and report lifecycle. Either can enroll, upload, preview,
-publish, unpublish, and delete without requiring the other. Desktop enrollment
-uses an in-app email code and stores its revocable session through a
-cross-platform credential abstraction owned by Rust; the web client also
-supports passkeys. None of this identity state enters a session bundle or
-changes account-free offline behavior.
+Issue #10 gates any reassessment on signed external-beta evidence that identifies
+a repeated sharing problem local standalone HTML cannot solve. A later
+experiment must choose the smallest useful mechanism and one first client rather
+than assume the former end-to-end account service. Hosted state would remain a
+derived explicit copy, never synchronization or session evidence.

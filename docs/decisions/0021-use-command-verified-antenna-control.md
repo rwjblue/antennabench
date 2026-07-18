@@ -210,8 +210,9 @@ profile, and never accepts executable configuration from portable evidence.
 This decision adds no built-in CAT, Hamlib, serial, TCP, UDP, PTT,
 transmit-enable, frequency, mode, tuner, keyer, or waveform protocol. A wrapper
 may use any of those mechanisms, but AntennaBench's contract is limited to
-direct process execution, bounded audit evidence, and antenna readiness. The
-non-WSPR transmit execution boundary remains owned by issue #32.
+direct process execution, bounded audit evidence, and antenna readiness. Issue
+#32 subsequently selected manual/keyer-first execution and closed without adding
+built-in CAT, PTT, Morse generation, keyer, waveform, or automatic retry.
 
 ## Verification Boundary
 

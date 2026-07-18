@@ -324,8 +324,9 @@ npm run site:dry-build --workspace @antennabench/hosted
 ```
 
 `apps/hosted/wrangler.site.jsonc` serves only `dist/site`. The separate
-`wrangler.jsonc` retains the future `/api/*` Worker and hosted-sharing resources
-while reusing the same static output. Production deployment and owner-only
+`wrangler.jsonc` retains the admission-disabled prototype Worker and resource
+inventory while reusing the same static output. It is not active hosted-product
+scope. Production site deployment and owner-only
 domain/rollback verification are documented in
 [Hosted Site And Foundation Operations](hosted-operations.md).
 

@@ -66,14 +66,15 @@ safe export of evidence already on disk.
 commands and diagnostics that actually ran, but it cannot contain or reactivate
 the local executable profile and antenna mapping that granted process authority.
 
-**Hosted data is a copy, never synchronization.** A future publishing action may
-send an explicit copy for sharing. Hosted state does not become experiment
-evidence and never replaces the local bundle.
+**Hosted data would be a copy, never synchronization.** The checked-in hosted
+foundation is an admission-disabled prototype, not an active product. If a
+future field-evidence-backed sharing experiment sends an explicit copy, hosted
+state still cannot become experiment evidence or replace the local bundle.
 
 **The public site is not the hosted product.** Its site-only Cloudflare profile
-contains no API or processing resources. A later authenticated client may be
-added under `/app` and use the preserved `/api/*` Worker seam, while published
-reports remain on their separate immutable origin.
+contains no API or processing resources. No authenticated client, upload path,
+account service, or public user-report origin is planned. The dormant prototype
+seams remain isolated from the deployed site and local desktop workflow.
 
 See the [Architecture Technical Reference](architecture-reference.md) for
 crate-level APIs, adapter contracts, resource behavior, desktop command

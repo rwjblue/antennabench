@@ -1,12 +1,12 @@
 # Hosted Site And Foundation Operations
 
-The public project site and the future hosted-sharing foundation occupy the same
+The public project site and the dormant hosted-sharing prototype occupy the same
 `apps/hosted` package but have deliberately different deployment boundaries.
 
 - `wrangler.site.jsonc` serves only deterministic Astro output from
   `dist/site`. It has no Worker entry point, API, backend binding, admission
   state, or hosted-sharing resource.
-- `wrangler.jsonc` retains the future admission-disabled `/api/*` Worker and its
+- `wrangler.jsonc` retains the dormant admission-disabled `/api/*` Worker and its
   R2, D1, Queue, Durable Object, and Container declarations. Ordinary project-
   site deployment does not use this configuration.
 
@@ -29,8 +29,8 @@ npm run site:dry-build --workspace @antennabench/hosted
 ```
 
 `mise run hosted:test` runs those checks together with the preserved hosted
-Worker tests, type drift check, strict TypeScript compilation, and future-
-foundation dry builds. The sample check reruns the canonical fixture through the
+Worker tests, type drift check, strict TypeScript compilation, and prototype dry
+builds. The sample check reruns the canonical fixture through the
 trusted Rust report renderer and byte-compares the result with
 `public/sample-report/index.html`. The social-card check validates the committed
 PNG signature and dimensions together with its editable SVG design source.
@@ -55,16 +55,13 @@ Complete these steps before merging the first production-deploying change:
 3. After the first reviewed deployment creates the `antennabench-site` Worker,
    attach `antennabench.com` as its Workers custom domain. Confirm Cloudflare
    provisions the proxied DNS record and an active TLS certificate.
-4. Ensure `www.antennabench.com` has a proxied DNS record, then add a Cloudflare
-   Single Redirect with source wildcard
-   `https://www.antennabench.com/*`, target
-   `https://antennabench.com/${1}`, status **301**, and **Preserve query string**
-   enabled. Do not reverse the canonical direction.
+4. Keep the supported hostname apex-only. Do not provision or advertise a
+   `www.antennabench.com` hostname or redirect unless a later owner decision
+   changes that contract.
 
 Cloudflare's maintained references are
 [Workers GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/),
-[Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/),
-and the [www-to-apex redirect example](https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-www-to-root/).
+[Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
 
 ### Production Deployment And Rollback
 
@@ -86,15 +83,13 @@ change—verify:
 ```bash
 curl --fail --silent --show-error --head https://antennabench.com/
 curl --fail --silent --show-error --head https://antennabench.com/sample-report/
-curl --silent --show-error --head 'https://www.antennabench.com/check/path?source=verify'
 curl --silent --show-error --head https://antennabench.com/api/health
 ```
 
 Confirm the apex responses have valid TLS, CSP, `nosniff`, referrer, framing,
-permissions, and expected cache headers. The `www` request must return 301 with
-location `https://antennabench.com/check/path?source=verify`. The site-only
-`/api/health` request must return the static not-found response; it must not
-expose the future hosted foundation's health inventory. Inspect the home and
+permissions, and expected cache headers. The site-only `/api/health` request
+must return the static not-found response; it must not expose the dormant hosted
+prototype's health inventory. Inspect the home and
 how-it-works pages at narrow and desktop widths, navigate them by keyboard, open
 the canonical report, and review the social card before approving production.
 
@@ -102,13 +97,20 @@ The production URL, domain/TLS checks, redirect result, header result, rollback
 rehearsal, and final visual/copy approval are human-owned completion evidence for
 #139. Never replace them with a test domain or fabricated output.
 
-## Future Hosted-Sharing Foundation
+## Dormant Hosted-Sharing Prototype
 
-The optional hosted application lives in `apps/hosted` and is independent from
-the Rust desktop and local bundle workflow. Admission is fixed off in every
-environment in this foundation. Development and production have no public
-Worker route; preview alone may use its distinct `workers.dev` name for an
-authorized smoke test. No upload or publication endpoint exists yet.
+The hosted-service design in `apps/hosted` is retained as an isolated prototype,
+not an active product commitment. Admission is fixed off in every environment.
+Development and production have no public Worker route; preview alone may use
+its distinct `workers.dev` name for an authorized smoke test. No upload,
+account, processing, or publication endpoint is planned or available. Issue #10
+requires field evidence and a new owner decision before any implementation or
+resource provisioning.
+
+> [!WARNING]
+> The remaining prototype resource, deployment, drain, and teardown procedures
+> are reference material only. Do not create or deploy these resources under the
+> current roadmap.
 
 ## Fixed Environment And Binding Matrix
 
@@ -124,8 +126,8 @@ authorized smoke test. No upload or publication endpoint exists yet.
 
 Every omitted prefix is `antennabench-hosted`. The three R2 roles are separate
 buckets and bindings. Do not enable public development access or an R2 custom
-domain on either private bucket. The `REPORTS_PUBLIC` bucket also stays private
-until the trusted immutable promotion path in #70 is implemented.
+domain on either private bucket. The `REPORTS_PUBLIC` bucket also stays private.
+The former immutable-promotion issue #70 is closed as not planned.
 
 The checked-in D1 UUIDs are recognizable non-resource placeholders so local
 types and fake tests are deterministic. They must be replaced only with the ID

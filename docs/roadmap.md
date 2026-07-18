@@ -1,6 +1,6 @@
 # Roadmap
 
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-18
 
 This page summarizes product outcomes. GitHub Issues contain the implementation
 scope, dependencies, and acceptance criteria for individual changes.
@@ -31,7 +31,8 @@ The next product outcome is an installable preview that operators can use in rea
 antenna sessions. That work includes:
 
 - signing, notarization, publication, and independent release verification;
-- maintainer field sessions and external operator feedback;
+- report-comprehension review, maintainer field sessions, and external operator
+  feedback under the [reporter-directed privacy policy](field-testing.md);
 - clearer in-product guidance and report-comprehension checks; and
 - fixes discovered through real use without weakening the evidence model.
 
@@ -43,10 +44,17 @@ requirement.
 
 Later work may include calibrated uncertainty and carefully validated
 comparative conclusions, broader rig observation or control, live or scheduled
-RBN acquisition, cross-session search when a measured use case justifies it,
-optional private-to-unlisted report sharing, native WSPR operation, and
-mobile-specific workflows.
+RBN acquisition, cross-session search, optional report sharing, native WSPR
+operation, and mobile-specific workflows. These are possibilities, not active
+implementation tracks.
 
 Automatic “winner” language remains out of scope until the project has a
-validated experiment-design and inference contract. Hosted sharing, when added,
-will remain optional and will not replace the local session bundle.
+validated experiment-design and inference contract plus enough real-session
+evidence to justify it.
+
+Rich propagation capture, built-in non-WSPR keying, and the previously designed
+hosted account/publishing service are not planned. Their prior issues and ADRs
+remain research history. Hosted sharing will be reconsidered only after the
+signed external beta identifies a repeated problem that local standalone HTML
+cannot solve; any later experiment will remain optional and will not replace the
+local session bundle.

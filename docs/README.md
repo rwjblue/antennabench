@@ -14,6 +14,8 @@ are intentionally technical.
   WSPR and RBN as antenna-testing tools, with current receiver-population data.
 - [Local Antenna Controller Profiles](antenna-controller-profiles.md) is an
   advanced operator guide for optional local switch and verification programs.
+- [Field Testing And Feedback](field-testing.md) explains how to report public
+  or private findings without requiring station or session evidence.
 - [Examples](../examples/README.md) contains reviewed starting points for optional
   station integrations.
 - [Roadmap](roadmap.md) summarizes what works today, what is next, and what remains

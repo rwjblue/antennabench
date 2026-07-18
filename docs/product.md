@@ -116,7 +116,9 @@ choose to keep or share.
 On macOS, **Use current location** requests one foreground location only after you
 press it. AntennaBench converts that location to a six-character Maidenhead grid,
 stores the grid, and does not retain the raw coordinates. Manual entry remains
-available if permission is denied or the lookup fails.
+available if permission is denied or the lookup fails. The native boundary and
+fallbacks have deterministic coverage; the fresh-install system permission
+prompt remains part of the field-alpha verification.
 
 ## Optional Controller Assistance
 
