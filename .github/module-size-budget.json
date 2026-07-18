@@ -3,7 +3,6 @@
   "default_budget": 1200,
   "allowlist_slack": 10,
   "allowlist": {
-    "apps/desktop/src/antenna_control.rs": 1999,
     "apps/desktop/src/wsjtx_session.rs": 1465,
     "crates/storage/src/live.rs": 2012,
     "crates/storage/src/resource.rs": 1207,

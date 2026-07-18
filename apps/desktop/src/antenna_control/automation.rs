@@ -10,9 +10,12 @@ use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 use super::{
-    attempt_diagnostic, command_verified_event, execute_profile_attempt, invocation_context,
-    next_intent, read_catalog, resolved_app_data_dir, rig_record, AntennaControllerState,
-    AutomationStatus, ControllerAttemptSummary, ControllerProfile, RuntimeAssociation,
+    policy::{
+        command_verified_event, next_intent, AntennaControllerState, AutomationStatus,
+        ControllerAttemptSummary, RuntimeAssociation,
+    },
+    process::{attempt_diagnostic, execute_profile_attempt, invocation_context, rig_record},
+    profiles::{read_catalog, resolved_app_data_dir, ControllerProfile},
 };
 use crate::{
     conductor::live_error_payload,
@@ -614,7 +617,7 @@ mod tests {
             profile_id: "profile-1".into(),
             revision: "revision-1".into(),
             name: "Bench switch".into(),
-            switch_command: super::super::ControllerCommandTemplate {
+            switch_command: super::super::profiles::ControllerCommandTemplate {
                 program_template: "switch".into(),
                 argument_templates: vec!["{target}".into()],
             },
