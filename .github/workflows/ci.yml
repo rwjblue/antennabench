@@ -20,6 +20,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Export stacked branch history
+        run: |
+          git fetch origin \
+            main \
+            agent/module-size-budget \
+            agent/split-report-html \
+            agent/split-open-session
+          git bundle create /tmp/antennabench-stack.bundle \
+            refs/remotes/origin/main \
+            refs/remotes/origin/agent/module-size-budget \
+            refs/remotes/origin/agent/split-report-html \
+            refs/remotes/origin/agent/split-open-session
+
+      - name: Upload stacked branch history
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: antennabench-stack-bundle
+          path: /tmp/antennabench-stack.bundle
+          retention-days: 1
 
       - name: Install Tauri system dependencies
         run: |
