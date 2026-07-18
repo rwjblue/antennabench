@@ -6,22 +6,24 @@ are intentionally technical.
 
 ## Use Or Evaluate AntennaBench
 
+- [Your First Antenna Comparison](quickstart.md) is a start-to-finish walkthrough
+  of one manual WSPR session and its three export choices.
 - [How AntennaBench Works](product.md) walks through planning, running, and
   reviewing an antenna experiment.
-- [Operator Glossary](glossary.md) defines the canonical terms used by the app,
-  reports, and operator guides.
 - [Session Bundles](bundle-format.md) explains the portable experiment record and
   when to export a bundle versus an HTML report.
+- [Operator Glossary](glossary.md) defines the canonical terms used by the app,
+  reports, and operator guides.
 - [Why Not Just Use The Reverse Beacon Network?](why-not-just-use-rbn.md) compares
   WSPR and RBN as antenna-testing tools, with current receiver-population data.
+- [Roadmap](roadmap.md) summarizes what works today, what is next, and what remains
+  exploratory.
 - [Local Antenna Controller Profiles](antenna-controller-profiles.md) is an
   advanced operator guide for optional local switch and verification programs.
 - [Field Testing And Feedback](field-testing.md) explains how to report public
   or private findings without requiring station or session evidence.
 - [Examples](../examples/README.md) contains reviewed starting points for optional
   station integrations.
-- [Roadmap](roadmap.md) summarizes what works today, what is next, and what remains
-  exploratory.
 
 ## Contribute To The Project
 
