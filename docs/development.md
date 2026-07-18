@@ -42,15 +42,33 @@ mise run desktop:e2e         # unattended setup-to-export workflow
 mise run desktop:build       # debug app build without packaging
 mise run hosted:test         # public site plus optional hosted foundation
 mise run desktop:frontend-coverage
+mise run module-size         # ratcheting Rust module-size policy
 mise run desktop:release-test
 mise run desktop:publication-test
 mise run ci                  # complete routine repository checks
 ```
 
-`mise run ci` checks tool pins and supply-chain policy, formatting, Clippy, the
-Rust workspace, frontend behavior, hosted code, and the unattended desktop
-workflow. Tests use synthetic or reduced fixtures and do not require radio
+`mise run ci` checks tool pins and supply-chain policy, the Rust module-size
+ratchet, formatting, Clippy, the Rust workspace, frontend behavior, hosted code,
+and the unattended desktop workflow. Tests use synthetic or reduced fixtures and do not require radio
 hardware, WSJT-X, NOAA, Cloudflare, or another live service.
+
+## Rust Module-Size Budget
+
+`mise run module-size` measures every Rust file under `crates/*/src` and
+`apps/desktop/src`. The measurement stops before the first inline module gated
+by `#[cfg(test)]`, so isolated test-only imports or helpers do not hide
+production code that follows, and the trailing inline test module does not
+consume the production budget. Unlisted files may contain at most 1,200
+measured lines.
+
+Current oversized modules are explicit exceptions in
+`.github/module-size-budget.json`. An exception is a ratchet, not a target: the
+check fails when a file grows beyond its recorded budget and also when the
+recorded budget is more than 10 lines above the measured file. Prefer splitting
+the module; when growth is deliberate, raise the exact entry in review and
+explain why. When a split lands, lower or remove its entry in the same change.
+Frontend `.mjs` files are not covered by this policy.
 
 ## Repository Layout
 

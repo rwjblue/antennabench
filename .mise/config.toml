@@ -3,3 +3,7 @@
 "cargo:tauri-cli" = { version = "2.11.4", locked = true }
 node = "24.18.0"
 rust = { version = "1.96.1", components = ["rustfmt", "clippy"] }
+
+[tasks.module-size]
+description = "Enforce the ratcheting Rust module-size budget"
+run = "bash scripts/run-module-size.sh"
