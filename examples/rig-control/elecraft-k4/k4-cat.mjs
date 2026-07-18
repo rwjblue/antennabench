@@ -265,6 +265,11 @@ async function waitForExpectedState(options, expected) {
 
 export async function switchAntenna(options) {
   const expected = expectedState(options);
+  // Prove that this CAT endpoint can provide authoritative antenna state before
+  // changing hardware. Some bridges forward AN/AR SET commands but do not
+  // implement the corresponding GET commands; switching first would leave the
+  // station changed even though verification can never succeed.
+  await queryState(options, expected, options.timeoutMs);
   await sendCommands(options, setCommands(expected));
   if (options.settleMs > 0) await delay(options.settleMs);
   const actual = await waitForExpectedState(options, expected);

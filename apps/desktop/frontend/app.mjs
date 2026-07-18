@@ -2,6 +2,7 @@ import { createDesktopController } from "./controller.mjs";
 import { collectDesktopElements } from "./elements.mjs";
 import {
   applyStationPreferences,
+  normalizeMaidenheadGrid,
   readEvidenceAction,
   readEvidenceReplacement,
   readSetupDraft,
@@ -20,6 +21,7 @@ import {
 } from "./models.mjs";
 import { initialState } from "./state.mjs";
 import {
+  formatCountdown,
   renderNavigation,
   renderReport,
   renderRun,
@@ -27,7 +29,8 @@ import {
   renderTransfer,
 } from "./renderers.mjs";
 
-function mount(root, browserWindow) {
+export function mount(root, browserWindow) {
+  const rootDocument = root.ownerDocument ?? root;
   let state = initialState(workflowFromHash(browserWindow.location.hash));
   let countdownAnchor = null;
   let countdownAnchorKey = null;
@@ -176,15 +179,15 @@ function mount(root, browserWindow) {
       return () => browserWindow.removeEventListener?.("focus", callback);
     },
     onVisibilityChange(callback) {
-      root.ownerDocument.addEventListener?.("visibilitychange", callback);
-      return () => root.ownerDocument.removeEventListener?.("visibilitychange", callback);
+      rootDocument.addEventListener?.("visibilitychange", callback);
+      return () => rootDocument.removeEventListener?.("visibilitychange", callback);
     },
     onHashChange(callback) {
       const listener = () => callback(workflowFromHash(browserWindow.location.hash));
       browserWindow.addEventListener("hashchange", listener);
       return () => browserWindow.removeEventListener?.("hashchange", listener);
     },
-    isVisible: () => root.ownerDocument.visibilityState !== "hidden",
+    isVisible: () => rootDocument.visibilityState !== "hidden",
     prompt: (message, initial) => browserWindow.prompt(message, initial),
     confirm: (message) => browserWindow.confirm(message),
     getCountdownAnchor: () => countdownAnchor,
@@ -399,6 +402,8 @@ function mount(root, browserWindow) {
   setupForm.addEventListener("input", (event) => {
     if (event.target.matches?.('[data-setup-field="callsign"], [data-setup-field="signalTransmittedCallsign"]')) {
       event.target.value = event.target.value.toUpperCase();
+    } else if (event.target.matches?.('[data-setup-field="grid"]')) {
+      event.target.value = normalizeMaidenheadGrid(event.target.value);
     }
     if (event.target.matches?.("[data-setup-question]")) {
       selectSetupQuestion(setupForm, event.target.value);

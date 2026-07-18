@@ -448,7 +448,7 @@ function conductorActionLabel(action) {
   }
 }
 
-function formatCountdown(seconds) {
+export function formatCountdown(seconds) {
   const safe = Math.max(0, Number(seconds));
   const minutes = Math.floor(safe / 60);
   const remainder = Math.floor(safe % 60);

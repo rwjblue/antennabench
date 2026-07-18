@@ -22,7 +22,10 @@ function options(...args) {
   ]);
 }
 
-async function startFakeK4(initial = { transmit: 1, receive: 5 }) {
+async function startFakeK4(
+  initial = { transmit: 1, receive: 5 },
+  { respondToQueries = true } = {},
+) {
   const state = { ...initial };
   const commands = [];
   const server = createServer((socket) => {
@@ -38,10 +41,12 @@ async function startFakeK4(initial = { transmit: 1, receive: 5 }) {
         commands.push(frame);
         if (frame === "AI0") continue;
         if (frame === "AN") {
-          socket.write(`AN${state.transmit};`, "ascii");
+          if (respondToQueries) socket.write(`AN${state.transmit};`, "ascii");
         } else if (frame === "AR") {
           // Split the response to exercise stream framing rather than packet assumptions.
-          socket.write(`AR${state.receive}`, "ascii", () => socket.write(";", "ascii"));
+          if (respondToQueries) {
+            socket.write(`AR${state.receive}`, "ascii", () => socket.write(";", "ascii"));
+          }
         } else if (/^AN[1-3]$/.test(frame)) {
           state.transmit = Number(frame.slice(2));
         } else if (/^AR[0-7]$/.test(frame)) {
@@ -179,6 +184,39 @@ test("focused modes leave the unrelated antenna path unchanged", async (t) => {
     ]),
   );
   assert.deepEqual(fake.state, { transmit: 2, receive: 6 });
+});
+
+test("switching never changes hardware when the bridge cannot read antenna state", async (t) => {
+  const fake = await startFakeK4(
+    { transmit: 1, receive: 5 },
+    { respondToQueries: false },
+  );
+  t.after(() => fake.close());
+
+  await assert.rejects(
+    switchAntenna(
+      parseOptions([
+        "--host",
+        fake.host,
+        "--port",
+        String(fake.port),
+        "--target",
+        "2",
+        "--mode",
+        "tx_focused",
+        "--direction",
+        "transmit",
+        "--timeout-ms",
+        "150",
+        "--settle-ms",
+        "0",
+      ]),
+    ),
+    /timed out waiting for K4 antenna state/,
+  );
+
+  assert.deepEqual(fake.state, { transmit: 1, receive: 5 });
+  assert(!fake.commands.includes("AN2"));
 });
 
 test("verification fails non-ambiguously when read-back never matches", async (t) => {

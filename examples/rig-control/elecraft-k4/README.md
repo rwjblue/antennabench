@@ -65,7 +65,10 @@ On Windows, select `node.exe` as the program and enter those arguments as
 separate ordered values. No quoting or shell interpolation is required in the
 canonical array.
 
-The default internal read-back timeout is two seconds and the switch settles
+Before changing hardware, the switch command first proves that the CAT endpoint
+supports authoritative `AN;` and/or `AR;` read-back. This prevents a partial CAT
+bridge from forwarding the SET command and only then failing verification. The
+default internal read-back timeout is two seconds and the switch settles
 for 150 milliseconds before polling. Optional fixed profile arguments can
 override them:
 
@@ -101,6 +104,12 @@ This example follows the Elecraft K4 Programmer's Reference, revision D12:
 - `AI0;` disables auto-info for each short-lived client so unsolicited state
   does not get mistaken for the requested read-back; and
 - a response containing `?` is a rejected command.
+
+QK4 v0.7.0-beta.3 forwards antenna SET commands but does not implement `AN;` or
+`AR;` GET responses on its embedded CAT server. The preflight therefore rejects
+that endpoint without changing the antenna. Command-verified automation through
+QK4 requires a release that exposes those read-backs (or another documented,
+authoritative state API).
 
 The scripts intentionally do not control PTT, transmit enable, frequency,
 mode, tuner operation, or any other radio setting.

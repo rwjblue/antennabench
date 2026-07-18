@@ -31,6 +31,7 @@ import {
   applyStationPreferences,
   goalForSetupQuestion,
   modeForSetupQuestion,
+  normalizeMaidenheadGrid,
   readEvidenceAction,
   readEvidenceReplacement,
   readSetupDraft,
@@ -251,6 +252,8 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
 
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, true);
   assert.equal(readSetupDraft(form).station.callsign, "N1RWJ");
+  values.set("grid", "fn42AB");
+  assert.equal(readSetupDraft(form).station.grid, "FN42ab");
   publicSpots.checked = false;
   assert.equal(readSetupDraft(form).wsprLiveAcquisitionEnabled, false);
 });
@@ -458,11 +461,13 @@ test("saved station details fill only an untouched setup form", () => {
   assert.equal(controls.get("grid").value, "EM10");
 });
 
-test("native coordinates produce a six-character Maidenhead grid without retaining coordinates", async () => {
-  assert.equal(maidenheadGrid(42.3601, -71.0589), "FN42LI");
-  assert.equal(maidenheadGrid(-33.8688, 151.2093), "QF56OD");
-  assert.equal(maidenheadGrid(-90, -180), "AA00AA");
-  assert.equal(maidenheadGrid(90, 180), "RR99XX");
+test("native coordinates produce a canonical six-character Maidenhead grid without retaining coordinates", async () => {
+  assert.equal(normalizeMaidenheadGrid("fn42AB"), "FN42ab");
+  assert.equal(normalizeMaidenheadGrid("f"), "F");
+  assert.equal(maidenheadGrid(42.3601, -71.0589), "FN42li");
+  assert.equal(maidenheadGrid(-33.8688, 151.2093), "QF56od");
+  assert.equal(maidenheadGrid(-90, -180), "AA00aa");
+  assert.equal(maidenheadGrid(90, 180), "RR99xx");
   assert.throws(() => maidenheadGrid(91, 0), RangeError);
   assert.throws(() => maidenheadGrid(Number.NaN, 0), TypeError);
 
@@ -472,7 +477,7 @@ test("native coordinates produce a six-character Maidenhead grid without retaini
     return { status: "success", latitude: 42.3601, longitude: -71.0589 };
   });
   assert.deepEqual(calls, [["request_station_location"]]);
-  assert.equal(maidenheadGrid(outcome.latitude, outcome.longitude), "FN42LI");
+  assert.equal(maidenheadGrid(outcome.latitude, outcome.longitude), "FN42li");
   assert.match(locationLookupMessage({ status: "denied" }), /System Settings/);
   assert.match(locationLookupMessage({ status: "restricted" }), /restricted/);
   assert.match(locationLookupMessage({ status: "unavailable" }), /unavailable/);

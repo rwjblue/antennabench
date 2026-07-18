@@ -58,6 +58,14 @@ export function syncWsprLiveForSignalPlan(form, signalPlanEnabled) {
   return wsprLive.checked;
 }
 
+export function normalizeMaidenheadGrid(value) {
+  return [...value].map((character, index) => {
+    if (index < 2) return character.toUpperCase();
+    if (index >= 4 && /[a-z]/i.test(character)) return character.toLowerCase();
+    return character;
+  }).join("");
+}
+
 export function readSignalEvidenceFields(frequency, mode, power, callsign, cadence) {
   return {
     frequencyHz: optionalNumber(frequency.value),
@@ -126,7 +134,7 @@ export function readSetupDraft(form) {
   return {
     station: {
       callsign: value("callsign").toUpperCase(),
-      grid: value("grid"),
+      grid: normalizeMaidenheadGrid(value("grid")),
       powerWatts: value("powerWatts"),
       operatorNotes: value("operatorNotes"),
     },
@@ -203,7 +211,11 @@ export function applyStationPreferences(form, preferences) {
   if (controls.some((control) => control.value.trim().length > 0)) return false;
   controls.forEach((control, index) => {
     const field = Object.keys(fields)[index];
-    control.value = field === "callsign" ? fields[field].toUpperCase() : fields[field];
+    control.value = field === "callsign"
+      ? fields[field].toUpperCase()
+      : field === "grid"
+        ? normalizeMaidenheadGrid(fields[field])
+        : fields[field];
   });
   return true;
 }

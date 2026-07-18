@@ -68,7 +68,7 @@ export const CONTEXT_HELP = Object.freeze({
 });
 
 export function installContextualHelp(root) {
-  const document = root.ownerDocument;
+  const document = root.ownerDocument ?? root;
   let openDisclosure = null;
 
   const close = (restoreFocus = false) => {
@@ -147,7 +147,7 @@ export function maidenheadGrid(latitude, longitude) {
   const subsquareLongitude = Math.floor((shiftedLongitude % 2) * 12);
   const subsquareLatitude = Math.floor((shiftedLatitude % 1) * 24);
 
-  return `${String.fromCharCode(65 + fieldLongitude)}${String.fromCharCode(65 + fieldLatitude)}${squareLongitude}${squareLatitude}${String.fromCharCode(65 + subsquareLongitude)}${String.fromCharCode(65 + subsquareLatitude)}`;
+  return `${String.fromCharCode(65 + fieldLongitude)}${String.fromCharCode(65 + fieldLatitude)}${squareLongitude}${squareLatitude}${String.fromCharCode(97 + subsquareLongitude)}${String.fromCharCode(97 + subsquareLatitude)}`;
 }
 
 export function locationLookupMessage(outcome) {
