@@ -46,6 +46,15 @@ jobs:
       - name: Run CI checks
         run: mise run ci
 
+      - name: Upload module-size diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: module-size-linux
+          path: target/module-size/last-run.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   desktop-portability:
     name: Desktop portability (${{ matrix.name }})
     strategy:
