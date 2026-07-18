@@ -238,8 +238,10 @@ cancellation outcomes. All network tests use injected transports or loopback;
 the verification suite never depends on a live NOAA or WSJT-X service.
 WSPR.live fixtures additionally pin the fixed bidirectional TX/RX query,
 station-role classification, receiver-side azimuth mapping, confirmed-cycle
-direction filtering, provider-ID replay behavior, and exact attachment
-provenance. They use synthetic ClickHouse JSON and never contact WSPR.live.
+direction filtering, even-minute provider-slot alignment for operator-paced
+cycles, provider-ID replay behavior, and exact attachment provenance. A
+non-empty desktop acquisition fixture exercises the complete HTTPS-to-storage
+path. The fixtures use synthetic ClickHouse JSON and never contact WSPR.live.
 
 Analysis/report resource tests inject tiny profiles around N-1/N/N+1 to pin
 per-collection and aggregate-live entry failures, cancellation checkpoints,

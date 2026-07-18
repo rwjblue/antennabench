@@ -14,6 +14,7 @@ use antennabench_wsjtx::{
     WsprLiveImportLimits, WsprLiveQueryScope, WsprLiveRowDisposition, WsprLiveRowReason,
     WsprLiveSpotDirection, WSPR_LIVE_COLUMNS, WSPR_LIVE_INGESTION_GRACE_SECONDS,
     WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS, WSPR_LIVE_QUERY_ENDPOINT,
+    WSPR_LIVE_SLOT_TIMESTAMP_OFFSET_SECONDS,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{json, Value};
@@ -189,6 +190,32 @@ fn derives_the_query_scope_from_the_complete_schedule_not_slot_order() {
         derive_wspr_live_query_scope("N1RWJ", &[]),
         Err(WsprLiveImportError::Config(_))
     ));
+}
+
+#[test]
+fn operator_paced_query_windows_include_the_provider_slot_timestamp() {
+    let cycle_starts_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 1).unwrap();
+    let slots = [planned_slot(
+        "operator-paced",
+        1,
+        cycle_starts_at,
+        Band::M20,
+    )];
+
+    let scope = derive_wspr_live_query_scope("N1RWJ", &slots).unwrap();
+    let acquisition =
+        plan_wspr_live_acquisition_for_completed_slot("N1RWJ", &slots, "operator-paced").unwrap();
+
+    assert_eq!(WSPR_LIVE_SLOT_TIMESTAMP_OFFSET_SECONDS, 1);
+    assert_eq!(
+        scope.window_start,
+        cycle_starts_at - chrono::Duration::seconds(1)
+    );
+    assert_eq!(acquisition.query.window_start, scope.window_start);
+    assert!(acquisition
+        .query
+        .sql()
+        .contains("time >= toDateTime('2026-07-15 20:00:00', 'UTC')"));
 }
 
 #[test]
@@ -460,6 +487,124 @@ fn filters_ambiguous_roles_and_rows_outside_the_confirmed_cycle_direction() {
         no_confirmed_cycle.rows[0].reason,
         WsprLiveRowReason::DirectionFiltered,
         "schema-v4 parsing fails closed before any cycle is confirmed"
+    );
+}
+
+#[test]
+fn confirmed_operator_paced_cycles_admit_only_the_matching_wspr_slot() {
+    let cycle_starts_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 12, 1).unwrap();
+    let transmission_ends_at = "2026-07-15T20:13:51.592Z".parse().unwrap();
+    let mut configured = config();
+    configured.window_start = Utc.with_ymd_and_hms(2026, 7, 15, 20, 10, 0).unwrap();
+    configured.window_end = Utc.with_ymd_and_hms(2026, 7, 15, 20, 15, 0).unwrap();
+    configured.confirmed_cycles = Some(vec![WsprLiveConfirmedCycle {
+        starts_at: cycle_starts_at,
+        transmission_ends_at,
+        band: Band::M20,
+        direction: Some(WsprCycleDirection::Transmit),
+    }]);
+
+    let timestamps = [
+        "2026-07-15 20:12:00",
+        "2026-07-15 20:12:01",
+        "2026-07-15T20:13:51.592Z",
+        "2026-07-15 20:10:00",
+        "2026-07-15 20:14:00",
+    ];
+    let rows = timestamps
+        .into_iter()
+        .enumerate()
+        .map(|(index, timestamp)| {
+            let mut value = row(7_100 + index as u64);
+            value["time"] = json!(timestamp);
+            value
+        })
+        .collect();
+    let parsed = parse_wspr_live_json_with_limits(
+        &document(rows),
+        &configured,
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.summary.accepted, 2);
+    assert_eq!(parsed.summary.filtered, 3);
+    assert_eq!(parsed.rows[0].reason, WsprLiveRowReason::Accepted);
+    assert_eq!(parsed.rows[1].reason, WsprLiveRowReason::Accepted);
+    for row in &parsed.rows[2..] {
+        assert_eq!(row.reason, WsprLiveRowReason::DirectionFiltered);
+    }
+
+    let matching_only = parse_wspr_live_json_with_limits(
+        &document(vec![row(7_200)]),
+        &WsprLiveImportConfig {
+            confirmed_cycles: configured.confirmed_cycles.clone(),
+            ..configured.clone()
+        },
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+    let prepared = prepare_wspr_live_import(
+        &matching_only,
+        &configured,
+        "session-1",
+        "aligned-slot",
+        attachment(),
+        &[],
+    );
+    assert_eq!(prepared.observations.len(), 1);
+    assert_eq!(
+        matching_only.rows[0].spot.as_ref().unwrap().observed_at,
+        cycle_starts_at - chrono::Duration::seconds(1)
+    );
+
+    let mut opposite = row(7_201);
+    opposite["time"] = json!("2026-07-15 20:12:00");
+    opposite["rx_sign"] = json!("N1RWJ");
+    opposite["tx_sign"] = json!("K1ABC");
+    let opposite = parse_wspr_live_json_with_limits(
+        &document(vec![opposite]),
+        &configured,
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+    assert_eq!(
+        opposite.rows[0].reason,
+        WsprLiveRowReason::DirectionFiltered
+    );
+
+    configured.confirmed_cycles = Some(Vec::new());
+    let unconfirmed = parse_wspr_live_json_with_limits(
+        &document(vec![row(7_202)]),
+        &configured,
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+    assert_eq!(
+        unconfirmed.rows[0].reason,
+        WsprLiveRowReason::DirectionFiltered
+    );
+
+    configured.confirmed_cycles = Some(vec![WsprLiveConfirmedCycle {
+        starts_at: cycle_starts_at,
+        transmission_ends_at,
+        band: Band::M20,
+        direction: None,
+    }]);
+    let unknown_direction = parse_wspr_live_json_with_limits(
+        &document(vec![row(7_203)]),
+        &configured,
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+    assert_eq!(
+        unknown_direction.rows[0].reason,
+        WsprLiveRowReason::DirectionFiltered
     );
 }
 

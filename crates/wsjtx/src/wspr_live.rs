@@ -7,13 +7,14 @@ use antennabench_core::{
         NormalizedRecordLink, ObservationRecordV2, Provenance, ProviderId, RecordMetaV2, SourceId,
     },
     v3::WsprCycleDirection,
-    Band, ObservationKind, PlannedSlot, SCHEMA_VERSION_V2,
+    Band, ObservationKind, PlannedSlot, SCHEMA_VERSION_V2, WSPR_NOMINAL_START_OFFSET_SECONDS,
 };
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::wspr_live_alignment::{matching_confirmed_cycle, wspr_live_query_window_start};
 use crate::{
     diagnostic, normalize_maidenhead_grid, normalize_wspr_callsign, AdapterCancellationToken,
     AdapterResourceError, AdapterResourceStage, AdapterResourceUnit,
@@ -29,6 +30,9 @@ pub const WSPR_LIVE_WSPR2_CODE: i16 = 1;
 pub const WSPR_LIVE_QUERY_ENDPOINT: &str = "https://db1.wspr.live/";
 pub const WSPR_LIVE_INGESTION_GRACE_SECONDS: i64 = 5 * 60;
 pub const WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS: i64 = 10;
+/// WSPR.live names a WSPR-2 slot by its even-minute boundary, while
+/// AntennaBench records the transmission start one second into that slot.
+pub const WSPR_LIVE_SLOT_TIMESTAMP_OFFSET_SECONDS: i64 = WSPR_NOMINAL_START_OFFSET_SECONDS;
 
 pub const WSPR_LIVE_COLUMNS: [&str; 16] = [
     "id",
@@ -309,12 +313,12 @@ pub fn derive_wspr_live_query_scope(
     let first_slot = slots.first().ok_or_else(|| {
         WsprLiveImportError::Config("schedule must contain at least one slot".into())
     })?;
-    let mut window_start = first_slot.starts_at;
+    let mut window_start = wspr_live_query_window_start(first_slot.starts_at);
     let mut window_end = slot_end(first_slot)?;
     let mut selected_bands = vec![first_slot.band];
 
     for slot in &slots[1..] {
-        window_start = window_start.min(slot.starts_at);
+        window_start = window_start.min(wspr_live_query_window_start(slot.starts_at));
         window_end = window_end.max(slot_end(slot)?);
         if !selected_bands.contains(&slot.band) {
             selected_bands.push(slot.band);
@@ -350,11 +354,11 @@ pub fn plan_wspr_live_acquisition_for_completed_slot(
         .ok_or_else(|| {
             WsprLiveImportError::Config("WSPR.live grace deadline exceeds UTC range".into())
         })?;
-    let mut window_start = completed_slot.starts_at;
+    let mut window_start = wspr_live_query_window_start(completed_slot.starts_at);
     let mut selected_bands = Vec::new();
     for slot in slots {
         if slot_end(slot)? <= segment_ended_at {
-            window_start = window_start.min(slot.starts_at);
+            window_start = window_start.min(wspr_live_query_window_start(slot.starts_at));
             if !selected_bands.contains(&slot.band) {
                 selected_bands.push(slot.band);
             }
@@ -1157,14 +1161,7 @@ fn classify_row(
         WsprLiveSpotDirection::Transmit => WsprCycleDirection::Transmit,
     };
     if confirmed_cycles.is_some_and(|cycles| {
-        !cycles.iter().any(|cycle| {
-            cycle.band == band
-                && cycle.starts_at <= observed_at
-                && observed_at < cycle.transmission_ends_at
-                && cycle
-                    .direction
-                    .is_none_or(|direction| direction == expected_direction)
-        })
+        matching_confirmed_cycle(cycles, observed_at, band, expected_direction).is_none()
     }) {
         return row_result(
             row_number,

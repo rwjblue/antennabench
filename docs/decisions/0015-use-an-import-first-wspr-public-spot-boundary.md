@@ -206,11 +206,19 @@ to the session's supported bands, constrain `code` to WSPR-2, order by
 never trusts the query description or filename to have selected correctly.
 
 The normal source window is the schedule's earliest slot start through latest
-slot end. A caller may deliberately supply a wider bounded source result, but
-rows outside the schedule window remain filtered evidence and cannot become
-observations. Source timestamps identify the WSPR receive period and continue
-through the existing slot-alignment and guard-time policy; acquisition time is
-not used as the observation time.
+slot end. For an operator-paced WSPR cycle recorded at one second after an even
+UTC minute, its WSPR.live source window begins one second earlier at the
+provider's canonical even-minute slot timestamp. The adapter admits that
+timestamp only when it falls in the half-open interval from that canonical
+slot timestamp through the confirmed transmission end and the row also matches
+the confirmed band and TX/RX direction. The prior slot, next slot, transmission
+end, unconfirmed cycles, and opposite-direction rows remain excluded.
+
+A caller may deliberately supply a wider bounded source result, but rows
+outside the schedule window remain filtered evidence and cannot become
+observations. The adapter record retains the provider's original timestamp as
+its source time and near-raw input; acquisition time is not substituted when
+matching the row to a confirmed cycle.
 
 Structural JSON failure, missing required columns, duplicate column names, an
 unsupported response shape, or a resource-limit breach fails the complete

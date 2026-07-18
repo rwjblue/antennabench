@@ -6,6 +6,7 @@ mod live;
 mod protocol;
 mod resource;
 mod wspr_live;
+mod wspr_live_alignment;
 mod wspr_live_http;
 
 pub use all_wspr::*;
