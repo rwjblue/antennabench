@@ -152,7 +152,6 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
     for shared_fact in [
         "Delta orientation:",
         "Supported by this run",
-        "Not established by this run",
         "Same-path signal",
         "Reach and unique paths",
         "Run quality and answerability",
@@ -181,6 +180,33 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
         "Paired difference data",
     ] {
         assert!(!first.contains(omitted), "compact output leaked {omitted}");
+    }
+}
+
+#[test]
+fn consolidates_standing_caveats_in_one_shared_reading_panel() {
+    let report = paired_report(true);
+    for html in [
+        render_standalone_html(&report).unwrap(),
+        render_compact_summary_html(&report).unwrap(),
+    ] {
+        assert_eq!(html.matches("id=\"reading-guide-title\"").count(), 1);
+        assert!(
+            html.find("id=\"reading-guide-title\"").unwrap()
+                < html.find("id=\"what-run-show-title\"").unwrap()
+        );
+        for caveat in [
+            "A missing report is missing evidence, never a zero-strength signal.",
+            "This report describes evidence; it does not select a winner or prove one antenna is better.",
+            "Each comparison group (direction × band × mode × kind × source) is analyzed separately and never pooled.",
+            "Alternating antennas reduces but does not eliminate time and propagation effects.",
+        ] {
+            assert_eq!(html.matches(caveat).count(), 1, "repeated caveat: {caveat}");
+        }
+        assert!(!html.contains("Unmatched paths are not zero-SNR measurements"));
+        assert!(!html.contains("Adjacent switched slots reduce elapsed time"));
+        assert!(!html.contains("strata are not pooled"));
+        assert!(!html.contains("not a strength grade or winner"));
     }
 }
 
@@ -692,7 +718,7 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
         "Missing or invalid mode",
         "Exact duplicates collapsed",
         "Conflicting duplicate groups",
-        "Adjacent switched slots reduce elapsed time but do not remove propagation or time confounding.",
+        "Alternating antennas reduces but does not eliminate time and propagation effects.",
     ] {
         assert!(html.contains(fact), "missing fact: {fact}");
     }
@@ -718,7 +744,7 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     assert!(html.contains("<caption>One path-median B − A SNR delta per remote path"));
     assert!(html.contains("<td>K1PAIR</td><td>2</td>"));
     assert!(html.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
-    assert!(html.contains("<strong>not</strong> zero-SNR measurements."));
+    assert!(html.contains("left-only and right-only paths remain visible"));
     assert!(html.contains("<caption>Unique finite remote-path reach counts"));
     assert!(html.contains(".path-strip-row{grid-template-columns:1fr}"));
     assert!(html.contains("@media print"));
@@ -740,7 +766,7 @@ fn renders_missing_and_unavailable_same_path_states_without_zeroing_them() {
     assert!(html
         .contains("Missing SNR remains separate (left: 2, right: 1). This is not a 0 dB result"));
     assert!(html.contains("No finite path-reach evidence in 1 of 1 comparison strata"));
-    assert!(html.contains("absent reach is not zero-SNR evidence"));
+    assert!(!html.contains("absent reach is not zero-SNR evidence"));
 }
 
 #[test]
@@ -807,13 +833,13 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
     assert!(mixed_html.contains("No finite path-reach evidence in 1 of 2 comparison strata"));
     assert!(mixed_html.contains("No located paired paths in 1 of 2 comparison strata"));
     assert!(mixed_html.contains("RX path · 40 m · WSPR · Public report · WSPRnet"));
-    assert!(mixed_html.contains("not pooled"));
+    assert!(mixed_html.contains("never pooled"));
 
     let compact_html = render_compact_summary_html(&mixed_report).unwrap();
     assert!(compact_html.contains("No path delta in 1 comparison stratum"));
     assert!(compact_html.contains("No finite same-path path-median delta in 1 of 2"));
     assert!(compact_html.contains("No finite reach evidence in 1 comparison stratum"));
-    assert!(compact_html.contains("not pooled"));
+    assert!(compact_html.contains("never pooled"));
 }
 
 #[test]

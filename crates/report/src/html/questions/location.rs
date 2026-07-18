@@ -17,7 +17,7 @@ pub(in super::super) fn render_observed_path_context(
     report: &SessionReport,
 ) {
     if report.overview.strata.is_empty() {
-        out.push_str("<p class=\"empty\">No observed paired paths are available for distance or azimuth context. This is not a zero-distance or near-zero path delta; strata are not pooled.</p>");
+        out.push_str("<p class=\"empty\">No observed paired paths are available for distance or azimuth context. This is not a near-zero path delta.</p>");
         return;
     }
     let available = report
@@ -42,10 +42,10 @@ pub(in super::super) fn render_observed_path_context(
             .iter()
             .map(|row| row.location_context.inconsistent_location_path_count)
             .sum::<usize>();
-        write_html!(out, "<p class=\"empty\">No observed paired paths are available for distance or azimuth context across {} ({}). Location unavailable remains separate ({} missing, {} inconsistent). This is not a zero-distance or near-zero path delta; strata are not pooled.</p>", comparison_strata_label(unavailable.len()), comparison_strata_list(&unavailable), missing, inconsistent);
+        write_html!(out, "<p class=\"empty\">No observed paired paths are available for distance or azimuth context across {} ({}). Location unavailable remains separate ({} missing, {} inconsistent). This is not a near-zero path delta.</p>", comparison_strata_label(unavailable.len()), comparison_strata_list(&unavailable), missing, inconsistent);
         return;
     }
-    out.push_str("<p class=\"muted\">Each located paired path contributes once to one fixed distance bin and one fixed 45° compass sector. The supporting paired-row count stays visible; repeated rows from one endpoint do not increase a cell’s path count. Comparison strata remain separate and are not pooled; unavailable location is not a zero-distance or zero-delta path.</p>");
+    out.push_str("<p class=\"muted\">Each located paired path contributes once to one fixed distance bin and one fixed 45° compass sector. The supporting paired-row count stays visible; repeated rows from one endpoint do not increase a cell’s path count.</p>");
     for (index, stratum) in available {
         let context = &stratum.location_context;
         write_html!(

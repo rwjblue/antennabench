@@ -18,7 +18,7 @@ mod quality;
 pub(super) use location::render_distance_section;
 pub(super) use overview::{
     overview_lifecycle_label, render_answer_first_overview,
-    render_answer_first_overview_with_reference, render_question_navigation,
+    render_answer_first_overview_with_reference, render_how_to_read, render_question_navigation,
 };
 pub(super) use paths::{
     plural_suffix, render_reach_section, render_same_path_section, render_same_path_stratum,

@@ -23,8 +23,9 @@ pub use compact::{render_compact_summary_html, render_compact_summary_html_with_
 
 use audit::render_audit_appendix;
 use questions::{
-    render_answer_first_overview, render_distance_section, render_question_navigation,
-    render_reach_section, render_run_quality_section, render_same_path_section,
+    render_answer_first_overview, render_distance_section, render_how_to_read,
+    render_question_navigation, render_reach_section, render_run_quality_section,
+    render_same_path_section,
 };
 use shared::{escape_html, CheckedHtmlWriter};
 use styles::STYLES;
@@ -64,6 +65,7 @@ pub fn render_standalone_html_with_resources(
         escape_html(&report.overview.scope.session_id)
     );
     render_question_navigation(&mut out);
+    render_how_to_read(&mut out);
     render_answer_first_overview(&mut out, report);
     render_same_path_section(&mut out, report);
     render_reach_section(&mut out, report);

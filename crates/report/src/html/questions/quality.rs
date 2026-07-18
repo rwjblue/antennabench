@@ -47,7 +47,7 @@ pub(in super::super) fn render_answerability(
         };
         write_html!(out, "<tr><td data-label=\"Stratum\">{}</td><td data-label=\"Availability\">{}</td><td data-label=\"Unique paired paths\">{}</td><td data-label=\"Paired rows\">{}</td><td data-label=\"Blocks\">{}</td><td data-label=\"A→B / B→A\">{} / {}</td><td data-label=\"Unmatched L / R\">{} / {}</td><td data-label=\"Missing SNR L / R\">{} / {}</td><td data-label=\"Excluded\">{}</td><td data-label=\"Duplicates\">{}</td><td data-label=\"Conflicts\">{}</td></tr>", comparison_stratum(&row.stratum), availability, row.unique_path_count, row.paired_row_count, row.contributing_block_count, row.left_then_right_block_count, row.right_then_left_block_count, row.unmatched_left_count, row.unmatched_right_count, row.missing_snr_left_count, row.missing_snr_right_count, row.excluded_observation_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
     }
-    out.push_str("</tbody></table></div><p class=\"muted\">Unmatched paths, missing values, exclusions, duplicates, and conflicts remain separate facts. They are not converted into zero-SNR samples.</p>");
+    out.push_str("</tbody></table></div><p class=\"muted\">Unmatched paths, missing values, exclusions, duplicates, and conflicts remain separate facts.</p>");
 }
 pub(in super::super) fn render_lifecycle_strip(
     out: &mut CheckedHtmlWriter<'_>,

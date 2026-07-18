@@ -12,6 +12,9 @@ pub(in super::super) fn render_question_navigation(out: &mut CheckedHtmlWriter<'
 </ul></nav>",
     );
 }
+pub(in super::super) fn render_how_to_read(out: &mut CheckedHtmlWriter<'_>) {
+    out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing report is missing evidence, never a zero-strength signal.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never pooled.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul></aside>");
+}
 pub(in super::super) fn render_answer_first_overview(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
@@ -155,11 +158,15 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
             overview.strata.len(),
         );
     }
-    out.push_str("</ul></section><section aria-labelledby=\"not-established-title\"><h3 id=\"not-established-title\">Not established by this run</h3><ul><li>This descriptive report does not select a winner or establish antenna superiority.</li><li>Adjacent switched slots reduce elapsed time but do not remove propagation or time confounding.</li>");
-    for limitation in &overview.limitations {
-        write_html!(out, "<li>{}</li>", overview_limitation_text(*limitation));
+    out.push_str("</ul></section>");
+    if !overview.limitations.is_empty() {
+        out.push_str("<section aria-labelledby=\"not-established-title\"><h3 id=\"not-established-title\">Not established by this run</h3><ul>");
+        for limitation in &overview.limitations {
+            write_html!(out, "<li>{}</li>", overview_limitation_text(*limitation));
+        }
+        out.push_str("</ul></section>");
     }
-    out.push_str("</ul></section></div>");
+    out.push_str("</div>");
     render_visible_acquisition_limitations(out, report, audit_reference);
     out.push_str("</section>");
 }
