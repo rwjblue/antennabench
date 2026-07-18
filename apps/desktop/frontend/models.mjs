@@ -323,6 +323,7 @@ export function wsprLiveAcquisitionModel(state) {
   });
   if (state.wsprLiveAcquisitionStatus === "fetching") {
     return {
+      compact: { kind: "checking", text: "WSPR.live · Checking for public spots now…" },
       phase: "Collecting best-effort public spots…",
       detail: "Delayed/public active · AntennaBench is checking WSPR.live for TX and RX rows in the configured request window now.",
       diagnostic: "",
@@ -331,6 +332,7 @@ export function wsprLiveAcquisitionModel(state) {
   }
   if (state.wsprLiveAcquisitionError) {
     return {
+      compact: { kind: "error", text: "WSPR.live · Collection needs attention" },
       phase: "Public collection needs attention",
       detail: state.wsprLiveAcquisitionError.message,
       diagnostic: state.wsprLiveAcquisitionError.detail ?? "",
@@ -341,6 +343,7 @@ export function wsprLiveAcquisitionModel(state) {
   const outcome = state.wsprLiveAcquisition;
   if (outcome?.status === "disabled") {
     return {
+      compact: { kind: "offline", text: "WSPR.live · Automatic collection off; manual run available" },
       phase: "Automatic collection is off",
       detail: "Delayed/public inactive · no WSPR.live spots will be collected automatically. Receive-capable runs require the direct/local UDP source.",
       diagnostic: "",
@@ -349,6 +352,7 @@ export function wsprLiveAcquisitionModel(state) {
   }
   if (!outcome || outcome.status === "dormant") {
     return {
+      compact: { kind: "waiting", text: "WSPR.live · Waiting for the first completed cycle" },
       phase: "Waiting for the first completed cycle",
       detail: "Delayed/public active · collection begins after a confirmed WSPR receive or transmit cycle completes.",
       diagnostic: "",
@@ -357,6 +361,7 @@ export function wsprLiveAcquisitionModel(state) {
   }
   if (outcome.status === "waiting") {
     return {
+      compact: { kind: "waiting", text: `WSPR.live · Waiting for ingestion until ${localTime(outcome.notBefore)}` },
       phase: "Waiting briefly for public spots",
       detail: `Delayed/public active · TX and RX spots from the last completed cycle may be available after ${localTime(outcome.notBefore)}.`,
       diagnostic: "",
@@ -365,6 +370,7 @@ export function wsprLiveAcquisitionModel(state) {
   }
   if (outcome.status === "up_to_date") {
     return {
+      compact: { kind: "success", text: `WSPR.live · Last configured-window check succeeded through ${localTime(outcome.capturedThrough)}` },
       phase: "Best-effort public collection completed",
       detail: `Delayed/public active · AntennaBench retained the rows returned for configured request windows through ${localTime(outcome.capturedThrough)}. The upstream mirror does not provide an independent completeness guarantee.`,
       diagnostic: "",
@@ -372,7 +378,12 @@ export function wsprLiveAcquisitionModel(state) {
     };
   }
   if (outcome.status === "captured") {
+    const checkedAt = localTime(outcome.checkedAt ?? outcome.capturedThrough);
+    const compact = outcome.observationsCreated > 0
+      ? { kind: "success", text: `WSPR.live · ${outcome.observationsCreated} new spot(s) retained · checked ${checkedAt}` }
+      : { kind: "success", text: `WSPR.live · Last check succeeded; no new matching spots yet · ${checkedAt}` };
     return {
+      compact,
       phase: "Best-effort public collection completed",
       detail: `Delayed/public active · ${outcome.observationsCreated} new TX/RX spot(s) were retained from configured request windows through ${localTime(outcome.capturedThrough)}. The upstream mirror does not provide an independent completeness guarantee.`,
       diagnostic: "",
@@ -381,6 +392,7 @@ export function wsprLiveAcquisitionModel(state) {
   }
   if (outcome.status === "completed") {
     return {
+      compact: { kind: "success", text: `WSPR.live · Final configured-window check complete through ${localTime(outcome.capturedThrough)}` },
       phase: "Best-effort public collection completed",
       detail: `TX and RX spots returned for configured request windows through ${localTime(outcome.capturedThrough)} were retained. The upstream mirror does not provide an independent completeness guarantee. The session ended automatically.`,
       diagnostic: "",
@@ -388,6 +400,7 @@ export function wsprLiveAcquisitionModel(state) {
     };
   }
   return {
+    compact: { kind: "error", text: "WSPR.live · Collection needs attention" },
     phase: "Public collection needs attention",
     detail: outcome.message || "Automatic public spot collection could not finish.",
     diagnostic: outcome.detail ?? "",

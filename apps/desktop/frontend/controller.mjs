@@ -45,6 +45,7 @@ import {
   beginWsprLiveImport,
   conductorLoadSucceeded,
   conductorMutationFailed,
+  conductorPollSucceeded,
   editSessionSetup,
   exportSessionCancelled,
   exportSessionFailed,
@@ -98,6 +99,7 @@ export function createDesktopController(options = {}) {
   };
   let state = options.state ?? initialState(options.initialWorkflow);
   let transitionRefreshKey = null;
+  let conductorPollInFlight = false;
   let started = false;
   let disposed = false;
   const cleanups = [];
@@ -416,13 +418,20 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
-    async refreshConductor(advanceAcquisition = true) {
-      if (["loading", "refreshing", "mutating"].includes(state.conductorStatus)) return state;
-      commit(beginConductorLoad(state));
+    async refreshConductor(advanceAcquisition = true, silent = false) {
+      if (["loading", "refreshing", "mutating"].includes(state.conductorStatus)
+        || conductorPollInFlight) return state;
+      if (silent) conductorPollInFlight = true;
+      else commit(beginConductorLoad(state));
       try {
-        commit(conductorLoadSucceeded(state, await invokeActiveSessionConductor(invoke())));
+        const conductor = await invokeActiveSessionConductor(invoke());
+        commit(silent
+          ? conductorPollSucceeded(state, conductor)
+          : conductorLoadSucceeded(state, conductor));
       } catch (error) {
-        commit(conductorMutationFailed(state, error));
+        if (!silent) commit(conductorMutationFailed(state, error));
+      } finally {
+        conductorPollInFlight = false;
       }
       if (state.conductor) {
         await controller.refreshAntennaController();
@@ -488,7 +497,7 @@ export function createDesktopController(options = {}) {
 
     refreshOnReturn() {
       if (effects.isVisible() && state.activeWorkflow === "run" && state.session) {
-        void controller.refreshConductor();
+        void controller.refreshConductor(true, true);
       }
     },
 
@@ -496,7 +505,7 @@ export function createDesktopController(options = {}) {
       if (state.activeWorkflow === "run"
         && state.conductorStatus === "ready"
         && state.conductor?.lifecycle === "running") {
-        void controller.refreshConductor();
+        void controller.refreshConductor(true, true);
       }
       if (state.activeWorkflow === "report" && state.session) void controller.refreshReport();
     },
@@ -507,10 +516,11 @@ export function createDesktopController(options = {}) {
         || state.conductor?.lifecycle !== "running") return;
       const anchor = effects.getCountdownAnchor();
       const projectedSeconds = projectCountdown(anchor, effects.monotonicNow());
+      if (projectedSeconds === 0 && transitionRefreshKey === anchor?.key) return;
       effects.renderCountdown(projectedSeconds);
       if (projectedSeconds === 0 && anchor?.seconds > 0 && transitionRefreshKey !== anchor.key) {
         transitionRefreshKey = anchor.key;
-        void controller.refreshConductor();
+        void controller.refreshConductor(true, true);
       }
     },
 

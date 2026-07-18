@@ -272,7 +272,7 @@
 
             <div class="conductor" data-conductor hidden>
               <section class="conductor-prompt" aria-live="polite">
-                <div><p class="eyebrow" data-conductor-phase></p><h2 data-conductor-guidance></h2></div>
+                <div class="conductor-guidance"><p class="eyebrow" data-conductor-phase></p><h2 data-conductor-guidance></h2><p class="run-source-status" data-wspr-live-compact data-kind="waiting">WSPR.live · Waiting for the first completed cycle</p></div>
                 <span class="countdown-help"><button class="context-help" type="button" data-help-trigger="countdown">?</button><strong class="countdown" data-conductor-countdown></strong></span>
               </section>
 
@@ -313,16 +313,18 @@
                 <button type="button" class="primary-action" data-conductor-action="arm_wspr_cycle">Antenna ready</button>
               </div>
 
-              <div class="inline-help-action"><button type="button" class="text-action skip-cycle-action" data-conductor-action="skip_wspr_cycle">Skip this cycle</button><button class="context-help" type="button" data-help-trigger="skip_cycle">?</button></div>
-              <div class="conductor-actions run-task-actions">
-                <button type="button" data-add-run-note>Add note</button>
-                <button type="button" data-open-corrections>Correct last action</button>
+              <div class="inline-help-action" data-skip-cycle-control hidden><button type="button" class="text-action skip-cycle-action" data-conductor-action="skip_wspr_cycle">Skip this cycle</button><button class="context-help" type="button" data-help-trigger="skip_cycle">?</button></div>
+              <div class="action-help-row">
+                <div class="conductor-actions run-task-actions">
+                  <button type="button" data-add-run-note>Add note</button>
+                  <button type="button" data-open-corrections>Correct last action</button>
+                </div>
                 <button class="context-help" type="button" data-help-trigger="notes_corrections">?</button>
               </div>
 
               <div class="slot-focus">
-                <article><span>Current / last cycle <button class="context-help" type="button" data-help-trigger="current_cycle">?</button></span><div data-current-slot></div></article>
-                <article><span>Next cycle <button class="context-help" type="button" data-help-trigger="next_cycle">?</button></span><div data-next-slot></div></article>
+                <article><span class="help-label"><span>Current / last cycle</span><button class="context-help" type="button" data-help-trigger="current_cycle">?</button></span><div data-current-slot></div></article>
+                <article><span class="help-label"><span>Next cycle</span><button class="context-help" type="button" data-help-trigger="next_cycle">?</button></span><div data-next-slot></div></article>
               </div>
 
               <details class="run-details">

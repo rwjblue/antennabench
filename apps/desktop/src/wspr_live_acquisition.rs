@@ -218,6 +218,8 @@ pub(crate) enum WsprLiveAcquisitionOutcome {
         completed_slot_id: String,
         #[serde(rename = "capturedThrough")]
         captured_through: DateTime<Utc>,
+        #[serde(rename = "checkedAt")]
+        checked_at: DateTime<Utc>,
         total: usize,
         accepted: usize,
         duplicate: usize,
@@ -511,6 +513,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                     revision,
                     completed_slot_id: plan.completed_slot_id,
                     captured_through,
+                    checked_at: response.received_at,
                     total: committed.summary.total,
                     accepted: committed.summary.accepted,
                     duplicate: committed.summary.duplicate,
@@ -526,6 +529,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             revision: committed.revision,
             completed_slot_id: plan.completed_slot_id,
             captured_through: plan.query.window_end,
+            checked_at: response.received_at,
             total: committed.summary.total,
             accepted: committed.summary.accepted,
             duplicate: committed.summary.duplicate,
@@ -1421,12 +1425,14 @@ mod tests {
             total,
             accepted,
             observations_created,
+            checked_at,
             ..
         } = outcome
         else {
             panic!("non-empty acquisition must capture: {outcome:?}")
         };
         assert_eq!((total, accepted, observations_created), (1, 1, 1));
+        assert_eq!(checked_at, now);
 
         let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
         let observation = after.observations.last().unwrap();

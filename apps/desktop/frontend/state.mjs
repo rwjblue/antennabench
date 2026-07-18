@@ -374,6 +374,13 @@ export function conductorLoadSucceeded(state, conductor) {
   };
 }
 
+export function conductorPollSucceeded(state, conductor) {
+  return {
+    ...state,
+    conductor,
+  };
+}
+
 export function beginConductorMutation(state, action = "operator_action") {
   return {
     ...state,

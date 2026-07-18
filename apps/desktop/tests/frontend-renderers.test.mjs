@@ -8,6 +8,7 @@ import {
   REQUIRED_ELEMENT_SELECTORS,
   collectDesktopElements,
 } from "../frontend/elements.mjs";
+import { createDesktopController } from "../frontend/controller.mjs";
 import { CONTEXT_HELP, installContextualHelp } from "../frontend/models.mjs";
 
 import {
@@ -232,6 +233,11 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.match(e.nextSlot.children[0].textContent, /Transmit on Dipole/);
   assert.equal(e.lifecycleButtons[0].disabled, true, "start waits for required WSJT-X");
   assert.equal(e.evidenceSlot.children.length, 2);
+  state.conductorStatus = "refreshing";
+  renderRun(e, state, document, { monotonicNow: () => 1000 });
+  assert.equal(e.conductorStatus.textContent, "Refreshing");
+  assert.match(e.conductorFeedbackMessage.textContent, /Recovering/);
+  state.conductorStatus = "ready";
   state.antennaControllerOutcome = {
     detail: "Switch failed; manual operation remains available.",
     diagnostic: "Switch program: /opt/controller\ndisposition: exit 7\nstderr: failure",
@@ -259,6 +265,9 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.wsjtxSetupWarnings.children[0].children[1].textContent, "Turn Enable Tx on.");
   assert.equal(e.lifecycleButtons[2].disabled, false, "advisory warnings do not disable conductor actions");
   assert.equal(e.wsprLiveRetry.disabled, true);
+  assert.equal(e.wsprLiveCompact.dataset.kind, "checking");
+  assert.match(e.wsprLiveCompact.textContent, /Checking/);
+  assert.equal(e.skipCycleControl.hidden, false);
 
   const slot = {
     slotId: "slot-1", sequenceNumber: 1, direction: "transmit", band: "20m",
@@ -275,6 +284,7 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.currentSlot.children[0].textContent, "Cycle 1");
   assert.equal(e.currentSlot.children[2].textContent, "Actual: Dipole");
   assert.equal(e.nextSlot.children[0].textContent, "Cycle 2");
+  assert.equal(e.skipCycleControl.hidden, true);
 
   state.wsprLiveAcquisitionStatus = "error";
   state.wsprLiveAcquisitionError = { message: "mirror down" };
@@ -287,6 +297,70 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.wsprLiveEndWithout.hidden, false);
   assert.equal(e.conductorEvents.children[0].children[1].children.length, 2);
   assert.equal(e.conductorEvents.children[0].children[1].children[0].textContent, "Replace");
+});
+
+test("a full polling interval preserves the mounted Active Run text until atomic success", async () => {
+  const e = loadDesktopDocument();
+  const view = conductorView({ guidance: "Switch and confirm", secondsToTransition: 30 });
+  const state = initialState("run");
+  state.session = { lifecycle: "running", schemaVersion: 5 };
+  state.conductorStatus = "ready";
+  state.conductor = view;
+  state.conductorNotice = "Session started.";
+  state.wsprLiveAcquisitionStatus = "ready";
+  state.wsprLiveAcquisition = { status: "disabled" };
+  state.wsjtx = { phase: "stopped", receivedDatagrams: 0, committedMutations: 0, ignoredDatagrams: 0 };
+  state.antennaController = { policy: "manual", attached: false, armed: false, targets: {} };
+  const intervals = [];
+  let resolvePoll;
+  const calls = [];
+  const controller = createDesktopController({
+    state,
+    invoke: async (command) => {
+      calls.push(command);
+      if (command === "active_session_conductor") {
+        return new Promise((resolve) => { resolvePoll = resolve; });
+      }
+      if (command === "active_session_antenna_controller") return state.antennaController;
+      if (command === "active_session_wsjtx_status") return state.wsjtx;
+      if (command === "advance_active_session_wspr_live") return { status: "disabled" };
+      throw new Error(`unexpected command ${command}`);
+    },
+    render: (next) => renderRun(e, next, document, { monotonicNow: () => 1000 }),
+    setInterval: (callback, milliseconds) => {
+      intervals.push({ callback, milliseconds });
+      return callback;
+    },
+    getCountdownAnchor: () => null,
+  });
+  controller.render();
+  const visibleBefore = {
+    status: e.conductorStatus.textContent,
+    guidance: e.conductorGuidance.textContent,
+    feedback: e.conductorFeedbackMessage.textContent,
+    action: e.lifecycleButtons.find((button) => !button.hidden)?.textContent,
+    compact: e.wsprLiveCompact.textContent,
+    countdown: e.conductorCountdown.textContent,
+  };
+
+  controller.start();
+  intervals.find(({ milliseconds }) => milliseconds === 5000).callback();
+  await vi.waitFor(() => assert.equal(calls[0], "active_session_conductor"));
+  assert.deepEqual({
+    status: e.conductorStatus.textContent,
+    guidance: e.conductorGuidance.textContent,
+    feedback: e.conductorFeedbackMessage.textContent,
+    action: e.lifecycleButtons.find((button) => !button.hidden)?.textContent,
+    compact: e.wsprLiveCompact.textContent,
+    countdown: e.conductorCountdown.textContent,
+  }, visibleBefore);
+
+  resolvePoll({ ...view });
+  await vi.waitFor(() => assert.ok(calls.includes("advance_active_session_wspr_live")));
+  assert.equal(e.conductorStatus.textContent, visibleBefore.status);
+  assert.equal(e.conductorGuidance.textContent, visibleBefore.guidance);
+  assert.equal(e.conductorFeedbackMessage.textContent, visibleBefore.feedback);
+  controller.dispose();
 });
 
 test("transfer renderer covers lifecycle/schema eligibility and feedback outcomes", () => {

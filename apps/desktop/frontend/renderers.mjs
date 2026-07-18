@@ -281,10 +281,11 @@ export function renderRun(elements, state, root, options = {}) {
     conductorPanel, conductorEmpty, conductorStatus, conductorRefreshButtons,
     evidenceForm, conductorFeedback, conductorFeedbackMessage, conductorFeedbackDetail,
     conductorLifecycle, conductorAntennaInUse, conductorPhase, conductorGuidance,
-    conductorCountdown, currentSlot, nextSlot, evidenceSlot, evidenceAntenna,
+    conductorCountdown, skipCycleControl, currentSlot, nextSlot, evidenceSlot, evidenceAntenna,
     lifecycleButtons, conductorDiagnostics, conductorEvents, wsjtxForm, wsjtxStart,
     wsjtxStop, wsjtxRequirement, wsjtxPhase, wsjtxCounts, wsjtxSetupWarnings, wsjtxDiagnostic,
-    wsprLivePhase, wsprLiveDetail, wsprLiveDiagnostic, wsprLiveRetry, wsprLiveEndWithout,
+    wsprLivePhase, wsprLiveCompact, wsprLiveDetail, wsprLiveDiagnostic, wsprLiveRetry,
+    wsprLiveEndWithout,
     antennaControllerStatus, antennaControllerDetail, antennaControllerDiagnostic,
     antennaControllerAttach,
     antennaControllerRun, antennaControllerRetry, antennaControllerEditor,
@@ -415,6 +416,8 @@ export function renderRun(elements, state, root, options = {}) {
     button.disabled = conductorBusy || !available
       || (action === "start" && view.wsjtxRequired && !wsjtxRunning);
   });
+  skipCycleControl.hidden = !lifecycleButtons.some((button) =>
+    button.dataset.conductorAction === "skip_wspr_cycle" && !button.hidden);
   conductorDiagnostics.replaceChildren(...view.diagnostics.map((diagnostic) => {
     const item = root.createElement("li");
     const code = root.createElement("strong");
@@ -460,6 +463,8 @@ export function renderRun(elements, state, root, options = {}) {
     if (adapterDiagnostic.code) wsjtxDiagnostic.textContent += ` (${adapterDiagnostic.code})`;
   }
   const acquisition = wsprLiveAcquisitionModel(state);
+  wsprLiveCompact.textContent = acquisition.compact.text;
+  wsprLiveCompact.dataset.kind = acquisition.compact.kind;
   wsprLivePhase.textContent = acquisition.phase;
   wsprLiveDetail.textContent = acquisition.detail;
   wsprLiveDiagnostic.hidden = acquisition.diagnostic.length === 0;

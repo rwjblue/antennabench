@@ -70,6 +70,7 @@ import {
   beginWsprLiveImport,
   conductorLoadSucceeded,
   conductorMutationFailed,
+  conductorPollSucceeded,
   editSessionSetup,
   exportSessionCancelled,
   exportSessionFailed,
@@ -355,6 +356,23 @@ test("question cards preserve native keyboard controls and collapse on narrow sc
   assert.match(css, /question-choices label:has\(input:focus-visible\)/);
 });
 
+test("Active Run help stays grouped with its subject across responsive layouts", () => {
+  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
+  assert.match(
+    html,
+    /data-skip-cycle-control hidden><button[^>]+data-conductor-action="skip_wspr_cycle"[\s\S]*?data-help-trigger="skip_cycle"/,
+  );
+  assert.match(html, /class="action-help-row"[\s\S]*?data-help-trigger="notes_corrections"/);
+  assert.match(html, /class="help-label"[\s\S]*?data-help-trigger="current_cycle"/);
+  assert.match(html, /class="help-label"[\s\S]*?data-help-trigger="next_cycle"/);
+  assert.match(css, /\.action-help-row \{[^}]*align-items: center[^}]*justify-content: center/);
+  assert.match(
+    css,
+    /@media \(max-width: 620px\)[\s\S]*\.action-help-row \{[^}]*align-items: flex-start[^}]*flex-wrap: wrap/,
+  );
+});
+
 test("setup serializes explicit local controller policy, profile, and target mappings", () => {
   const setupHtml = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
   assert.match(setupHtml, /Antenna switching assistant/);
@@ -581,6 +599,10 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
     actionToken: "mutation-4",
   };
   const ready = conductorLoadSucceeded(loading, conductor);
+  const silentlyPolled = conductorPollSucceeded({
+    ...ready,
+    conductorNotice: "Session started.",
+  }, { ...conductor, now: "2026-07-15T20:00:05Z" });
   const mutating = beginConductorMutation(ready, "start");
   const saved = conductorLoadSucceeded(mutating, { ...conductor, revision: 5 });
   const failed = conductorMutationFailed(beginConductorMutation(saved, "arm_wspr_cycle"), {
@@ -592,6 +614,8 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
   assert.equal(loading.conductorStatus, "loading");
   assert.equal(ready.conductorStatus, "ready");
   assert.equal(ready.conductor, conductor);
+  assert.equal(silentlyPolled.conductorStatus, "ready");
+  assert.equal(silentlyPolled.conductorNotice, "Session started.");
   assert.equal(mutating.conductorStatus, "mutating");
   assert.equal(mutating.conductorPendingAction, "start");
   assert.equal(saved.conductorStatus, "ready");
@@ -882,6 +906,35 @@ test("active-run public spot states keep operator copy plain and expose diagnost
     "Best-effort public collection completed",
     "Public collection needs attention",
   ]);
+  assert.deepEqual(presentations.map(({ compact }) => compact.kind), [
+    "checking",
+    "error",
+    "offline",
+    "waiting",
+    "waiting",
+    "success",
+    "success",
+    "success",
+    "error",
+  ]);
+  assert.match(presentations[3].compact.text, /first completed cycle/);
+  assert.match(presentations[4].compact.text, /Waiting for ingestion/);
+  assert.match(presentations[5].compact.text, /Last configured-window check succeeded/);
+  assert.match(presentations[6].compact.text, /3 new spot\(s\) retained/);
+  assert.doesNotMatch(
+    presentations.map(({ compact }) => compact.text).join(" "),
+    /better|worse|winner|outperform/i,
+  );
+  const zeroSpots = wsprLiveAcquisitionModel({
+    wsprLiveAcquisition: {
+      status: "captured",
+      capturedThrough: "2026-07-16T15:04:00Z",
+      checkedAt: "2026-07-16T15:09:00Z",
+      observationsCreated: 0,
+    },
+    conductor,
+  });
+  assert.match(zeroSpots.compact.text, /no new matching spots yet/);
   assert.match(presentations[5].detail, /configured request windows/);
   assert.match(presentations[5].detail, /independent completeness guarantee/);
   assert.match(presentations[8].detail, /Collection stopped/);
