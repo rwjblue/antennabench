@@ -40,7 +40,7 @@ Windows, but macOS is the supported environment for interactive desktop work.
 mise run desktop:test        # focused desktop and frontend tests
 mise run desktop:e2e         # unattended setup-to-export workflow
 mise run desktop:build       # debug app build without packaging
-mise run hosted:test         # optional hosted foundation
+mise run hosted:test         # public site plus optional hosted foundation
 mise run desktop:frontend-coverage
 mise run desktop:release-test
 mise run desktop:publication-test
@@ -55,7 +55,8 @@ hardware, WSJT-X, NOAA, Cloudflare, or another live service.
 ## Repository Layout
 
 - `apps/desktop/` contains the Tauri backend and static frontend.
-- `apps/hosted/` contains the optional, admission-disabled Cloudflare foundation.
+- `apps/hosted/` contains the static Astro project site and the separate,
+  optional admission-disabled Cloudflare sharing foundation.
 - `crates/` contains bundle, storage, adapter, analysis, and report code.
 - `fixtures/` contains redistribution-safe test inputs.
 - `docs/` contains operator guides, contributor references, internal runbooks,

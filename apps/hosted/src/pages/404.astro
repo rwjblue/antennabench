@@ -1,0 +1,21 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="Page not found · AntennaBench"
+  description="The requested AntennaBench page could not be found."
+  canonicalPath="/404/"
+>
+  <section class="not-found section-pad">
+    <div class="shell narrow-shell">
+      <p class="error-code">404</p>
+      <h1>That path isn’t in this experiment.</h1>
+      <p>The page may have moved, or the address may be incomplete.</p>
+      <div class="button-row">
+        <a class="button button-primary" href="/">Return home</a>
+        <a class="button button-secondary" href="/sample-report/">View the sample report</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

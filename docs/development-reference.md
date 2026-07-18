@@ -298,18 +298,36 @@ cargo run -p antennabench-report --example render_canonical_sample -- /tmp/anten
 For documentation-only changes, inspect the rendered intent and verify the diff
 is limited to the requested files.
 
-The optional hosted foundation is verified independently with:
+The public project site and optional hosted foundation are verified together with:
 
 ```bash
 mise run hosted:test
 ```
 
-It uses the locked root npm workspace, generated Wrangler binding types, fake service
-inventory tests, strict TypeScript, and a no-account dry build. The dry build
-uses `--containers-rollout=none` so ordinary CI needs no Docker daemon and does
+It uses the locked root npm workspace, generates the canonical public sample
+through the trusted Rust renderer, builds static Astro output, validates links,
+metadata, security headers, no-hydration output, and the backend-free site
+Wrangler profile, then preserves the generated binding types, fake service
+inventory tests, strict TypeScript, and future-foundation dry builds. The latter
+use `--containers-rollout=none` so ordinary CI needs no Docker daemon and does
 not provision or contact Cloudflare. Environment matrix tests pin distinct
 private-upload, private-derived, public-report, D1, Queue/DLQ, and bounded
 Container configuration. Local Rust and desktop tests never read hosted config.
+
+Focused site commands remain available through the hosted workspace:
+
+```bash
+npm run site:sample:check --workspace @antennabench/hosted
+npm run site:build --workspace @antennabench/hosted
+npm run site:check --workspace @antennabench/hosted
+npm run site:dry-build --workspace @antennabench/hosted
+```
+
+`apps/hosted/wrangler.site.jsonc` serves only `dist/site`. The separate
+`wrangler.jsonc` retains the future `/api/*` Worker and hosted-sharing resources
+while reusing the same static output. Production deployment and owner-only
+domain/rollback verification are documented in
+[Hosted Site And Foundation Operations](hosted-operations.md).
 
 ## Continuous Integration
 

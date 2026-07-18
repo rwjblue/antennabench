@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   validateDependabotText,
   validateDependencyReviewText,
+  validateHostedSiteDeployWorkflowText,
   validateManifestCoverage,
   validateNpmWorkspace,
   validateReleaseWorkflowText,
@@ -159,6 +160,36 @@ jobs:
   assert.ok(validateReleaseWorkflowText(valid.replace("  assemble:\n", "  leak:\n    run: echo ${{ secrets.APPLE_API_KEY }}\n  assemble:\n")).length);
   assert.ok(validateReleaseWorkflowText(valid.replace("  push:\n", "  pull_request:\n")).length);
   assert.ok(validateReleaseWorkflowText(valid.replace("publication-publish-draft", "gh release publish")).length);
+});
+
+test("hosted site deployment pins reviewed main source and protected credentials", () => {
+  const valid = `name: site
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        required: true
+permissions:
+  contents: read
+jobs:
+  deploy:
+    environment:
+      name: production
+    steps:
+      - run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - run: mise run hosted:test
+      - name: Deploy static site
+        run: npm run deploy:site --workspace @antennabench/hosted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+`;
+  assert.deepEqual(validateHostedSiteDeployWorkflowText(valid), []);
+  assert.ok(validateHostedSiteDeployWorkflowText(valid.replace("branches: [main]", "branches: [feature]")).length);
+  assert.ok(validateHostedSiteDeployWorkflowText(valid.replace("origin/main", "HEAD^")).length);
+  assert.ok(validateHostedSiteDeployWorkflowText(valid.replace("- name: Deploy static site", "- run: echo ${{ secrets.CLOUDFLARE_API_TOKEN }}\n      - name: Deploy static site")).length);
 });
 
 test("the repository satisfies its supply-chain convention", () => {

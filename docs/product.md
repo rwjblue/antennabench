@@ -137,6 +137,11 @@ collect optional WSJT-X and WSPR.live evidence, import supported WSPR and RBN
 data, recover interrupted sessions, render local reports, and export reports or
 verified bundle copies.
 
+The public information site at `antennabench.com` explains that local workflow
+and serves the repository's generated canonical sample. The site is not an
+account, upload, or hosted-report product, and the desktop remains fully usable
+without it.
+
 A signed end-user release, automated antenna conclusions, automatic controller
 operation, and hosted report publishing are not yet available. See the
 [roadmap](roadmap.md) for current direction and the

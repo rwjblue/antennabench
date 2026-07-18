@@ -612,6 +612,33 @@ identity. Rust re-derives all context and resolves the pinned profile; there is
 no generic webview process API. Interruption, terminal lifecycle, session
 replacement, profile change, and shutdown revoke volatile authority.
 
+## Public Project Site Boundary
+
+The public information site is static Astro output inside the existing hosted
+npm workspace. `apps/hosted/public` supplies passthrough assets and the
+canonical sample generated through the trusted Rust report renderer;
+`apps/hosted/dist/site` is disposable build output. The committed sample is
+byte-compared with a fresh render so the site cannot become an independent
+semantic report implementation.
+
+`wrangler.site.jsonc` is an assets-only deployment. It has no Worker entry
+point, backend bindings, variables, admission state, or hosted processing
+resources. CSP disables scripts, network connections, forms, and external
+framing while allowing the same-origin canonical report preview. Ordinary page
+views therefore execute no Worker or client JavaScript and load no third-party
+runtime resource.
+
+The future hosted configuration consumes the same `dist/site` assets and runs
+its preserved Worker first only for `/api/*`. This leaves Astro responsible for
+public pages, reserves `/app` for #73's later authenticated React client, and
+keeps immutable published reports on a separate report origin. Neither site nor
+future hosted state is a dependency of the local desktop workflow.
+
+[Decision 0023](decisions/0023-use-static-astro-for-the-project-site.md)
+records the deployment, extension, and no-hydration boundaries. The owner-only
+credential, domain, redirect, header, and rollback procedure is in
+[Hosted Site And Foundation Operations](hosted-operations.md).
+
 ## Hosted Trust Boundary
 
 AntennaBench's hosted surface is an optional sharing adapter. Local session

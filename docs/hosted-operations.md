@@ -1,4 +1,108 @@
-# Hosted Foundation Operations
+# Hosted Site And Foundation Operations
+
+The public project site and the future hosted-sharing foundation occupy the same
+`apps/hosted` package but have deliberately different deployment boundaries.
+
+- `wrangler.site.jsonc` serves only deterministic Astro output from
+  `dist/site`. It has no Worker entry point, API, backend binding, admission
+  state, or hosted-sharing resource.
+- `wrangler.jsonc` retains the future admission-disabled `/api/*` Worker and its
+  R2, D1, Queue, Durable Object, and Container declarations. Ordinary project-
+  site deployment does not use this configuration.
+
+The desktop's local session, analysis, report, and export workflows never depend
+on either deployment.
+
+## Public Project Site
+
+### Build And Validate Without Credentials
+
+From the repository root:
+
+```bash
+npm ci
+npm run site:sample:check --workspace @antennabench/hosted
+npm run site:social:check --workspace @antennabench/hosted
+npm run site:build --workspace @antennabench/hosted
+npm run site:check --workspace @antennabench/hosted
+npm run site:dry-build --workspace @antennabench/hosted
+```
+
+`mise run hosted:test` runs those checks together with the preserved hosted
+Worker tests, type drift check, strict TypeScript compilation, and future-
+foundation dry builds. The sample check reruns the canonical fixture through the
+trusted Rust report renderer and byte-compares the result with
+`public/sample-report/index.html`. The social-card check validates the committed
+PNG signature and dimensions together with its editable SVG design source.
+Astro adds no hydration or client JavaScript.
+
+The static validation checks expected pages and assets, internal links, canonical
+and social metadata, security headers, the site-only Wrangler boundary, exact
+Astro ownership, and the absence of React and external runtime resources.
+
+### One-Time Owner Setup
+
+Complete these steps before merging the first production-deploying change:
+
+1. In Cloudflare, create a custom API token from the **Edit Cloudflare Workers**
+   template. Restrict its account resource to the one account that owns
+   `antennabench.com`; do not grant R2, D1, Queues, Containers, DNS, or unrelated
+   account access for this static deployment.
+2. In GitHub, create or update the repository's `production` environment. Enable
+   required-reviewer protection for deployments and add environment secrets
+   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. Do not add either value as
+   a repository variable, workflow input, local file, or pull-request secret.
+3. After the first reviewed deployment creates the `antennabench-site` Worker,
+   attach `antennabench.com` as its Workers custom domain. Confirm Cloudflare
+   provisions the proxied DNS record and an active TLS certificate.
+4. Ensure `www.antennabench.com` has a proxied DNS record, then add a Cloudflare
+   Single Redirect with source wildcard
+   `https://www.antennabench.com/*`, target
+   `https://antennabench.com/${1}`, status **301**, and **Preserve query string**
+   enabled. Do not reverse the canonical direction.
+
+Cloudflare's maintained references are
+[Workers GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/),
+[Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/),
+and the [www-to-apex redirect example](https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-www-to-root/).
+
+### Production Deployment And Rollback
+
+`.github/workflows/hosted-site-deploy.yml` deploys pushes to `main` through the
+protected `production` environment. Pull requests never receive Cloudflare
+credentials. The job reruns the locked hosted validation before invoking the
+exact-pinned workspace Wrangler.
+
+To redeploy or roll back, open **Deploy public project site** in GitHub Actions,
+choose **Run workflow**, and enter the full commit SHA to deploy. The job rejects
+any revision that is not already reachable from `origin/main`; a rollback is a
+redeployment of a reviewed historical source revision, not an unreviewed bundle
+or dashboard edit. Record the selected SHA and deployment result in the release
+or incident notes.
+
+Before the first public announcement—and after a domain, header, or deployment
+change—verify:
+
+```bash
+curl --fail --silent --show-error --head https://antennabench.com/
+curl --fail --silent --show-error --head https://antennabench.com/sample-report/
+curl --silent --show-error --head 'https://www.antennabench.com/check/path?source=verify'
+curl --silent --show-error --head https://antennabench.com/api/health
+```
+
+Confirm the apex responses have valid TLS, CSP, `nosniff`, referrer, framing,
+permissions, and expected cache headers. The `www` request must return 301 with
+location `https://antennabench.com/check/path?source=verify`. The site-only
+`/api/health` request must return the static not-found response; it must not
+expose the future hosted foundation's health inventory. Inspect the home and
+how-it-works pages at narrow and desktop widths, navigate them by keyboard, open
+the canonical report, and review the social card before approving production.
+
+The production URL, domain/TLS checks, redirect result, header result, rollback
+rehearsal, and final visual/copy approval are human-owned completion evidence for
+#139. Never replace them with a test domain or fabricated output.
+
+## Future Hosted-Sharing Foundation
 
 The optional hosted application lives in `apps/hosted` and is independent from
 the Rust desktop and local bundle workflow. Admission is fixed off in every

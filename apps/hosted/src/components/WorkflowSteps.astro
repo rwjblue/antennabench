@@ -1,0 +1,34 @@
+---
+const steps = [
+  {
+    number: "01",
+    title: "Plan the comparison",
+    body: "Choose the question, station, antennas, band, direction, and repetition count before the run begins.",
+  },
+  {
+    number: "02",
+    title: "Switch when ready",
+    body: "Follow one operator-paced instruction at a time. The recorded ready action—not the schedule—says what was connected.",
+  },
+  {
+    number: "03",
+    title: "Collect attributed evidence",
+    body: "Keep public WSPR spots, local decodes, imports, notes, missed cycles, and corrections distinct and traceable.",
+  },
+  {
+    number: "04",
+    title: "Review results and limits",
+    body: "See matched-path comparisons, reach, run quality, missing evidence, and the complete audit trail—without an invented winner.",
+  },
+];
+---
+
+<ol class="workflow-steps">
+  {steps.map((step) => (
+    <li>
+      <span class="step-number">{step.number}</span>
+      <h3>{step.title}</h3>
+      <p>{step.body}</p>
+    </li>
+  ))}
+</ol>
