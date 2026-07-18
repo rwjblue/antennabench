@@ -96,7 +96,11 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     if overview.strata.is_empty() {
         out.push_str("<tr><td data-label=\"Stratum\" colspan=\"5\">No comparison strata are available for this run.</td></tr>");
     } else {
-        for row in &overview.strata {
+        for row in overview
+            .strata
+            .iter()
+            .filter(|row| matches!(row.path_delta, ReportOverviewPathDelta::Available { .. }))
+        {
             let (delta, coverage) = match row.path_delta {
                 ReportOverviewPathDelta::Unavailable => {
                     ("Not available".to_string(), "Unavailable".to_string())
@@ -125,6 +129,14 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
                 row.contributing_block_count,
                 coverage,
             );
+        }
+        let unavailable = overview
+            .strata
+            .iter()
+            .filter(|row| row.path_delta == ReportOverviewPathDelta::Unavailable)
+            .collect::<Vec<_>>();
+        if !unavailable.is_empty() {
+            write_html!(out, "<tr class=\"collapsed-empty-strata\"><td data-label=\"Stratum\">No path delta in {}: {}</td><td data-label=\"Path delta\">Not available</td><td data-label=\"Paths / rows\">Not pooled</td><td data-label=\"Blocks\">Not pooled</td><td data-label=\"Coverage\">Unavailable</td></tr>", comparison_strata_label(unavailable.len()), comparison_strata_list(&unavailable));
         }
     }
     out.push_str("</tbody></table></div><div class=\"overview-support\"><section aria-labelledby=\"supported-title\"><h3 id=\"supported-title\">Supported by this run</h3><ul>");

@@ -114,6 +114,10 @@ pub(super) fn render_compact_same_path_view(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
+    if report.overview.strata.is_empty() {
+        out.push_str("<p class=\"empty\">No comparison stratum has same-path evidence available. This is not a 0 dB result; strata are not pooled.</p>");
+        return;
+    }
     let orientation = report.overview.scope.delta_orientation.as_ref();
     let available = report
         .overview
@@ -121,16 +125,25 @@ pub(super) fn render_compact_same_path_view(
         .iter()
         .filter(|row| !row.path_median_deltas.is_empty())
         .collect::<Vec<_>>();
+    let unavailable = report
+        .overview
+        .strata
+        .iter()
+        .filter(|row| row.path_median_deltas.is_empty())
+        .collect::<Vec<_>>();
     if available.is_empty() {
-        write_html!(out, "<p class=\"empty\">No finite same-path path-median delta is available across the {} reported stratum row(s). This is not a 0 dB result; availability remains explicit in the result table.</p>", report.overview.strata.len());
+        write_html!(out, "<p class=\"empty\">No finite same-path path-median delta is available across {} ({}). This is not a 0 dB result; strata are not pooled and availability remains explicit in the result table.</p>", comparison_strata_label(unavailable.len()), comparison_strata_list(&unavailable));
         return;
     }
     if let Some(orientation) = orientation {
         write_html!(out, "<p class=\"orientation\"><strong>Orientation:</strong> each value is <strong>{} − {}</strong> SNR in dB. Negative values are toward {}; positive values are toward {}. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label), escape_html(&orientation.subtrahend_label), escape_html(&orientation.minuend_label));
     }
-    out.push_str("<p class=\"path-view-note\">Each blue dot is one unique remote path’s median across its paired rows; the purple diamond is the median across those path medians. Unavailable strata remain in the result table without repeated empty visuals.</p>");
+    out.push_str("<p class=\"path-view-note\">Each blue dot is one unique remote path’s median across its paired rows; the purple diamond is the median across those path medians. A missing value is not a 0 dB result, and comparison strata are not pooled.</p>");
     for row in available {
         render_same_path_stratum(out, row, orientation);
+    }
+    if !unavailable.is_empty() {
+        write_html!(out, "<p class=\"empty collapsed-empty-strata\">No finite same-path path-median delta in {} of {} comparison strata: {}. Availability remains explicit in the result table.</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable));
     }
 }
 
@@ -145,11 +158,28 @@ pub(super) fn render_compact_reach_view(out: &mut CheckedHtmlWriter<'_>, report:
             || row.reach.right_only_unique_path_count > 0
     });
     if !any_reach {
-        out.push_str("<p class=\"empty\">No unique observed paths are available for reach overlap. This is not a coverage score or evidence of equal reach.</p>");
+        let strata = report.overview.strata.iter().collect::<Vec<_>>();
+        write_html!(out, "<p class=\"empty\">No unique observed paths are available for reach overlap across {} ({}). Missing reach is not zero-SNR evidence; strata are not pooled.</p>", comparison_strata_label(strata.len()), comparison_strata_list(&strata));
         return;
     }
     out.push_str("<div class=\"table-wrap\"><table><caption>Unique observed-path overlap by separate stratum</caption><thead><tr><th scope=\"col\">Stratum</th><th scope=\"col\">Left only</th><th scope=\"col\">Both</th><th scope=\"col\">Right only</th></tr></thead><tbody>");
-    for row in &report.overview.strata {
+    let unavailable = report
+        .overview
+        .strata
+        .iter()
+        .filter(|row| {
+            row.reach.left_only_unique_path_count
+                + row.reach.both_unique_path_count
+                + row.reach.right_only_unique_path_count
+                == 0
+        })
+        .collect::<Vec<_>>();
+    for row in report.overview.strata.iter().filter(|row| {
+        row.reach.left_only_unique_path_count
+            + row.reach.both_unique_path_count
+            + row.reach.right_only_unique_path_count
+            > 0
+    }) {
         write_html!(
             out,
             "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
@@ -159,7 +189,10 @@ pub(super) fn render_compact_reach_view(out: &mut CheckedHtmlWriter<'_>, report:
             row.reach.right_only_unique_path_count
         );
     }
-    out.push_str("</tbody></table></div><p class=\"muted\">These are unique observed paths, not a coverage score or a claim about unobserved paths.</p>");
+    if !unavailable.is_empty() {
+        write_html!(out, "<tr class=\"collapsed-empty-strata\"><td colspan=\"4\">No finite reach evidence in {}: {}.</td></tr>", comparison_strata_label(unavailable.len()), comparison_strata_list(&unavailable));
+    }
+    out.push_str("</tbody></table></div><p class=\"muted\">These are unique observed paths, not a coverage score or a claim about unobserved paths. Missing reach is not zero-SNR evidence, and comparison strata are not pooled.</p>");
 }
 
 pub(super) fn render_compact_reference(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {

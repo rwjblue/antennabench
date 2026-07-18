@@ -2,7 +2,7 @@ use std::fmt::{self, Write};
 
 use crate::{
     report_resource_error, ReportCancellationToken, ReportDetailFamily, ReportImportedEvidence,
-    ReportNotice, ReportOperatorEventKind, ReportResourceStage,
+    ReportNotice, ReportOperatorEventKind, ReportOverviewStratum, ReportResourceStage,
 };
 use antennabench_analysis::{
     ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder, ComparisonSide,
@@ -244,6 +244,18 @@ pub(super) fn comparison_stratum(value: &antennabench_analysis::ComparisonStratu
         escape_html(value.mode.as_str()),
         observation_kind(value.observation_kind),
         record_source(value.source)
+    )
+}
+pub(super) fn comparison_strata_list(rows: &[&ReportOverviewStratum]) -> String {
+    rows.iter()
+        .map(|row| comparison_stratum(&row.stratum))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+pub(super) fn comparison_strata_label(count: usize) -> String {
+    format!(
+        "{count} comparison {}",
+        if count == 1 { "stratum" } else { "strata" }
     )
 }
 pub(super) fn path_direction(value: PathDirection) -> &'static str {

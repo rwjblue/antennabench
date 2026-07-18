@@ -16,8 +16,9 @@ use antennabench_report::{
     ReportAntennaControlAttempt, ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection,
     ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
     ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
-    ReportOverviewLimitation, ReportOverviewLocationCell, ReportSnapshotContext,
-    ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis, SessionReport,
+    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
+    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
+    SessionReport,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -734,10 +735,85 @@ fn renders_missing_and_unavailable_same_path_states_without_zeroing_them() {
 
     let html = render_standalone_html(&report).unwrap();
 
-    assert!(html.contains("No finite same-path delta is available; missing SNR is retained separately (left: 2, right: 1). This is not a 0 dB result."));
-    assert!(html.contains(
-        "No finite path reach counts; missing SNR is retained separately (left: 2, right: 1)."
-    ));
+    assert!(html
+        .contains("No finite same-path paired evidence is available across 1 comparison stratum"));
+    assert!(html
+        .contains("Missing SNR remains separate (left: 2, right: 1). This is not a 0 dB result"));
+    assert!(html.contains("No finite path-reach evidence in 1 of 1 comparison strata"));
+    assert!(html.contains("absent reach is not zero-SNR evidence"));
+}
+
+#[test]
+fn collapses_empty_strata_without_hiding_mixed_availability() {
+    let empty_report = canonical_report();
+    let empty_html = render_standalone_html(&empty_report).unwrap();
+
+    assert_eq!(empty_report.overview.strata.len(), 8);
+    assert!(empty_html.contains("No path delta in 8 comparison strata"));
+    assert_eq!(empty_html.matches("<div class=\"path-strip\"").count(), 0);
+    let populated_reach_strata = empty_report
+        .overview
+        .strata
+        .iter()
+        .filter(|row| {
+            row.reach.left_only_unique_path_count
+                + row.reach.both_unique_path_count
+                + row.reach.right_only_unique_path_count
+                > 0
+        })
+        .count();
+    assert_eq!(
+        empty_html.matches("<div class=\"reach-strip\"").count(),
+        populated_reach_strata
+    );
+    assert_eq!(
+        empty_html
+            .matches("<div class=\"location-context\"")
+            .count(),
+        0
+    );
+    assert!(empty_html.matches("No observed paired paths").count() <= 4);
+    assert!(empty_html.split_whitespace().count() < 6_000);
+
+    let mut mixed_report = paired_report(true);
+    let mut empty_stratum = mixed_report.overview.strata[0].clone();
+    empty_stratum.stratum.direction = antennabench_analysis::PathDirection::Receive;
+    empty_stratum.stratum.band = Band::M40;
+    empty_stratum.stratum.observation_kind = ObservationKind::PublicReport;
+    empty_stratum.stratum.source = RecordSource::Wsprnet;
+    empty_stratum.path_delta = ReportOverviewPathDelta::Unavailable;
+    empty_stratum.path_median_deltas.clear();
+    empty_stratum.unique_path_count = 0;
+    empty_stratum.paired_row_count = 0;
+    empty_stratum.contributing_block_count = 0;
+    empty_stratum.reach = Default::default();
+    empty_stratum.location_context.paths.clear();
+    empty_stratum.location_context.missing_location_path_count = 0;
+    empty_stratum
+        .location_context
+        .inconsistent_location_path_count = 0;
+    mixed_report.overview.strata.push(empty_stratum);
+
+    let mixed_html = render_standalone_html(&mixed_report).unwrap();
+    assert_eq!(mixed_html.matches("<div class=\"path-strip\"").count(), 1);
+    assert_eq!(mixed_html.matches("<div class=\"reach-strip\"").count(), 1);
+    assert_eq!(
+        mixed_html
+            .matches("<section aria-labelledby=\"path-context-")
+            .count(),
+        1
+    );
+    assert!(mixed_html.contains("No finite same-path paired evidence in 1 of 2 comparison strata"));
+    assert!(mixed_html.contains("No finite path-reach evidence in 1 of 2 comparison strata"));
+    assert!(mixed_html.contains("No located paired paths in 1 of 2 comparison strata"));
+    assert!(mixed_html.contains("RX path · 40 m · WSPR · Public report · WSPRnet"));
+    assert!(mixed_html.contains("not pooled"));
+
+    let compact_html = render_compact_summary_html(&mixed_report).unwrap();
+    assert!(compact_html.contains("No path delta in 1 comparison stratum"));
+    assert!(compact_html.contains("No finite same-path path-median delta in 1 of 2"));
+    assert!(compact_html.contains("No finite reach evidence in 1 comparison stratum"));
+    assert!(compact_html.contains("not pooled"));
 }
 
 #[test]
