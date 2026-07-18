@@ -101,6 +101,42 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
   ]);
 });
 
+test("controller profiles can be explicitly saved and deleted during setup", async () => {
+  const savedProfile = {
+    profileId: "profile-1",
+    revision: "revision-1",
+    name: "Bench switch",
+  };
+  let profiles = [savedProfile];
+  const run = harness({
+    save_antenna_controller_profile: savedProfile,
+    delete_antenna_controller_profile: undefined,
+    antenna_controller_profiles: () => ({ inputStyle: "one_line", profiles }),
+  });
+
+  assert.equal(
+    await run.controller.saveAntennaControllerProfile({ profileId: null, name: "Bench switch" }),
+    savedProfile,
+  );
+  assert.deepEqual(run.controller.state.antennaControllerProfileNotice, {
+    kind: "saved",
+    profileId: "profile-1",
+  });
+
+  profiles = [];
+  assert.equal(await run.controller.deleteAntennaControllerProfile("profile-1"), true);
+  assert.deepEqual(run.controller.state.antennaControllerProfileNotice, {
+    kind: "deleted",
+    profileId: "",
+  });
+  assert.deepEqual(run.calls.map(([command]) => command), [
+    "save_antenna_controller_profile",
+    "antenna_controller_profiles",
+    "delete_antenna_controller_profile",
+    "antenna_controller_profiles",
+  ]);
+});
+
 test("open cancellation, failure, and success retain focused state and refresh reports", async () => {
   const cancelled = harness({ open_session_bundle: { status: "cancelled" } });
   await cancelled.controller.openSession();

@@ -3,6 +3,7 @@ import { collectDesktopElements } from "./elements.mjs";
 import {
   applyStationPreferences,
   normalizeMaidenheadGrid,
+  readControllerProfileDraft,
   readEvidenceAction,
   readEvidenceReplacement,
   readSetupDraft,
@@ -65,6 +66,8 @@ export function mount(root, browserWindow) {
     setupReviewSlots,
     controllerSetupFields,
     controllerProfileSelect,
+    controllerProfileSave,
+    controllerProfileDelete,
     conductorPanel,
     conductorEmpty,
     conductorStatus,
@@ -353,8 +356,26 @@ export function mount(root, browserWindow) {
     const profile = state.antennaControllerCatalog?.profiles?.find(
       (candidate) => candidate.profileId === controllerProfileSelect.value,
     );
-    if (profile) applyControllerProfile(setupForm, profile);
+    applyControllerProfile(setupForm, profile ?? null);
     controller.editSetup();
+  });
+
+  controllerProfileSave.addEventListener("click", async () => {
+    const saved = await controller.saveAntennaControllerProfile(readControllerProfileDraft(setupForm));
+    if (saved) controller.editSetup();
+  });
+
+  controllerProfileDelete.addEventListener("click", async () => {
+    const profile = state.antennaControllerCatalog?.profiles?.find(
+      (candidate) => candidate.profileId === controllerProfileSelect.value,
+    );
+    if (!profile) return;
+    if (!controller.confirm(`Delete the controller profile “${profile.name}” from this computer? Existing sessions that used it will fall back to manual switching.`)) return;
+    const deleted = await controller.deleteAntennaControllerProfile(profile.profileId);
+    if (deleted) {
+      applyControllerProfile(setupForm, null);
+      controller.editSetup();
+    }
   });
 
   antennaControllerAttach.addEventListener("click", async () => {
@@ -441,7 +462,7 @@ export function mount(root, browserWindow) {
   setupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const outcome = await controller.reviewSetup(readSetupDraft(setupForm));
-    focusSetupOutcome(outcome, setupReviewPanel, setupDiagnostics);
+    focusSetupOutcome(outcome, setupReviewPanel, setupDiagnostics, setupForm);
   });
 
   setupCreateButton.addEventListener("click", async () => {
@@ -513,14 +534,14 @@ function applyControllerProfile(form, profile) {
   const set = (field, value) => {
     form.querySelector(`[data-setup-field="${field}"]`).value = value ?? "";
   };
-  set("controllerProfileName", profile.name);
-  set("controllerTimeoutSeconds", profile.timeoutSeconds);
-  set("controllerSwitchCommand", canonicalCommandLine(profile.switchCommand));
-  set("controllerVerificationCommand", canonicalCommandLine(profile.verificationCommand));
-  set("controllerSwitchProgram", profile.switchCommand.programTemplate);
-  set("controllerSwitchArguments", profile.switchCommand.argumentTemplates.join("\n"));
-  set("controllerVerificationProgram", profile.verificationCommand?.programTemplate ?? "");
-  set("controllerVerificationArguments", profile.verificationCommand?.argumentTemplates?.join("\n") ?? "");
+  set("controllerProfileName", profile?.name ?? "");
+  set("controllerTimeoutSeconds", profile?.timeoutSeconds ?? 10);
+  set("controllerSwitchCommand", canonicalCommandLine(profile?.switchCommand));
+  set("controllerVerificationCommand", canonicalCommandLine(profile?.verificationCommand));
+  set("controllerSwitchProgram", profile?.switchCommand?.programTemplate ?? "");
+  set("controllerSwitchArguments", profile?.switchCommand?.argumentTemplates?.join("\n") ?? "");
+  set("controllerVerificationProgram", profile?.verificationCommand?.programTemplate ?? "");
+  set("controllerVerificationArguments", profile?.verificationCommand?.argumentTemplates?.join("\n") ?? "");
 }
 
 function syncControllerSetupFields(form, fields) {

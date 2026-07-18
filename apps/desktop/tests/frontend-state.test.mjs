@@ -11,6 +11,7 @@ import {
   invokeAntennaControllerProfiles,
   invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
+  invokeDeleteAntennaControllerProfile,
   invokeExportActiveSessionReport,
   invokeExportSession,
   invokeImportActiveSessionRbn,
@@ -113,7 +114,7 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     new URL("../../../package-lock.json", import.meta.url),
     "utf8",
   ));
-  assert.match(html, /<script type="module" src="app\.mjs"><\/script>/);
+  assert.match(html, /<script type="module" src="main\.mjs"><\/script>/);
   assert.equal(tauri.build.frontendDist, "frontend");
   assert.equal(tauri.build.beforeDevCommand, undefined);
   assert.equal(tauri.build.beforeBuildCommand, undefined);
@@ -130,6 +131,7 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     "elements.mjs",
     "forms.mjs",
     "index.html",
+    "main.mjs",
     "mark.svg",
     "models.mjs",
     "renderers.mjs",
@@ -177,6 +179,8 @@ test("the shell starts in session setup", () => {
     antennaController: null,
     antennaControllerError: null,
     antennaControllerOutcome: null,
+    antennaControllerProfileNotice: null,
+    antennaControllerProfileError: null,
   });
 });
 
@@ -329,8 +333,12 @@ test("RX-only questions retain default best-effort public collection and explici
 test("setup review focus follows successful and invalid keyboard submissions", () => {
   const review = { focusCount: 0, focus() { this.focusCount += 1; } };
   const diagnostics = { focusCount: 0, focus() { this.focusCount += 1; } };
+  const invalidField = { focusCount: 0, focus() { this.focusCount += 1; } };
+  const form = { querySelector() { return invalidField; } };
   assert.equal(focusSetupOutcome({ setupStatus: "reviewed" }, review, diagnostics), "review");
   assert.equal(review.focusCount, 1);
+  assert.equal(focusSetupOutcome({ setupStatus: "invalid" }, review, diagnostics, form), "field");
+  assert.equal(invalidField.focusCount, 1);
   assert.equal(focusSetupOutcome({ setupStatus: "invalid" }, review, diagnostics), "diagnostics");
   assert.equal(diagnostics.focusCount, 1);
   assert.equal(focusSetupOutcome({ setupStatus: "error" }, review, diagnostics), null);
@@ -350,10 +358,11 @@ test("question cards preserve native keyboard controls and collapse on narrow sc
 
 test("setup serializes explicit local controller policy, profile, and target mappings", () => {
   const setupHtml = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
-  assert.match(setupHtml, /Use a local direct-process antenna controller/);
-  assert.match(setupHtml, /Automatic after Start \/ Resume/);
-  assert.match(setupHtml, /Require manual review/);
-  assert.match(setupHtml, /Imported bundles never attach or run them/);
+  assert.match(setupHtml, /Antenna switching assistant/);
+  assert.match(setupHtml, /Automatically after Start or Resume/);
+  assert.match(setupHtml, /wait for me to confirm the antenna is ready/);
+  assert.match(setupHtml, /Save profile/);
+  assert.match(setupHtml, /Delete selected profile/);
   assert.match(setupHtml, /may disclose paths, addresses, usernames, or credentials/);
   assert.match(setupHtml, /Switch arguments, one per line/);
 
@@ -713,6 +722,7 @@ test("antenna-controller bridge separates local profile writes from narrow activ
 
   await invokeAntennaControllerProfiles(invoke);
   await invokeSaveAntennaControllerProfile(invoke, draft);
+  await invokeDeleteAntennaControllerProfile(invoke, "profile-1");
   await invokeActiveSessionAntennaController(invoke);
   await invokeAttachSessionAntennaController(invoke, attach);
   await invokeRunSessionAntennaController(invoke, run);
@@ -720,6 +730,7 @@ test("antenna-controller bridge separates local profile writes from narrow activ
   assert.deepEqual(calls, [
     ["antenna_controller_profiles"],
     ["save_antenna_controller_profile", { draft }],
+    ["delete_antenna_controller_profile", { profileId: "profile-1" }],
     ["active_session_antenna_controller"],
     ["attach_active_session_antenna_controller", { request: attach }],
     ["run_active_session_antenna_controller", { request: run }],

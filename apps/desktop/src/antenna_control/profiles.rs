@@ -307,6 +307,20 @@ pub(super) fn validate_catalog(catalog: &ControllerCatalog) -> Result<(), String
     Ok(())
 }
 
+pub(super) fn remove_profile(catalog: &mut ControllerCatalog, profile_id: &str) -> bool {
+    let previous_len = catalog.profiles.len();
+    catalog
+        .profiles
+        .retain(|profile| profile.profile_id != profile_id);
+    if catalog.profiles.len() == previous_len {
+        return false;
+    }
+    catalog
+        .associations
+        .retain(|association| association.profile_id != profile_id);
+    true
+}
+
 pub(super) fn write_catalog(
     app_data_dir: &Path,
     catalog: &ControllerCatalog,

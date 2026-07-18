@@ -10,8 +10,8 @@ mod wspr_live_import;
 
 use antenna_control::{
     active_session_antenna_controller, antenna_controller_profiles,
-    attach_active_session_antenna_controller, run_active_session_antenna_controller,
-    save_antenna_controller_profile, AntennaControllerState,
+    attach_active_session_antenna_controller, delete_antenna_controller_profile,
+    run_active_session_antenna_controller, save_antenna_controller_profile, AntennaControllerState,
 };
 use conductor::{active_session_conductor, mutate_active_session_conductor, ConductorSessionState};
 use location::{request_station_location, LocationState};
@@ -62,6 +62,7 @@ pub fn run() {
             import_active_session_rbn,
             antenna_controller_profiles,
             save_antenna_controller_profile,
+            delete_antenna_controller_profile,
             active_session_antenna_controller,
             attach_active_session_antenna_controller,
             run_active_session_antenna_controller

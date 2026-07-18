@@ -155,30 +155,40 @@
                 <p class="field-help">Actual WSPR timing remains operator-paced and excludes switching time and waits for eligible cycle boundaries.</p>
               </fieldset>
 
-              <fieldset class="setup-section">
-                <legend><span>05</span> Optional antenna controller</legend>
-                <label class="authority-confirmation"><input type="checkbox" data-setup-field="antennaControllerEnabled"> Use a local direct-process antenna controller</label>
-                <p class="field-help">Controller programs and target mappings stay in this computer's application data. Imported bundles never attach or run them.</p>
+              <fieldset class="setup-section" data-controller-section>
+                <legend><span>05</span> Antenna switching assistant <button class="context-help" type="button" data-help-trigger="antenna_controller">?</button></legend>
+                <label class="authority-confirmation"><input type="checkbox" data-setup-field="antennaControllerEnabled"> Let AntennaBench run a local program to switch antennas</label>
+                <p class="field-help">Manual switching remains the default. Turn this on only if you already have a controller program that AntennaBench can run before each planned cycle.</p>
                 <div data-controller-setup-fields hidden>
-                  <div class="field-grid">
-                    <label>Saved profile<select data-setup-field="controllerProfileId"><option value="">New profile</option></select></label>
-                    <label>Profile name<input data-setup-field="controllerProfileName" maxlength="256"></label>
-                    <label>Timeout (seconds)<input type="number" min="1" max="60" value="10" data-setup-field="controllerTimeoutSeconds"></label>
-                    <label>Invocation<select data-setup-field="controllerInvocation"><option value="operator_triggered" selected>Operator-triggered</option><option value="automatic">Automatic after Start / Resume</option></select></label>
+                  <div class="controller-profile-block">
+                    <div class="field-grid">
+                      <label>Controller profile<select data-setup-field="controllerProfileId"><option value="">Create a new profile</option></select><small>Profiles keep reusable command settings on this computer; they are never included in imported session bundles.</small></label>
+                      <label>Profile name<input data-setup-field="controllerProfileName" maxlength="256"><small>Choose a name that identifies the switch or controller.</small></label>
+                      <label>Stop waiting after<input type="number" min="1" max="60" value="10" data-setup-field="controllerTimeoutSeconds"><small>Seconds before a controller command is treated as timed out.</small></label>
+                      <label>Run the controller<select data-setup-field="controllerInvocation"><option value="operator_triggered" selected>Only when I click Switch antenna</option><option value="automatic">Automatically after Start or Resume</option></select></label>
+                    </div>
+                    <div class="controller-profile-actions">
+                      <button type="button" class="secondary-action" data-controller-profile-save>Save profile</button>
+                      <button type="button" class="danger-text-action" data-controller-profile-delete disabled>Delete selected profile</button>
+                      <span class="controller-profile-status" data-controller-profile-status role="status" aria-live="polite"></span>
+                    </div>
                   </div>
-                  <div data-controller-one-line>
-                    <label class="field-wide">Switch command<input data-setup-field="controllerSwitchCommand" autocomplete="off" spellcheck="false"></label>
-                    <label class="field-wide">Verification command (optional)<input data-setup-field="controllerVerificationCommand" autocomplete="off" spellcheck="false"></label>
+                  <div class="field-grid controller-command-fields" data-controller-one-line>
+                    <label class="field-wide">Command to switch antennas<input data-setup-field="controllerSwitchCommand" autocomplete="off" spellcheck="false"><small>Runs for the upcoming antenna. You can use placeholders such as <code>{target}</code>, <code>{antenna}</code>, and <code>{band}</code>.</small></label>
+                    <label class="field-wide">Command to verify the switch <span class="optional-label">Optional</span><input data-setup-field="controllerVerificationCommand" autocomplete="off" spellcheck="false"><small>Runs only after the switch command succeeds. Required if AntennaBench will continue without your confirmation.</small></label>
                   </div>
-                  <div data-controller-structured hidden>
+                  <div class="field-grid controller-command-fields" data-controller-structured hidden>
                     <label class="field-wide">Switch program<input data-setup-field="controllerSwitchProgram" autocomplete="off" spellcheck="false"></label>
                     <label class="field-wide">Switch arguments, one per line<textarea rows="5" data-setup-field="controllerSwitchArguments" spellcheck="false"></textarea></label>
                     <label class="field-wide">Verification program (optional)<input data-setup-field="controllerVerificationProgram" autocomplete="off" spellcheck="false"></label>
                     <label class="field-wide">Verification arguments, one per line<textarea rows="5" data-setup-field="controllerVerificationArguments" spellcheck="false"></textarea></label>
                   </div>
-                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerArmForSession"> Attach and arm this local profile for the newly created session</label>
-                  <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerManualReviewRequired" checked> Require manual review and the named ready action after successful verification</label>
-                  <p class="field-help">Turning review off requires a verification command. A successful switch and independent verification will then arm the next eligible WSPR boundary automatically.</p>
+                  <div class="controller-behavior">
+                    <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerArmForSession"> Allow AntennaBench to run this controller in the new session</label>
+                    <p class="field-help">This permission is temporary and is revoked when the app closes or the run is paused. Otherwise the profile is saved for later, but the session starts with manual switching.</p>
+                    <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerManualReviewRequired" checked> After each switch, wait for me to confirm the antenna is ready</label>
+                    <p class="field-help">If turned off, both the switch and verification commands must succeed before AntennaBench schedules the next eligible WSPR cycle.</p>
+                  </div>
                   <p class="privacy-note">Resolved programs, indexed arguments, stdout, and stderr become portable session evidence and may disclose paths, addresses, usernames, or credentials.</p>
                 </div>
               </fieldset>
@@ -273,7 +283,7 @@
                 <p class="field-help" data-antenna-controller-detail>No local controller is attached. The manual ready action remains available.</p>
                 <pre class="controller-diagnostic" data-antenna-controller-diagnostic hidden></pre>
                 <div class="conductor-actions">
-                  <button type="button" data-antenna-controller-attach hidden>Attach and arm saved profile</button>
+                  <button type="button" data-antenna-controller-attach hidden>Allow saved profile to run</button>
                   <button type="button" class="primary-action" data-antenna-controller-run hidden>Switch antenna</button>
                   <button type="button" data-antenna-controller-retry hidden>Retry switch</button>
                 </div>

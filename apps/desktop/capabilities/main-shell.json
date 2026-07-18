@@ -23,6 +23,7 @@
     "allow-import-active-session-rbn",
     "allow-antenna-controller-profiles",
     "allow-save-antenna-controller-profile",
+    "allow-delete-antenna-controller-profile",
     "allow-active-session-antenna-controller",
     "allow-attach-active-session-antenna-controller",
     "allow-run-active-session-antenna-controller"

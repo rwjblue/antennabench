@@ -122,6 +122,34 @@ pub(crate) fn save_antenna_controller_profile(
 }
 
 #[tauri::command]
+pub(crate) fn delete_antenna_controller_profile(
+    app: AppHandle,
+    controller_state: State<'_, AntennaControllerState>,
+    profile_id: String,
+) -> Result<(), SessionErrorPayload> {
+    let app_data_dir = resolved_app_data_dir(&app)?;
+    let mut catalog = read_catalog(&app_data_dir)?;
+    if !remove_profile(&mut catalog, &profile_id) {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The saved antenna-controller profile no longer exists.",
+            "refresh the local controller profile list before deleting",
+        ));
+    }
+    write_catalog(&app_data_dir, &catalog)?;
+    let should_revoke = controller_state.runtime.lock().ok().is_some_and(|runtime| {
+        runtime
+            .attached
+            .as_ref()
+            .is_some_and(|attached| attached.profile_id == profile_id)
+    });
+    if should_revoke {
+        controller_state.revoke();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub(crate) fn attach_active_session_antenna_controller(
     app: AppHandle,
     active_state: State<'_, ActiveSessionState>,

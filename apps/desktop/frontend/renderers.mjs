@@ -30,6 +30,7 @@ export function renderSetup(elements, state, root) {
     setupReviewSchedule, setupReviewCounterbalance, setupReviewTransitions,
     setupReviewSequence, setupReviewCanDescribe, setupReviewCannotEstablish,
     controllerOneLine, controllerStructured, controllerProfileSelect,
+    controllerProfileSave, controllerProfileDelete, controllerProfileStatus,
   } = elements;
   const setupBusy = ["reviewing", "creating"].includes(state.setupStatus);
   setupForm.setAttribute("aria-busy", String(setupBusy));
@@ -43,11 +44,12 @@ export function renderSetup(elements, state, root) {
   setupStatus.classList.toggle("muted", ["editing", "invalid", "error"].includes(state.setupStatus));
   const catalog = state.antennaControllerCatalog;
   if (catalog) {
-    const selected = controllerProfileSelect.value;
+    const selected = state.antennaControllerProfileNotice?.profileId
+      ?? controllerProfileSelect.value;
     const signature = catalog.profiles.map((profile) => `${profile.profileId}:${profile.revision}`).join("|");
     if (controllerProfileSelect.dataset.catalogSignature !== signature) {
       replaceSelectOptions(controllerProfileSelect, [
-        { value: "", label: "New profile" },
+        { value: "", label: "Create a new profile" },
         ...catalog.profiles.map((profile) => ({ value: profile.profileId, label: profile.name })),
       ]);
       controllerProfileSelect.value = catalog.profiles.some((profile) => profile.profileId === selected)
@@ -59,6 +61,24 @@ export function renderSetup(elements, state, root) {
     controllerOneLine.hidden = structured;
     controllerStructured.hidden = !structured;
   }
+  const profileBusy = ["saving", "deleting"].includes(state.antennaControllerStatus);
+  controllerProfileSave.disabled = profileBusy;
+  controllerProfileSave.textContent = state.antennaControllerStatus === "saving"
+    ? "Saving…"
+    : "Save profile";
+  controllerProfileDelete.disabled = profileBusy || controllerProfileSelect.value === "";
+  controllerProfileDelete.textContent = state.antennaControllerStatus === "deleting"
+    ? "Deleting…"
+    : "Delete selected profile";
+  const profileNotice = state.antennaControllerProfileNotice;
+  controllerProfileStatus.dataset.kind = state.antennaControllerProfileError ? "error" : "ready";
+  controllerProfileStatus.textContent = state.antennaControllerProfileError
+    ? state.antennaControllerProfileError.detail ?? state.antennaControllerProfileError.message
+    : profileNotice?.kind === "deleted"
+      ? "Profile deleted from this computer."
+      : profileNotice?.kind === "saved"
+        ? "Profile saved on this computer."
+        : "";
 
   renderFeedback(
     setupFeedback,
@@ -66,13 +86,22 @@ export function renderSetup(elements, state, root) {
     setupFeedbackDetail,
     setupFeedbackModel(state),
   );
-  const diagnostics = state.setupReview?.diagnostics ?? [];
+  const diagnostics = [
+    ...(state.setupReview?.diagnostics ?? []),
+    ...(state.antennaControllerProfileError ? [{
+      field: "antennaController",
+      message: state.antennaControllerProfileError.detail ?? state.antennaControllerProfileError.message,
+      code: "setup.antenna_controller.profile",
+      severity: "error",
+    }] : []),
+  ];
+  renderSetupFieldDiagnostics(setupForm, diagnostics, root);
   setupDiagnostics.replaceChildren(...diagnostics.map((diagnostic) => {
     const item = root.createElement("li");
     const field = root.createElement("strong");
     field.textContent = diagnostic.field;
     const message = root.createElement("span");
-    message.textContent = `${diagnostic.message} (${diagnostic.code})`;
+    message.textContent = diagnostic.message;
     item.append(field, message);
     return item;
   }));
@@ -142,6 +171,111 @@ export function renderSetup(elements, state, root) {
   }));
 }
 
+function renderSetupFieldDiagnostics(form, diagnostics, root) {
+  for (const diagnostic of form.querySelectorAll("[data-field-diagnostic]")) {
+    diagnostic.remove();
+  }
+  for (const control of form.querySelectorAll("[data-setup-invalid]")) {
+    control.removeAttribute("aria-invalid");
+    control.removeAttribute("data-setup-invalid");
+    const describedBy = (control.getAttribute("aria-describedby") ?? "")
+      .split(/\s+/)
+      .filter((id) => id && !id.startsWith("setup-field-error-"));
+    if (describedBy.length > 0) control.setAttribute("aria-describedby", describedBy.join(" "));
+    else control.removeAttribute("aria-describedby");
+  }
+  diagnostics.forEach((diagnostic, index) => {
+    const control = setupControlForDiagnostic(form, diagnostic);
+    if (!control) return;
+    const id = `setup-field-error-${index + 1}`;
+    const message = root.createElement("small");
+    message.id = id;
+    message.className = "field-error";
+    message.dataset.fieldDiagnostic = "";
+    message.textContent = diagnostic.message;
+    const container = control.closest("label, .field-control") ?? control.parentElement;
+    container?.append(message);
+    control.dataset.setupInvalid = "";
+    if (diagnostic.severity !== "warning") control.setAttribute("aria-invalid", "true");
+    const describedBy = new Set((control.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean));
+    describedBy.add(id);
+    control.setAttribute("aria-describedby", [...describedBy].join(" "));
+  });
+}
+
+function setupControlForDiagnostic(form, diagnostic) {
+  const directFields = {
+    "station.callsign": "callsign",
+    "station.grid": "grid",
+    "station.powerWatts": "powerWatts",
+    "schedule.mode": "mode",
+    "schedule.goal": "goal",
+    "schedule.band": "band",
+    "schedule.rounds": "rounds",
+    wsprLiveAcquisitionEnabled: "wsprLiveAcquisitionEnabled",
+    "signalPlan.plannedPowerWatts": "signalPlannedPowerWatts",
+    "signalPlan.transmittedCallsign": "signalTransmittedCallsign",
+    "signalPlan.differingIdentityValidated": "signalDifferingIdentityValidated",
+    "signalPlan.message": "signalMessage",
+    "signalPlan.repetitionCount": "signalRepetitionCount",
+    "signalPlan.keySpeedWpm": "signalKeySpeedWpm",
+    "signalPlan.transmitSeconds": "signalTransmitSeconds",
+    "signalPlan.intervalSeconds": "signalIntervalSeconds",
+    "signalPlan.frequenciesHz": "signalFrequenciesHz",
+  };
+  if (directFields[diagnostic.field]) {
+    return form.querySelector(`[data-setup-field="${directFields[diagnostic.field]}"]`);
+  }
+  const antenna = diagnostic.field?.match(/^antennas\.(\d+)\.(\w+)$/);
+  if (antenna) {
+    return form.querySelectorAll("[data-antenna-row]")[Number(antenna[1])]
+      ?.querySelector(`[data-antenna-field="${antenna[2]}"]`) ?? null;
+  }
+  if (diagnostic.field === "antennas") {
+    return form.querySelector('[data-antenna-row] [data-antenna-field="label"]');
+  }
+  if (diagnostic.field === "station") {
+    return form.querySelector('[data-setup-field="callsign"]');
+  }
+  if (diagnostic.field === "schedule") {
+    return form.querySelector('[data-setup-field="mode"]');
+  }
+  if (diagnostic.field === "signalPlan") {
+    return form.querySelector('[data-setup-field="signalTransmittedCallsign"]');
+  }
+  if (diagnostic.field === "antennaController") {
+    return controllerControlForMessage(form, diagnostic.message);
+  }
+  return null;
+}
+
+function controllerControlForMessage(form, message = "") {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("profile name")) {
+    return form.querySelector('[data-setup-field="controllerProfileName"]');
+  }
+  if (normalized.includes("timeout")) {
+    return form.querySelector('[data-setup-field="controllerTimeoutSeconds"]');
+  }
+  if (normalized.includes("verification")) {
+    return visibleControllerControl(form, "controllerVerificationCommand", "controllerVerificationProgram");
+  }
+  if (normalized.includes("target") || normalized.includes("antenna")) {
+    return form.querySelector('[data-antenna-row] [data-antenna-field="controllerTarget"]');
+  }
+  if (normalized.includes("saved") || normalized.includes("profile")) {
+    return form.querySelector('[data-setup-field="controllerProfileId"]');
+  }
+  return visibleControllerControl(form, "controllerSwitchCommand", "controllerSwitchProgram");
+}
+
+function visibleControllerControl(form, oneLine, structured) {
+  const oneLineControl = form.querySelector(`[data-setup-field="${oneLine}"]`);
+  return oneLineControl?.closest("[hidden]")
+    ? form.querySelector(`[data-setup-field="${structured}"]`)
+    : oneLineControl;
+}
+
 export function renderRun(elements, state, root, options = {}) {
   const {
     conductorPanel, conductorEmpty, conductorStatus, conductorRefreshButtons,
@@ -189,9 +323,9 @@ export function renderRun(elements, state, root, options = {}) {
   const controller = state.antennaController;
   const controllerBusy = ["loading", "attaching", "saving", "running"].includes(state.antennaControllerStatus);
   antennaControllerStatus.textContent = controller?.armed
-    ? `${controller.profileName ?? "Local profile"} armed · ${humanizeIdentifier(controller.automationStatus ?? "idle")}`
+    ? `${controller.profileName ?? "Local profile"} ready · ${humanizeIdentifier(controller.automationStatus ?? "idle")}`
     : controller?.profileId
-      ? `${controller.profileName ?? "Saved profile"} not armed`
+      ? `${controller.profileName ?? "Saved profile"} not allowed to run`
       : controller?.policy === "command_controlled"
         ? "No local profile attached"
         : "Manual only";
@@ -199,7 +333,7 @@ export function renderRun(elements, state, root, options = {}) {
     ?? state.antennaControllerOutcome?.detail
     ?? controller?.lastAttempt?.detail
     ?? (controller?.staleProfile
-      ? "The saved profile changed. Review, attach, and arm its current revision before retrying."
+      ? "The saved profile changed. Review it and allow its current revision to run before retrying."
       : controller?.manualReviewRequired === false
         ? "Successful switch and independent verification commands authorize the next eligible WSPR boundary. Manual ready remains available as fallback."
         : "Successful commands wait for the named operator ready action; manual operation remains available.");
@@ -561,7 +695,7 @@ function setupFeedbackModel(state) {
   if (state.setupStatus === "reviewing") return { kind: "loading", message: "Normalizing and validating the plan…", detail: "No destination is created during review." };
   if (state.setupStatus === "creating") return { kind: "loading", message: "Creating and reopening the checkpointed session…", detail: "The destination is published only after complete verification." };
   if (state.setupError) return { kind: "error", ...state.setupError };
-  if (state.setupStatus === "invalid") return { kind: "error", message: "The plan needs changes before it can be created.", detail: "Use the field diagnostics below, then review again." };
+  if (state.setupStatus === "invalid") return { kind: "error", message: "The plan needs changes before it can be created.", detail: "Correct the highlighted fields, then review again." };
   if (state.setupNotice === "cancelled") return { kind: "cancelled", message: "Creation cancelled.", detail: "The reviewed plan remains ready and no destination was changed." };
   if (state.setupNotice === "created" && state.session) return { kind: "ready", message: `${state.session.bundleName} is the active session.`, detail: `Checkpoint revision 0 is ready with ${state.session.slotCount} planned slots.` };
   if (state.setupStatus === "reviewed") return { kind: "ready", message: "The normalized plan passed strict creation validation.", detail: "Review the exact UTC-backed schedule, then create the session." };

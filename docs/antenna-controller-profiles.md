@@ -20,10 +20,16 @@ directory. A profile contains a name, switch command, optional verification
 command, and timeout. Each session maps its antenna labels to opaque controller
 targets such as `1`, `2`, `north`, or `loop`.
 
+The setup screen can save a new profile or update the selected one before a
+session is created. Deleting a profile removes it and its remembered session
+associations from this computer. Any affected session falls back to manual
+switching until another local profile is selected and allowed to run.
+
 Portable session bundles never contain an executable profile, target mapping, or
 timeout. Opening or recovering a bundle cannot run a command or restore process
-authority. You must explicitly attach and arm a local profile for the active
-session again.
+authority. You must explicitly select a local profile and allow AntennaBench to
+run it for the active session again. Internally this temporary process authority
+is called “armed”; the setup UI describes the permission directly.
 
 A bundle can retain the resolved program, ordered arguments, standard output,
 standard error, timing, and result from commands that actually ran. That evidence
@@ -40,6 +46,11 @@ A profile has:
 - one target mapping for every antenna in the session.
 
 Disabling manual review requires an independent verification command.
+
+Use **Save profile** to keep the entered commands for this and future sessions.
+Creating the session also saves the reviewed profile. Select an existing profile
+to reuse or update it; use **Delete selected profile** to remove it from local
+application data.
 
 On macOS and Linux, the app accepts a command line and applies a small,
 predictable tokenizer for whitespace, quotes, and backslash escapes. On Windows,

@@ -40,6 +40,8 @@ export function initialState(workflow = "setup") {
       antennaController: null,
       antennaControllerError: null,
       antennaControllerOutcome: null,
+      antennaControllerProfileNotice: null,
+      antennaControllerProfileError: null,
     },
     workflow,
   );
@@ -62,13 +64,18 @@ export function beginOpenSession(state) {
 }
 
 export function editSessionSetup(state) {
-  if (state.setupStatus === "editing" && state.setupReview === null) return state;
+  if (
+    state.setupStatus === "editing"
+    && state.setupReview === null
+    && state.antennaControllerProfileError === null
+  ) return state;
   return {
     ...state,
     setupStatus: "editing",
     setupReview: null,
     setupError: null,
     setupNotice: null,
+    antennaControllerProfileError: null,
   };
 }
 
@@ -79,6 +86,7 @@ export function beginSetupReview(state) {
     setupReview: null,
     setupError: null,
     setupNotice: null,
+    antennaControllerProfileError: null,
   };
 }
 
@@ -392,6 +400,33 @@ export function beginAntennaControllerAction(state, status = "loading") {
     antennaControllerStatus: status,
     antennaControllerOutcome: null,
     antennaControllerError: null,
+    antennaControllerProfileNotice: ["saving", "deleting"].includes(status)
+      ? null
+      : state.antennaControllerProfileNotice,
+    antennaControllerProfileError: ["saving", "deleting"].includes(status)
+      ? null
+      : state.antennaControllerProfileError,
+  };
+}
+
+export function antennaControllerProfileSucceeded(state, catalog, notice) {
+  return {
+    ...state,
+    antennaControllerStatus: "ready",
+    antennaControllerCatalog: catalog,
+    antennaControllerError: null,
+    antennaControllerProfileNotice: notice,
+    antennaControllerProfileError: null,
+  };
+}
+
+export function antennaControllerProfileActionFailed(state, error) {
+  const normalized = normalizeOpenError(error);
+  return {
+    ...state,
+    antennaControllerStatus: "error",
+    antennaControllerError: normalized,
+    antennaControllerProfileError: normalized,
   };
 }
 

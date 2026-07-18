@@ -128,9 +128,6 @@ export function readSetupDraft(form) {
   const value = (field) => form.querySelector(`[data-setup-field="${field}"]`).value;
   const signalPlanEnabled = form.querySelector('[data-setup-field="signalPlanEnabled"]').checked;
   const controllerEnabled = form.querySelector('[data-setup-field="antennaControllerEnabled"]').checked;
-  const lines = (field) => value(field) === "" ? [] : value(field).split(/\r?\n/);
-  const verificationOneLine = value("controllerVerificationCommand");
-  const verificationProgram = value("controllerVerificationProgram");
   return {
     station: {
       callsign: value("callsign").toUpperCase(),
@@ -174,25 +171,33 @@ export function readSetupDraft(form) {
       armForSession: form.querySelector('[data-setup-field="controllerArmForSession"]').checked,
       invocation: value("controllerInvocation"),
       manualReviewRequired: form.querySelector('[data-setup-field="controllerManualReviewRequired"]').checked,
-      profile: {
-        profileId: value("controllerProfileId") || null,
-        name: value("controllerProfileName"),
-        timeoutSeconds: Number(value("controllerTimeoutSeconds")),
-        switchCommand: {
-          oneLine: value("controllerSwitchCommand"),
-          program: value("controllerSwitchProgram"),
-          arguments: lines("controllerSwitchArguments"),
-        },
-        verificationCommand: (verificationOneLine || verificationProgram) ? {
-          oneLine: verificationOneLine,
-          program: verificationProgram,
-          arguments: lines("controllerVerificationArguments"),
-        } : null,
-      },
+      profile: readControllerProfileDraft(form),
       targets: [...form.querySelectorAll("[data-antenna-row]")].map((row) => ({
         antennaLabel: optionalField(row, "label"),
         target: optionalField(row, "controllerTarget"),
       })),
+    } : null,
+  };
+}
+
+export function readControllerProfileDraft(form) {
+  const value = (field) => form.querySelector(`[data-setup-field="${field}"]`).value;
+  const lines = (field) => value(field) === "" ? [] : value(field).split(/\r?\n/);
+  const verificationOneLine = value("controllerVerificationCommand");
+  const verificationProgram = value("controllerVerificationProgram");
+  return {
+    profileId: value("controllerProfileId") || null,
+    name: value("controllerProfileName"),
+    timeoutSeconds: Number(value("controllerTimeoutSeconds")),
+    switchCommand: {
+      oneLine: value("controllerSwitchCommand"),
+      program: value("controllerSwitchProgram"),
+      arguments: lines("controllerSwitchArguments"),
+    },
+    verificationCommand: (verificationOneLine || verificationProgram) ? {
+      oneLine: verificationOneLine,
+      program: verificationProgram,
+      arguments: lines("controllerVerificationArguments"),
     } : null,
   };
 }

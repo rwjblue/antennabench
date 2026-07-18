@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-antenna-controller-profile"
+description = "Enables the delete_antenna_controller_profile command without any pre-configured scope."
+commands.allow = ["delete_antenna_controller_profile"]
+
+[[permission]]
+identifier = "deny-delete-antenna-controller-profile"
+description = "Denies the delete_antenna_controller_profile command without any pre-configured scope."
+commands.deny = ["delete_antenna_controller_profile"]

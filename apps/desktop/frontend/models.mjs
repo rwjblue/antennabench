@@ -25,6 +25,10 @@ export const CONTEXT_HELP = Object.freeze({
     title: "Rounds and cycles",
     text: "One repetition tests every configured antenna in the selected direction. Both mode includes one receive and one transmit period per antenna; the estimate shows ideal WSPR time only.",
   },
+  antenna_controller: {
+    title: "Antenna switching assistant",
+    text: "AntennaBench can run a program already installed on this computer to request each antenna change and optionally verify it. Profiles are saved only in local application data, and opening an imported session never grants permission to run them.",
+  },
   public_spots: {
     title: "Automatic bidirectional WSPR spots",
     text: "AntennaBench collects delayed public reports for both transmissions and receptions from WSPR.live on a best-effort basis; enable WSJT-X Upload spots and keep it online. It retains the rows returned for configured request windows, the upstream mirror does not provide an independent completeness guarantee, and you can turn this off for an offline run.",
@@ -71,6 +75,29 @@ export function installContextualHelp(root) {
   const document = root.ownerDocument ?? root;
   let openDisclosure = null;
 
+  const position = () => {
+    if (!openDisclosure) return;
+    const { trigger, popover } = openDisclosure;
+    const triggerRect = trigger.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const viewportWidth = document.defaultView?.innerWidth ?? document.documentElement.clientWidth;
+    const viewportHeight = document.defaultView?.innerHeight ?? document.documentElement.clientHeight;
+    const margin = 12;
+    const gap = 8;
+    const width = popoverRect.width || Math.min(360, viewportWidth - (margin * 2));
+    const height = popoverRect.height || 150;
+    const left = Math.min(
+      Math.max(margin, triggerRect.left + (triggerRect.width / 2) - (width / 2)),
+      Math.max(margin, viewportWidth - width - margin),
+    );
+    const fitsBelow = triggerRect.bottom + gap + height <= viewportHeight - margin;
+    const top = fitsBelow
+      ? triggerRect.bottom + gap
+      : Math.max(margin, triggerRect.top - height - gap);
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+  };
+
   const close = (restoreFocus = false) => {
     if (!openDisclosure) return;
     const { trigger, popover } = openDisclosure;
@@ -84,16 +111,22 @@ export function installContextualHelp(root) {
   [...root.querySelectorAll("[data-help-trigger]")].forEach((trigger, index) => {
     const help = CONTEXT_HELP[trigger.dataset.helpTrigger];
     if (!help) return;
-    const popover = document.createElement("span");
+    const popover = document.createElement("div");
     popover.id = `context-help-${index + 1}`;
     popover.className = "context-help-popover";
     popover.setAttribute("role", "note");
-    popover.textContent = help.text;
+    const title = document.createElement("strong");
+    title.id = `${popover.id}-title`;
+    title.textContent = help.title;
+    const text = document.createElement("p");
+    text.textContent = help.text;
+    popover.append(title, text);
     popover.hidden = true;
     trigger.setAttribute("aria-label", `Help: ${help.title}`);
     trigger.setAttribute("aria-controls", popover.id);
     trigger.setAttribute("aria-expanded", "false");
-    trigger.after(popover);
+    popover.setAttribute("aria-labelledby", title.id);
+    (document.body ?? document.documentElement).append(popover);
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -104,6 +137,7 @@ export function installContextualHelp(root) {
       trigger.setAttribute("aria-expanded", "true");
       trigger.setAttribute("aria-describedby", popover.id);
       openDisclosure = { trigger, popover };
+      position();
     });
   });
 
@@ -119,6 +153,8 @@ export function installContextualHelp(root) {
       close();
     }
   });
+  document.defaultView?.addEventListener("resize", position);
+  document.addEventListener("scroll", position, true);
 
   return { close };
 }
@@ -165,12 +201,17 @@ export function locationLookupMessage(outcome) {
   }
 }
 
-export function focusSetupOutcome(state, reviewPanel, diagnostics) {
+export function focusSetupOutcome(state, reviewPanel, diagnostics, form = null) {
   if (state.setupStatus === "reviewed") {
     reviewPanel.focus();
     return "review";
   }
   if (state.setupStatus === "invalid") {
+    const invalidField = form?.querySelector?.("[data-setup-invalid]");
+    if (invalidField) {
+      invalidField.focus();
+      return "field";
+    }
     diagnostics.focus();
     return "diagnostics";
   }

@@ -6,6 +6,7 @@ import {
   invokeAntennaControllerProfiles,
   invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
+  invokeDeleteAntennaControllerProfile,
   invokeExportActiveSessionReport,
   invokeExportSession,
   invokeImportActiveSessionRbn,
@@ -25,6 +26,8 @@ import { projectCountdown } from "./models.mjs";
 import {
   antennaControllerActionFailed,
   antennaControllerCatalogSucceeded,
+  antennaControllerProfileSucceeded,
+  antennaControllerProfileActionFailed,
   antennaControllerRunSucceeded,
   antennaControllerViewSucceeded,
   beginAntennaControllerAction,
@@ -180,16 +183,35 @@ export function createDesktopController(options = {}) {
     async saveAntennaControllerProfile(draft) {
       commit(beginAntennaControllerAction(state, "saving"));
       try {
-        await invokeSaveAntennaControllerProfile(invoke(), draft);
-        commit(antennaControllerCatalogSucceeded(
+        const savedProfile = await invokeSaveAntennaControllerProfile(invoke(), draft);
+        commit(antennaControllerProfileSucceeded(
           state,
           await invokeAntennaControllerProfiles(invoke()),
+          { kind: "saved", profileId: savedProfile.profileId },
         ));
         if (state.session) await controller.refreshAntennaController();
+        return savedProfile;
       } catch (error) {
-        commit(antennaControllerActionFailed(state, error));
+        commit(antennaControllerProfileActionFailed(state, error));
+        return null;
       }
-      return state;
+    },
+
+    async deleteAntennaControllerProfile(profileId) {
+      commit(beginAntennaControllerAction(state, "deleting"));
+      try {
+        await invokeDeleteAntennaControllerProfile(invoke(), profileId);
+        commit(antennaControllerProfileSucceeded(
+          state,
+          await invokeAntennaControllerProfiles(invoke()),
+          { kind: "deleted", profileId: "" },
+        ));
+        if (state.session) await controller.refreshAntennaController();
+        return true;
+      } catch (error) {
+        commit(antennaControllerProfileActionFailed(state, error));
+        return false;
+      }
     },
 
     async runAntennaController() {

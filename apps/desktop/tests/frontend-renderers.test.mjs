@@ -65,6 +65,9 @@ test("contextual help is centralized, keyboard accessible, and fully inventoried
   assert.equal(trigger.getAttribute("aria-expanded"), "true");
   assert.equal(trigger.getAttribute("aria-describedby"), popover.id);
   assert.equal(popover.hidden, false);
+  assert.equal(popover.parentElement, document.body);
+  assert.match(popover.style.left, /px$/);
+  assert.match(popover.style.top, /px$/);
 
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   assert.equal(trigger.getAttribute("aria-expanded"), "false");
@@ -95,7 +98,8 @@ test("contextual help is centralized, keyboard accessible, and fully inventoried
 test("contextual help accepts the document root used by the desktop mount", () => {
   loadDesktopDocument();
   assert.doesNotThrow(() => installContextualHelp(document));
-  assert.ok(document.querySelector('[data-help-trigger="setup_question"] + .context-help-popover'));
+  const trigger = document.querySelector('[data-help-trigger="setup_question"]');
+  assert.ok(document.getElementById(trigger.getAttribute("aria-controls")));
 });
 
 test("the desktop mounts on document and installs setup interaction guards", async () => {
@@ -156,13 +160,26 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
 
   state.setupStatus = "invalid";
   state.setupReview = {
-    diagnostics: [{ field: "station.grid", message: "Grid required", code: "grid.required" }],
+    diagnostics: [
+      { field: "station.grid", message: "Grid required", code: "grid.required" },
+      {
+        field: "antennaController",
+        message: "The controller profile name is required",
+        code: "setup.antenna_controller.invalid",
+      },
+    ],
     plan: null,
   };
   renderSetup(e, state, document);
   assert.equal(e.setupStatus.textContent, "Needs changes");
   assert.equal(e.setupDiagnostics.hidden, false);
-  assert.equal(e.setupDiagnostics.children[0].children[1].textContent, "Grid required (grid.required)");
+  assert.equal(e.setupDiagnostics.children[0].children[1].textContent, "Grid required");
+  const grid = e.setupForm.querySelector('[data-setup-field="grid"]');
+  assert.equal(grid.getAttribute("aria-invalid"), "true");
+  assert.equal(grid.closest("label").querySelector(".field-error").textContent, "Grid required");
+  const profileName = e.setupForm.querySelector('[data-setup-field="controllerProfileName"]');
+  assert.equal(profileName.getAttribute("aria-invalid"), "true");
+  assert.match(profileName.closest("label").querySelector(".field-error").textContent, /profile name/);
 
   state.setupStatus = "reviewed";
   state.setupReview = {

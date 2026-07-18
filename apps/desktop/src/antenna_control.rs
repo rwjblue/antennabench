@@ -45,8 +45,8 @@ mod profiles;
 pub(crate) use automation::schedule_automatic_coordinator;
 pub(crate) use commands::{
     active_session_antenna_controller, antenna_controller_profiles,
-    attach_active_session_antenna_controller, run_active_session_antenna_controller,
-    save_antenna_controller_profile,
+    attach_active_session_antenna_controller, delete_antenna_controller_profile,
+    run_active_session_antenna_controller, save_antenna_controller_profile,
 };
 pub(crate) use policy::AntennaControllerState;
 pub(crate) use profiles::{
@@ -435,5 +435,33 @@ pub(crate) mod tests {
         let restarted = AntennaControllerState::default();
         assert!(restarted.runtime.lock().unwrap().attached.is_none());
         fs::remove_dir_all(&app_data_dir).unwrap();
+    }
+
+    #[test]
+    fn deleting_a_profile_removes_its_local_session_associations() {
+        let mut catalog = ControllerCatalog {
+            version: CATALOG_VERSION,
+            profiles: vec![ControllerProfile {
+                profile_id: "profile-1".into(),
+                revision: "revision-1".into(),
+                name: "Fake controller".into(),
+                switch_command: fake_template("exit-zero"),
+                verification_command: None,
+                timeout_seconds: 2,
+            }],
+            associations: vec![PersistedAssociation {
+                source: "/tmp/example.antennabundle".into(),
+                session_id: "session-1".into(),
+                profile_id: "profile-1".into(),
+                profile_revision: "revision-1".into(),
+                targets: BTreeMap::from([("Dipole".into(), "relay-a".into())]),
+            }],
+        };
+
+        assert!(remove_profile(&mut catalog, "profile-1"));
+        assert!(catalog.profiles.is_empty());
+        assert!(catalog.associations.is_empty());
+        assert!(!remove_profile(&mut catalog, "profile-1"));
+        assert!(validate_catalog(&catalog).is_ok());
     }
 }
