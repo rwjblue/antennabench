@@ -7,9 +7,11 @@ scope, dependencies, and acceptance criteria for individual changes.
 
 ## Available Now
 
-AntennaBench has a complete local, manual workflow for repeatable WSPR sessions:
+AntennaBench has a complete local, manual workflow for repeatable
+[WSPR sessions](glossary.md#session):
 
-- review the station, antennas, direction, and cycle order before creating a
+- review the station, antennas, direction, and
+  [cycle](glossary.md#wspr-cycle) order before creating a
   session;
 - conduct operator-paced cycles with actual WSPR timing, notes, missed or bad
   cycles, and corrections;
@@ -17,7 +19,8 @@ AntennaBench has a complete local, manual workflow for repeatable WSPR sessions:
 - optionally collect local WSJT-X evidence and delayed WSPR.live public spots;
 - import supported WSPR.live JSON and Reverse Beacon Network archives;
 - inspect conservative descriptive reports; and
-- export standalone HTML or a verified copy of the complete session bundle.
+- export standalone HTML or a verified copy of the complete
+  [session bundle](glossary.md#session-bundle).
 
 The repository can also build verified macOS release inputs for Apple silicon and
 Intel. There is not yet a signed public download. `antennabench.com` is the

@@ -1,8 +1,9 @@
 # Session Bundles
 
-An AntennaBench session bundle is the portable record of one antenna experiment.
-It keeps what you planned, what actually happened, the observations that were
-collected, and the information needed to explain the report.
+An AntennaBench [session bundle](glossary.md#session-bundle) is the portable
+record of one antenna experiment. It keeps what you planned, what actually
+happened, the observations that were collected, and the information needed to
+explain the report.
 
 Bundles are ordinary directories ending in `.session.antennabundle`. You can copy
 one to another computer, archive it with station records, or reopen it in a later
@@ -27,15 +28,17 @@ from the same committed report revision; neither replaces the bundle.
 A bundle can include:
 
 - station details, antenna descriptions, and the intended run order;
-- readiness actions, missed or bad cycles, notes, interruptions, and corrections;
-- local decodes and attributed public reports;
+- [readiness](glossary.md#readiness) actions, missed or bad
+  [cycles](glossary.md#wspr-cycle), notes, interruptions, and corrections;
+- [local decodes](glossary.md#local-decode) and attributed
+  [public reports](glossary.md#public-report);
 - original imported inputs when they are needed to establish provenance;
 - optional controller attempts and bounded diagnostics; and
 - enough metadata to reproduce the supported analysis and explain missing data.
 
 AntennaBench keeps these fact types distinct. It does not turn a planned switch
-into a confirmed switch, treat a missing spot as a zero, or hide a correction by
-rewriting the original record.
+into a confirmed switch, treat a missing [spot](glossary.md#spot) as a zero, or
+hide a correction by rewriting the original record.
 
 ## What Is Inside?
 
@@ -75,8 +78,9 @@ rather than editing bundle files by hand.
 - Review bundles before sharing. Notes, imported source material, and controller
   diagnostics can contain station details, local paths, usernames, addresses, or
   other sensitive text.
-- A damaged or ambiguous record may be excluded from a comparison while the
-  report still explains the problem. It is not silently converted into a result.
+- A damaged or ambiguous record may receive an
+  [exclusion](glossary.md#exclusion) while the report still explains the
+  problem. It is not silently converted into a result.
 
 Building an importer or working on storage internals? See the
 [Bundle Format Technical Reference](bundle-format-reference.md) for complete

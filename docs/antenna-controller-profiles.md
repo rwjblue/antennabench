@@ -5,7 +5,8 @@
 
 AntennaBench can run a machine-local program to request an antenna switch and,
 optionally, a separate program to verify the resulting state. Setup freezes two
-choices for the session: whether invocation is operator-triggered or automatic,
+choices for the [session](glossary.md#session): whether invocation is
+operator-triggered or automatic,
 and whether manual review remains required. Operator-triggered invocation and
 manual review are the defaults.
 
@@ -17,7 +18,8 @@ available.
 
 Controller profiles are stored only in this computer’s application-data
 directory. A profile contains a name, switch command, optional verification
-command, and timeout. Each session maps its antenna labels to opaque controller
+command, and timeout. Each session maps its
+[antenna labels](glossary.md#antenna-label) to opaque controller
 targets such as `1`, `2`, `north`, or `loop`.
 
 The setup screen can save a new profile or update the selected one before a
@@ -92,7 +94,8 @@ In review-required mode:
 1. Request the configured switch command.
 2. Inspect the result and, when configured, request independent verification.
 3. Confirm the actual hardware state.
-4. Press the named antenna’s **ready** action to arm the next eligible cycle.
+4. Press the named antenna’s
+   [**ready** action](glossary.md#readiness) to arm the next eligible cycle.
 
 When review is disabled, both commands must exit zero. AntennaBench commits the
 two attempt records and one `command_verified` ready event atomically, using the
@@ -111,10 +114,11 @@ association. Retry is explicit; editing/reattaching, the manual ready action,
 pause, end, report, and export remain available.
 
 Recovery never restores process authority. If a crash happened before the
-atomic checkpoint, explicit recovery, reattachment, and Resume may run the
-repeat-safe target commands again. If the checkpoint committed, the armed
-intention is projected and is not repeated. A committed successful pair in
-review-required mode is shown as awaiting operator review and is also not rerun.
+atomic [checkpoint](glossary.md#checkpoint), explicit recovery, reattachment,
+and Resume may run the repeat-safe target commands again. If the checkpoint
+committed, the armed intention is projected and is not repeated. A committed
+successful pair in review-required mode is shown as awaiting operator review and
+is also not rerun.
 
 ## Example Integration
 

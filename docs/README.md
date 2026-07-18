@@ -8,6 +8,8 @@ are intentionally technical.
 
 - [How AntennaBench Works](product.md) walks through planning, running, and
   reviewing an antenna experiment.
+- [Operator Glossary](glossary.md) defines the canonical terms used by the app,
+  reports, and operator guides.
 - [Session Bundles](bundle-format.md) explains the portable experiment record and
   when to export a bundle versus an HTML report.
 - [Why Not Just Use The Reverse Beacon Network?](why-not-just-use-rbn.md) compares

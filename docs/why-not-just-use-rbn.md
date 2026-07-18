@@ -12,18 +12,18 @@ holds for the signal you actually use on the air.
 
 > **Use RBN when the question is:** “Where is my real CW signal being copied?”
 >
-> **Use WSPR when the question is:** “Across interleaved, matched trials, does
-> antenna A consistently produce stronger or more complete evidence than
-> antenna B?”
+> **Use WSPR when the question is:** “Across interleaved
+> [matched pairs](glossary.md#matched-pair-internally-paired-row), does antenna A
+> consistently produce stronger or more complete evidence than antenna B?”
 
 ## They observe different things
 
-An RBN CW spot is the end of a recognition pipeline. A skimmer must hear an
-accepted keyword such as `CQ` or `TEST`, collect enough repetitions of the
-callsign, and decode sufficiently clean code. Those requirements are useful for
-finding stations that are calling CQ. They also mean that message construction,
-keying quality, callsign recognition, decoder state, and duplicate suppression
-can become variables in an antenna experiment.
+An RBN CW [spot](glossary.md#spot) is the end of a recognition pipeline. A
+skimmer must hear an accepted keyword such as `CQ` or `TEST`, collect enough
+repetitions of the callsign, and decode sufficiently clean code. Those
+requirements are useful for finding stations that are calling CQ. They also mean
+that message construction, keying quality, callsign recognition, decoder state,
+and duplicate suppression can become variables in an antenna experiment.
 
 WSPR starts with a more standardized test signal. Its messages carry a callsign,
 locator, and reported power using a narrow-band, strongly coded waveform in
@@ -106,9 +106,10 @@ or hide either network.
 
 A single remote receiver can be unusually quiet, noisy, directional, overloaded,
 or temporarily misconfigured. A larger and more geographically varied reporting
-population creates more opportunities for matched comparisons on the same
-remote path. AntennaBench still treats each path separately; it does not assume
-that 1,000 heterogeneous receivers form one calibrated instrument.
+population creates more opportunities for matched pairs on the same
+[remote path](glossary.md#remote-path). AntennaBench still treats each path
+separately; it does not assume that 1,000 heterogeneous receivers form one
+calibrated instrument.
 
 ### WSPR gives the experiment a fixed cadence
 
@@ -122,15 +123,15 @@ transmissions or wait ten minutes; otherwise a node that already spotted the
 station may suppress the duplicate. This is not browser caching. It is a
 reporting rule that must be included in the experiment design.
 
-### A missing report is not a zero
+### A Missing Spot Is Not A Zero
 
-For both networks, no spot means only that no qualifying report was observed. A
+For both networks, no spot means only that no qualifying spot was observed. A
 signal may have been below threshold, covered by interference, rejected by the
 decoder, suppressed as a duplicate, lost during upload, or received by a station
 that was not monitoring that band. AntennaBench therefore discloses missing and
 unmatched observations rather than treating them as zero-strength signals.
 
-### The SNR numbers are not interchangeable
+### The [SNR](glossary.md#snr) Numbers Are Not Interchangeable
 
 RBN and WSPR use different waveforms, decoders, bandwidth conventions, and
 reporting paths. An RBN SNR cannot be merged with a WSPR SNR as though both were
@@ -150,8 +151,8 @@ question:
 
 For a controlled RBN test, use a memory keyer, keep the message and power fixed,
 alternate antennas, record the exact frequencies, and either move at least 300 Hz
-between adjacent transmissions or wait ten minutes. Compare paired reports from
-the same skimmer over nearby times.
+between adjacent transmissions or wait ten minutes. Compare matched pairs of
+reports from the same skimmer over nearby times.
 
 ## Where WSPR is the easier default
 
