@@ -4,7 +4,6 @@
   "allowlist_slack": 10,
   "allowlist": {
     "apps/desktop/src/antenna_control.rs": 1821,
-    "apps/desktop/src/open_session.rs": 1853,
     "apps/desktop/src/wsjtx_session.rs": 1465,
     "crates/storage/src/live.rs": 2012,
     "crates/storage/src/resource.rs": 1207,
