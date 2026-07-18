@@ -20,7 +20,9 @@ AntennaBench has a complete local, manual workflow for repeatable WSPR sessions:
 - export standalone HTML or a verified copy of the complete session bundle.
 
 The repository can also build verified macOS release inputs for Apple silicon and
-Intel. There is not yet a signed public download. The hosted foundation is a
+Intel. There is not yet a signed public download. `antennabench.com` is the
+public information site and canonical sample; it does not offer accounts,
+uploads, or report publishing. The separate hosted-sharing foundation remains a
 non-public, admission-disabled prototype and is not part of the current product.
 
 ## Next: A Trustworthy macOS Preview

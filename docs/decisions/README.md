@@ -43,6 +43,8 @@ historical references, not tutorials or work trackers; start with the
   Control](0021-use-command-verified-antenna-control.md)
 - [0022: Use One Root npm Workspace For JavaScript
   Tooling](0022-use-one-root-npm-workspace.md)
+- [0023: Use Static Astro For The Project
+  Site](0023-use-static-astro-for-the-project-site.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions

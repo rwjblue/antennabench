@@ -10,3 +10,4 @@ node_modules/
 coverage/
 .wrangler/
 /apps/hosted/dist/
+/apps/hosted/.astro/

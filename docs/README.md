@@ -53,8 +53,9 @@ are intentionally technical.
   draft verification, promotion, recovery, and credentials.
 - [Supply-Chain Updates](supply-chain.md) is the dependency, tool, Action, runner,
   and exception-maintenance procedure.
-- [Hosted Foundation Operations](hosted-operations.md) is the environment and
-  teardown runbook for the admission-disabled hosted prototype.
+- [Hosted Site And Foundation Operations](hosted-operations.md) covers static
+  site deployment, domain and rollback verification, and the separate
+  admission-disabled hosted prototype.
 
 ## Historical And Legal References
 

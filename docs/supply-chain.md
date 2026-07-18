@@ -6,8 +6,9 @@ repository-owned Action, runner, tool, and dependency-maintenance checks.
 
 ## Routine Pull Requests
 
-Dependabot checks Cargo, GitHub Actions, and the root npm workspace every Monday. Each ecosystem permits
-at most five open update pull requests. Patch and minor version updates may be
+Dependabot checks Cargo, GitHub Actions, and the root npm workspace every
+Monday. Each ecosystem permits at most five open update pull requests. Patch
+and minor version updates may be
 grouped; major and security updates remain independent. Updates are never
 merged automatically.
 
@@ -80,6 +81,13 @@ The private root workspace explicitly contains `apps/desktop` and
 npm lockfile, and ordinary installs run `npm ci` from that root. Workspace
 manifests own the exact direct versions their source and tests import; the root
 manifest owns orchestration and the reviewed install-script allowlist.
+
+Astro is a hosted-workspace build dependency only. Its static output contains
+no framework runtime or hydrated JavaScript, and the assets-only production
+workflow invokes the same exact-pinned Wrangler dependency already covered by
+the root lock. Cloudflare credentials are protected GitHub `production`
+environment secrets and are exposed only to the final deploy step after the
+credential-free hosted validation succeeds.
 
 The supply-chain gate rejects an undeclared package manifest, a nested lockfile,
 a non-exact direct version, or disagreement between any workspace manifest and

@@ -2,6 +2,12 @@
 
 Date: 2026-07-14
 
+Amended by [Decision 0023](0023-use-static-astro-for-the-project-site.md):
+the explanatory site and canonical sample launch independently as static Astro
+output through an assets-only Cloudflare profile. The sharing topology below
+remains the selected future boundary; its resources and user actions are not
+enabled by the public information site.
+
 ## Decision
 
 AntennaBench will treat hosted report sharing as an optional adapter around the

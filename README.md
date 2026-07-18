@@ -6,6 +6,12 @@
 
 <p align="center"><strong>Run repeatable antenna comparisons and keep the evidence behind every result.</strong></p>
 
+<p align="center">
+  <a href="https://antennabench.com">Project site</a> ·
+  <a href="https://antennabench.com/sample-report/">Canonical sample report</a> ·
+  <a href="docs/README.md">Documentation</a>
+</p>
+
 Antenna tests are easy to start and surprisingly easy to overstate. Propagation
 changes, receiver populations shift, switches happen late, and missing spots can
 look like measurements when they are not.
@@ -52,6 +58,10 @@ comparisons, collect optional WSJT-X and WSPR.live evidence, import bounded WSPR
 and Reverse Beacon Network data, render local reports, and export compact
 printable summaries, full evidence reports, and verified bundles. Automatic
 winner selection and hosted report publishing are not available.
+
+The public project site explains the workflow and serves a canonical report
+generated from sanitized repository fixture data. It does not provide an
+account, upload, publication, or report-hosting service.
 
 See the [roadmap](docs/roadmap.md) for the current direction.
 

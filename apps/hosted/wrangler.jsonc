@@ -12,7 +12,7 @@
     "ADMISSION_ENABLED": "false"
   },
   "assets": {
-    "directory": "./public",
+    "directory": "./dist/site",
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
   },
@@ -74,7 +74,7 @@
         "ADMISSION_ENABLED": "false"
       },
       "assets": {
-        "directory": "./public",
+        "directory": "./dist/site",
         "binding": "ASSETS",
         "run_worker_first": ["/api/*"]
       },
@@ -133,7 +133,7 @@
         "ADMISSION_ENABLED": "false"
       },
       "assets": {
-        "directory": "./public",
+        "directory": "./dist/site",
         "binding": "ASSETS",
         "run_worker_first": ["/api/*"]
       },

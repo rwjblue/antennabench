@@ -201,6 +201,42 @@ export function validateReleaseWorkflowText(
   return errors;
 }
 
+export function validateHostedSiteDeployWorkflowText(
+  text,
+  source = ".github/workflows/hosted-site-deploy.yml",
+) {
+  const errors = [];
+  const required = [
+    [/^  push:\s*\n    branches: \[main\]\s*$/m, "must deploy pushes only from main"],
+    [/^  workflow_dispatch:\s*$/m, "must support reviewed-revision redeployment"],
+    [/^      source_revision:\s*$/m, "must require an explicit rollback source revision"],
+    [/^        required: true\s*$/m, "rollback source revision must be required"],
+    [/^    environment:\s*\n      name: production\s*$/m, "deploy job must use the production environment"],
+    [/git merge-base --is-ancestor "\$GITHUB_SHA" origin\/main/, "must reject source outside main history"],
+    [/mise run hosted:test/, "must validate the locked hosted workspace before deploy"],
+    [/npm run deploy:site --workspace @antennabench\/hosted/, "must use the hosted workspace deploy command"],
+  ];
+  for (const [pattern, message] of required) {
+    if (!pattern.test(text)) errors.push(`${source}: ${message}`);
+  }
+  if (text.includes("pull_request:")) {
+    errors.push(`${source}: production deployment must not run for pull requests`);
+  }
+  if ((text.match(/^    environment:\s*$/gm) ?? []).length !== 1) {
+    errors.push(`${source}: exactly one job may receive the production environment`);
+  }
+  const secretNames = [...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1]);
+  const expectedSecrets = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"];
+  if (JSON.stringify([...new Set(secretNames)].sort()) !== JSON.stringify(expectedSecrets)) {
+    errors.push(`${source}: Cloudflare secret inventory is not exact`);
+  }
+  const deployStart = text.indexOf("- name: Deploy static site");
+  if (deployStart === -1 || /secrets\./.test(text.slice(0, deployStart))) {
+    errors.push(`${source}: Cloudflare secrets must be scoped only to the final deploy step`);
+  }
+  return errors;
+}
+
 export function validateRepository(root) {
   const errors = [];
   const workflowRoot = path.join(root, ".github", "workflows");
@@ -213,6 +249,8 @@ export function validateRepository(root) {
     }
     if (file === "desktop-release.yml") {
       errors.push(...validateReleaseWorkflowText(text, relative));
+    } else if (file === "hosted-site-deploy.yml") {
+      errors.push(...validateHostedSiteDeployWorkflowText(text, relative));
     } else if (/secrets\./.test(text)) {
       errors.push(`${relative}: ordinary workflow must not reference repository secrets`);
     }

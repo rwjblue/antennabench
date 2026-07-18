@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#102b2b"/>
+      <stop offset="1" stop-color="#174b46"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="1060" cy="70" r="260" fill="#f0b35a" opacity=".92"/>
+  <circle cx="960" cy="325" r="220" fill="none" stroke="#70c5b8" stroke-width="4" opacity=".24"/>
+  <circle cx="960" cy="325" r="150" fill="none" stroke="#70c5b8" stroke-width="4" opacity=".42"/>
+  <circle cx="960" cy="325" r="80" fill="none" stroke="#70c5b8" stroke-width="4" opacity=".72"/>
+  <circle cx="960" cy="282" r="20" fill="#f0b35a"/>
+  <path d="M960 302v124M915 426h90" fill="none" stroke="#f7f1df" stroke-linecap="round" stroke-width="15"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="86" y="105" fill="#70c5b8" font-size="28" font-weight="700" letter-spacing="2">ANTENNABENCH</text>
+    <text x="82" y="240" fill="#f7f1df" font-size="76" font-weight="800">Better antenna</text>
+    <text x="82" y="326" fill="#f7f1df" font-size="76" font-weight="800">comparisons.</text>
+    <text x="82" y="413" fill="#f0b35a" font-family="Georgia, serif" font-size="73" font-style="italic">Evidence included.</text>
+    <text x="86" y="510" fill="#c8d8d4" font-size="27">Guided WSPR experiments · Local-first reports</text>
+    <text x="86" y="558" fill="#91aaa4" font-size="24">antennabench.com</text>
+  </g>
+</svg>

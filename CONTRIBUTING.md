@@ -23,6 +23,15 @@ workspaces; it does not build the desktop frontend. The first setup downloads
 the pinned tools, and the first desktop build compiles the application. Stop
 the development process with Control-C.
 
+The public static site is part of the hosted workspace. Build and validate it
+without Cloudflare credentials with:
+
+```bash
+npm run site:build
+npm run site:check
+npm run site:dry-build
+```
+
 ## Contributor References
 
 - [Development guide](docs/development.md) covers setup, routine commands,

@@ -1,0 +1,122 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import WorkflowSteps from "../components/WorkflowSteps.astro";
+
+const description = "See how AntennaBench plans, conducts, records, and reports a repeatable WSPR antenna comparison without hiding uncertainty.";
+---
+
+<BaseLayout
+  title="How AntennaBench works"
+  description={description}
+  canonicalPath="/how-it-works/"
+>
+  <section class="page-hero section-pad">
+    <div class="shell narrow-shell">
+      <p class="eyebrow">How it works</p>
+      <h1>A guided WSPR experiment, not a one-number verdict</h1>
+      <p>
+        AntennaBench keeps the question, plan, operator actions, observations, and
+        corrections separate. The report can then say what the run describes—and where
+        the evidence stops.
+      </p>
+    </div>
+  </section>
+
+  <section class="section-pad detail-workflow" aria-labelledby="overview-title">
+    <div class="shell">
+      <h2 id="overview-title" class="visually-hidden">Workflow overview</h2>
+      <WorkflowSteps />
+    </div>
+  </section>
+
+  <section class="section-pad process-section" aria-labelledby="before-title">
+    <div class="shell process-grid">
+      <div class="process-label"><span>Before</span><strong>Define the experiment</strong></div>
+      <div class="process-copy">
+        <h2 id="before-title">Start with what you want to learn</h2>
+        <p>
+          Choose a supported question: compare the whole station, ask where you are heard
+          better, ask what you can hear better, or profile one antenna. Then enter the
+          station, antennas, band, direction, and complete repetition count.
+        </p>
+        <p>
+          The normalized review shows the directed counterbalanced order, cycle count,
+          antenna-versus-direction changes, and ideal minimum duration. It also states
+          what the run cannot prove before any evidence is collected.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-pad process-section alt-process" aria-labelledby="during-title">
+    <div class="shell process-grid">
+      <div class="process-label"><span>During</span><strong>Record what happened</strong></div>
+      <div class="process-copy">
+        <h2 id="during-title">Switch, confirm, and follow the actual cadence</h2>
+        <p>
+          The app presents one current instruction at a time. After the physical antenna
+          change, the operator presses the named ready action. AntennaBench then chooses
+          the next eligible even-minute WSPR cycle.
+        </p>
+        <p>
+          Missed or bad cycles, notes, corrections, interruptions, and optional controller
+          failures remain explicit. Earlier evidence is retained instead of silently
+          rewritten to match the plan.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-pad process-section" aria-labelledby="evidence-title">
+    <div class="shell process-grid">
+      <div class="process-label"><span>Evidence</span><strong>Keep sources distinct</strong></div>
+      <div class="process-copy">
+        <h2 id="evidence-title">Public spots, local decodes, imports, and operator facts</h2>
+        <p>
+          WSPR.live public spots can be gathered on a best-effort basis. Local WSJT-X
+          decodes, bounded WSPR or Reverse Beacon Network imports, and operator facts keep
+          their own provenance. A network gap does not erase evidence already safe on disk.
+        </p>
+        <aside class="explain-card">
+          <strong>A missing decode is not zero signal.</strong>
+          <p>Unmatched paths remain reach evidence; they are never inserted into paired SNR calculations as zeros.</p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-pad process-section alt-process" aria-labelledby="reporting-title">
+    <div class="shell process-grid">
+      <div class="process-label"><span>After</span><strong>Read the evidence</strong></div>
+      <div class="process-copy">
+        <h2 id="reporting-title">Compare like with like, then inspect the limitations</h2>
+        <p>
+          The report can show zero-centered same-path differences, reach seen on only one
+          comparison side, coverage and imbalance, switching-order context, and available
+          distance, direction, or solar context. Comparisons stay separate by direction,
+          band, mode, observation kind, and source.
+        </p>
+        <p>
+          “Insufficient data” is a useful outcome. AntennaBench provides descriptive
+          evidence today; it does not select a winner or claim a result generalizes beyond
+          the recorded session.
+        </p>
+        <a class="button button-primary" href="/sample-report/">Read the canonical report</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="record-section" aria-labelledby="record-title">
+    <div class="shell record-grid">
+      <img src="/mark.svg" width="112" height="112" alt="" />
+      <div>
+        <p class="eyebrow">Local-first by design</p>
+        <h2 id="record-title">Your session bundle remains the durable record</h2>
+        <p>
+          The report is deterministic output that can be regenerated. Creating, conducting,
+          reviewing, and exporting a session does not depend on this website or any account.
+        </p>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
