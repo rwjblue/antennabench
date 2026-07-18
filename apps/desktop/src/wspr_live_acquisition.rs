@@ -843,6 +843,44 @@ mod tests {
         }
     }
 
+    fn large_confirmed_receive_response(received_at: DateTime<Utc>) -> WsprLiveHttpResponse {
+        let rows = (0..400)
+            .map(|index| {
+                json!({
+                    "id": 92000 + index,
+                    "time": "2026-07-15 20:00:00",
+                    "band": 14,
+                    "rx_sign": "N1RWJ",
+                    "rx_loc": "FN42",
+                    "tx_sign": format!("K1A{index:03}"),
+                    "tx_loc": "EM12",
+                    "distance": 2450,
+                    "azimuth": 252,
+                    "rx_azimuth": 65,
+                    "frequency": "14095600",
+                    "power": 37,
+                    "snr": -18,
+                    "drift": 1,
+                    "version": "2.6.1",
+                    "code": 1
+                })
+            })
+            .collect::<Vec<_>>();
+        WsprLiveHttpResponse {
+            received_at,
+            status: 200,
+            body: serde_json::to_vec(&json!({
+                "meta": WSPR_LIVE_COLUMNS.map(|name| json!({
+                    "name": name,
+                    "type": "Synthetic",
+                })),
+                "data": rows,
+                "rows": 400,
+            }))
+            .unwrap(),
+        }
+    }
+
     fn running_confirmed_session(
         root: &Path,
         wspr_live_acquisition_enabled: bool,
@@ -1156,6 +1194,43 @@ mod tests {
         assert_eq!(
             adapter.source_time,
             Some("2026-07-15T20:00:00Z".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn multi_record_capture_may_exceed_one_jsonl_line_in_aggregate() {
+        let temp = TempDir::new().unwrap();
+        let (active, path, now) = running_confirmed_session(temp.path(), true);
+        let before = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        let transport = FakeTransport {
+            calls: Cell::new(0),
+            response: Ok(large_confirmed_receive_response(now)),
+        };
+
+        let outcome = advance_with_transport(
+            &active,
+            &WsprLiveAcquisitionState::default(),
+            WsprLiveAcquisitionRequest::default(),
+            now,
+            &transport,
+        )
+        .unwrap();
+
+        let WsprLiveAcquisitionOutcome::Captured {
+            accepted,
+            observations_created,
+            ..
+        } = outcome
+        else {
+            panic!("large multi-record acquisition must capture: {outcome:?}")
+        };
+        assert_eq!((accepted, observations_created), (400, 400));
+        let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        assert_eq!(after.session_state.lifecycle, SessionLifecycleV2::Ended);
+        assert!(
+            after.session_state.streams["adapter_records"].committed_bytes
+                - before.session_state.streams["adapter_records"].committed_bytes
+                > 256 * 1024
         );
     }
 

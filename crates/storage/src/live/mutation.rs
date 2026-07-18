@@ -814,18 +814,10 @@ pub(super) fn preflight_live_budget(
     let mut added_bytes = BTreeMap::<LiveStreamV2, u64>::new();
     let mut added_records = BTreeMap::<LiveStreamV2, u64>::new();
     for (stream, bytes) in serialized {
-        let line_bytes = u64::try_from(bytes.len()).expect("usize fits u64");
-        if line_bytes > profile.jsonl_line_bytes {
-            return Err(LivePersistenceError::InvalidMutation {
-                message: format!(
-                    "{} member exceeds the {} byte JSONL line limit",
-                    stream.checkpoint_name(),
-                    profile.jsonl_line_bytes
-                ),
-            });
-        }
-        *added_bytes.entry(*stream).or_default() += line_bytes;
-        *added_records.entry(*stream).or_default() += 1;
+        let (batch_bytes, batch_records) =
+            serialized_jsonl_usage(*stream, bytes, profile.jsonl_line_bytes)?;
+        *added_bytes.entry(*stream).or_default() += batch_bytes;
+        *added_records.entry(*stream).or_default() += batch_records;
     }
     let mut total_bytes = 0_u64;
     let mut total_records = 0_u64;
@@ -870,6 +862,33 @@ pub(super) fn preflight_live_budget(
     Ok(())
 }
 
+fn serialized_jsonl_usage(
+    stream: LiveStreamV2,
+    bytes: &[u8],
+    line_limit: u64,
+) -> Result<(u64, u64), LivePersistenceError> {
+    let batch_bytes = u64::try_from(bytes.len()).expect("usize fits u64");
+    let mut records = 0_u64;
+    for line in bytes.split_inclusive(|byte| *byte == b'\n') {
+        let line_bytes = u64::try_from(line.len()).expect("usize fits u64");
+        if line_bytes > line_limit {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: format!(
+                    "{} member exceeds the {} byte JSONL line limit",
+                    stream.checkpoint_name(),
+                    line_limit
+                ),
+            });
+        }
+        records = records
+            .checked_add(1)
+            .ok_or_else(|| LivePersistenceError::InvalidMutation {
+                message: "stream record accounting overflowed".into(),
+            })?;
+    }
+    Ok((batch_bytes, records))
+}
+
 pub(super) fn validate_generation_id(value: &str) -> Result<(), LivePersistenceError> {
     if value.is_empty()
         || !value
@@ -881,5 +900,29 @@ pub(super) fn validate_generation_id(value: &str) -> Result<(), LivePersistenceE
         })
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{serialized_jsonl_usage, LivePersistenceError, LiveStreamV2};
+
+    #[test]
+    fn live_budget_counts_each_jsonl_member_in_a_serialized_batch() {
+        assert_eq!(
+            serialized_jsonl_usage(LiveStreamV2::AdapterRecords, b"{}\n{}\n", 3).unwrap(),
+            (6, 2)
+        );
+    }
+
+    #[test]
+    fn live_budget_rejects_an_individual_oversized_jsonl_member() {
+        let error =
+            serialized_jsonl_usage(LiveStreamV2::AdapterRecords, b"[123]\n{}\n", 5).unwrap_err();
+        assert!(matches!(
+            error,
+            LivePersistenceError::InvalidMutation { message }
+                if message == "adapter_records member exceeds the 5 byte JSONL line limit"
+        ));
     }
 }
