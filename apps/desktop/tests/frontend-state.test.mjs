@@ -114,7 +114,7 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     new URL("../../../package-lock.json", import.meta.url),
     "utf8",
   ));
-  assert.match(html, /<script type="module" src="main\.mjs"><\/script>/);
+  assert.match(html, /<script type="module" src="app\.mjs"><\/script>/);
   assert.equal(tauri.build.frontendDist, "frontend");
   assert.equal(tauri.build.beforeDevCommand, undefined);
   assert.equal(tauri.build.beforeBuildCommand, undefined);
@@ -131,7 +131,6 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     "elements.mjs",
     "forms.mjs",
     "index.html",
-    "main.mjs",
     "mark.svg",
     "models.mjs",
     "renderers.mjs",

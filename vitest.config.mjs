@@ -21,7 +21,10 @@ export default defineConfig({
         test: {
           name: "desktop-dom",
           environment: "jsdom",
-          include: ["apps/desktop/tests/frontend-renderers.test.mjs"],
+          include: [
+            "apps/desktop/tests/frontend-app.test.mjs",
+            "apps/desktop/tests/frontend-renderers.test.mjs",
+          ],
         },
       },
       {

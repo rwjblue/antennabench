@@ -102,41 +102,6 @@ test("contextual help accepts the document root used by the desktop mount", () =
   assert.ok(document.getElementById(trigger.getAttribute("aria-controls")));
 });
 
-test("the desktop mounts on document and installs setup interaction guards", async () => {
-  const elements = loadDesktopDocument();
-  vi.useFakeTimers();
-  try {
-    await import("../frontend/app.mjs?document-mount-test");
-    const callsign = elements.setupForm.querySelector('[data-setup-field="callsign"]');
-    const grid = elements.setupForm.querySelector('[data-setup-field="grid"]');
-    callsign.value = "n1rwj";
-    callsign.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    grid.value = "fn42AB";
-    grid.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    assert.equal(callsign.value, "N1RWJ");
-    assert.equal(grid.value, "FN42ab");
-
-    const controllerEnabled = elements.setupForm.querySelector(
-      '[data-setup-field="antennaControllerEnabled"]',
-    );
-    controllerEnabled.checked = true;
-    controllerEnabled.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    assert.equal(elements.controllerSetupFields.hidden, false);
-    assert.equal(
-      elements.setupForm.querySelector("[data-controller-target-field]").hidden,
-      false,
-    );
-
-    const submit = new Event("submit", { bubbles: true, cancelable: true });
-    assert.equal(elements.setupForm.dispatchEvent(submit), false);
-    assert.equal(submit.defaultPrevented, true);
-    assert.equal(callsign.value, "N1RWJ", "review does not reset entered station values");
-  } finally {
-    vi.clearAllTimers();
-    vi.useRealTimers();
-  }
-});
-
 test("navigation renders exactly one active accessible workflow", () => {
   const e = loadDesktopDocument();
   renderNavigation(e, { activeWorkflow: "transfer" });
