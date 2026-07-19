@@ -38,6 +38,15 @@ standard error, timing, and result from commands that actually ran. That evidenc
 may expose local paths, usernames, network addresses, or credentials. Review it
 before sharing a bundle.
 
+When a session contains controller attempts, **Export full evidence HTML** asks
+whether to include controller command details or omit the programs, arguments,
+targets, and output. **Include** is the default. Choosing **Omit** leaves the
+attempt, role, controller identity, result, timing, and readiness chain visible,
+marks every hidden field as omitted at export, and points readers to the lossless
+bundle for the complete record. It does not alter the bundle. The compact summary
+already omits controller output and says that the complete audit evidence remains
+in the full report or bundle.
+
 ## Creating A Profile
 
 A profile has:

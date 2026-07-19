@@ -1058,8 +1058,10 @@ test("revision-keyed report refresh retains coherent prior output on failure and
     revision: 4,
     lifecycle: "running",
     completeness: "full_detail",
+    hasControllerEvidence: true,
     reportHtml: "<!doctype html><title>revision 4</title>",
   });
+  assert.equal(first.session.hasControllerEvidence, true);
   assert.equal(updateReportFrame(frame, first), true);
 
   const exporting = beginReportExport(first);
@@ -1087,8 +1089,10 @@ test("revision-keyed report refresh retains coherent prior output on failure and
     revision: 5,
     lifecycle: "ended",
     completeness: "bounded_overview",
+    hasControllerEvidence: false,
     reportHtml: "<!doctype html><title>revision 5</title>",
   });
+  assert.equal(second.session.hasControllerEvidence, false);
   assert.equal(updateReportFrame(frame, second), true);
   assert.equal(frame.srcdoc, "<!doctype html><title>revision 5</title>");
 });
@@ -1253,7 +1257,7 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["active_session_report"],
     ["export_active_session"],
     ["refresh_active_session_report"],
-    ["export_active_session_report", { format: "full_evidence_html" }],
+    ["export_active_session_report", { format: "full_evidence_html", controllerEvidence: "complete" }],
     ["import_active_session_wspr_live"],
     ["import_active_session_rbn"],
   ]);

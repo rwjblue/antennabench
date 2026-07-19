@@ -175,6 +175,7 @@ where
 pub(super) fn export_active_report_with_selection<F>(
     state: &ActiveSessionState,
     format: ReportExportFormat,
+    controller_evidence: ControllerEvidenceHandling,
     select: F,
 ) -> Result<ExportReportOutcome, SessionErrorPayload>
 where
@@ -208,6 +209,28 @@ where
             )
         })?
         .to_string();
+    let controller_evidence =
+        if format == ReportExportFormat::FullEvidenceHtml && presentation.has_controller_evidence {
+            controller_evidence
+        } else {
+            ControllerEvidenceHandling::Complete
+        };
+    let html = match (format, controller_evidence) {
+        (ReportExportFormat::CompactSummaryHtml, _) => &presentation.compact_summary_html,
+        (ReportExportFormat::FullEvidenceHtml, ControllerEvidenceHandling::Complete) => {
+            &presentation.report_html
+        }
+        (ReportExportFormat::FullEvidenceHtml, ControllerEvidenceHandling::OmittedAtExport) => {
+            presentation
+                .controller_omitted_report_html
+                .as_ref()
+                .ok_or_else(|| {
+                    SessionErrorPayload::report_pipeline(
+                        "controller omission export is unavailable for this report snapshot",
+                    )
+                })?
+        }
+    };
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -219,10 +242,6 @@ where
                 format!("{}: {error}", destination.display()),
             )
         })?;
-    let html = match format {
-        ReportExportFormat::CompactSummaryHtml => &presentation.compact_summary_html,
-        ReportExportFormat::FullEvidenceHtml => &presentation.report_html,
-    };
     if let Err(error) = file
         .write_all(html.as_bytes())
         .and_then(|()| file.sync_all())
@@ -468,46 +487,54 @@ pub(crate) async fn export_active_session_report(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
     format: Option<ReportExportFormat>,
+    controller_evidence: Option<ControllerEvidenceHandling>,
 ) -> Result<ExportReportOutcome, SessionErrorPayload> {
     let format = format.unwrap_or_default();
-    export_active_report_with_selection(state.inner(), format, |source| {
-        let mut dialog = app
-            .dialog()
-            .file()
-            .set_title(match format {
-                ReportExportFormat::CompactSummaryHtml => {
-                    "Export compact AntennaBench share summary (not the full audit report)"
-                }
-                ReportExportFormat::FullEvidenceHtml => {
-                    "Export full AntennaBench evidence report snapshot"
-                }
+    export_active_report_with_selection(
+        state.inner(),
+        format,
+        controller_evidence.unwrap_or_default(),
+        |source| {
+            let mut dialog = app
+                .dialog()
+                .file()
+                .set_title(match format {
+                    ReportExportFormat::CompactSummaryHtml => {
+                        "Export compact AntennaBench share summary (not the full audit report)"
+                    }
+                    ReportExportFormat::FullEvidenceHtml => {
+                        "Export full AntennaBench evidence report snapshot"
+                    }
+                })
+                .set_file_name(match format {
+                    ReportExportFormat::CompactSummaryHtml => {
+                        suggested_compact_summary_name(source)
+                    }
+                    ReportExportFormat::FullEvidenceHtml => suggested_report_name(source),
+                })
+                .set_can_create_directories(true)
+                .add_filter(
+                    match format {
+                        ReportExportFormat::CompactSummaryHtml => "Compact summary HTML",
+                        ReportExportFormat::FullEvidenceHtml => "Full evidence HTML report",
+                    },
+                    &["html"],
+                );
+            if let Some(parent) = source.parent() {
+                dialog = dialog.set_directory(parent);
+            }
+            let Some(selection) = dialog.blocking_save_file() else {
+                return Ok(None);
+            };
+            selection.into_path().map(Some).map_err(|error| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::Destination,
+                    "The selected destination is not available as a local path.",
+                    error.to_string(),
+                )
             })
-            .set_file_name(match format {
-                ReportExportFormat::CompactSummaryHtml => suggested_compact_summary_name(source),
-                ReportExportFormat::FullEvidenceHtml => suggested_report_name(source),
-            })
-            .set_can_create_directories(true)
-            .add_filter(
-                match format {
-                    ReportExportFormat::CompactSummaryHtml => "Compact summary HTML",
-                    ReportExportFormat::FullEvidenceHtml => "Full evidence HTML report",
-                },
-                &["html"],
-            );
-        if let Some(parent) = source.parent() {
-            dialog = dialog.set_directory(parent);
-        }
-        let Some(selection) = dialog.blocking_save_file() else {
-            return Ok(None);
-        };
-        selection.into_path().map(Some).map_err(|error| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Destination,
-                "The selected destination is not available as a local path.",
-                error.to_string(),
-            )
-        })
-    })
+        },
+    )
 }
 
 #[tauri::command]

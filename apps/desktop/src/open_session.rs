@@ -24,10 +24,11 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report_with_snapshot, render_compact_summary_html, render_standalone_html,
-    ReportAdapterEvidence, ReportAntennaControlAttempt, ReportCompleteness, ReportError,
-    ReportEventCorrection, ReportEventCorrectionAction, ReportImportedEvidence,
-    ReportLifecycleEvent, ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind,
-    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
+    render_standalone_html_with_options, ControllerEvidenceHandling, ReportAdapterEvidence,
+    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportEventCorrection,
+    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind, ReportSnapshotContext,
+    ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis, StandaloneHtmlOptions,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::{Deserialize, Serialize};
@@ -107,11 +108,13 @@ pub(crate) fn export_e2e_snapshots(
     let report_path = root.join("complete-workflow-report.html");
     let compact_summary_path = root.join("complete-workflow-compact-summary.html");
     let bundle_path = root.join(format!("complete-workflow-export{V2_BUNDLE_SUFFIX}"));
-    let report_outcome =
-        export_active_report_with_selection(state, ReportExportFormat::FullEvidenceHtml, |_| {
-            Ok(Some(report_path.clone()))
-        })
-        .expect("standalone report export");
+    let report_outcome = export_active_report_with_selection(
+        state,
+        ReportExportFormat::FullEvidenceHtml,
+        ControllerEvidenceHandling::Complete,
+        |_| Ok(Some(report_path.clone())),
+    )
+    .expect("standalone report export");
     assert!(matches!(
         report_outcome,
         ExportReportOutcome::Exported {
@@ -123,14 +126,17 @@ pub(crate) fn export_e2e_snapshots(
     assert!(export_active_report_with_selection(
         state,
         ReportExportFormat::FullEvidenceHtml,
+        ControllerEvidenceHandling::Complete,
         |_| Ok(Some(report_path.clone())),
     )
     .is_err());
-    let compact_summary_outcome =
-        export_active_report_with_selection(state, ReportExportFormat::CompactSummaryHtml, |_| {
-            Ok(Some(compact_summary_path.clone()))
-        })
-        .expect("compact share summary export");
+    let compact_summary_outcome = export_active_report_with_selection(
+        state,
+        ReportExportFormat::CompactSummaryHtml,
+        ControllerEvidenceHandling::Complete,
+        |_| Ok(Some(compact_summary_path.clone())),
+    )
+    .expect("compact share summary export");
     assert!(matches!(
         compact_summary_outcome,
         ExportReportOutcome::Exported {
@@ -142,6 +148,7 @@ pub(crate) fn export_e2e_snapshots(
     assert!(export_active_report_with_selection(
         state,
         ReportExportFormat::CompactSummaryHtml,
+        ControllerEvidenceHandling::Complete,
         |_| Ok(Some(compact_summary_path.clone())),
     )
     .is_err());
@@ -190,9 +197,11 @@ mod tests {
         active_session_report_for, check_ipc_payload, copy_error_payload,
         export_active_report_with_selection, export_active_session_with_selection, export_bundle,
         open_bundle, open_session_with_selection, refresh_active_session_report_for,
-        report_error_payload, suggested_compact_summary_name, suggested_report_name,
-        ActiveSessionState, ExportReportOutcome, ExportSessionOutcome, OpenSessionOutcome,
-        ReportExportFormat, SessionErrorKind, SessionErrorPayload, REPORT_DOCUMENT_IPC_BYTES,
+        report_error_payload, suggested_compact_summary_name, suggested_report_name, ActiveSession,
+        ActiveSessionState, ControllerEvidenceHandling, ExportReportOutcome, ExportSessionOutcome,
+        OpenSessionOutcome, OpenedSession, ReportCompleteness, ReportExportFormat,
+        ReportPresentation, SessionErrorKind, SessionErrorPayload, SessionLifecycleV2,
+        REPORT_DOCUMENT_IPC_BYTES, SCHEMA_VERSION_V5,
     };
 
     fn canonical_fixture() -> std::path::PathBuf {
@@ -449,6 +458,7 @@ mod tests {
         let exported = export_active_report_with_selection(
             &state,
             ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::Complete,
             |_| Ok(Some(html_destination.clone())),
         )
         .unwrap();
@@ -468,6 +478,7 @@ mod tests {
             export_active_report_with_selection(
                 &state,
                 ReportExportFormat::FullEvidenceHtml,
+                ControllerEvidenceHandling::Complete,
                 |_| Ok(Some(html_destination.clone())),
             )
             .unwrap_err()
@@ -479,6 +490,7 @@ mod tests {
         let compact_exported = export_active_report_with_selection(
             &state,
             ReportExportFormat::CompactSummaryHtml,
+            ControllerEvidenceHandling::Complete,
             |_| Ok(Some(compact_destination.clone())),
         )
         .unwrap();
@@ -498,6 +510,7 @@ mod tests {
             export_active_report_with_selection(
                 &state,
                 ReportExportFormat::CompactSummaryHtml,
+                ControllerEvidenceHandling::Complete,
                 |_| Ok(Some(compact_destination.clone())),
             )
             .unwrap_err()
@@ -669,6 +682,94 @@ mod tests {
             report
         );
         println!("desktop-e2e result=cancelled-normal active_report=retained");
+    }
+
+    #[test]
+    fn full_report_export_selects_controller_detail_variant_only_when_applicable() {
+        let temp = TempDir::new().expect("create isolated export directory");
+        let source = temp.path().join("active.session.antennabundle");
+        let state = ActiveSessionState::default();
+        let presentation = ReportPresentation {
+            presentation_id: 7,
+            session_id: "session-controller-export".into(),
+            revision: Some(4),
+            lifecycle: Some(SessionLifecycleV2::Ended),
+            completeness: ReportCompleteness::FullDetail,
+            has_controller_evidence: true,
+            report_html: "<p>complete sensitive controller details</p>".into(),
+            compact_summary_html: "<p>compact</p>".into(),
+            controller_omitted_report_html: Some(
+                "<p>Omitted at export — retained in the session bundle</p>".into(),
+            ),
+        };
+        let summary = OpenedSession {
+            bundle_name: "active.session.antennabundle".into(),
+            session_id: presentation.session_id.clone(),
+            callsign: "N1TEST".into(),
+            grid: "FN42".into(),
+            antenna_count: 2,
+            slot_count: 2,
+            observation_count: 0,
+            schema_version: SCHEMA_VERSION_V5,
+            revision: presentation.revision,
+            lifecycle: presentation.lifecycle,
+            report_available: true,
+        };
+        state.0.lock().unwrap().active = Some(ActiveSession {
+            source,
+            summary,
+            presentation: Some(presentation),
+        });
+
+        let omitted_path = temp.path().join("omitted.html");
+        export_active_report_with_selection(
+            &state,
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::OmittedAtExport,
+            |_| Ok(Some(omitted_path.clone())),
+        )
+        .expect("export omitted controller details");
+        assert_eq!(
+            fs::read_to_string(&omitted_path).unwrap(),
+            "<p>Omitted at export — retained in the session bundle</p>"
+        );
+
+        let complete_path = temp.path().join("complete.html");
+        export_active_report_with_selection(
+            &state,
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::Complete,
+            |_| Ok(Some(complete_path.clone())),
+        )
+        .expect("export complete controller details");
+        assert_eq!(
+            fs::read_to_string(&complete_path).unwrap(),
+            "<p>complete sensitive controller details</p>"
+        );
+
+        let mut desktop = state.0.lock().unwrap();
+        let manual_presentation = desktop
+            .active
+            .as_mut()
+            .unwrap()
+            .presentation
+            .as_mut()
+            .unwrap();
+        manual_presentation.has_controller_evidence = false;
+        manual_presentation.controller_omitted_report_html = None;
+        drop(desktop);
+        let manual_path = temp.path().join("manual.html");
+        export_active_report_with_selection(
+            &state,
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::OmittedAtExport,
+            |_| Ok(Some(manual_path.clone())),
+        )
+        .expect("manual-only report ignores an inapplicable omission request");
+        assert_eq!(
+            fs::read_to_string(&manual_path).unwrap(),
+            "<p>complete sensitive controller details</p>"
+        );
     }
 
     #[test]

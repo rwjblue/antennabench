@@ -138,7 +138,7 @@ export function mount(root, browserWindow) {
     reportRevision,
     reportSummary,
     reportRefreshButton,
-    reportCompactExportButton, reportFullExportButton,
+    reportCompactExportButton, reportFullExportButton, reportControllerHandling,
     reportFeedback,
     reportFeedbackMessage,
     reportFeedbackDetail,
@@ -506,7 +506,7 @@ export function mount(root, browserWindow) {
     await controller.exportReport("compact_summary_html");
   });
   reportFullExportButton.addEventListener("click", async () => {
-    await controller.exportReport("full_evidence_html");
+    await controller.exportReport("full_evidence_html", reportControllerHandling.value);
   });
 
   syncSignalPlanFields(setupForm);

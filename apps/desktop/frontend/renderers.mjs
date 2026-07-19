@@ -511,7 +511,8 @@ export function renderReport(elements, state) {
   const {
     reportStatus, reportPlaceholder, reportViewer, reportFrame, reportRefreshButton,
     reportCompactExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
-    reportBundleName, reportRevision, reportSummary,
+    reportBundleName, reportRevision, reportSummary, reportControllerOptions,
+    reportControllerHandling,
   } = elements;
   const hasSession = state.session !== null;
   const hasReport = typeof state.session?.reportHtml === "string";
@@ -528,6 +529,15 @@ export function renderReport(elements, state) {
   reportRefreshButton.disabled = reportBusy;
   reportCompactExportButton.disabled = reportBusy || !hasReport;
   reportFullExportButton.disabled = reportBusy || !hasReport;
+  const hasControllerEvidence = hasReport && state.session.hasControllerEvidence === true;
+  reportControllerOptions.hidden = !hasControllerEvidence;
+  if (!hasControllerEvidence) {
+    reportControllerHandling.value = "complete";
+    delete reportControllerOptions.dataset.presentationId;
+  } else if (reportControllerOptions.dataset.presentationId !== String(state.reportPresentationId)) {
+    reportControllerHandling.value = "complete";
+    reportControllerOptions.dataset.presentationId = String(state.reportPresentationId);
+  }
   reportRefreshButton.textContent = state.reportStatus === "refreshing" ? "Refreshing…" : "Refresh committed snapshot";
   reportCompactExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export compact summary HTML";
   reportFullExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export full evidence HTML";

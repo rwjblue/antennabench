@@ -404,6 +404,22 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   state.reportPresentationId = 3;
   renderReport(e, state);
   assert.equal(e.reportFrame.srcdoc, "<p>three</p>");
+  assert.equal(e.reportControllerOptions.hidden, true);
+  assert.equal(e.reportControllerHandling.value, "complete");
+
+  state.session.hasControllerEvidence = true;
+  renderReport(e, state);
+  assert.equal(e.reportControllerOptions.hidden, false);
+  assert.equal(e.reportControllerHandling.value, "complete", "controller details are included by default");
+  e.reportControllerHandling.value = "omitted_at_export";
+  renderReport(e, state);
+  assert.equal(e.reportControllerHandling.value, "omitted_at_export", "choice persists for one presentation");
+  state.reportPresentationId = 4;
+  renderReport(e, state);
+  assert.equal(e.reportControllerHandling.value, "complete", "a new snapshot defaults to include");
+  state.session.hasControllerEvidence = false;
+  renderReport(e, state);
+  assert.equal(e.reportControllerOptions.hidden, true);
   e.reportFrame.srcdoc = "sentinel";
   renderReport(e, state);
   assert.equal(e.reportFrame.srcdoc, "sentinel", "same presentation does not replace srcdoc");

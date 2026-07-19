@@ -12,13 +12,14 @@ use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource,
 };
 use antennabench_report::{
-    build_report, render_compact_summary_html, render_standalone_html, ReportAdapterEvidence,
+    build_report, render_compact_summary_html, render_standalone_html,
+    render_standalone_html_with_options, ControllerEvidenceHandling, ReportAdapterEvidence,
     ReportAntennaControlAttempt, ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection,
     ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
     ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
     ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
     ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
-    SessionReport,
+    SessionReport, StandaloneHtmlOptions,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -401,7 +402,7 @@ fn renders_readiness_basis_and_bounded_command_diagnostics() {
             disposition: AntennaControlDispositionV5::Exit { code: 0 },
             stdout: AntennaControlOutputV5 {
                 encoding: AntennaControlOutputEncodingV5::Utf8,
-                data: "verified".into(),
+                data: "sensitive-controller-stdout".into(),
                 truncated: false,
             },
             stderr: AntennaControlOutputV5 {
@@ -420,6 +421,54 @@ fn renders_readiness_basis_and_bounded_command_diagnostics() {
     assert!(html.contains("switch &lt;profile&gt;"));
     assert!(html.contains("truncated=true"));
     assert!(html.contains("[1]=&quot;relay-a&quot;"));
+
+    let explicit_complete = render_standalone_html_with_options(
+        &report,
+        StandaloneHtmlOptions {
+            controller_evidence: ControllerEvidenceHandling::Complete,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        explicit_complete, html,
+        "the explicit default preserves today's output"
+    );
+
+    let report_json = serde_json::to_string(&report).unwrap();
+    let omitted = render_standalone_html_with_options(
+        &report,
+        StandaloneHtmlOptions {
+            controller_evidence: ControllerEvidenceHandling::OmittedAtExport,
+        },
+    )
+    .unwrap();
+    assert_eq!(serde_json::to_string(&report).unwrap(), report_json);
+    for sensitive in [
+        "/opt/bin/verify",
+        "--target",
+        "relay-a",
+        "sensitive-controller-stdout",
+        "AAE=",
+    ] {
+        assert!(
+            !omitted.contains(sensitive),
+            "omitted report leaked {sensitive}"
+        );
+    }
+    assert!(omitted.contains("Controller command details omitted at export"));
+    assert_eq!(omitted.matches("Omitted at export").count(), 5);
+    for retained in [
+        "verify-record",
+        "Verification",
+        "intent-1",
+        "switch &lt;profile&gt;",
+        "revision-7",
+        "Exit code 0",
+        "0 ms elapsed",
+        "Command verified",
+    ] {
+        assert!(omitted.contains(retained), "omitted report lost {retained}");
+    }
 }
 
 #[test]

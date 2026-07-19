@@ -244,8 +244,12 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
   await run.controller.refreshReport();
   assert.equal(run.controller.state.session.reportHtml, "<p>prior</p>");
   assert.equal(run.controller.state.reportStatus, "ready");
-  await run.controller.exportReport();
+  await run.controller.exportReport("full_evidence_html", "omitted_at_export");
   assert.equal(run.controller.state.reportExportStatus, "error");
+  assert.deepEqual(
+    run.calls.find(([command]) => command === "export_active_session_report")[1],
+    { format: "full_evidence_html", controllerEvidence: "omitted_at_export" },
+  );
 
   const completed = harness({
     advance_active_session_wspr_live: { status: "completed", session: session({ lifecycle: "ended" }) },

@@ -432,6 +432,15 @@
                 <div><span>Committed snapshot</span><strong data-report-revision></strong></div>
                 <p data-report-summary></p>
               </div>
+              <div class="report-export-choice" data-report-controller-options hidden>
+                <label>Full evidence HTML controller details
+                  <select data-report-controller-handling>
+                    <option value="complete" selected>Include controller command details</option>
+                    <option value="omitted_at_export">Omit controller command details</option>
+                  </select>
+                </label>
+                <p>For the full evidence HTML, controller programs, arguments, and output can reveal local paths, usernames, or addresses. Include them, or omit them with a visible notice. Compact summaries already omit controller output.</p>
+              </div>
               <div class="conductor-actions report-actions">
                 <button type="button" data-report-refresh>Refresh committed snapshot</button>
                 <button type="button" data-report-export-compact>Export compact summary HTML</button>

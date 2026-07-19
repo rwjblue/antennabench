@@ -532,6 +532,7 @@ export function reportRefreshSucceeded(state, presentation) {
       revision: presentation.revision,
       lifecycle: presentation.lifecycle,
       completeness: presentation.completeness,
+      hasControllerEvidence: presentation.hasControllerEvidence,
       presentationId: presentation.presentationId,
       reportAvailable: true,
     } : state.session,

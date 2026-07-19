@@ -1,6 +1,10 @@
 use super::*;
 
-pub(in super::super) fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+pub(in super::super) fn render_snapshot(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+    controller_evidence: ControllerEvidenceHandling,
+) {
     let snapshot = &report.snapshot;
     if !snapshot_has_detail(report) {
         return;
@@ -179,32 +183,71 @@ pub(in super::super) fn render_snapshot(out: &mut CheckedHtmlWriter<'_>, report:
         out.push_str("</tbody></table></div>");
     }
     if !snapshot.antenna_control_attempts.is_empty() {
-        out.push_str("<div class=\"table-wrap\"><table><caption>Antenna-control command attempts</caption><thead><tr><th scope=\"col\">Record</th><th scope=\"col\">Role</th><th scope=\"col\">Intent / target / mode</th><th scope=\"col\">Controller</th><th scope=\"col\">Resolved invocation</th><th scope=\"col\">Outcome</th><th scope=\"col\">Stdout</th><th scope=\"col\">Stderr</th></tr></thead><tbody>");
-        for attempt in &snapshot.antenna_control_attempts {
-            let arguments = attempt
-                .resolved_arguments
-                .iter()
-                .enumerate()
-                .map(|(index, value)| format!("[{index}]={value:?}"))
-                .collect::<Vec<_>>()
-                .join(" ");
-            let outcome = format!(
-                "{:?}; {} ms",
-                attempt.disposition, attempt.elapsed_milliseconds
-            );
-            let stdout = format!(
-                "{:?}; truncated={}; {}",
-                attempt.stdout.encoding, attempt.stdout.truncated, attempt.stdout.data
-            );
-            let stderr = format!(
-                "{:?}; truncated={}; {}",
-                attempt.stderr.encoding, attempt.stderr.truncated, attempt.stderr.data
-            );
-            write_html!(out, "<tr><td><code>{}</code></td><td>{:?}</td><td><code>{}</code><br>{} → {}<br>{}</td><td>{} / {}</td><td><code>{}</code><br>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", escape_html(&attempt.record_id), attempt.role, escape_html(&attempt.intent_id), escape_html(&attempt.antenna), escape_html(&attempt.target), experiment_mode(attempt.mode), escape_html(&attempt.controller_profile_name), escape_html(&attempt.controller_profile_revision), escape_html(&attempt.resolved_program), escape_html(&arguments), escape_html(&outcome), escape_html(&stdout), escape_html(&stderr));
+        if controller_evidence == ControllerEvidenceHandling::OmittedAtExport {
+            render_omitted_antenna_control_attempts(out, report);
+        } else {
+            render_complete_antenna_control_attempts(out, report);
         }
-        out.push_str("</tbody></table></div>");
     }
     out.push_str("</section>");
+}
+
+fn render_complete_antenna_control_attempts(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) {
+    let snapshot = &report.snapshot;
+    out.push_str("<div class=\"table-wrap\"><table><caption>Antenna-control command attempts</caption><thead><tr><th scope=\"col\">Record</th><th scope=\"col\">Role</th><th scope=\"col\">Intent / target / mode</th><th scope=\"col\">Controller</th><th scope=\"col\">Resolved invocation</th><th scope=\"col\">Outcome</th><th scope=\"col\">Stdout</th><th scope=\"col\">Stderr</th></tr></thead><tbody>");
+    for attempt in &snapshot.antenna_control_attempts {
+        let arguments = attempt
+            .resolved_arguments
+            .iter()
+            .enumerate()
+            .map(|(index, value)| format!("[{index}]={value:?}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let outcome = format!(
+            "{:?}; {} ms",
+            attempt.disposition, attempt.elapsed_milliseconds
+        );
+        let stdout = format!(
+            "{:?}; truncated={}; {}",
+            attempt.stdout.encoding, attempt.stdout.truncated, attempt.stdout.data
+        );
+        let stderr = format!(
+            "{:?}; truncated={}; {}",
+            attempt.stderr.encoding, attempt.stderr.truncated, attempt.stderr.data
+        );
+        write_html!(out, "<tr><td><code>{}</code></td><td>{:?}</td><td><code>{}</code><br>{} → {}<br>{}</td><td>{} / {}</td><td><code>{}</code><br>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", escape_html(&attempt.record_id), attempt.role, escape_html(&attempt.intent_id), escape_html(&attempt.antenna), escape_html(&attempt.target), experiment_mode(attempt.mode), escape_html(&attempt.controller_profile_name), escape_html(&attempt.controller_profile_revision), escape_html(&attempt.resolved_program), escape_html(&arguments), escape_html(&outcome), escape_html(&stdout), escape_html(&stderr));
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_omitted_antenna_control_attempts(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) {
+    const OMITTED: &str = "Omitted at export — retained in the session bundle";
+    out.push_str("<div class=\"table-wrap\"><table><caption>Antenna-control command attempts with command details omitted at export</caption><thead><tr><th scope=\"col\">Record</th><th scope=\"col\">Role</th><th scope=\"col\">Intent / target / mode</th><th scope=\"col\">Controller</th><th scope=\"col\">Resolved invocation</th><th scope=\"col\">Timing</th><th scope=\"col\">Outcome</th><th scope=\"col\">Stdout</th><th scope=\"col\">Stderr</th></tr></thead><tbody>");
+    for attempt in &report.snapshot.antenna_control_attempts {
+        let outcome = match &attempt.disposition {
+            AntennaControlDispositionV5::Exit { code } => format!("Exit code {code}"),
+            AntennaControlDispositionV5::SpawnError { .. } => "Spawn error".into(),
+            AntennaControlDispositionV5::Signaled { signal } => signal.map_or_else(
+                || "Terminated by signal; signal number not recorded".into(),
+                |signal| format!("Terminated by signal {signal}"),
+            ),
+            AntennaControlDispositionV5::Timeout => "Timed out".into(),
+        };
+        let timing = format!(
+            "Started {}; completed {}; {} ms elapsed",
+            timestamp(attempt.started_at),
+            timestamp(attempt.completed_at),
+            attempt.elapsed_milliseconds,
+        );
+        write_html!(out, "<tr><td><code>{}</code></td><td>{:?}</td><td><code>{}</code><br>{} → {}<br>{}</td><td>{} / {}</td><td>Program: {}<br>Arguments: {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", escape_html(&attempt.record_id), attempt.role, escape_html(&attempt.intent_id), escape_html(&attempt.antenna), OMITTED, experiment_mode(attempt.mode), escape_html(&attempt.controller_profile_name), escape_html(&attempt.controller_profile_revision), OMITTED, OMITTED, escape_html(&timing), escape_html(&outcome), OMITTED, OMITTED);
+    }
+    out.push_str("</tbody></table></div>");
 }
 pub(in super::super) fn snapshot_has_detail(report: &SessionReport) -> bool {
     let snapshot = &report.snapshot;

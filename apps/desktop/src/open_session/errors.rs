@@ -8,9 +8,12 @@ pub(crate) struct ReportPresentation {
     pub(super) revision: Option<u64>,
     pub(super) lifecycle: Option<SessionLifecycleV2>,
     pub(super) completeness: ReportCompleteness,
+    pub(super) has_controller_evidence: bool,
     pub(super) report_html: String,
     #[serde(skip)]
     pub(super) compact_summary_html: String,
+    #[serde(skip)]
+    pub(super) controller_omitted_report_html: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

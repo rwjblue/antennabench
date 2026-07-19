@@ -353,11 +353,11 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
-    async exportReport(format = "full_evidence_html") {
+    async exportReport(format = "full_evidence_html", controllerEvidence = "complete") {
       if (!state.session?.reportHtml || state.reportExportStatus === "loading") return state;
       commit(beginReportExport(state));
       try {
-        const outcome = await invokeExportActiveSessionReport(invoke(), format);
+        const outcome = await invokeExportActiveSessionReport(invoke(), format, controllerEvidence);
         commit(outcome.status === "cancelled"
           ? reportExportCancelled(state)
           : reportExportSucceeded(state, outcome));

@@ -20,8 +20,11 @@ facts, run quality, limitations, and the committed session revision, while
 intentionally directing readers to the complete audit evidence.
 
 Export the **full evidence HTML** when someone needs the convenient,
-read-only report with its complete audit appendix. Both HTML exports are derived
-from the same committed report revision; neither replaces the bundle.
+read-only report with its audit appendix. When controller attempts are present,
+you can explicitly include their command details or omit programs, arguments,
+targets, and output behind visible **omitted at export** markers. Both HTML
+exports are derived from the same committed report revision; neither replaces
+the bundle.
 
 ## What A Bundle Keeps
 
@@ -78,6 +81,10 @@ rather than editing bundle files by hand.
 - Review bundles before sharing. Notes, imported source material, and controller
   diagnostics can contain station details, local paths, usernames, addresses, or
   other sensitive text.
+- A full HTML report with controller attempts offers an explicit choice to omit
+  command details with visible markers. That choice changes only the exported
+  report; it does not sanitize or modify the lossless bundle. The compact summary
+  already omits controller output and identifies that omission.
 - A damaged or ambiguous record may receive an
   [exclusion](glossary.md#exclusion) while the report still explains the
   problem. It is not silently converted into a result.

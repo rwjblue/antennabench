@@ -112,6 +112,8 @@ export const REQUIRED_ELEMENT_SELECTORS = Object.freeze({
   reportRefreshButton: "[data-report-refresh]",
   reportCompactExportButton: "[data-report-export-compact]",
   reportFullExportButton: "[data-report-export-full]",
+  reportControllerOptions: "[data-report-controller-options]",
+  reportControllerHandling: "[data-report-controller-handling]",
   reportFeedback: "[data-report-feedback]",
   reportFeedbackMessage: "[data-report-feedback-message]",
   reportFeedbackDetail: "[data-report-feedback-detail]",

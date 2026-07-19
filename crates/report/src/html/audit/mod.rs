@@ -6,9 +6,11 @@ use antennabench_analysis::{
     EligibilityScope, PairedObservationRow, SolarEndpointContext, SolarLightState,
     SolarPositionResult,
 };
-use antennabench_core::{v2::SessionLifecycleV2, v3::WsprCycleDirection};
+use antennabench_core::{
+    v2::SessionLifecycleV2, v3::WsprCycleDirection, v5::AntennaControlDispositionV5,
+};
 
-use super::{evidence::evidence_summary, shared::*};
+use super::{evidence::evidence_summary, shared::*, ControllerEvidenceHandling};
 
 mod appendix;
 mod comparison;

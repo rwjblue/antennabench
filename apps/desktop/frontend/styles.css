@@ -312,6 +312,10 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .report-context span { color: #77857f; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; }
 .report-context strong { color: #315d57; font-size: 0.82rem; overflow-wrap: anywhere; }
 .report-context p { margin: 0; color: #62736f; font-size: 0.72rem; text-align: right; }
+.report-export-choice { display: grid; grid-template-columns: minmax(240px, 0.7fr) minmax(280px, 1.3fr); align-items: center; gap: 18px; padding: 14px 19px; border-bottom: 1px solid #d8ddd6; background: #f8faf7; }
+.report-export-choice label { display: grid; gap: 6px; color: #315d57; font-size: 0.74rem; font-weight: 750; }
+.report-export-choice select { width: 100%; min-width: 0; border: 1px solid #c7d1ca; border-radius: 9px; padding: 9px 10px; color: #173131; background: #fff; font: inherit; font-weight: 500; }
+.report-export-choice p { margin: 0; color: #62736f; font-size: 0.72rem; line-height: 1.5; }
 .report-actions { padding: 14px 19px; border-bottom: 1px solid #d8ddd6; }
 .report-viewer > .open-feedback { margin: 16px 19px; }
 .report-viewer iframe { display: block; width: 100%; min-height: 680px; border: 0; background: #fff; }
@@ -349,6 +353,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
   .action-list article { align-items: flex-start; flex-direction: column; }
   .report-context { align-items: flex-start; flex-direction: column; }
   .report-context p { text-align: left; }
+  .report-export-choice { grid-template-columns: 1fr; }
   .context-help-popover { width: calc(100vw - 24px); }
   .countdown-help { align-self: stretch; justify-content: space-between; }
   .action-help-row { align-items: flex-start; justify-content: flex-start; flex-wrap: wrap; }

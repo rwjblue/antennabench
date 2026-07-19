@@ -30,12 +30,38 @@ use questions::{
 use shared::{escape_html, CheckedHtmlWriter};
 use styles::STYLES;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ControllerEvidenceHandling {
+    #[default]
+    Complete,
+    OmittedAtExport,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StandaloneHtmlOptions {
+    pub controller_evidence: ControllerEvidenceHandling,
+}
+
 /// Renders a deterministic, standalone HTML document from renderer-neutral
 /// report data. The output contains no scripts, external resources, or
 /// unescaped report strings.
 pub fn render_standalone_html(report: &SessionReport) -> Result<String, ReportError> {
-    render_standalone_html_with_resources(
+    render_standalone_html_with_options_and_resources(
         report,
+        StandaloneHtmlOptions::default(),
+        REPORT_RESOURCE_LIMITS,
+        &ReportCancellationToken::default(),
+    )
+}
+
+pub fn render_standalone_html_with_options(
+    report: &SessionReport,
+    options: StandaloneHtmlOptions,
+) -> Result<String, ReportError> {
+    render_standalone_html_with_options_and_resources(
+        report,
+        options,
         REPORT_RESOURCE_LIMITS,
         &ReportCancellationToken::default(),
     )
@@ -43,6 +69,20 @@ pub fn render_standalone_html(report: &SessionReport) -> Result<String, ReportEr
 
 pub fn render_standalone_html_with_resources(
     report: &SessionReport,
+    limits: ReportResourceLimits,
+    cancellation: &ReportCancellationToken,
+) -> Result<String, ReportError> {
+    render_standalone_html_with_options_and_resources(
+        report,
+        StandaloneHtmlOptions::default(),
+        limits,
+        cancellation,
+    )
+}
+
+pub fn render_standalone_html_with_options_and_resources(
+    report: &SessionReport,
+    options: StandaloneHtmlOptions,
     limits: ReportResourceLimits,
     cancellation: &ReportCancellationToken,
 ) -> Result<String, ReportError> {
@@ -71,7 +111,7 @@ pub fn render_standalone_html_with_resources(
     render_reach_section(&mut out, report);
     render_distance_section(&mut out, report);
     render_run_quality_section(&mut out, report);
-    render_audit_appendix(&mut out, report);
+    render_audit_appendix(&mut out, report, options.controller_evidence);
 
     out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
     out.finish().map_err(ReportError::from)
