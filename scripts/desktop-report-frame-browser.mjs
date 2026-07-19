@@ -95,6 +95,7 @@ async function evaluateReportFrame(pageUrl, expression) {
       });
       const evaluation = await command("Runtime.evaluate", {
         expression,
+        awaitPromise: true,
         returnByValue: true,
       }, sessionId);
       assert.equal(evaluation.exceptionDetails, undefined, evaluation.exceptionDetails?.text);
@@ -116,6 +117,7 @@ async function evaluateReportFrame(pageUrl, expression) {
     }, sessionId);
     const evaluation = await command("Runtime.evaluate", {
       expression,
+      awaitPromise: true,
       contextId: executionContextId,
       returnByValue: true,
     }, sessionId);
@@ -151,11 +153,14 @@ const server = createServer((request, response) => {
       const reports = ${JSON.stringify(reports)};
       const mode = location.pathname.slice(1);
       const frame = document.querySelector("#report");
-      frame.addEventListener("load", () => { document.body.dataset.reportLoaded = "true"; }, { once: true });
-      updateReportFrame(frame, {
+      const state = {
         reportPresentationId: 1,
         session: { reportHtml: reports[mode] },
-      }, createReportDocumentUrls(window));
+      };
+      const reportDocuments = createReportDocumentUrls(window);
+      frame.addEventListener("load", () => { document.body.dataset.reportLoaded = "true"; }, { once: true });
+      updateReportFrame(frame, state, reportDocuments);
+      window.noopReportUpdate = () => updateReportFrame(frame, state, reportDocuments);
     `);
     return;
   }
@@ -212,6 +217,39 @@ try {
     assert.equal(styles.panelBorderStyle, "solid");
     assert.equal(styles.tableCollapse, "collapse");
     assert.equal(styles.heroDisplay, mode === "compact" ? "block" : "grid");
+
+    await evaluateReportFrame(pageUrl, `(() => {
+      const disclosure = document.querySelector("details");
+      if (disclosure) disclosure.open = true;
+      const focusTarget = document.querySelector("a,summary") ?? document.querySelector("main");
+      focusTarget.tabIndex = -1;
+      focusTarget.focus();
+      scrollTo(0, Math.min(400, document.documentElement.scrollHeight - innerHeight));
+    })()`);
+    await browser(["wait", "500"]);
+    const readerBefore = await evaluateReportFrame(pageUrl, `(() => {
+      const disclosure = document.querySelector("details");
+      return {
+        focus: document.activeElement.tagName + ":" + document.activeElement.className,
+        disclosureOpen: disclosure?.open ?? null,
+        scrollY,
+      };
+    })()`);
+    const noOp = (await browser(["eval", "window.noopReportUpdate()"], { json: true })).result;
+    assert.equal(noOp, false);
+    const unchangedShell = (await browser(["eval", "document.querySelector('#report').getAttribute('src')"], {
+      json: true,
+    })).result;
+    assert.equal(unchangedShell, shell.source);
+    const readerAfter = await evaluateReportFrame(pageUrl, `(() => {
+      const disclosure = document.querySelector("details");
+      return {
+        focus: document.activeElement.tagName + ":" + document.activeElement.className,
+        disclosureOpen: disclosure?.open ?? null,
+        scrollY,
+      };
+    })()`);
+    assert.deepEqual(readerAfter, readerBefore);
 
     await browser(["set", "viewport", "500", "900"]);
     const responsive = await evaluateReportFrame(pageUrl, `(() => ({

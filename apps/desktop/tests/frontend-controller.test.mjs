@@ -319,6 +319,116 @@ test("background refresh does not duplicate an in-flight final WSPR.live acquisi
   assert.equal(run.controller.state.session.reportHtml, "<p>ended</p>");
 });
 
+test("report background checks are silent, change-aware, and bounded by lifecycle", async () => {
+  const endedState = openSessionSucceeded(initialState("report"), session({
+    lifecycle: "ended",
+    presentationId: 7,
+    revision: 7,
+  }));
+  const ended = harness({
+    refresh_active_session_report: {
+      presentationId: 7,
+      reportHtml: "<p>prior</p>",
+      revision: 7,
+      lifecycle: "ended",
+      completeness: "full_detail",
+    },
+  }, { state: endedState });
+
+  ended.controller.periodicRefresh();
+  ended.controller.periodicRefresh();
+  ended.controller.periodicRefresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(ended.calls.length, 0, "terminal reports are not polled by the timer");
+  assert.equal(ended.renders.length, 0);
+
+  ended.controller.refreshOnReturn();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(ended.calls.length, 1, "focus performs one external-change check");
+  assert.equal(ended.renders.length, 0, "an unchanged presentation has no visible state transition");
+  assert.equal(ended.controller.state, endedState);
+
+  const runningState = openSessionSucceeded(initialState("report"), session({
+    lifecycle: "running",
+    presentationId: 10,
+    revision: 10,
+  }));
+  let presentationId = 10;
+  const running = harness({
+    refresh_active_session_report: () => ({
+      presentationId,
+      reportHtml: `<p>revision ${presentationId}</p>`,
+      revision: presentationId,
+      lifecycle: "running",
+      completeness: "full_detail",
+    }),
+  }, { state: runningState });
+
+  running.controller.periodicRefresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(running.calls.length, 1);
+  assert.equal(running.renders.length, 0);
+  assert.equal(running.controller.state, runningState);
+
+  presentationId = 11;
+  running.controller.periodicRefresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(running.controller.state.reportPresentationId, 11);
+  assert.equal(running.controller.state.session.reportHtml, "<p>revision 11</p>");
+  assert.equal(running.renders.length, 1, "a new coherent presentation is committed once");
+
+  running.controller.periodicRefresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(running.renders.length, 1, "subsequent no-op checks stay silent");
+
+  const failed = harness({
+    refresh_active_session_report: new Error("externally changed bundle is invalid"),
+  }, { state: runningState });
+  await failed.controller.refreshReport(true);
+  assert.equal(failed.controller.state.session.reportHtml, "<p>prior</p>");
+  assert.equal(failed.controller.state.reportStatus, "ready");
+  assert.match(failed.controller.state.reportError.detail, /externally changed bundle is invalid/);
+  assert.equal(failed.renders.length, 1, "background failures remain visible and typed");
+});
+
+test("manual report refresh retains visible progress and queues behind a silent check", async () => {
+  const state = openSessionSucceeded(initialState("report"), session({
+    lifecycle: "running",
+    presentationId: 3,
+    revision: 3,
+  }));
+  const resolvers = [];
+  const run = harness({
+    refresh_active_session_report: () => new Promise((resolve) => resolvers.push(resolve)),
+  }, { state });
+
+  const silent = run.controller.refreshReport(true);
+  const manual = run.controller.refreshReport();
+  assert.equal(run.controller.state.reportStatus, "ready");
+  assert.equal(run.renders.length, 0);
+  resolvers.shift()({
+    presentationId: 3,
+    reportHtml: "<p>prior</p>",
+    revision: 3,
+    lifecycle: "running",
+    completeness: "full_detail",
+  });
+  await silent;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(run.controller.state.reportStatus, "refreshing");
+  assert.equal(run.renders.length, 1);
+  resolvers.shift()({
+    presentationId: 3,
+    reportHtml: "<p>prior</p>",
+    revision: 3,
+    lifecycle: "running",
+    completeness: "full_detail",
+  });
+  await manual;
+  assert.equal(run.controller.state.reportStatus, "ready");
+  assert.equal(run.renders.length, 2);
+});
+
 test("focus, visibility, periodic, countdown, and disposal use injected lifecycle ports", async () => {
   const intervals = [];
   const cleared = [];

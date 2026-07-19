@@ -515,6 +515,13 @@ shell therefore keeps `style-src 'self'` and adds `blob:` only to `frame-src`.
 Exported reports retain their inline stylesheet, restrictive report-local CSP,
 and fully self-contained standalone behavior. Superseded blob URLs are revoked
 when a new presentation is installed or the desktop controller is disposed.
+The five-second coherence timer checks reports only while the active session is
+running. Those checks are silent and retain the exact frame document when the
+backend returns the current presentation identity; a new identity is installed
+once as one coherent report. Terminal reports are checked on explicit refresh
+or when the visible app returns to the report, which keeps external changes and
+typed generation failures discoverable without polling or disturbing reading
+state indefinitely.
 
 ## Integration Seams
 

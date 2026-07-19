@@ -452,8 +452,11 @@ compile, bundle, or generated-artifact step.
 inject command results, render notifications, navigation, monotonic time,
 interval registration, focus/visibility/hash listeners, prompts, confirmations,
 and countdown presentation. They assert setup, open, conductor, WSJT-X,
-WSPR.live, report, refresh, duplicate-operation, transition-timer, and disposal
-behavior without a window, native picker, live timer, or Tauri runtime. DOM
+WSPR.live, report, silent no-op and changed-presentation refreshes,
+duplicate-operation, transition-timer, and disposal behavior without a window,
+native picker, live timer, or Tauri runtime. Terminal reports are not timer
+polled; focus/visibility return performs a silent external-change check, and
+the manual button alone always enters visible bounded refresh progress. DOM
 lookup is centralized by the fail-fast `elements.mjs` selector inventory.
 `renderers.mjs` gives navigation, setup, active-run, transfer, and report
 presentation separate ownership and consumes only explicit element/root/time

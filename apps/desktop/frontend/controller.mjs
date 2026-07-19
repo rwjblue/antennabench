@@ -102,6 +102,7 @@ export function createDesktopController(options = {}) {
   let state = options.state ?? initialState(options.initialWorkflow);
   let transitionRefreshKey = null;
   let conductorPollInFlight = false;
+  let reportPollInFlight = null;
   let started = false;
   let disposed = false;
   const cleanups = [];
@@ -346,15 +347,33 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
-    async refreshReport() {
+    async refreshReport(silent = false) {
       if (!state.session || state.reportStatus === "refreshing" || state.reportExportStatus === "loading") {
         return state;
       }
-      commit(beginReportRefresh(state));
+      if (reportPollInFlight) {
+        if (silent) return state;
+        await reportPollInFlight;
+        return controller.refreshReport(false);
+      }
+      if (!silent) commit(beginReportRefresh(state));
+      const sessionAtStart = state.session;
+      const previousPresentationId = state.reportPresentationId;
+      const poll = (async () => {
+        try {
+          const presentation = await invokeRefreshActiveSessionReport(invoke());
+          if (state.session !== sessionAtStart) return;
+          const changed = String(presentation.presentationId) !== String(previousPresentationId);
+          if (!silent || changed) commit(reportRefreshSucceeded(state, presentation));
+        } catch (error) {
+          if (state.session === sessionAtStart) commit(reportRefreshFailed(state, error));
+        }
+      })();
+      reportPollInFlight = poll;
       try {
-        commit(reportRefreshSucceeded(state, await invokeRefreshActiveSessionReport(invoke())));
-      } catch (error) {
-        commit(reportRefreshFailed(state, error));
+        await poll;
+      } finally {
+        if (reportPollInFlight === poll) reportPollInFlight = null;
       }
       return state;
     },
@@ -474,14 +493,14 @@ export function createDesktopController(options = {}) {
       commit(selectWorkflow(state, workflow));
       effects.navigate(state.activeWorkflow);
       if (state.activeWorkflow === "run" && state.session) await controller.refreshConductor();
-      if (state.activeWorkflow === "report" && state.session) await controller.refreshReport();
+      if (state.activeWorkflow === "report" && state.session) await controller.refreshReport(true);
       return state;
     },
 
     async routeWorkflow(workflow) {
       commit(selectWorkflow(state, workflow));
       if (state.activeWorkflow === "run" && state.session) await controller.refreshConductor();
-      if (state.activeWorkflow === "report" && state.session) await controller.refreshReport();
+      if (state.activeWorkflow === "report" && state.session) await controller.refreshReport(true);
       return state;
     },
 
@@ -505,6 +524,9 @@ export function createDesktopController(options = {}) {
       if (effects.isVisible() && state.activeWorkflow === "run" && state.session) {
         void controller.refreshConductor(true, true);
       }
+      if (effects.isVisible() && state.activeWorkflow === "report" && state.session) {
+        void controller.refreshReport(true);
+      }
     },
 
     periodicRefresh() {
@@ -513,7 +535,8 @@ export function createDesktopController(options = {}) {
         && state.conductor?.lifecycle === "running") {
         void controller.refreshConductor(true, true);
       }
-      if (state.activeWorkflow === "report" && state.session) void controller.refreshReport();
+      if (state.activeWorkflow === "report"
+        && state.session?.lifecycle === "running") void controller.refreshReport(true);
     },
 
     tickCountdown() {
