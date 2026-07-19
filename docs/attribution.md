@@ -1,5 +1,22 @@
 # Attribution And External Data
 
+## Natural Earth Coastline
+
+The report crate embeds a quantized copy of the [Natural Earth 1:110m
+coastline](https://www.naturalearthdata.com/downloads/110m-physical-vectors/)
+for self-contained static geographic figures. Natural Earth states that its
+[raster and vector map data are in the public
+domain](https://www.naturalearthdata.com/about/terms-of-use/); inclusion does
+not imply endorsement.
+
+The checked-in asset was derived from the Natural Earth vector repository's
+`ne_110m_coastline.geojson` source blob
+`0dde16b6687ab562b2ca8864bb1b8828b4093c99`, retrieved 2026-07-19. Coordinates
+are quantized to tenths of a degree and stored as integer longitude/latitude
+pairs without feature metadata. The resulting compile-time asset is 46,306
+bytes. A test enforces the owner-approved hard cap of 60 KiB (61,440 bytes), so
+future coastline changes cannot silently exceed the report binary-size budget.
+
 ## Reverse Beacon Network
 
 AntennaBench can import daily archive files published by the
