@@ -23,12 +23,13 @@ use antenna_control::{
 use conductor::{active_session_conductor, mutate_active_session_conductor, ConductorSessionState};
 use location::{request_station_location, LocationState};
 use managed_sessions::{
-    delete_managed_session, list_managed_sessions, open_managed_session, reveal_managed_session,
-    reveal_managed_sessions_directory, ManagedSessionsState,
+    delete_managed_session, export_managed_session, import_managed_session, list_managed_sessions,
+    open_managed_session, reveal_managed_session, reveal_managed_sessions_directory,
+    ManagedSessionsState,
 };
 use open_session::{
-    active_session_report, export_active_session, export_active_session_report,
-    open_session_bundle, refresh_active_session_report, ActiveSessionState,
+    active_session_report, export_active_session_report, refresh_active_session_report,
+    ActiveSessionState,
 };
 use rbn_import::import_active_session_rbn;
 use setup::{
@@ -64,8 +65,8 @@ pub fn run() {
             reveal_managed_sessions_directory,
             reveal_managed_session,
             delete_managed_session,
-            open_session_bundle,
-            export_active_session,
+            import_managed_session,
+            export_managed_session,
             export_active_session_report,
             active_session_report,
             refresh_active_session_report,

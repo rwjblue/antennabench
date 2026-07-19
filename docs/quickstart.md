@@ -125,8 +125,9 @@ switch the radio or antenna for this manual run.
       the recipient needs it.
     - **Export compact summary HTML** saves a shorter standalone overview for a
       quick review or share.
-    - Under **Import / export**, **Export the complete session bundle** saves the
-      lossless durable record from which reports can be regenerated.
+    - In **Saved sessions**, the row action **Export bundle…** saves the
+      checkpoint-coherent lossless durable record from which reports can be
+      regenerated. The row does not need to be opened first.
 
 For a support request, prefer **Copy support summary** in **Build and operational
 history**. Review the deterministic JSON before pasting it into an issue. It
@@ -138,10 +139,19 @@ and operational records.
 **Saved sessions** lists experiments created in AntennaBench's managed sessions
 folder. Use **Start session**, **Continue session**, or **Resume session** for
 workable sessions; use **View report** for terminal and legacy sessions. The
-screen also provides **Open from another location…** for portable bundles and
-Finder reveal actions for the managed folder and individual entries. Refresh
+screen also provides **Import session…** to validate and copy an external
+portable bundle losslessly into the managed library. Import success offers
+**Open session** and **Reveal in Finder** follow-ups. Finder reveal actions are
+also available for the managed folder and individual entries. Refresh
 failures leave the last useful list visible, while partial-list and problem-row
 messages identify entries that could not be fully inspected.
+
+Use an available row's **Export bundle…** action to save a lossless copy without
+opening or activating that session. The native picker and opaque row locator
+stay in Rust; cancellation and row-local failures leave the catalog and source
+unchanged. **Add a saved WSPR.live response** and **Add an RBN daily ZIP
+archive** are instead under **Add evidence from a saved file** in **Active run**
+because those operations append evidence to the active experiment.
 
 Use a row’s **Delete…** action only when you want to remove that complete
 portable record from the managed library. AntennaBench identifies the exact

@@ -1,19 +1,5 @@
 use super::*;
 
-pub(super) fn suggested_export_name(source: &Path) -> String {
-    source
-        .file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| bundle_suffix(name).map(|suffix| (name, suffix)))
-        .map_or_else(
-            || format!("session-copy{V2_BUNDLE_SUFFIX}"),
-            |(name, suffix)| {
-                let stem = name.strip_suffix(suffix).expect("matched suffix");
-                format!("{stem}-copy{suffix}")
-            },
-        )
-}
-
 pub(super) fn suggested_report_name(source: &Path) -> String {
     source
         .file_name()
@@ -87,12 +73,26 @@ pub(super) fn export_bundle(
     Ok((bundle_name, revision))
 }
 
+pub(crate) fn export_session_bundle_at_path(
+    source: &Path,
+    destination: &Path,
+) -> Result<(String, Option<u64>), SessionErrorPayload> {
+    export_bundle(source, destination).map_err(SessionErrorPayload::from)
+}
+
+pub(crate) fn validate_portable_session_at_path(path: &Path) -> Result<(), SessionErrorPayload> {
+    open_bundle(path)
+        .map(|_| ())
+        .map_err(SessionErrorPayload::from)
+}
+
 pub(super) fn bundle_suffix(name: &str) -> Option<&'static str> {
     [V2_BUNDLE_SUFFIX, V1_BUNDLE_SUFFIX]
         .into_iter()
         .find(|suffix| name.ends_with(suffix))
 }
 
+#[cfg(test)]
 pub(super) fn open_session_with_selection<F>(
     state: &ActiveSessionState,
     select: F,
@@ -164,6 +164,7 @@ pub(crate) fn finish_open_side_effects(
     wsjtx_state.stop_all("WSJT-X reception stopped because a different session was opened.");
 }
 
+#[cfg(test)]
 pub(super) fn export_active_session_with_selection<F>(
     state: &ActiveSessionState,
     select: F,
@@ -486,80 +487,6 @@ pub(crate) fn check_ipc_payload(
     } else {
         Ok(())
     }
-}
-
-#[tauri::command]
-pub(crate) async fn open_session_bundle(
-    app: AppHandle,
-    state: State<'_, ActiveSessionState>,
-    wsjtx_state: State<'_, WsjtxSessionState>,
-    controller_state: State<'_, AntennaControllerState>,
-) -> Result<OpenSessionOutcome, SessionErrorPayload> {
-    let outcome = open_session_with_selection(state.inner(), || {
-        let Some(selection) = app
-            .dialog()
-            .file()
-            .set_title("Open an AntennaBench session bundle")
-            .set_can_create_directories(false)
-            .blocking_pick_folder()
-        else {
-            return Ok(None);
-        };
-
-        selection.into_path().map(Some).map_err(|error| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Selection,
-                "The selected directory is not available as a local path.",
-                error.to_string(),
-            )
-        })
-    })?;
-    if matches!(outcome, OpenSessionOutcome::Opened { .. }) {
-        finish_open_side_effects(controller_state.inner(), wsjtx_state.inner());
-    }
-    Ok(outcome)
-}
-
-#[tauri::command]
-pub(crate) async fn export_active_session(
-    app: AppHandle,
-    state: State<'_, ActiveSessionState>,
-) -> Result<ExportSessionOutcome, SessionErrorPayload> {
-    let result = export_active_session_with_selection(state.inner(), |source| {
-        let mut dialog = app
-            .dialog()
-            .file()
-            .set_title("Export an AntennaBench session bundle copy")
-            .set_file_name(suggested_export_name(source))
-            .set_can_create_directories(true)
-            .add_filter(
-                "AntennaBench session bundle",
-                &["antennabundle", "wsprabundle"],
-            );
-        if let Some(parent) = source.parent() {
-            dialog = dialog.set_directory(parent);
-        }
-
-        let Some(selection) = dialog.blocking_save_file() else {
-            return Ok(None);
-        };
-        selection.into_path().map(Some).map_err(|error| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Destination,
-                "The selected destination is not available as a local path.",
-                error.to_string(),
-            )
-        })
-    });
-    result.map_err(|payload| {
-        persist_active_operation_failure(
-            state.inner(),
-            DiagnosticOperationV6::BundleExport,
-            DiagnosticPhaseV6::WriteDestination,
-            "bundle.export_failed",
-            payload,
-        )
-    })
 }
 
 #[tauri::command]

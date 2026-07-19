@@ -13,11 +13,11 @@ import { CONTEXT_HELP, installContextualHelp } from "../frontend/models.mjs";
 
 import {
   renderNavigation,
+  renderEvidenceImports,
   renderReport,
   renderRun,
   renderSavedSessions,
   renderSetup,
-  renderTransfer,
 } from "../frontend/renderers.mjs";
 import { initialState } from "../frontend/state.mjs";
 
@@ -121,9 +121,9 @@ test("contextual help accepts the document root used by the desktop mount", () =
 
 test("navigation renders exactly one active accessible workflow", () => {
   const e = loadDesktopDocument();
-  renderNavigation(e, { activeWorkflow: "transfer" });
-  assert.deepEqual(e.navigation.map((node) => node.getAttribute("aria-current")), ["false", "false", "false", "page", "false"]);
-  assert.deepEqual(e.panels.map((node) => node.hidden), [true, true, true, false, true]);
+  renderNavigation(e, { activeWorkflow: "report" });
+  assert.deepEqual(e.navigation.map((node) => node.getAttribute("aria-current")), ["false", "false", "false", "page"]);
+  assert.deepEqual(e.panels.map((node) => node.hidden), [true, true, true, false]);
   assert.equal(e.navigation.filter((node) => node.classList.contains("active")).length, 1);
 });
 
@@ -204,15 +204,42 @@ test("saved sessions render lifecycle actions, problems, duplicates, and distinc
   assert.equal(rows[3].querySelector(".saved-warning").hidden, false);
   assert.equal(rows[4].querySelector(".saved-warning").hidden, false);
   assert.match(rows[3].querySelector(".saved-row-error").textContent, /bundle moved/);
+  assert.equal(rows[3].querySelector(".saved-row-error").getAttribute("role"), "alert");
   assert.equal(rows[1].querySelector(".saved-open-now").textContent, "Open now");
   assert.equal(rows[7].querySelector(".saved-lifecycle").textContent, "Invalid session bundle");
   assert.match(rows[7].querySelector("details").textContent, /Manifest is invalid/);
   assert.equal(rows[0].querySelector('[data-saved-action="delete"]').textContent, "Delete…");
+  assert.equal(rows[0].querySelector('[data-saved-action="export"]').textContent, "Export bundle…");
   assert.equal(rows[0].querySelector('[data-saved-action="delete"]').disabled, false);
   assert.equal(rows[1].querySelector('[data-saved-action="delete"]').disabled, true);
   assert.match(rows[1].querySelector('[data-saved-action="delete"]').title, /Close this session/);
   assert.equal(rows[7].querySelector('[data-saved-action="delete"]'), null);
   assert.equal(e.savedEmpty.hidden, true);
+
+  state.catalogRowOperation = { locatorId: "ready", kind: "exporting" };
+  renderSavedSessions(e, state, document);
+  assert.equal(
+    e.savedCatalog.querySelector('[data-locator-id="ready"] [data-saved-action="export"]').textContent,
+    "Exporting…",
+  );
+  assert.equal(
+    e.savedCatalog.querySelector('[data-locator-id="ended"] [data-saved-action="export"]').disabled,
+    false,
+    "export progress remains row-local",
+  );
+  state.catalogRowOperation = null;
+  state.catalogImportStatus = "loading";
+  renderSavedSessions(e, state, document);
+  assert.match(e.savedImportFeedback.textContent, /private staging copy/i);
+  assert.equal(e.savedCatalog.querySelector('[data-saved-action="export"]').disabled, true);
+  state.catalogImportStatus = "ready";
+  state.catalogImportNotice = {
+    locatorId: "ready",
+    bundleName: "ready.session.antennabundle",
+  };
+  renderSavedSessions(e, state, document);
+  assert.match(e.savedImportFeedback.textContent, /was imported/i);
+  assert.equal(e.savedImportActions.hidden, false);
 
   state.catalogDeleteStatus = "confirming";
   state.catalogDeleteTarget = {
@@ -613,20 +640,17 @@ test("a full polling interval preserves the mounted Active Run text until atomic
   controller.dispose();
 });
 
-test("transfer renderer covers lifecycle/schema eligibility and feedback outcomes", () => {
+test("contextual evidence imports preserve lifecycle and schema eligibility", () => {
   const e = loadDesktopDocument();
-  const state = initialState("transfer");
-  renderTransfer(e, state);
-  assert.equal(e.exportButton.disabled, true);
+  const state = initialState("run");
+  renderEvidenceImports(e, state);
   assert.equal(e.importRbnButton.textContent, "Open a session first");
 
   state.openStatus = "ready";
   state.session = { lifecycle: "running", schemaVersion: 3, bundleName: "test" };
-  renderTransfer(e, state);
+  renderEvidenceImports(e, state);
   assert.equal(e.importWsprLiveButton.disabled, false);
   assert.equal(e.importRbnButton.disabled, false);
-
-  assert.equal(e.transferStatus.textContent, "Session active");
 });
 
 test("report renderer covers unavailable, refreshing, ready, exporting, error, and frame identity", () => {

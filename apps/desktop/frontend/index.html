@@ -43,12 +43,8 @@
               <span class="step">02</span>
               <span><strong>Active run</strong><small>Prompts and observations</small></span>
             </button>
-            <button class="nav-item" type="button" data-workflow="transfer">
-              <span class="step">03</span>
-              <span><strong>Import / export</strong><small>Portable session bundles</small></span>
-            </button>
             <button class="nav-item" type="button" data-workflow="report">
-              <span class="step">04</span>
+              <span class="step">03</span>
               <span><strong>Local report</strong><small>Evidence and context</small></span>
             </button>
           </nav>
@@ -65,10 +61,10 @@
               <div><p class="eyebrow">Your experiment library</p><h1 id="saved-title">Saved sessions</h1></div>
               <span class="status-chip muted" data-saved-status>Loading</span>
             </div>
-            <p class="lede">Sessions created by AntennaBench are saved automatically. Continue active work, inspect a committed report, or open a portable session from another location.</p>
+            <p class="lede">Sessions created by AntennaBench are saved automatically. Continue active work, inspect a committed report, or import a verified lossless copy of a portable session.</p>
             <div class="saved-header-actions">
               <button class="primary-action" type="button" data-saved-new>New session</button>
-              <button type="button" data-saved-open-external>Open from another location…</button>
+              <button type="button" data-saved-import>Import session…</button>
               <button type="button" data-saved-reveal-folder>Reveal sessions folder</button>
               <button type="button" data-saved-refresh>Refresh</button>
             </div>
@@ -76,11 +72,22 @@
               <span class="feedback-mark" aria-hidden="true"></span>
               <div><strong data-saved-feedback-message></strong><p data-saved-feedback-detail></p></div>
             </div>
+            <div class="open-feedback saved-import-feedback" data-saved-import-feedback hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div>
+                <strong data-saved-import-message></strong>
+                <p data-saved-import-detail></p>
+                <div class="saved-import-actions" data-saved-import-actions hidden>
+                  <button type="button" data-saved-import-open>Open session</button>
+                  <button type="button" data-saved-import-reveal>Reveal in Finder</button>
+                </div>
+              </div>
+            </div>
             <div class="saved-empty" data-saved-empty hidden>
               <span class="empty-icon" aria-hidden="true">◌</span>
               <h2>No saved sessions yet</h2>
-              <p>New sessions are saved here automatically. Create an experiment or open a portable session from another location.</p>
-              <div class="saved-empty-actions"><button type="button" data-saved-empty-new>New session</button><button type="button" data-saved-empty-open>Open from another location…</button></div>
+              <p>New sessions are saved here automatically. Create an experiment or import a portable session into this library.</p>
+              <div class="saved-empty-actions"><button type="button" data-saved-empty-new>New session</button><button type="button" data-saved-empty-import>Import session…</button></div>
             </div>
             <div class="saved-catalog" data-saved-catalog aria-live="polite"></div>
             <dialog class="saved-delete-dialog" data-saved-delete-dialog aria-labelledby="saved-delete-title" aria-describedby="saved-delete-description">
@@ -419,6 +426,19 @@
                 <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry acquisition</button><button type="button" class="danger-action" data-wspr-live-end-without hidden>End without public spots</button></div>
               </details>
 
+              <details class="receiver-panel add-evidence-panel" data-add-evidence>
+                <summary>Add evidence from a saved file</summary>
+                <p class="field-help">These imports append evidence to this active experiment only. Their existing lifecycle and schema eligibility remains unchanged.</p>
+                <div class="action-list evidence-action-list">
+                  <article><div><span>Recovery import</span><h2>Add a saved WSPR.live response</h2><p>If automatic acquisition was interrupted, select a <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> JSON response. AntennaBench validates it against this session before importing spots.</p></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Open a running session first</button></article>
+                  <article><div><span>Import evidence</span><h2>Add an RBN daily ZIP archive</h2><p>Select an official <a href="https://www.reversebeacon.net/raw_data/" target="_blank" rel="noreferrer">Reverse Beacon Network daily archive</a>. AntennaBench filters it to this session and preserves the exact ZIP in the bundle.</p></div><button class="secondary-action" type="button" data-import-rbn disabled>Open a session first</button></article>
+                </div>
+                <div class="open-feedback" data-import-feedback hidden role="status" aria-live="polite">
+                  <span class="feedback-mark" aria-hidden="true"></span>
+                  <div><strong data-import-feedback-message></strong><p data-import-feedback-detail></p></div>
+                </div>
+              </details>
+
               <details class="receiver-panel">
                 <summary><span data-wsjtx-requirement>Local/offline receive collection</span> · <strong data-wsjtx-phase>Not started</strong> <button class="context-help" type="button" data-help-trigger="wsjtx_receiver">?</button></summary>
                 <form data-wsjtx-form>
@@ -459,27 +479,6 @@
                 <div data-conductor-events></div>
               </details>
 
-            </div>
-          </section>
-
-          <section class="workflow-panel" data-panel="transfer" aria-labelledby="transfer-title" hidden>
-            <div class="panel-heading">
-              <div><p class="eyebrow">Move durable evidence</p><h1 id="transfer-title">Import / export</h1></div>
-              <span class="status-chip muted" data-transfer-status>No bundle open</span>
-            </div>
-            <p class="lede">Bundle operations will stay behind narrow Rust services. The webview receives no general filesystem authority.</p>
-            <div class="action-list">
-              <article><div><span>Recovery import</span><h2>Add a saved WSPR.live response</h2><p>If automatic acquisition was interrupted, select a <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> JSON response for the active session. AntennaBench validates it against the session before importing any spots.</p></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Open a running session first</button></article>
-              <article><div><span>Import evidence</span><h2>Add an RBN daily ZIP archive</h2><p>Select an official <a href="https://www.reversebeacon.net/raw_data/" target="_blank" rel="noreferrer">Reverse Beacon Network daily archive</a>. AntennaBench performs no download: it filters the selected local ZIP to the session callsign, experiment window, and bands, then preserves the exact ZIP in the bundle.</p></div><button class="secondary-action" type="button" data-import-rbn disabled>Open a session first</button></article>
-              <article><div><span>Lossless export</span><h2>Export the complete session bundle</h2><p>Preserve the original durable files and attachments losslessly. This is the authoritative session record.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
-            </div>
-            <div class="open-feedback" data-export-feedback hidden role="status" aria-live="polite">
-              <span class="feedback-mark" aria-hidden="true"></span>
-              <div><strong data-export-feedback-message></strong><p data-export-feedback-detail></p></div>
-            </div>
-            <div class="open-feedback" data-import-feedback hidden role="status" aria-live="polite">
-              <span class="feedback-mark" aria-hidden="true"></span>
-              <div><strong data-import-feedback-message></strong><p data-import-feedback-detail></p></div>
             </div>
           </section>
 

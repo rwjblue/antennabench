@@ -144,31 +144,59 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   };
   let managedOpenAttempts = 0;
   let reportRefreshes = 0;
+  let importedCatalog = false;
+  const existingCatalogEntry = {
+    locatorId: "locator-existing",
+    bundleName: "existing.session.antennabundle",
+    origin: "managed",
+    originLabel: "Saved by AntennaBench",
+    status: "available",
+    sessionId: "session-existing",
+    callsign: "W1AW",
+    createdAt: "2026-07-17T14:00:00Z",
+    lifecycle: "ended",
+    schemaVersion: 5,
+    revision: 9,
+    mode: "tx_focused",
+    bands: ["20m"],
+    antennaLabels: ["Dipole", "Vertical"],
+    antennaCount: 2,
+    sameSessionIdCount: 1,
+    problems: [],
+  };
+  const importedCatalogEntry = {
+    ...existingCatalogEntry,
+    locatorId: "locator-imported-refreshed",
+    bundleName: "imported.session.antennabundle",
+    sessionId: "session-imported",
+    callsign: "K1ABC",
+  };
   const responses = {
     load_station_preferences: null,
     antenna_controller_profiles: { inputStyle: "one_line", profiles: [] },
-    list_managed_sessions: {
+    list_managed_sessions: () => ({
       status: "complete",
       diagnostics: [],
-      entries: [{
-        locatorId: "locator-existing",
-        bundleName: "existing.session.antennabundle",
-        origin: "managed",
-        originLabel: "Saved by AntennaBench",
-        status: "available",
-        sessionId: "session-existing",
-        callsign: "W1AW",
-        createdAt: "2026-07-17T14:00:00Z",
-        lifecycle: "ended",
-        schemaVersion: 5,
-        revision: 9,
-        mode: "tx_focused",
-        bands: ["20m"],
-        antennaLabels: ["Dipole", "Vertical"],
-        antennaCount: 2,
-        sameSessionIdCount: 1,
-        problems: [],
-      }],
+      entries: importedCatalog
+        ? [existingCatalogEntry, importedCatalogEntry]
+        : [existingCatalogEntry],
+    }),
+    import_managed_session: () => {
+      importedCatalog = true;
+      return {
+        status: "imported",
+        location: {
+          locatorId: "locator-imported-temporary",
+          bundleName: importedCatalogEntry.bundleName,
+          origin: "managed",
+          originLabel: "Saved by AntennaBench",
+        },
+      };
+    },
+    export_managed_session: {
+      status: "exported",
+      bundleName: "existing-copy.session.antennabundle",
+      revision: 9,
     },
     request_station_location: {
       status: "success",
@@ -186,7 +214,8 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
         originLabel: "Saved by AntennaBench",
       },
     },
-    open_managed_session: () => {
+    open_managed_session: (payload) => {
+      if (payload.locatorId === "locator-imported-refreshed") return { status: "cancelled" };
       managedOpenAttempts += 1;
       if (managedOpenAttempts === 2) throw new Error("The saved bundle moved.");
       return {
@@ -262,6 +291,36 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       assert.equal(document.querySelector('[data-panel="saved"]').hidden, false);
       assert.match(elements.savedCatalog.textContent, /W1AW/);
       assert.match(elements.savedCatalog.textContent, /View report/);
+    });
+    elements.savedImport.click();
+    await vi.waitFor(() => {
+      assert.match(elements.savedImportFeedback.textContent, /imported\.session\.antennabundle was imported/);
+      assert.match(elements.savedCatalog.textContent, /K1ABC/);
+      assert.equal(elements.savedImportActions.hidden, false);
+    });
+    elements.savedImportReveal.click();
+    await vi.waitFor(() => {
+      assert.ok(calls.some(([command, payload]) => command === "reveal_managed_session"
+        && payload.locatorId === "locator-imported-refreshed"));
+    });
+    elements.savedImportOpen.click();
+    await vi.waitFor(() => {
+      assert.ok(calls.some(([command, payload]) => command === "open_managed_session"
+        && payload.locatorId === "locator-imported-refreshed"));
+    });
+    let exportButton = elements.savedCatalog.querySelector(
+      '[data-locator-id="locator-existing"] [data-saved-action="export"]',
+    );
+    exportButton.click();
+    await vi.waitFor(() => {
+      exportButton = elements.savedCatalog.querySelector(
+        '[data-locator-id="locator-existing"] [data-saved-action="export"]',
+      );
+      assert.equal(document.activeElement, exportButton, "row export restores keyboard focus");
+      assert.match(
+        elements.savedCatalog.querySelector('[data-locator-id="locator-existing"]').textContent,
+        /Exported existing-copy\.session\.antennabundle/,
+      );
     });
     let deleteButton = elements.savedCatalog.querySelector('[data-saved-action="delete"]');
     deleteButton.click();

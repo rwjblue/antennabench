@@ -14,14 +14,14 @@ import {
   invokeDeleteManagedSession,
   invokeDeleteAntennaControllerProfile,
   invokeExportActiveSessionReport,
-  invokeExportSession,
+  invokeExportManagedSession,
+  invokeImportManagedSession,
   invokeImportActiveSessionRbn,
   invokeImportActiveSessionWsprLive,
   invokeLoadStationPreferences,
   invokeListManagedSessions,
   invokeMutateSessionConductor,
   invokeOpenManagedSession,
-  invokeOpenSessionFromAnotherLocation,
   invokeRefreshActiveSessionReport,
   invokeRevealManagedSession,
   invokeRevealManagedSessionsDirectory,
@@ -69,7 +69,8 @@ import {
 import {
   beginConductorLoad,
   beginConductorMutation,
-  beginExportSession,
+  beginManagedExport,
+  beginManagedImport,
   beginManagedCatalogLoad,
   beginManagedDelete,
   beginManagedReveal,
@@ -86,14 +87,17 @@ import {
   conductorMutationFailed,
   conductorPollSucceeded,
   editSessionSetup,
-  exportSessionCancelled,
-  exportSessionFailed,
-  exportSessionSucceeded,
   initialState,
   managedCatalogLoadFailed,
   managedCatalogLoadSucceeded,
   managedDeleteFailed,
   managedDeleteSucceeded,
+  managedExportCancelled,
+  managedExportFailed,
+  managedExportSucceeded,
+  managedImportCancelled,
+  managedImportFailed,
+  managedImportSucceeded,
   managedRevealFailed,
   managedRevealSucceeded,
   cancelManagedDelete,
@@ -198,6 +202,10 @@ test("the shell starts in saved sessions", () => {
     catalogError: null,
     catalogRowOperation: null,
     catalogRowError: null,
+    catalogRowNotice: null,
+    catalogImportStatus: "idle",
+    catalogImportError: null,
+    catalogImportNotice: null,
     catalogDeleteStatus: "idle",
     catalogDeleteTarget: null,
     catalogDeleteError: null,
@@ -215,10 +223,6 @@ test("the shell starts in saved sessions", () => {
     supportCopyError: null,
     error: null,
     notice: null,
-    exportStatus: "idle",
-    exportError: null,
-    exportNotice: null,
-    exportedBundleName: null,
     importStatus: "idle",
     importKind: null,
     importError: null,
@@ -577,7 +581,7 @@ test("setup serializes explicit local controller policy, profile, and target map
 
 test("active run leads with task actions and hides implementation-oriented tools", () => {
   const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
-  const runPanel = html.match(/<section class="workflow-panel" data-panel="run"[\s\S]*?<section class="workflow-panel" data-panel="transfer"/u)?.[0] ?? "";
+  const runPanel = html.match(/<section class="workflow-panel" data-panel="run"[\s\S]*?<section class="workflow-panel" data-panel="report"/u)?.[0] ?? "";
   assert.match(runPanel, /Start session/);
   assert.match(runPanel, /Antenna ready/);
   assert.doesNotMatch(runPanel, /Begin antenna switch|begin_antenna_switch/);
@@ -586,7 +590,14 @@ test("active run leads with task actions and hides implementation-oriented tools
   assert.match(runPanel, /Correct last action/);
   assert.match(runPanel, /<details[^>]*>\s*<summary><span data-wsjtx-requirement>Local\/offline receive collection/u);
   assert.match(runPanel, /<details[^>]*data-corrections-panel/u);
+  assert.match(runPanel, /Add evidence from a saved file/);
+  assert.match(runPanel, /Add a saved WSPR\.live response/);
+  assert.match(runPanel, /Add an RBN daily ZIP archive/);
   assert.doesNotMatch(runPanel, /Explicit operator evidence|Trusted boundary|Trusted time/);
+  assert.doesNotMatch(html, /data-panel="transfer"|data-workflow="transfer"|>Import \/ export</);
+  const reportPanel = html.match(/data-panel="report"[\s\S]*?<\/section>\s*<\/main>/u)?.[0] ?? "";
+  assert.match(reportPanel, /Export compact summary HTML/);
+  assert.match(reportPanel, /Export full evidence HTML/);
 });
 
 test("readiness is the only normal antenna-change action", () => {
@@ -1170,7 +1181,7 @@ test("active-run public spot states keep operator copy plain and expose diagnost
   assert.equal(finalizationFailure.endWithout, true);
 
   const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
-  const runPanel = html.match(/data-panel="run"[\s\S]*?data-panel="transfer"/u)?.[0] ?? "";
+  const runPanel = html.match(/data-panel="run"[\s\S]*?data-panel="report"/u)?.[0] ?? "";
   assert.doesNotMatch(runPanel, /data-conductor-revision|data-conductor-now|Checkpoint|Current time/);
   assert.match(runPanel, /data-conductor-lifecycle|data-conductor-antenna-in-use/);
   assert.match(runPanel, /<button type="button" data-conductor-refresh>Refresh<\/button>/);
@@ -1213,7 +1224,7 @@ test("setup native errors remain typed and editable", () => {
 });
 
 test("opening a session transitions through loading and ready", () => {
-  const loading = beginOpenSession(initialState("transfer"), "managed", "work", "locator-1");
+  const loading = beginOpenSession(initialState("saved"), "managed", "work", "locator-1");
   const session = { sessionId: "session-1", reportHtml: "<!doctype html>" };
   const ready = openSessionSucceeded(loading, session, "run");
 
@@ -1261,7 +1272,7 @@ test("fresh lifecycle and explicit intent determine the opening destination", ()
 test("same-ID successful opens refresh only the new report presentation", () => {
   const reportFrame = { dataset: {}, src: "", removeAttribute() {} };
   const reportDocuments = reportDocumentHarness();
-  const first = openSessionSucceeded(initialState("transfer"), {
+  const first = openSessionSucceeded(initialState("report"), {
     sessionId: "session-1",
     reportHtml: "<!doctype html><title>first</title>",
   });
@@ -1270,9 +1281,9 @@ test("same-ID successful opens refresh only the new report presentation", () => 
   assert.equal(reportFrame.src, "blob:report-1");
   assert.deepEqual(reportDocuments.created, ["<!doctype html><title>first</title>"]);
 
-  const navigated = selectWorkflow(first, "transfer");
-  const exporting = beginExportSession(navigated);
-  const exported = exportSessionSucceeded(exporting, "session-1-copy.session.wsprabundle");
+  const navigated = selectWorkflow(first, "saved");
+  const exporting = beginManagedExport(navigated, "locator-1");
+  const exported = managedExportSucceeded(exporting, "session-1-copy.session.wsprabundle");
   assert.equal(updateReportFrame(reportFrame, navigated, reportDocuments), false);
   assert.equal(updateReportFrame(reportFrame, exporting, reportDocuments), false);
   assert.equal(updateReportFrame(reportFrame, exported, reportDocuments), false);
@@ -1354,7 +1365,7 @@ test("revision-keyed report refresh retains coherent prior output on failure and
 });
 
 test("cancelling the native picker is a normal non-error transition", () => {
-  const cancelled = openSessionCancelled(beginOpenSession(initialState("transfer")));
+  const cancelled = openSessionCancelled(beginOpenSession(initialState("saved")));
 
   assert.equal(cancelled.openStatus, "idle");
   assert.equal(cancelled.notice, "cancelled");
@@ -1362,7 +1373,7 @@ test("cancelling the native picker is a normal non-error transition", () => {
 });
 
 test("typed native failures retain friendly and technical context", () => {
-  const failed = openSessionFailed(beginOpenSession(initialState("transfer")), {
+  const failed = openSessionFailed(beginOpenSession(initialState("saved")), {
     kind: "validation",
     message: "The session bundle did not pass validation.",
     detail: "2 validation issues",
@@ -1376,47 +1387,50 @@ test("typed native failures retain friendly and technical context", () => {
   });
 });
 
-test("exporting has independent loading and success state", () => {
-  const active = openSessionSucceeded(initialState("transfer"), {
-    sessionId: "session-1",
+test("managed import and row export have independent catalog state", () => {
+  const catalog = { status: "complete", entries: [{ locatorId: "locator-1", bundleName: "one" }] };
+  const base = { ...initialState("saved"), catalogStatus: "ready", managedCatalog: catalog };
+  const importing = beginManagedImport(base);
+  const imported = managedImportSucceeded(importing, {
+    locatorId: "import-locator",
+    bundleName: "imported.session.wsprabundle",
   });
-  const loading = beginExportSession(active);
-  const exported = exportSessionSucceeded(
-    loading,
-    "session-1-copy.session.wsprabundle",
-  );
+  const exporting = beginManagedExport(base, "locator-1");
+  const exported = managedExportSucceeded(exporting, "one-copy.session.wsprabundle");
 
-  assert.equal(loading.exportStatus, "loading");
-  assert.equal(loading.session, active.session);
-  assert.equal(exported.exportStatus, "ready");
-  assert.equal(
-    exported.exportedBundleName,
-    "session-1-copy.session.wsprabundle",
-  );
-  assert.equal(exported.session, active.session);
+  assert.equal(importing.catalogImportStatus, "loading");
+  assert.equal(importing.managedCatalog, catalog);
+  assert.equal(imported.catalogImportNotice.bundleName, "imported.session.wsprabundle");
+  assert.deepEqual(exporting.catalogRowOperation, { locatorId: "locator-1", kind: "exporting" });
+  assert.equal(exported.catalogRowNotice.locatorId, "locator-1");
+  assert.equal(exported.managedCatalog, catalog);
 });
 
-test("export cancellation and typed errors do not replace the active session", () => {
-  const active = openSessionSucceeded(initialState("transfer"), {
-    sessionId: "session-1",
+test("managed import and export cancellation or failure preserve the coherent catalog", () => {
+  const catalog = { status: "complete", entries: [{ locatorId: "locator-1", bundleName: "one" }] };
+  const base = { ...initialState("saved"), catalogStatus: "ready", managedCatalog: catalog };
+  const importCancelled = managedImportCancelled(beginManagedImport(base));
+  const importFailed = managedImportFailed(beginManagedImport(base), {
+    kind: "validation", message: "Invalid bundle.", detail: "manifest",
   });
-  const cancelled = exportSessionCancelled(beginExportSession(active));
-  const failed = exportSessionFailed(beginExportSession(active), {
+  const exportCancelled = managedExportCancelled(beginManagedExport(base, "locator-1"));
+  const exportFailed = managedExportFailed(beginManagedExport(base, "locator-1"), {
     kind: "destination",
     message: "A file or directory already exists at that destination.",
     detail: "/tmp/existing.session.wsprabundle",
   });
 
-  assert.equal(cancelled.exportStatus, "idle");
-  assert.equal(cancelled.exportNotice, "cancelled");
-  assert.equal(cancelled.session, active.session);
-  assert.equal(failed.exportStatus, "error");
-  assert.equal(failed.exportError.kind, "destination");
-  assert.equal(failed.session, active.session);
+  assert.equal(importCancelled.catalogImportStatus, "idle");
+  assert.equal(importFailed.catalogImportError.kind, "validation");
+  assert.match(exportCancelled.catalogRowNotice.message, /cancelled/i);
+  assert.equal(exportFailed.catalogRowError.error.kind, "destination");
+  for (const state of [importCancelled, importFailed, exportCancelled, exportFailed]) {
+    assert.equal(state.managedCatalog, catalog);
+  }
 });
 
 test("WSPR.live import preserves focused state and refreshes the active summary", () => {
-  const active = openSessionSucceeded(initialState("transfer"), {
+  const active = openSessionSucceeded(initialState("run"), {
     sessionId: "session-1",
     lifecycle: "running",
     observationCount: 2,
@@ -1452,7 +1466,7 @@ test("WSPR.live import preserves focused state and refreshes the active summary"
 });
 
 test("RBN import preserves focused state and refreshes the schema-v3 summary", () => {
-  const active = openSessionSucceeded(initialState("transfer"), {
+  const active = openSessionSucceeded(initialState("run"), {
     sessionId: "session-1",
     schemaVersion: 3,
     lifecycle: "ended",
@@ -1551,35 +1565,33 @@ test("the frontend invokes only the narrow session commands", async () => {
   const calls = [];
   const invoke = async (...args) => {
     calls.push(args);
-    return args[0] === "open_session_bundle"
-      ? { status: "opened", session: { sessionId: "session-1" } }
-      : args[0] === "active_session_report"
+    return args[0] === "active_session_report"
         ? "<!doctype html>"
         : { status: "exported", bundleName: "session-1-copy.session.wsprabundle" };
   };
 
-  const result = await invokeOpenSessionFromAnotherLocation(invoke);
   const managed = await invokeOpenManagedSession(invoke, "locator-1");
   const catalog = await invokeListManagedSessions(invoke);
   const revealedFolder = await invokeRevealManagedSessionsDirectory(invoke);
   const revealedSession = await invokeRevealManagedSession(invoke, "locator-1");
   const deletedSession = await invokeDeleteManagedSession(invoke, "locator-1");
+  const importedSession = await invokeImportManagedSession(invoke);
+  const exportedSession = await invokeExportManagedSession(invoke, "locator-1");
   const report = await invokeActiveSessionReport(invoke);
-  const exported = await invokeExportSession(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
   const reportExported = await invokeExportActiveSessionReport(invoke, "full_evidence_html");
   const imported = await invokeImportActiveSessionWsprLive(invoke);
   const rbnImported = await invokeImportActiveSessionRbn(invoke);
 
   assert.deepEqual(calls, [
-    ["open_session_bundle"],
     ["open_managed_session", { locatorId: "locator-1" }],
     ["list_managed_sessions"],
     ["reveal_managed_sessions_directory"],
     ["reveal_managed_session", { locatorId: "locator-1" }],
     ["delete_managed_session", { locatorId: "locator-1" }],
+    ["import_managed_session"],
+    ["export_managed_session", { locatorId: "locator-1" }],
     ["active_session_report"],
-    ["export_active_session"],
     ["refresh_active_session_report"],
     ["export_active_session_report", {
       format: "full_evidence_html",
@@ -1589,14 +1601,14 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["import_active_session_wspr_live"],
     ["import_active_session_rbn"],
   ]);
-  assert.equal(result.status, "opened");
   assert.equal(managed.status, "exported");
   assert.equal(catalog.status, "exported");
   assert.equal(revealedFolder.status, "exported");
   assert.equal(revealedSession.status, "exported");
   assert.equal(deletedSession.status, "exported");
+  assert.equal(importedSession.status, "exported");
+  assert.equal(exportedSession.status, "exported");
   assert.equal(report, "<!doctype html>");
-  assert.equal(exported.status, "exported");
   assert.equal(refreshed.status, "exported");
   assert.equal(reportExported.status, "exported");
   assert.equal(imported.status, "exported");
@@ -1628,7 +1640,7 @@ test("unknown workflow transitions are rejected", () => {
 });
 
 test("hash routing falls back to saved sessions for unsupported values", () => {
-  assert.equal(workflowFromHash("#transfer"), "transfer");
+  assert.equal(workflowFromHash("#transfer"), "saved");
   assert.equal(workflowFromHash("#settings"), "saved");
   assert.equal(workflowFromHash(""), "saved");
 });

@@ -29,11 +29,11 @@ import { initialState } from "./state.mjs";
 import {
   formatCountdown,
   renderNavigation,
+  renderEvidenceImports,
   renderReport,
   renderRun,
   renderSavedSessions,
   renderSetup,
-  renderTransfer,
 } from "./renderers.mjs";
 
 export function mount(root, browserWindow) {
@@ -53,11 +53,13 @@ export function mount(root, browserWindow) {
   const {
     mainContent,
     savedNew,
-    savedOpenExternal,
+    savedImport,
     savedRevealFolder,
     savedRefresh,
     savedEmptyNew,
-    savedEmptyOpen,
+    savedEmptyImport,
+    savedImportOpen,
+    savedImportReveal,
     savedCatalog,
     savedDeleteDialog,
     savedDeleteCancel,
@@ -139,13 +141,8 @@ export function mount(root, browserWindow) {
     wsjtxRequirement,
     wsjtxCounts,
     wsjtxDiagnostic,
-    exportButton,
     importWsprLiveButton,
     importRbnButton,
-    transferStatus,
-    exportFeedback,
-    exportFeedbackMessage,
-    exportFeedbackDetail,
     importFeedback,
     importFeedbackMessage,
     importFeedbackDetail,
@@ -185,7 +182,7 @@ export function mount(root, browserWindow) {
     });
     countdownAnchor = countdown.anchor;
     countdownAnchorKey = countdown.key;
-    renderTransfer(elements, state);
+    renderEvidenceImports(elements, state);
     renderReport(elements, state, reportDocuments);
     if (workflowScrollTop !== null) mainContent.scrollTop = workflowScrollTop;
   };
@@ -247,12 +244,19 @@ export function mount(root, browserWindow) {
   };
   savedNew.addEventListener("click", startNewSession);
   savedEmptyNew.addEventListener("click", startNewSession);
-  const openExternal = async () => {
-    await controller.openSessionFromAnotherLocation();
+  const importManaged = async () => controller.importManagedSession();
+  savedImport.addEventListener("click", importManaged);
+  savedEmptyImport.addEventListener("click", importManaged);
+  savedImportOpen.addEventListener("click", async () => {
+    const locatorId = state.catalogImportNotice?.locatorId;
+    if (!locatorId) return;
+    await controller.openManagedSession(locatorId, null);
     focusActiveHeading(elements, state.activeWorkflow);
-  };
-  savedOpenExternal.addEventListener("click", openExternal);
-  savedEmptyOpen.addEventListener("click", openExternal);
+  });
+  savedImportReveal.addEventListener("click", async () => {
+    const locatorId = state.catalogImportNotice?.locatorId;
+    if (locatorId) await controller.revealManagedSession(locatorId);
+  });
   savedRevealFolder.addEventListener("click", () => controller.revealManagedSessionsDirectory());
   savedRefresh.addEventListener("click", () => controller.loadManagedSessions());
   savedCatalog.addEventListener("click", async (event) => {
@@ -277,6 +281,14 @@ export function mount(root, browserWindow) {
       deleteTrigger = button;
       controller.requestManagedSessionDeletion(entry);
       Promise.resolve().then(() => savedDeleteCancel.focus());
+      return;
+    }
+    if (button.dataset.savedAction === "export") {
+      const locatorId = button.dataset.locatorId;
+      await controller.exportManagedSession(locatorId);
+      [...savedCatalog.querySelectorAll('[data-saved-action="export"]')]
+        .find((candidate) => candidate.dataset.locatorId === locatorId)
+        ?.focus();
       return;
     }
     await controller.openManagedSession(button.dataset.locatorId, button.dataset.intent);
@@ -620,10 +632,6 @@ export function mount(root, browserWindow) {
     refreshAntennaRows(setupForm);
     syncControllerTargets(setupForm);
     controller.editSetup();
-  });
-
-  exportButton.addEventListener("click", async () => {
-    await controller.exportSession();
   });
 
   importWsprLiveButton.addEventListener("click", async () => {

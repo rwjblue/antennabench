@@ -1,4 +1,4 @@
-export const WORKFLOWS = Object.freeze(["saved", "setup", "run", "transfer", "report"]);
+export const WORKFLOWS = Object.freeze(["saved", "setup", "run", "report"]);
 export const OPEN_INTENTS = Object.freeze(["work", "report"]);
 
 const WORK_LIFECYCLES = Object.freeze(["ready", "running", "interrupted"]);
@@ -183,7 +183,7 @@ export function workflowFromHash(hash) {
 
 export function startupWorkflowFromHash(hash) {
   const requested = workflowFromHash(hash);
-  return ["run", "transfer", "report"].includes(requested) ? "saved" : requested;
+  return ["run", "report"].includes(requested) ? "saved" : requested;
 }
 
 export function createWorkflowScrollMemory(initialWorkflow) {

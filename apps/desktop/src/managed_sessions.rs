@@ -23,11 +23,13 @@ use crate::{
 };
 
 mod catalog;
+mod transfer;
 
 use catalog::{
     build_catalog, record_created, revalidate_available, revalidate_direct_child,
     revalidate_for_removal, CatalogBuild, LocatorRecord,
 };
+pub(crate) use transfer::{export_managed_session, import_managed_session};
 
 pub(crate) const MAX_CATALOG_CANDIDATES: usize = 256;
 pub(crate) const MANAGED_CATALOG_IPC_BYTES: usize = 512 * 1024;

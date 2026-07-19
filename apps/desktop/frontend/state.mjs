@@ -12,6 +12,10 @@ export function initialState(workflow = "saved") {
       catalogError: null,
       catalogRowOperation: null,
       catalogRowError: null,
+      catalogRowNotice: null,
+      catalogImportStatus: "idle",
+      catalogImportError: null,
+      catalogImportNotice: null,
       catalogDeleteStatus: "idle",
       catalogDeleteTarget: null,
       catalogDeleteError: null,
@@ -29,10 +33,6 @@ export function initialState(workflow = "saved") {
       supportCopyError: null,
       error: null,
       notice: null,
-      exportStatus: "idle",
-      exportError: null,
-      exportNotice: null,
-      exportedBundleName: null,
       importStatus: "idle",
       importKind: null,
       importError: null,
@@ -175,10 +175,6 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     notice: null,
     managedLocationNotice: managedLocation,
     activeManagedLocatorId: managedLocation?.locatorId ?? null,
-    exportStatus: "idle",
-    exportError: null,
-    exportNotice: null,
-    exportedBundleName: null,
     importStatus: "idle",
     importKind: null,
     importError: null,
@@ -236,10 +232,6 @@ export function openSessionSucceeded(
       : null,
     catalogRowOperation: null,
     catalogRowError: null,
-    exportStatus: "idle",
-    exportError: null,
-    exportNotice: null,
-    exportedBundleName: null,
     importStatus: "idle",
     importKind: null,
     importError: null,
@@ -290,11 +282,18 @@ export function beginManagedCatalogLoad(state) {
 }
 
 export function managedCatalogLoadSucceeded(state, catalog) {
+  const imported = state.catalogImportNotice;
+  const refreshedImported = imported
+    ? catalog.entries?.find((entry) => entry.bundleName === imported.bundleName)
+    : null;
   return {
     ...state,
     catalogStatus: "ready",
     managedCatalog: catalog,
     catalogError: null,
+    catalogImportNotice: imported
+      ? { ...imported, locatorId: refreshedImported?.locatorId ?? null }
+      : null,
   };
 }
 
@@ -311,6 +310,7 @@ export function beginManagedReveal(state, locatorId = null) {
     ...state,
     catalogRowOperation: { locatorId, kind: locatorId ? "revealing" : "revealing_folder" },
     catalogRowError: null,
+    catalogRowNotice: null,
   };
 }
 
@@ -390,43 +390,85 @@ export function managedDeleteFailed(state, error) {
   };
 }
 
-export function beginExportSession(state) {
+export function beginManagedImport(state) {
   return {
     ...state,
-    exportStatus: "loading",
-    exportError: null,
-    exportNotice: null,
-    exportedBundleName: null,
+    catalogImportStatus: "loading",
+    catalogImportError: null,
+    catalogImportNotice: null,
   };
 }
 
-export function exportSessionSucceeded(state, bundleName) {
+export function managedImportSucceeded(state, location) {
   return {
     ...state,
-    exportStatus: "ready",
-    exportError: null,
-    exportNotice: null,
-    exportedBundleName: bundleName,
+    catalogImportStatus: "ready",
+    catalogImportError: null,
+    catalogImportNotice: location,
   };
 }
 
-export function exportSessionCancelled(state) {
+export function managedImportCancelled(state) {
   return {
     ...state,
-    exportStatus: "idle",
-    exportError: null,
-    exportNotice: "cancelled",
-    exportedBundleName: null,
+    catalogImportStatus: "idle",
+    catalogImportError: null,
+    catalogImportNotice: null,
   };
 }
 
-export function exportSessionFailed(state, error) {
+export function managedImportFailed(state, error) {
   return {
     ...state,
-    exportStatus: "error",
-    exportError: normalizeOpenError(error),
-    exportNotice: null,
-    exportedBundleName: null,
+    catalogImportStatus: "error",
+    catalogImportError: normalizeOpenError(error),
+    catalogImportNotice: null,
+  };
+}
+
+export function beginManagedExport(state, locatorId) {
+  return {
+    ...state,
+    catalogRowOperation: { locatorId, kind: "exporting" },
+    catalogRowError: null,
+    catalogRowNotice: null,
+  };
+}
+
+export function managedExportSucceeded(state, bundleName) {
+  return {
+    ...state,
+    catalogRowOperation: null,
+    catalogRowError: null,
+    catalogRowNotice: {
+      locatorId: state.catalogRowOperation?.locatorId ?? null,
+      message: `Exported ${bundleName}.`,
+    },
+  };
+}
+
+export function managedExportCancelled(state) {
+  return {
+    ...state,
+    catalogRowOperation: null,
+    catalogRowError: null,
+    catalogRowNotice: {
+      locatorId: state.catalogRowOperation?.locatorId ?? null,
+      message: "Bundle export cancelled.",
+    },
+  };
+}
+
+export function managedExportFailed(state, error) {
+  const normalized = normalizeOpenError(error);
+  return {
+    ...state,
+    catalogRowError: {
+      locatorId: state.catalogRowOperation?.locatorId ?? null,
+      error: normalized,
+    },
+    catalogRowOperation: null,
+    catalogRowNotice: null,
   };
 }
 

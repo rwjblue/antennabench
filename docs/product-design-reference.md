@@ -262,8 +262,7 @@ recovery-system interruption before resume/end actions are offered, but only
 when the operator opens it to work and the conductor is loaded. Opening the
 same committed session for its report does not recover it or start run
 services. Saved-session actions make that `work` versus `report` intent
-explicit. The external picker defaults a freshly opened ready, running, or
-interrupted session to Run and a terminal or legacy session to Reports. A stale
+explicit. A stale
 work request that opens a now-terminal or read-only session is safely redirected
 to Reports with an explanation. No opening path starts or resumes a session;
 those remain explicit operator actions. Ended and abandoned sessions are
@@ -271,8 +270,9 @@ terminal, and schema-v1 sources remain read-only.
 
 Saved sessions is the app-level home and the startup fallback when a session-only
 destination is requested before any session is active. Its
-header keeps new-session, external-open, managed-folder reveal, and refresh
-actions available without mixing session opening into Import / export. Each
+header keeps new-session, managed import, managed-folder reveal, and refresh
+actions together. Import validates and atomically publishes a lossless copy,
+then offers open and reveal follow-ups. Each
 managed entry leads with callsign, creation time, lifecycle, compact immutable
 plan facts, origin, and bundle name. Correctable evidence remains in a details
 disclosure; duplicate session identities are warnings on distinct rows, not a
@@ -281,6 +281,13 @@ actions, row-local failures, partial results, and stale-list refresh failures
 keep catalog truth visible without converting catalog metadata into authority.
 Successful creation also identifies the managed location on Run and offers a
 Finder reveal action.
+
+Every available Saved sessions row offers a native **Export bundle…** action
+without requiring activation. Progress, cancellation, and failure stay on that
+row. WSPR.live recovery and RBN archive imports remain lifecycle-constrained
+under the active run's **Add evidence** disclosure because they append evidence
+to one active experiment. Compact and full HTML exports remain in Local report;
+there is no separate numbered Import / export destination.
 
 Local report presentation keeps durable operational history above, but outside,
 the scientific report iframe. It shows bounded creator/subsequent runtime cards

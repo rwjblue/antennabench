@@ -221,11 +221,11 @@ is a disposable, process-local Rust projection over direct children of the
 application-managed sessions directory. It independently inspects supported
 bundle directories through the bounded storage API, returns typed metadata and
 opaque refresh-local locators to the webview, and never renders reports,
-recovers or mutates bundles, or persists a second catalog. Session IDs remain
+recovers or mutates bundles while cataloging, or persists a second catalog. Session IDs remain
 bundle facts rather than catalog identities: copies with the same ID stay
 separate rows and receive a warning. Opening re-resolves the locator, verifies
 the direct child and inspected committed projection have not changed, then uses
-the same active-session path as picker opening. Invalid and unsupported direct
+the same active-session path used after managed creation or import. Invalid and unsupported direct
 children can be revealed through their native capability but cannot be opened;
 filesystem indirections receive no capability. The catalog admits at most 256
 candidate children and 512 KiB of IPC output, reporting incomplete status
@@ -244,19 +244,18 @@ summary; catalog lifecycle metadata is never used as routing authority. A
 managed `work` intent enters Run only for `ready`, `running`, or `interrupted`
 sessions. A terminal, legacy, or otherwise read-only fresh result is redirected
 to its report with an explicit notice. A managed `report` intent refreshes only
-the committed report projection. The external picker remains a single action:
-its fresh resumable lifecycle defaults to Run and a terminal or absent
-lifecycle defaults to Reports. Both sources share one open-in-flight state
-machine, and cancellation or failure retains the prior active workflow and
-report presentation.
+the committed report projection. Cancellation or failure retains the prior
+active workflow and report presentation.
 
 The Saved sessions frontend is a dedicated disposable catalog state machine,
 controller surface, and renderer. It consumes only the typed catalog response
 and opaque locator commands: JavaScript never receives or reconstructs a
 managed path. Initial load, explicit refresh, return-to-app refresh, incomplete
-catalogs, total failures, stale-data failures, and per-row open/reveal failures
-remain distinct states. A failed refresh preserves the previous catalog, and a
-row failure does not clear the active session or unrelated rows. The renderer
+catalogs, total failures, stale-data failures, managed import, and per-row
+open/reveal/export failures remain distinct states. A failed refresh preserves
+the previous catalog, import refresh remaps its returned context to the new
+refresh-local locator, and a row failure does not clear the active session or
+unrelated rows. The renderer
 uses catalog lifecycle only to label the operator's requested intent; the fresh
 Rust open result remains routing authority.
 
@@ -269,6 +268,19 @@ verified path. An unavailable or failed Trash operation returns a typed error;
 there is no recursive permanent-delete fallback. Unsafe or unbounded rows do
 not receive a locator, while invalid and unsupported direct bundles can still
 be removed when the removal snapshot proves their identity.
+
+Managed import and export are separate narrow transfer commands. Import owns a
+native directory picker, copies the selected bundle through bounded lossless
+storage APIs into a sibling private staging directory, validates the staged
+committed snapshot, and only then publishes it atomically under a collision-safe
+direct-child name. Failures and cancellation publish nothing; the source is
+never recovered, upgraded, rewritten, or merged. Equal session IDs become
+separate catalog rows with the existing duplicate warning. Row export accepts
+only an opaque locator, revalidates its direct-child identity and committed
+fingerprint before the native save picker and again before copying, then uses
+the checkpoint-safe lossless export primitive. It neither activates nor mutates
+the selected row, and destination collision or stale-source failure remains
+row-local.
 
 This direct projection is the simple in-memory approach anticipated by ADR
 0020, not evidence that a persistent cross-session index is required. Any
@@ -560,10 +572,9 @@ also durable adapter records. Resource or persistence completeness gaps stop
 intake, and lifecycle interruption/termination or active-session replacement
 cannot leave an orphan receiver.
 
-The allowlisted `open_session_bundle` application command owns the native
-directory picker and selects a coherent committed snapshot in Rust. It returns
-only a small session summary. The corresponding managed command accepts only a
-refresh-local locator. The frontend commits that fresh summary before routing:
+The allowlisted `open_managed_session` command accepts only a refresh-local
+locator and returns a small fresh session summary. The frontend commits that
+summary before routing:
 report intent refreshes the report alone, while work intent refreshes the
 report, then loads the conductor and the same run services used after creation.
 If conductor recovery changes lifecycle or revision, the summary is reconciled
@@ -572,9 +583,10 @@ implicitly starts or resumes a session. `active_session_report` reads the retain
 presentation, while `refresh_active_session_report` builds and verifies a
 revision-keyed replacement without discarding the prior presentation on error.
 `export_active_session_report` writes exactly that retained standalone HTML with
-create-new semantics. `export_active_session` owns a native save dialog and asks
-storage to create and verify a checkpointed lossless copy independently of
-report eligibility. Neither export replaces the active session.
+create-new semantics. The independent `import_managed_session()` and
+`export_managed_session(locatorId)` commands own their native pickers; the
+former returns only managed location context, and the latter returns only the
+verified output name and revision. Neither replaces the active session.
 
 Lossless schema-v2 export copies one committed stream prefix, active plan, and
 complete nested attachments tree rather than serializing normalized in-memory
@@ -583,14 +595,14 @@ destinations, symbolic links, and unsupported filesystem entries are rejected;
 an incomplete new destination is rolled back safely after copy or verification
 failure. The frontend receives no paths and has no general filesystem or dialog
 command permission. The dialog plugin is registered for native Rust
-open/export/import use, but its frontend permissions are not granted. Backend
+managed-open/export/import use, but its frontend permissions are not granted. Backend
 state retains at most one
 exact reviewed setup candidate plus the selected source reference and derived
 active-session presentation. Editing or re-reviewing replaces the candidate;
-successful creation consumes it. Opening and exporting do not write to the
+successful creation consumes it. Opening, importing, and exporting do not write to the
 source bundle.
 
-Native open/export pickers are thin path-selection adapters around private Rust
+Native import/export pickers are thin path-selection adapters around private Rust
 orchestration functions. The unattended desktop integration test substitutes
 only that selection result and deterministic setup/conductor hooks, then
 exercises the same review, checkpointed creation, manual lifecycle/evidence,

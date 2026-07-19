@@ -54,12 +54,13 @@ mod state;
 #[cfg(test)]
 pub(crate) use commands::open_session_at_path;
 pub(crate) use commands::{
-    active_session_report, check_ipc_payload, export_active_session, export_active_session_report,
-    finish_open_side_effects, open_session_at_path_verified, open_session_bundle,
-    refresh_active_session_report,
+    active_session_report, check_ipc_payload, export_active_session_report,
+    export_session_bundle_at_path, finish_open_side_effects, open_session_at_path_verified,
+    refresh_active_session_report, validate_portable_session_at_path,
 };
 pub(crate) use errors::{
-    storage_error_payload, OpenSessionOutcome, OpenedSession, SessionErrorKind, SessionErrorPayload,
+    copy_error_payload, storage_error_payload, OpenSessionOutcome, OpenedSession, SessionErrorKind,
+    SessionErrorPayload,
 };
 pub(crate) use state::{
     activate_created_bundle, active_session_source, reload_active_session,
@@ -70,9 +71,11 @@ use commands::bundle_suffix;
 use diagnostics::{
     legacy_diagnostics_presentation, present_bundle_diagnostics, BundleDiagnosticsPresentation,
 };
+#[cfg(test)]
+use errors::ExportSessionOutcome;
 use errors::{
-    report_error_payload, ExportReportOutcome, ExportSessionError, ExportSessionOutcome,
-    OpenSessionError, OperationalHistoryHandling, ReportExportFormat, ReportPresentation,
+    report_error_payload, ExportReportOutcome, ExportSessionError, OpenSessionError,
+    OperationalHistoryHandling, ReportExportFormat, ReportPresentation,
 };
 use projection::{load_snapshot, open_bundle, prepare_presentation};
 use state::{assign_presentation_id, ActiveSession};
@@ -84,9 +87,6 @@ use commands::{
     export_bundle, open_session_with_selection, refresh_active_session_report_for,
     suggested_compact_summary_name, suggested_report_name,
 };
-#[cfg(test)]
-use errors::copy_error_payload;
-
 #[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct E2eExportedSnapshots {

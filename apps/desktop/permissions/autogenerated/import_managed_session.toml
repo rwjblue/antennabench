@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-import-managed-session"
+description = "Enables the import_managed_session command without any pre-configured scope."
+commands.allow = ["import_managed_session"]
+
+[[permission]]
+identifier = "deny-import-managed-session"
+description = "Denies the import_managed_session command without any pre-configured scope."
+commands.deny = ["import_managed_session"]

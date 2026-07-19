@@ -136,8 +136,12 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .saved-plan-summary { color: #315d57; font-size: 0.86rem; font-weight: 750; }
 .saved-row-meta { overflow-wrap: anywhere; }
 .saved-lifecycle { font-size: 0.66rem; }
-.saved-warning, .saved-row-error { margin: 10px 0; padding: 9px 11px; border-radius: 8px; color: #744c1e; background: #fff3d9; font-size: 0.72rem; font-weight: 750; }
+.saved-warning, .saved-row-error, .saved-row-notice { margin: 10px 0; padding: 9px 11px; border-radius: 8px; color: #744c1e; background: #fff3d9; font-size: 0.72rem; font-weight: 750; }
 .saved-row-error { color: #793728; background: #faece8; }
+.saved-row-notice { color: #245451; background: #e8f3ef; }
+.saved-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.saved-import-actions[hidden] { display: none; }
+.saved-import-actions button { border: 1px solid #8ab3aa; border-radius: 8px; padding: 8px 10px; color: #245451; background: #fff; font-size: 0.72rem; font-weight: 800; cursor: pointer; }
 .saved-row-details { margin: 12px 0; padding: 10px 0; border-top: 1px solid #e1e5df; }
 .saved-row-details summary { color: #315d57; font-size: 0.75rem; font-weight: 800; cursor: pointer; }
 .saved-row-details dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
@@ -353,6 +357,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .action-list article > div > span { display: block; margin-bottom: 8px; color: #9b6a2b; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .action-list p { margin-bottom: 0; }
 .action-list p a { color: #245451; font-weight: 700; }
+.evidence-action-list article { padding: 18px; }
 .authority-confirmation { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; color: #435b57; font-size: 0.78rem; line-height: 1.45; cursor: pointer; }
 .authority-confirmation:has(input:focus-visible) { outline: 3px solid rgba(210, 139, 47, 0.35); outline-offset: 2px; }
 .authority-confirmation input { flex: 0 0 auto; margin-top: 2px; accent-color: #245451; }

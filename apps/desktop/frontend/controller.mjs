@@ -7,16 +7,16 @@ import {
   invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
   invokeDeleteManagedSession,
+  invokeExportManagedSession,
   invokeDeleteAntennaControllerProfile,
   invokeExportActiveSessionReport,
-  invokeExportSession,
+  invokeImportManagedSession,
   invokeImportActiveSessionRbn,
   invokeImportActiveSessionWsprLive,
   invokeLoadStationPreferences,
   invokeListManagedSessions,
   invokeMutateSessionConductor,
   invokeOpenManagedSession,
-  invokeOpenSessionFromAnotherLocation,
   invokeRefreshActiveSessionReport,
   invokeRevealManagedSession,
   invokeRevealManagedSessionsDirectory,
@@ -38,7 +38,8 @@ import {
   beginAntennaControllerAction,
   beginConductorLoad,
   beginConductorMutation,
-  beginExportSession,
+  beginManagedExport,
+  beginManagedImport,
   beginManagedCatalogLoad,
   beginManagedDelete,
   beginManagedReveal,
@@ -56,12 +57,15 @@ import {
   conductorMutationFailed,
   conductorPollSucceeded,
   editSessionSetup,
-  exportSessionCancelled,
-  exportSessionFailed,
-  exportSessionSucceeded,
   initialState,
   managedCatalogLoadFailed,
   managedCatalogLoadSucceeded,
+  managedExportCancelled,
+  managedExportFailed,
+  managedExportSucceeded,
+  managedImportCancelled,
+  managedImportFailed,
+  managedImportSucceeded,
   managedDeleteFailed,
   managedDeleteSucceeded,
   managedRevealFailed,
@@ -334,8 +338,8 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
-    async openManagedSession(locatorId, intent) {
-      if (!OPEN_INTENTS.includes(intent)) {
+    async openManagedSession(locatorId, intent = null) {
+      if (intent !== null && !OPEN_INTENTS.includes(intent)) {
         throw new RangeError(`Unknown session opening intent: ${intent}`);
       }
       return openSession({
@@ -346,15 +350,11 @@ export function createDesktopController(options = {}) {
       });
     },
 
-    async openSessionFromAnotherLocation() {
-      return openSession({
-        source: "external",
-        open: () => invokeOpenSessionFromAnotherLocation(invoke()),
-      });
-    },
-
     async loadManagedSessions() {
-      if (["loading", "refreshing"].includes(state.catalogStatus)) return state;
+      if (
+        ["loading", "refreshing"].includes(state.catalogStatus)
+        || state.catalogImportStatus === "loading"
+      ) return state;
       commit(beginManagedCatalogLoad(state));
       try {
         commit(managedCatalogLoadSucceeded(state, await invokeListManagedSessions(invoke())));
@@ -365,7 +365,7 @@ export function createDesktopController(options = {}) {
     },
 
     async revealManagedSessionsDirectory() {
-      if (state.catalogRowOperation) return state;
+      if (state.catalogRowOperation || state.catalogImportStatus === "loading") return state;
       commit(beginManagedReveal(state));
       try {
         await invokeRevealManagedSessionsDirectory(invoke());
@@ -377,7 +377,7 @@ export function createDesktopController(options = {}) {
     },
 
     async revealManagedSession(locatorId) {
-      if (state.catalogRowOperation) return state;
+      if (state.catalogRowOperation || state.catalogImportStatus === "loading") return state;
       commit(beginManagedReveal(state, locatorId));
       try {
         await invokeRevealManagedSession(invoke(), locatorId);
@@ -413,20 +413,45 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
-    async exportSession() {
-      if (state.exportStatus === "loading") return state;
-      commit(beginExportSession(state));
+    async importManagedSession() {
+      if (
+        state.catalogImportStatus === "loading"
+        || state.catalogRowOperation
+        || ["loading", "refreshing"].includes(state.catalogStatus)
+      ) return state;
+      commit(beginManagedImport(state));
       try {
-        const outcome = await invokeExportSession(invoke());
+        const outcome = await invokeImportManagedSession(invoke());
         if (outcome.status === "cancelled") {
-          commit(exportSessionCancelled(state));
-        } else if (outcome.status === "exported" && outcome.bundleName) {
-          commit(exportSessionSucceeded(state, outcome.bundleName));
+          commit(managedImportCancelled(state));
+        } else if (outcome.status === "imported" && outcome.location?.bundleName) {
+          commit(managedImportSucceeded(state, outcome.location));
+          await controller.loadManagedSessions();
         } else {
           throw unexpectedResponse();
         }
       } catch (error) {
-        commit(exportSessionFailed(state, error));
+        commit(managedImportFailed(state, error));
+      }
+      return state;
+    },
+
+    async exportManagedSession(locatorId) {
+      if (!locatorId || state.catalogRowOperation || state.catalogImportStatus === "loading") {
+        return state;
+      }
+      commit(beginManagedExport(state, locatorId));
+      try {
+        const outcome = await invokeExportManagedSession(invoke(), locatorId);
+        if (outcome.status === "cancelled") {
+          commit(managedExportCancelled(state));
+        } else if (outcome.status === "exported" && outcome.bundleName) {
+          commit(managedExportSucceeded(state, outcome.bundleName));
+        } else {
+          throw unexpectedResponse();
+        }
+      } catch (error) {
+        commit(managedExportFailed(state, error));
       }
       return state;
     },
@@ -648,7 +673,7 @@ export function createDesktopController(options = {}) {
     },
 
     async routeWorkflow(workflow) {
-      const destination = !state.session && ["run", "transfer", "report"].includes(workflow)
+      const destination = !state.session && ["run", "report"].includes(workflow)
         ? "saved"
         : workflow;
       commit(selectWorkflow(state, destination));

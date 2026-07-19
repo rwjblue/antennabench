@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-shell",
-  "description": "Main shell capability limited to setup, managed-session discovery, operator-triggered local control, the manual conductor, opening sessions, lossless export, and active reports.",
+  "description": "Main shell capability limited to setup, managed-session discovery and transfer, operator-triggered local control, the manual conductor, and active reports.",
   "windows": ["main"],
   "permissions": [
     "allow-review-session-setup",
@@ -13,8 +13,8 @@
     "allow-reveal-managed-sessions-directory",
     "allow-reveal-managed-session",
     "allow-delete-managed-session",
-    "allow-open-session-bundle",
-    "allow-export-active-session",
+    "allow-import-managed-session",
+    "allow-export-managed-session",
     "allow-export-active-session-report",
     "allow-active-session-report",
     "allow-refresh-active-session-report",

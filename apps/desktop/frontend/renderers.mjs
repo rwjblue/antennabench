@@ -26,14 +26,17 @@ export function renderNavigation(elements, state) {
 
 export function renderSavedSessions(elements, state, root) {
   const {
-    savedStatus, savedRefresh, savedRevealFolder, savedFeedback, savedFeedbackMessage,
-    savedFeedbackDetail, savedEmpty, savedCatalog,
+    savedStatus, savedRefresh, savedRevealFolder, savedImport, savedEmptyImport,
+    savedFeedback, savedFeedbackMessage, savedFeedbackDetail, savedEmpty, savedCatalog,
+    savedImportFeedback, savedImportMessage, savedImportDetail, savedImportActions,
     savedDeleteDialog, savedDeleteTitle, savedDeleteDescription, savedDeleteIdentity,
     savedDeleteError, savedDeleteCancel, savedDeleteConfirm,
   } = elements;
   const loading = ["loading", "refreshing"].includes(state.catalogStatus);
   const entries = state.managedCatalog?.entries ?? [];
-  savedStatus.textContent = state.catalogStatus === "loading"
+  savedStatus.textContent = state.catalogImportStatus === "loading"
+    ? "Importing"
+    : state.catalogStatus === "loading"
     ? "Loading"
     : state.catalogStatus === "refreshing"
       ? "Refreshing"
@@ -43,9 +46,15 @@ export function renderSavedSessions(elements, state, root) {
           ? "Unavailable"
           : `${entries.length} saved`;
   savedStatus.classList.toggle("muted", state.catalogStatus !== "ready");
-  savedRefresh.disabled = loading;
+  const importLoading = state.catalogImportStatus === "loading";
+  savedRefresh.disabled = loading || importLoading;
   savedRefresh.textContent = loading ? "Refreshing…" : "Refresh";
-  savedRevealFolder.disabled = state.catalogRowOperation !== null;
+  savedRevealFolder.disabled = state.catalogRowOperation !== null || importLoading;
+  const importBlocked = importLoading || loading || state.catalogRowOperation !== null;
+  savedImport.disabled = importBlocked;
+  savedEmptyImport.disabled = importBlocked;
+  savedImport.textContent = importLoading ? "Importing…" : "Import session…";
+  savedEmptyImport.textContent = importLoading ? "Importing…" : "Import session…";
   savedEmpty.hidden = !(
     state.catalogStatus === "ready"
     && state.managedCatalog?.status === "complete"
@@ -63,6 +72,13 @@ export function renderSavedSessions(elements, state, root) {
       }
       : openFeedbackModel(state));
   renderFeedback(savedFeedback, savedFeedbackMessage, savedFeedbackDetail, catalogMessage);
+  renderFeedback(
+    savedImportFeedback,
+    savedImportMessage,
+    savedImportDetail,
+    managedImportFeedbackModel(state),
+  );
+  savedImportActions.hidden = !state.catalogImportNotice?.locatorId;
 
   savedCatalog.setAttribute("aria-busy", String(loading));
   savedCatalog.replaceChildren(...entries.map((entry) => renderSavedRow(root, state, entry)));
@@ -159,6 +175,9 @@ function renderSavedRow(root, state, entry) {
     actions.append(savedActionButton(root, "View report", "open", entry.locatorId, "report"));
   }
   if (!action) actions.append(savedActionButton(root, "View details", "details", entry.locatorId, null, true));
+  if (entry.locatorId && entry.status === "available") {
+    actions.append(savedActionButton(root, "Export bundle…", "export", entry.locatorId));
+  }
   if (entry.locatorId) actions.append(savedActionButton(root, "Reveal in Finder", "reveal", entry.locatorId));
   if (entry.locatorId) {
     const deleteButton = savedActionButton(root, "Delete…", "delete", entry.locatorId);
@@ -169,9 +188,11 @@ function renderSavedRow(root, state, entry) {
     }
     actions.append(deleteButton);
   }
-  const existingRowBusy = state.catalogRowOperation && (
-    state.catalogRowOperation.locatorId === null
-    || state.catalogRowOperation.locatorId === entry.locatorId
+  const existingRowBusy = state.catalogImportStatus === "loading" || (
+    state.catalogRowOperation && (
+      state.catalogRowOperation.locatorId === null
+      || state.catalogRowOperation.locatorId === entry.locatorId
+    )
   );
   const deletePending = state.catalogDeleteStatus === "deleting"
     && state.catalogDeleteTarget?.locatorId === entry.locatorId;
@@ -179,6 +200,7 @@ function renderSavedRow(root, state, entry) {
   for (const button of actions.querySelectorAll("button")) {
     button.disabled ||= Boolean(rowBusy);
     if (rowBusy && button.dataset.savedAction === "delete") button.textContent = "Moving…";
+    if (rowBusy && button.dataset.savedAction === "export") button.textContent = "Exporting…";
   }
   if (state.activeManagedLocatorId === entry.locatorId) {
     const active = root.createElement("span"); active.className = "saved-open-now"; active.textContent = "Open now";
@@ -189,10 +211,18 @@ function renderSavedRow(root, state, entry) {
     : state.catalogDeleteTarget?.locatorId === entry.locatorId
       ? state.catalogDeleteError
       : null;
+  const rowNotice = state.catalogRowNotice?.locatorId === entry.locatorId
+    ? state.catalogRowNotice.message
+    : null;
   if (rowError) {
     const error = root.createElement("p"); error.className = "saved-row-error";
+    error.setAttribute("role", "alert");
     error.textContent = `${rowError.message} ${rowError.detail}`.trim();
     row.append(heading, summary, meta, duplicate, details, actions, error);
+  } else if (rowNotice) {
+    const notice = root.createElement("p"); notice.className = "saved-row-notice";
+    notice.setAttribute("role", "status"); notice.textContent = rowNotice;
+    row.append(heading, summary, meta, duplicate, details, actions, notice);
   } else {
     row.append(heading, summary, meta, duplicate, details, actions);
   }
@@ -771,16 +801,12 @@ export function renderRun(elements, state, root, options = {}) {
   return { anchor, key: anchor?.key ?? null };
 }
 
-export function renderTransfer(elements, state) {
+export function renderEvidenceImports(elements, state) {
   const {
-    exportButton, importWsprLiveButton, importRbnButton, transferStatus, exportFeedback,
-    exportFeedbackMessage, exportFeedbackDetail, importFeedback,
+    importWsprLiveButton, importRbnButton, importFeedback,
     importFeedbackMessage, importFeedbackDetail,
   } = elements;
-  const exportLoading = state.exportStatus === "loading";
   const importLoading = state.importStatus === "loading";
-  exportButton.disabled = state.session === null || state.openStatus === "loading" || exportLoading;
-  exportButton.textContent = state.session === null ? "Open a bundle first" : exportLoading ? "Exporting…" : "Export lossless bundle";
   importWsprLiveButton.disabled = state.session?.lifecycle !== "running" || importLoading;
   importWsprLiveButton.textContent = state.session?.lifecycle !== "running"
     ? "Open a running session first" : importLoading ? "Importing…" : "Choose WSPR.live JSON";
@@ -792,9 +818,6 @@ export function renderTransfer(elements, state) {
     : state.session.schemaVersion !== 3
       ? "This older session cannot import RBN evidence"
       : !rbnEligible ? "Start the session first" : importLoading ? "Importing…" : "Choose RBN ZIP";
-  transferStatus.textContent = transferStatusText(state);
-  transferStatus.classList.toggle("muted", state.session === null);
-  renderFeedback(exportFeedback, exportFeedbackMessage, exportFeedbackDetail, exportFeedbackModel(state));
   renderFeedback(importFeedback, importFeedbackMessage, importFeedbackDetail, importFeedbackModel(state));
 }
 
@@ -1143,12 +1166,6 @@ function conductorEventElement(root, event, disabled) {
   return article;
 }
 
-function transferStatusText(state) {
-  if (state.importStatus === "loading") return "Importing evidence";
-  if (state.importStatus === "error") return "Import failed";
-  return state.session ? "Session active" : "No active session";
-}
-
 function setupStatusText(state) {
   switch (state.setupStatus) {
     case "reviewing": return "Validating";
@@ -1204,11 +1221,18 @@ function managedDeleteFeedbackModel(state) {
   return null;
 }
 
-function exportFeedbackModel(state) {
-  if (state.exportStatus === "loading") return { kind: "loading", message: "Copying and verifying the active bundle…", detail: "Original durable files and attachments are preserved byte-for-byte." };
-  if (state.exportError) return { kind: "error", ...state.exportError };
-  if (state.exportNotice === "cancelled") return { kind: "cancelled", message: "Export cancelled.", detail: "The active session was not changed." };
-  if (state.exportedBundleName) return { kind: "ready", message: `${state.exportedBundleName} was exported and verified.`, detail: "The original bundle remains the active session." };
+function managedImportFeedbackModel(state) {
+  if (state.catalogImportStatus === "loading") return {
+    kind: "loading",
+    message: "Validating and importing the selected session…",
+    detail: "A private staging copy must pass verification before it appears in Saved sessions.",
+  };
+  if (state.catalogImportError) return { kind: "error", ...state.catalogImportError };
+  if (state.catalogImportNotice) return {
+    kind: "ready",
+    message: `${state.catalogImportNotice.bundleName} was imported.`,
+    detail: "The external source was left unchanged. Open or reveal the managed copy below.",
+  };
   return null;
 }
 

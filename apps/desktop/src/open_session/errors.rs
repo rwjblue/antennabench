@@ -45,6 +45,7 @@ pub(crate) enum OpenSessionOutcome {
     Opened { session: Box<OpenedSession> },
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum ExportSessionOutcome {
@@ -234,6 +235,7 @@ pub(super) enum OpenSessionError {
 
 #[derive(Debug, Error)]
 pub(super) enum ExportSessionError {
+    #[cfg(test)]
     #[error("no active session is available to export")]
     NoActiveSession,
     #[error("selected destination is not a session bundle: {name}")]
@@ -266,6 +268,7 @@ impl From<OpenSessionError> for SessionErrorPayload {
 impl From<ExportSessionError> for SessionErrorPayload {
     fn from(error: ExportSessionError) -> Self {
         match error {
+            #[cfg(test)]
             ExportSessionError::NoActiveSession => Self::new(
                 SessionErrorKind::ReportPipeline,
                 "Open a session bundle before exporting a copy.",
@@ -288,7 +291,7 @@ pub(super) fn error_with_source(error: &dyn StdError) -> String {
         .map_or_else(|| error.to_string(), |source| format!("{error}: {source}"))
 }
 
-pub(super) fn copy_error_payload(error: BundleCopyError) -> SessionErrorPayload {
+pub(crate) fn copy_error_payload(error: BundleCopyError) -> SessionErrorPayload {
     match error {
         BundleCopyError::Source { source } => storage_error_payload(source),
         BundleCopyError::DestinationExists { path } => SessionErrorPayload::new(
@@ -338,11 +341,37 @@ pub(crate) fn storage_error_payload(error: BundleStoreError) -> SessionErrorPayl
             "A bundle file contains invalid JSON.",
             format!("{}: {source}", path.display()),
         ),
+        BundleStoreError::AmbiguousManifest { message } => SessionErrorPayload::new(
+            SessionErrorKind::JsonParse,
+            "The bundle manifest is invalid or ambiguous.",
+            message,
+        ),
         BundleStoreError::Validation { source } => SessionErrorPayload::new(
             SessionErrorKind::Validation,
             "The session bundle did not pass validation.",
             validation_error_detail(&source),
         ),
+        BundleStoreError::UnsupportedSchemaVersion { actual } => SessionErrorPayload::new(
+            SessionErrorKind::Unsupported,
+            "This session bundle schema is not supported by this AntennaBench version.",
+            format!("unsupported schema version {actual}"),
+        ),
+        BundleStoreError::Resource(source) => {
+            let diagnostic = source.diagnostic;
+            let kind = if diagnostic.code == "resource.operation.cancelled" {
+                SessionErrorKind::Cancelled
+            } else {
+                SessionErrorKind::Resource
+            };
+            SessionErrorPayload::resource(
+                kind,
+                diagnostic.code,
+                &format!("{:?}", diagnostic.stage),
+                diagnostic.limit,
+                diagnostic.observed,
+                &format!("{:?}", diagnostic.unit).to_ascii_lowercase(),
+            )
+        }
         error => SessionErrorPayload::new(
             SessionErrorKind::Filesystem,
             "The session bundle could not be read.",

@@ -1,7 +1,3 @@
-export function invokeOpenSessionFromAnotherLocation(invoke) {
-  return invoke("open_session_bundle");
-}
-
 export function invokeOpenManagedSession(invoke, locatorId) {
   return invoke("open_managed_session", { locatorId });
 }
@@ -20,6 +16,14 @@ export function invokeRevealManagedSession(invoke, locatorId) {
 
 export function invokeDeleteManagedSession(invoke, locatorId) {
   return invoke("delete_managed_session", { locatorId });
+}
+
+export function invokeImportManagedSession(invoke) {
+  return invoke("import_managed_session");
+}
+
+export function invokeExportManagedSession(invoke, locatorId) {
+  return invoke("export_managed_session", { locatorId });
 }
 
 export function invokeReviewSessionSetup(invoke, draft) {
@@ -53,10 +57,6 @@ export function invokeExportActiveSessionReport(
   operationalHistory = "omitted",
 ) {
   return invoke("export_active_session_report", { format, controllerEvidence, operationalHistory });
-}
-
-export function invokeExportSession(invoke) {
-  return invoke("export_active_session");
 }
 
 export function invokeImportActiveSessionWsprLive(invoke) {
