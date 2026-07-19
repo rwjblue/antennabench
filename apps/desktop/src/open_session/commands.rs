@@ -100,25 +100,24 @@ pub(super) fn open_session_with_selection<F>(
 where
     F: FnOnce() -> Result<Option<PathBuf>, SessionErrorPayload>,
 {
+    open_session_with_selection_and_verification(state, select, |_| Ok(()))
+}
+
+fn open_session_with_selection_and_verification<F, V>(
+    state: &ActiveSessionState,
+    select: F,
+    verify: V,
+) -> Result<OpenSessionOutcome, SessionErrorPayload>
+where
+    F: FnOnce() -> Result<Option<PathBuf>, SessionErrorPayload>,
+    V: FnOnce(&Path) -> Result<(), SessionErrorPayload>,
+{
     let _foreground = state.begin_foreground()?;
     let Some(path) = select()? else {
         return Ok(OpenSessionOutcome::Cancelled);
     };
-    if path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .and_then(bundle_suffix)
-        .is_some()
-    {
-        state
-            .0
-            .lock()
-            .map_err(|_| {
-                SessionErrorPayload::report_pipeline("active session state is unavailable")
-            })?
-            .export_source = Some(path.clone());
-    }
     let mut session = open_bundle(&path).map_err(SessionErrorPayload::from)?;
+    verify(&path)?;
     let summary = session.summary.clone();
     check_ipc_payload(
         &OpenSessionOutcome::Opened {
@@ -137,6 +136,30 @@ where
     active.export_source = Some(path);
 
     Ok(OpenSessionOutcome::Opened { session: summary })
+}
+
+#[cfg(test)]
+pub(crate) fn open_session_at_path(
+    state: &ActiveSessionState,
+    path: PathBuf,
+) -> Result<OpenSessionOutcome, SessionErrorPayload> {
+    open_session_with_selection(state, || Ok(Some(path)))
+}
+
+pub(crate) fn open_session_at_path_verified(
+    state: &ActiveSessionState,
+    path: PathBuf,
+    verify: impl FnOnce(&Path) -> Result<(), SessionErrorPayload>,
+) -> Result<OpenSessionOutcome, SessionErrorPayload> {
+    open_session_with_selection_and_verification(state, || Ok(Some(path)), verify)
+}
+
+pub(crate) fn finish_open_side_effects(
+    controller_state: &AntennaControllerState,
+    wsjtx_state: &WsjtxSessionState,
+) {
+    controller_state.revoke();
+    wsjtx_state.stop_all("WSJT-X reception stopped because a different session was opened.");
 }
 
 pub(super) fn export_active_session_with_selection<F>(
@@ -443,8 +466,7 @@ pub(crate) async fn open_session_bundle(
         })
     })?;
     if matches!(outcome, OpenSessionOutcome::Opened { .. }) {
-        controller_state.revoke();
-        wsjtx_state.stop_all("WSJT-X reception stopped because a different session was opened.");
+        finish_open_side_effects(controller_state.inner(), wsjtx_state.inner());
     }
     Ok(outcome)
 }

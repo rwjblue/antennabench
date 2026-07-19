@@ -50,7 +50,10 @@ pub(super) fn create_with_selection(
         {
             *reviewed = None;
         }
-        Ok(CreateSessionOutcome::Created { session })
+        Ok(CreateSessionOutcome::Created {
+            session: Box::new(session),
+            managed_location: None,
+        })
     })
 }
 

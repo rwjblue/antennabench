@@ -48,12 +48,15 @@ mod errors;
 mod projection;
 mod state;
 
+#[cfg(test)]
+pub(crate) use commands::open_session_at_path;
 pub(crate) use commands::{
     active_session_report, check_ipc_payload, export_active_session, export_active_session_report,
-    open_session_bundle, refresh_active_session_report,
+    finish_open_side_effects, open_session_at_path_verified, open_session_bundle,
+    refresh_active_session_report,
 };
 pub(crate) use errors::{
-    storage_error_payload, OpenedSession, SessionErrorKind, SessionErrorPayload,
+    storage_error_payload, OpenSessionOutcome, OpenedSession, SessionErrorKind, SessionErrorPayload,
 };
 pub(crate) use state::{
     activate_created_bundle, active_session_source, reload_active_session,
@@ -63,7 +66,7 @@ pub(crate) use state::{
 use commands::bundle_suffix;
 use errors::{
     report_error_payload, ExportReportOutcome, ExportSessionError, ExportSessionOutcome,
-    OpenSessionError, OpenSessionOutcome, ReportExportFormat, ReportPresentation,
+    OpenSessionError, ReportExportFormat, ReportPresentation,
 };
 use projection::{load_snapshot, open_bundle, prepare_presentation};
 use state::{assign_presentation_id, ActiveSession};

@@ -38,6 +38,18 @@ impl BundleStore {
             bundle.manifest.schema_version,
         ));
         let intent_native = !bundle.schedule.wspr_cycle_intents.is_empty();
+        let mut native_planned_bands = Vec::new();
+        for band in bundle
+            .schedule
+            .wspr_cycle_intents
+            .iter()
+            .map(|intent| intent.band)
+            .chain(bundle.schedule.slots.iter().map(|slot| slot.band))
+        {
+            if !native_planned_bands.contains(&band) {
+                native_planned_bands.push(band);
+            }
+        }
         let current = bundle.into_current();
         report.extend(
             validate_bundle_report(&current.bundle)
@@ -56,7 +68,11 @@ impl BundleStore {
         let current = report
             .allows(BundleValidationProfile::CompatibilityRead)
             .then_some(current);
-        Ok(BundleInspection { current, report })
+        Ok(BundleInspection {
+            current,
+            report,
+            native_planned_bands,
+        })
     }
 
     pub fn refresh_v3_checkpoint(bundle: &mut BundleV3Contents) -> Result<(), BundleStoreError> {

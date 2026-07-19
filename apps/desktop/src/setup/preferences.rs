@@ -22,14 +22,7 @@ pub(super) fn automatic_session_destination(
     app_data_dir: &Path,
     bundle: &BundleV3Contents,
 ) -> Result<PathBuf, SessionErrorPayload> {
-    let sessions_dir = app_data_dir.join("sessions");
-    fs::create_dir_all(&sessions_dir).map_err(|error| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Filesystem,
-            "The AntennaBench sessions directory could not be prepared.",
-            format!("{}: {error}", sessions_dir.display()),
-        )
-    })?;
+    let sessions_dir = prepare_managed_sessions_dir(app_data_dir)?;
     let timestamp = bundle.manifest.created_at.format("%Y%m%dT%H%M%SZ");
     let base = format!("{}-{timestamp}", safe_callsign(bundle));
     for attempt in 1..=10_000 {
@@ -46,8 +39,44 @@ pub(super) fn automatic_session_destination(
     Err(SessionErrorPayload::new(
         SessionErrorKind::Destination,
         "A collision-free session name could not be allocated.",
-        sessions_dir.display().to_string(),
+        "10,000 managed bundle names were already occupied for this callsign and timestamp",
     ))
+}
+
+pub(crate) fn managed_sessions_dir(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("sessions")
+}
+
+pub(crate) fn prepare_managed_sessions_dir(
+    app_data_dir: &Path,
+) -> Result<PathBuf, SessionErrorPayload> {
+    let sessions_dir = managed_sessions_dir(app_data_dir);
+    match fs::symlink_metadata(&sessions_dir) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Filesystem,
+                "The AntennaBench sessions directory is not a safe local directory.",
+                "the managed sessions entry cannot be a symlink or non-directory",
+            ));
+        }
+        Ok(_) => return Ok(sessions_dir),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Filesystem,
+                "The AntennaBench sessions directory could not be inspected.",
+                error.to_string(),
+            ));
+        }
+    }
+    fs::create_dir_all(&sessions_dir).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "The AntennaBench sessions directory could not be prepared.",
+            error.to_string(),
+        )
+    })?;
+    Ok(sessions_dir)
 }
 
 pub(super) fn read_station_preferences(
@@ -100,7 +129,7 @@ pub(super) fn write_station_preferences(
     })
 }
 
-pub(super) fn resolved_app_data_dir(app: &AppHandle) -> Result<PathBuf, SessionErrorPayload> {
+pub(crate) fn resolved_app_data_dir(app: &AppHandle) -> Result<PathBuf, SessionErrorPayload> {
     app.path().app_data_dir().map_err(|error| {
         SessionErrorPayload::new(
             SessionErrorKind::Filesystem,

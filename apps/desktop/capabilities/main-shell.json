@@ -1,13 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-shell",
-  "description": "Main shell capability limited to setup, operator-triggered local control, the manual conductor, opening sessions, lossless export, and active reports.",
+  "description": "Main shell capability limited to setup, managed-session discovery, operator-triggered local control, the manual conductor, opening sessions, lossless export, and active reports.",
   "windows": ["main"],
   "permissions": [
     "allow-review-session-setup",
     "allow-request-station-location",
     "allow-load-station-preferences",
     "allow-create-session-from-review",
+    "allow-list-managed-sessions",
+    "allow-open-managed-session",
+    "allow-reveal-managed-sessions-directory",
+    "allow-reveal-managed-session",
     "allow-open-session-bundle",
     "allow-export-active-session",
     "allow-export-active-session-report",

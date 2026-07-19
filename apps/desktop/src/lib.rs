@@ -1,6 +1,7 @@
 mod antenna_control;
 mod conductor;
 mod location;
+mod managed_sessions;
 mod open_session;
 mod rbn_import;
 mod setup;
@@ -15,6 +16,10 @@ use antenna_control::{
 };
 use conductor::{active_session_conductor, mutate_active_session_conductor, ConductorSessionState};
 use location::{request_station_location, LocationState};
+use managed_sessions::{
+    list_managed_sessions, open_managed_session, reveal_managed_session,
+    reveal_managed_sessions_directory, ManagedSessionsState,
+};
 use open_session::{
     active_session_report, export_active_session, export_active_session_report,
     open_session_bundle, refresh_active_session_report, ActiveSessionState,
@@ -39,6 +44,7 @@ pub fn run() {
         .manage(AntennaControllerState::default())
         .manage(ConductorSessionState::default())
         .manage(LocationState::default())
+        .manage(ManagedSessionsState::default())
         .manage(SetupSessionState::default())
         .manage(WsjtxSessionState::default())
         .manage(WsprLiveAcquisitionState::default())
@@ -47,6 +53,10 @@ pub fn run() {
             request_station_location,
             load_station_preferences,
             create_session_from_review,
+            list_managed_sessions,
+            open_managed_session,
+            reveal_managed_sessions_directory,
+            reveal_managed_session,
             open_session_bundle,
             export_active_session,
             export_active_session_report,

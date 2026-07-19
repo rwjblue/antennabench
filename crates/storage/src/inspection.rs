@@ -1,7 +1,7 @@
 use std::{collections::HashSet, path::Path};
 
 use antennabench_core::{
-    codes, v2::CurrentBundleContents, validate_bundle_report, AnalysisFile, AntennasFile,
+    codes, v2::CurrentBundleContents, validate_bundle_report, AnalysisFile, AntennasFile, Band,
     BundleContents, BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation,
     BundleDiagnosticSeverity, BundleFileRole, BundleManifest, BundleRecordKind,
     BundleValidationError, BundleValidationProfile, BundleValidationReport, ObservationRecord,
@@ -25,9 +25,21 @@ use super::{
 pub struct BundleInspection {
     pub(super) current: Option<CurrentBundleContents>,
     pub(super) report: BundleValidationReport,
+    pub(super) native_planned_bands: Vec<Band>,
 }
 
 impl BundleInspection {
+    pub(super) fn projected(
+        current: Option<CurrentBundleContents>,
+        report: BundleValidationReport,
+    ) -> Self {
+        Self {
+            current,
+            report,
+            native_planned_bands: Vec::new(),
+        }
+    }
+
     pub fn bundle(&self) -> Option<&BundleContents> {
         self.current.as_ref().map(|current| &current.bundle)
     }
@@ -38,6 +50,12 @@ impl BundleInspection {
 
     pub fn report(&self) -> &BundleValidationReport {
         &self.report
+    }
+
+    /// Native plan bands retained when a newer schema's intent schedule cannot
+    /// be represented by the compatibility projection without actual events.
+    pub fn planned_bands(&self) -> &[Band] {
+        &self.native_planned_bands
     }
 
     pub fn into_parts(self) -> (Option<BundleContents>, BundleValidationReport) {
@@ -143,12 +161,14 @@ impl BundleStore {
             return Ok(BundleInspection {
                 current: None,
                 report,
+                native_planned_bands: Vec::new(),
             });
         };
         if !report.allows(BundleValidationProfile::CompatibilityRead) {
             return Ok(BundleInspection {
                 current: None,
                 report,
+                native_planned_bands: Vec::new(),
             });
         }
 
@@ -191,6 +211,7 @@ impl BundleStore {
             return Ok(BundleInspection {
                 current: None,
                 report,
+                native_planned_bands: Vec::new(),
             });
         };
         if manifest.schema_version != SCHEMA_VERSION_V1 {
@@ -200,6 +221,7 @@ impl BundleStore {
             return Ok(BundleInspection {
                 current: None,
                 report,
+                native_planned_bands: Vec::new(),
             });
         }
 
@@ -308,6 +330,7 @@ impl BundleStore {
             return Ok(BundleInspection {
                 current: None,
                 report,
+                native_planned_bands: Vec::new(),
             });
         };
 
@@ -331,6 +354,7 @@ impl BundleStore {
         Ok(BundleInspection {
             current: bundle.map(CurrentBundleContents::from_v1),
             report,
+            native_planned_bands: Vec::new(),
         })
     }
     fn inspect_root_file<T: DeserializeOwned>(

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reveal-managed-sessions-directory"
+description = "Enables the reveal_managed_sessions_directory command without any pre-configured scope."
+commands.allow = ["reveal_managed_sessions_directory"]
+
+[[permission]]
+identifier = "deny-reveal-managed-sessions-directory"
+description = "Denies the reveal_managed_sessions_directory command without any pre-configured scope."
+commands.deny = ["reveal_managed_sessions_directory"]

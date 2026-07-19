@@ -27,6 +27,7 @@ use crate::antenna_control::{
     AntennaControllerState, ControllerProfile, PreparedSetupController, SetupControllerDraft,
     SetupControllerReview,
 };
+use crate::managed_sessions::{ManagedLocationContext, ManagedSessionsState};
 use crate::open_session::{
     ActiveSessionState, OpenedSession, SessionErrorKind, SessionErrorPayload,
 };
@@ -36,13 +37,16 @@ mod bundle;
 mod creation;
 mod preferences;
 
+pub(crate) use preferences::{
+    managed_sessions_dir, prepare_managed_sessions_dir, resolved_app_data_dir,
+};
+
 use bundle::{build_v3_setup_bundle, planned_wspr_cycles, setup_plan_review_v3, use_latest_schema};
 use creation::{
     create_with_selection, creation_error, reviewed_setup_controller, reviewed_station_preferences,
 };
 use preferences::{
-    automatic_session_destination, read_station_preferences, resolved_app_data_dir,
-    write_station_preferences,
+    automatic_session_destination, read_station_preferences, write_station_preferences,
 };
 
 const SETUP_REVIEW_IPC_BYTES: u64 = 512 * 1024;
@@ -267,7 +271,11 @@ struct SetupSlotSignalReview {
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum CreateSessionOutcome {
     Cancelled,
-    Created { session: OpenedSession },
+    Created {
+        session: Box<OpenedSession>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        managed_location: Option<ManagedLocationContext>,
+    },
 }
 
 fn field_diagnostic(
@@ -937,6 +945,7 @@ pub(crate) async fn create_session_from_review(
     app: AppHandle,
     setup_state: State<'_, SetupSessionState>,
     active_state: State<'_, ActiveSessionState>,
+    managed_state: State<'_, ManagedSessionsState>,
     controller_state: State<'_, AntennaControllerState>,
     wsjtx_state: State<'_, WsjtxSessionState>,
     review_id: String,
@@ -951,6 +960,18 @@ pub(crate) async fn create_session_from_review(
         &review_id,
         |bundle| automatic_session_destination(&app_data_dir, bundle).map(Some),
     )?;
+    let outcome = match outcome {
+        CreateSessionOutcome::Cancelled => CreateSessionOutcome::Cancelled,
+        CreateSessionOutcome::Created { session, .. } => {
+            let (source, _) = crate::open_session::active_session_source(active_state.inner())?;
+            let managed_location =
+                managed_state.register_created(&managed_sessions_dir(&app_data_dir), &source)?;
+            CreateSessionOutcome::Created {
+                session,
+                managed_location: Some(managed_location),
+            }
+        }
+    };
     if matches!(outcome, CreateSessionOutcome::Created { .. }) {
         if let Err(error) = write_station_preferences(&app_data_dir, &station_preferences) {
             eprintln!("AntennaBench could not remember station details: {error:?}");
@@ -1116,7 +1137,7 @@ fn create_e2e_session_with_signal(
         Ok(Some(path.clone()))
     })
     .expect("atomic setup creation");
-    let CreateSessionOutcome::Created { session } = outcome else {
+    let CreateSessionOutcome::Created { session, .. } = outcome else {
         panic!("deterministic selection must create the session")
     };
     assert_eq!(session.session_id, plan.session_id);
@@ -1782,7 +1803,7 @@ mod tests {
             Ok(Some(destination.clone()))
         })
         .unwrap();
-        let CreateSessionOutcome::Created { session } = outcome else {
+        let CreateSessionOutcome::Created { session, .. } = outcome else {
             panic!("reviewed setup should create a session");
         };
         assert_eq!(session.session_id, "session-0001");

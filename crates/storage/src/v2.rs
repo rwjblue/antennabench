@@ -295,7 +295,7 @@ impl BundleStore {
         let current = report
             .allows(BundleValidationProfile::CompatibilityRead)
             .then_some(current);
-        Ok(BundleInspection { current, report })
+        Ok(BundleInspection::projected(current, report))
     }
 
     pub fn read_v2(&self) -> Result<BundleV2Contents, BundleStoreError> {

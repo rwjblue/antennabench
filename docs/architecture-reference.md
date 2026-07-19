@@ -216,9 +216,24 @@ the canonical record of a session.
 
 [Decision 0020](decisions/0020-defer-local-sqlite-until-measured.md) defers a
 production SQLite dependency until an exact query and representative benchmark
-show a material benefit over direct bounded reads. Current desktop operations
-consume one operator-selected coherent bundle and no cross-session catalog
-exists. Any future cache lives outside bundles, keys generations by strong
+show a material benefit over direct bounded reads. The Saved sessions catalog
+is a disposable, process-local Rust projection over direct children of the
+application-managed sessions directory. It independently inspects supported
+bundle directories through the bounded storage API, returns typed metadata and
+opaque refresh-local locators to the webview, and never renders reports,
+recovers or mutates bundles, or persists a second catalog. Session IDs remain
+bundle facts rather than catalog identities: copies with the same ID stay
+separate rows and receive a warning. Opening re-resolves the locator, verifies
+the direct child and inspected committed projection have not changed, then uses
+the same active-session path as picker opening. Invalid and unsupported direct
+children can be revealed through their native capability but cannot be opened;
+filesystem indirections receive no capability. The catalog admits at most 256
+candidates and 512 KiB of IPC output, reporting incomplete status whenever
+either bound shortens the result.
+
+This direct projection is the simple in-memory approach anticipated by ADR
+0020, not evidence that a persistent cross-session index is required. Any
+future cache lives outside bundles, keys generations by strong
 committed-revision identity rather than path or session ID, publishes complete
 builds atomically, replaces incompatible schemas instead of migrating them,
 and falls back to the direct bundle path after absence, staleness, corruption,
