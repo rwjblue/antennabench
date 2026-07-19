@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-const paths = ["/", "/how-it-works/", "/sample-report/"];
+const paths = ["/", "/how-it-works/", "/why-wspr/", "/sample-report/"];
 
 export const GET: APIRoute = ({ site }) => {
   if (site === undefined) {

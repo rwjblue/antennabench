@@ -1,0 +1,361 @@
+---
+import receiverSummaryJson from "../../../../docs/assets/why-not-rbn/data/receiver-census-summary.json";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import "../styles/why-wspr.css";
+
+type BandName = "40m" | "20m" | "15m";
+
+interface WsprWindowSummary {
+  unique_reporter_calls: number;
+  unique_four_character_grids: number;
+}
+
+interface ReceiverSummary {
+  windows: {
+    "168": {
+      start_utc: string;
+      end_utc: string;
+      unique_reporter_calls: number;
+    };
+  };
+  wspr_popular_bands: Record<BandName, {
+    windows: {
+      "168": WsprWindowSummary;
+    };
+  }>;
+  rbn_active_nodes: {
+    records_returned: number;
+    band_counts: Record<BandName, number>;
+    band_four_character_grids: Record<BandName, number>;
+  };
+}
+
+const receiverSummary = receiverSummaryJson as unknown as ReceiverSummary;
+const bandNames = ["40m", "20m", "15m"] as const;
+const bands = bandNames.map((name) => {
+  const wspr = receiverSummary.wspr_popular_bands[name].windows["168"];
+  const rbnReceivers = receiverSummary.rbn_active_nodes.band_counts[name];
+  const rbnGrids = receiverSummary.rbn_active_nodes.band_four_character_grids[name];
+  return {
+    name,
+    wsprReceivers: wspr.unique_reporter_calls,
+    rbnReceivers,
+    receiverRatio: wspr.unique_reporter_calls / rbnReceivers,
+    wsprGrids: wspr.unique_four_character_grids,
+    rbnGrids,
+    gridRatio: wspr.unique_four_character_grids / rbnGrids,
+  };
+});
+const maxReceivers = Math.max(...bands.map((band) => band.wsprReceivers));
+const maxGrids = Math.max(...bands.map((band) => band.wsprGrids));
+const reportingRatios = bands.map((band) => band.receiverRatio);
+const gridRatios = bands.map((band) => band.gridRatio);
+const reportingRange = `${Math.min(...reportingRatios).toFixed(1)}–${Math.max(...reportingRatios).toFixed(1)}×`;
+const gridRange = `${Math.min(...gridRatios).toFixed(1)}–${Math.max(...gridRatios).toFixed(1)}×`;
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const snapshotStart = dateFormatter.format(new Date(receiverSummary.windows["168"].start_utc));
+const snapshotEnd = dateFormatter.format(new Date(receiverSummary.windows["168"].end_utc));
+const formatCount = (value: number) => value.toLocaleString("en-US");
+const description = "Why AntennaBench starts with WSPR for repeatable antenna comparisons, where the receiver-network advantage comes from, and when CW or RTTY operators should use RBN instead.";
+---
+
+<BaseLayout
+  title="Why WSPR is the AntennaBench default—and where RBN wins"
+  socialTitle="Why WSPR is the default—and where RBN wins"
+  description={description}
+  canonicalPath="/why-wspr/"
+>
+  <section class="why-hero section-pad">
+    <div class="shell why-hero-grid">
+      <div class="why-hero-copy">
+        <p class="eyebrow">Choosing the measurement network</p>
+        <h1>Why WSPR is the default—and where RBN wins.</h1>
+        <p class="why-lede">
+          AntennaBench is not choosing a better mode. It is choosing a more repeatable
+          starting point for an A/B experiment: more observable remote paths, a fixed
+          two-minute cadence, and a standardized weak-signal transmission.
+        </p>
+        <div class="hero-mode-row" aria-label="Network roles">
+          <span><strong>WSPR</strong> controlled comparison</span>
+          <span><strong>RBN</strong> real CW or RTTY validation</span>
+        </div>
+      </div>
+
+      <figure class="network-figure">
+        <div class="network-stage" aria-hidden="true">
+          <svg viewBox="0 0 640 440">
+            <ellipse class="globe-outline" cx="320" cy="220" rx="246" ry="145"></ellipse>
+            <ellipse class="globe-grid" cx="320" cy="220" rx="108" ry="145"></ellipse>
+            <ellipse class="globe-grid" cx="320" cy="220" rx="188" ry="145"></ellipse>
+            <path class="globe-grid" d="M82 178h476M76 220h488M82 262h476"></path>
+            <path class="globe-grid" d="M320 75v290"></path>
+            <g class="wspr-points">
+              <circle cx="112" cy="198" r="7"></circle><circle cx="138" cy="151" r="5"></circle>
+              <circle cx="168" cy="238" r="6"></circle><circle cx="194" cy="124" r="6"></circle>
+              <circle cx="218" cy="192" r="5"></circle><circle cx="238" cy="285" r="7"></circle>
+              <circle cx="270" cy="154" r="6"></circle><circle cx="288" cy="230" r="5"></circle>
+              <circle cx="318" cy="112" r="7"></circle><circle cx="344" cy="182" r="5"></circle>
+              <circle cx="362" cy="274" r="6"></circle><circle cx="392" cy="132" r="5"></circle>
+              <circle cx="412" cy="218" r="7"></circle><circle cx="440" cy="298" r="5"></circle>
+              <circle cx="466" cy="164" r="6"></circle><circle cx="492" cy="244" r="7"></circle>
+              <circle cx="522" cy="190" r="5"></circle><circle cx="546" cy="274" r="6"></circle>
+              <circle cx="152" cy="288" r="5"></circle><circle cx="530" cy="132" r="5"></circle>
+            </g>
+            <g class="rbn-points">
+              <rect x="176" y="172" width="13" height="13" rx="3"></rect>
+              <rect x="250" y="118" width="13" height="13" rx="3"></rect>
+              <rect x="336" y="242" width="13" height="13" rx="3"></rect>
+              <rect x="426" y="154" width="13" height="13" rx="3"></rect>
+              <rect x="474" y="268" width="13" height="13" rx="3"></rect>
+              <rect x="520" y="214" width="13" height="13" rx="3"></rect>
+            </g>
+            <g class="signal-source">
+              <circle cx="320" cy="371" r="10"></circle>
+              <path d="M320 361v-47M299 386h42M306 371h28"></path>
+            </g>
+            <path class="signal-path signal-path-one" d="M320 350Q228 250 138 151"></path>
+            <path class="signal-path signal-path-two" d="M320 350Q380 238 466 164"></path>
+            <path class="signal-path signal-path-three" d="M320 350Q414 322 546 274"></path>
+          </svg>
+          <div class="network-legend">
+            <span><i class="legend-wspr"></i> WSPR reporter opportunity</span>
+            <span><i class="legend-rbn"></i> RBN active skimmer</span>
+          </div>
+        </div>
+        <figcaption>Illustrative network geometry. The measured band-by-band snapshot follows.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="answer-band" aria-labelledby="answer-title">
+    <div class="shell answer-grid">
+      <p class="eyebrow">The practical answer</p>
+      <div>
+        <h2 id="answer-title">Use WSPR to run the controlled experiment. Use RBN to validate it on the signal you actually operate.</h2>
+        <p>
+          RBN is often the better tool for a CW or RTTY operating question. WSPR is the
+          easier default when the question is whether antenna A consistently produces
+          stronger or more complete evidence than antenna B across many remote paths.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="snapshot-section section-pad" aria-labelledby="snapshot-title">
+    <div class="shell">
+      <div class="snapshot-heading">
+        <div>
+          <p class="eyebrow">Measured receiver footprint</p>
+          <h2 id="snapshot-title">More reporting stations—and more distinct regions—were observable on every band measured.</h2>
+        </div>
+        <p class="snapshot-date">
+          Snapshot: {snapshotStart}–{snapshotEnd} UTC<br />
+          WSPR seven-day window · RBN active-node snapshot
+        </p>
+      </div>
+
+      <div class="snapshot-summary" aria-label="Snapshot summary">
+        <article>
+          <span>Reporting population</span>
+          <strong>{reportingRange}</strong>
+          <p>more distinct WSPR reporting calls than active RBN nodes on 40, 20, and 15 meters.</p>
+        </article>
+        <article>
+          <span>Geographic footprint</span>
+          <strong>{gridRange}</strong>
+          <p>more occupied four-character Maidenhead grids in the WSPR window than in the RBN snapshot.</p>
+        </article>
+        <article>
+          <span>All included HF bands</span>
+          <strong>{formatCount(receiverSummary.windows["168"].unique_reporter_calls)}</strong>
+          <p>distinct WSPR reporter calls over seven days, compared with {formatCount(receiverSummary.rbn_active_nodes.records_returned)} active RBN nodes.</p>
+        </article>
+      </div>
+
+      <div class="band-comparison-grid">
+        {bands.map((band) => (
+          <article class="band-comparison-card">
+            <header>
+              <div>
+                <span>HF band</span>
+                <h3>{band.name}</h3>
+              </div>
+              <div class="ratio-stack">
+                <strong>{band.receiverRatio.toFixed(1)}×</strong>
+                <span>reporting population</span>
+              </div>
+            </header>
+
+            <div class="metric-block">
+              <div class="metric-title">
+                <span>Reporting calls / active nodes</span>
+                <small>Seven days vs snapshot</small>
+              </div>
+              <div class="comparison-bar wspr-bar">
+                <span style={`--bar-width:${Math.round((band.wsprReceivers / maxReceivers) * 100)}%`}></span>
+                <b>WSPR</b>
+                <strong>{formatCount(band.wsprReceivers)}</strong>
+              </div>
+              <div class="comparison-bar rbn-bar">
+                <span style={`--bar-width:${Math.round((band.rbnReceivers / maxReceivers) * 100)}%`}></span>
+                <b>RBN</b>
+                <strong>{formatCount(band.rbnReceivers)}</strong>
+              </div>
+            </div>
+
+            <div class="metric-block grid-metric">
+              <div class="metric-title">
+                <span>Occupied four-character grids</span>
+                <small>{band.gridRatio.toFixed(1)}× wider footprint</small>
+              </div>
+              <div class="comparison-bar wspr-bar">
+                <span style={`--bar-width:${Math.round((band.wsprGrids / maxGrids) * 100)}%`}></span>
+                <b>WSPR</b>
+                <strong>{formatCount(band.wsprGrids)}</strong>
+              </div>
+              <div class="comparison-bar rbn-bar">
+                <span style={`--bar-width:${Math.round((band.rbnGrids / maxGrids) * 100)}%`}></span>
+                <b>RBN</b>
+                <strong>{formatCount(band.rbnGrids)}</strong>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <aside class="method-note">
+        <strong>“Occupied grids” is the defensible claim—not “percentage of the globe covered.”</strong>
+        <p>
+          A four-character Maidenhead grid count reduces the effect of dense receiver clusters,
+          but it is still not calibrated geographic coverage. The WSPR values are reporting calls
+          or grids seen during seven days; RBN is a point-in-time list of active nodes advertising
+          each band. Neither number measures receiver quality, local noise, antenna performance,
+          or continuous availability.
+        </p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="why-matters section-pad" aria-labelledby="why-matters-title">
+    <div class="shell">
+      <div class="section-heading">
+        <p class="eyebrow">Why the footprint matters</p>
+        <h2 id="why-matters-title">A larger network gives the experiment more chances to compare like with like.</h2>
+        <p>
+          AntennaBench still treats every remote path separately. More receivers do not become
+          one calibrated instrument; they create more opportunities for near-in-time matched pairs.
+        </p>
+      </div>
+      <div class="reason-grid">
+        <article>
+          <span aria-hidden="true">01</span>
+          <h3>Less dependence on one receiver</h3>
+          <p>A quiet, noisy, directional, overloaded, or temporarily absent station is less likely to dominate the result.</p>
+        </article>
+        <article>
+          <span aria-hidden="true">02</span>
+          <h3>A fixed two-minute cadence</h3>
+          <p>WSPR’s UTC sequence makes frequent A/B interleaving practical while propagation and the band are changing.</p>
+        </article>
+        <article>
+          <span aria-hidden="true">03</span>
+          <h3>A standardized weak-signal stimulus</h3>
+          <p>The waveform, message shape, and nominal power are easier to repeat than free-form operating traffic.</p>
+        </article>
+      </div>
+      <div class="missing-note">
+        <strong>A missing spot is still not a zero.</strong>
+        <p>
+          Either network can miss a transmission because of threshold, interference, decoder state,
+          duplicate suppression, band monitoring, or upload gaps. AntennaBench discloses missing and
+          unmatched observations instead of inventing a zero-strength measurement.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mode-choice section-pad" aria-labelledby="mode-choice-title">
+    <div class="shell">
+      <div class="mode-choice-heading">
+        <p class="eyebrow">Choose the tool that matches the question</p>
+        <h2 id="mode-choice-title">RBN is not the wrong answer. It answers a different—and often very useful—question.</h2>
+      </div>
+      <div class="mode-card-grid">
+        <article class="mode-card rbn-mode-card">
+          <div class="mode-card-label"><span></span> Start with RBN</div>
+          <h3>When the operating signal is part of the question</h3>
+          <ul>
+            <li>Where is my actual CW CQ or RTTY signal being copied?</li>
+            <li>Did changing beam heading improve reports right now?</li>
+            <li>Are my keying, message construction, and callsign decoded reliably?</li>
+            <li>Does a controlled WSPR result carry over to real operating?</li>
+          </ul>
+          <aside>
+            <strong>Repeated-test discipline:</strong> move at least 300 Hz between transmissions
+            or wait ten minutes so duplicate suppression does not become an unrecorded variable.
+          </aside>
+        </article>
+
+        <article class="mode-card wspr-mode-card">
+          <div class="mode-card-label"><span></span> Start with WSPR</div>
+          <h3>When repeatability across many paths is the question</h3>
+          <ul>
+            <li>Which antenna performs better across automatically reported remote paths?</li>
+            <li>I do not operate CW, but I want a standardized transmit comparison.</li>
+            <li>I need frequent, counterbalanced A/B cycles over hours or days.</li>
+            <li>Which receive antenna produces more local weak-signal decodes?</li>
+          </ul>
+          <aside>
+            <strong>Measurement discipline:</strong> keep power and settings fixed, alternate often,
+            and compare the same receiver paths over nearby times.
+          </aside>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="use-both-section" aria-labelledby="use-both-title">
+    <div class="shell use-both-grid">
+      <div>
+        <p class="eyebrow">The strongest workflow</p>
+        <h2 id="use-both-title">Use both networks, in sequence.</h2>
+      </div>
+      <ol>
+        <li><span>1</span><div><strong>Run the controlled WSPR A/B</strong><p>Distribute changing conditions across the antennas with a fixed cadence.</p></div></li>
+        <li><span>2</span><div><strong>Inspect matched paths and limitations</strong><p>Keep missingness, imbalance, switching context, and source boundaries visible.</p></div></li>
+        <li><span>3</span><div><strong>Validate with RBN</strong><p>Check whether the result carries over to the CW or RTTY signal you actually use.</p></div></li>
+      </ol>
+      <div class="use-both-actions">
+        <a class="button button-light" href="/how-it-works/">See the complete workflow</a>
+        <a class="button use-both-secondary" href="/sample-report/">Read the sample report</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="sources-section section-pad" aria-labelledby="sources-title">
+    <div class="shell sources-grid">
+      <div>
+        <p class="eyebrow">Sources and reproducibility</p>
+        <h2 id="sources-title">The snapshot is bounded, checked in, and reproducible.</h2>
+      </div>
+      <div>
+        <p>
+          The repository contains the exact aggregate snapshot, queries, map source, generated
+          figures, and refresh script. The website reads the checked-in summary directly, so a
+          regenerated snapshot updates these figures at the next site build.
+        </p>
+        <ul>
+          <li><a href="https://github.com/rwjblue/antennabench/tree/main/tools/why-not-rbn">Snapshot and regeneration tools <span aria-hidden="true">↗</span></a></li>
+          <li><a href="https://www.reversebeacon.net/pages/How%2Bto%2Bget%2Bspotted%2Bby%2Bthe%2BRBN%2B44">RBN spotting guidance <span aria-hidden="true">↗</span></a></li>
+          <li><a href="https://wsjt.sourceforge.io/wsjtx-main_en.html#WSPR">WSJT-X WSPR documentation <span aria-hidden="true">↗</span></a></li>
+          <li><a href="https://wspr.live/">WSPR.live database documentation <span aria-hidden="true">↗</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
