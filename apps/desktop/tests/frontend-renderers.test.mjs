@@ -141,6 +141,10 @@ test("saved sessions render lifecycle actions, problems, duplicates, and distinc
     schemaVersion: 5,
     revision: 3,
     mode: "whole_station_ab",
+    plannedRepetitions: 2,
+    directionCoverage: "transmit_and_receive",
+    plannedCycleCount: 8,
+    observationCounts: { total: 3, localDecodes: 1, publicSpots: 1, importedSpots: 1 },
     bands: ["20m", "70cm"],
     antennaLabels: ["DXC", "Attic EFHW"],
     antennaCount: 2,
@@ -169,6 +173,10 @@ test("saved sessions render lifecycle actions, problems, duplicates, and distinc
         schemaVersion: null,
         revision: null,
         mode: null,
+        plannedRepetitions: null,
+        directionCoverage: null,
+        plannedCycleCount: null,
+        observationCounts: null,
         bands: [],
         antennaLabels: [],
         antennaCount: null,
@@ -189,7 +197,9 @@ test("saved sessions render lifecycle actions, problems, duplicates, and distinc
     "Start session", "Continue session", "Resume session", "View report",
     "View report", "View report", "View details", "View details",
   ]);
-  assert.match(rows[0].querySelector(".saved-plan-summary").textContent, /20 m, 70 cm · Whole Station A\/B · 2 antennas/);
+  assert.equal(rows[0].querySelector(".saved-plan-summary").textContent, "2 planned repetitions · TX + RX · 8 planned cycles · 3 recorded observations");
+  assert.match(rows[0].querySelector(".saved-row-details").textContent, /Local decodes1 recorded observation/);
+  assert.match(rows[0].querySelector(".saved-technical-details").textContent, /Schema5.*Committed revision3/s);
   assert.match(rows[3].querySelector(".saved-warning").textContent, /same session identity/);
   assert.equal(rows[3].querySelector(".saved-warning").hidden, false);
   assert.equal(rows[4].querySelector(".saved-warning").hidden, false);

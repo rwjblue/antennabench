@@ -26,6 +26,7 @@ pub struct BundleInspection {
     pub(super) current: Option<CurrentBundleContents>,
     pub(super) report: BundleValidationReport,
     pub(super) native_planned_bands: Vec<Band>,
+    pub(super) catalog_summary: super::CatalogExperimentSummary,
 }
 
 impl BundleInspection {
@@ -33,10 +34,12 @@ impl BundleInspection {
         current: Option<CurrentBundleContents>,
         report: BundleValidationReport,
     ) -> Self {
+        let catalog_summary = super::CatalogExperimentSummary::from_current(current.as_ref());
         Self {
             current,
             report,
             native_planned_bands: Vec::new(),
+            catalog_summary,
         }
     }
 
@@ -56,6 +59,10 @@ impl BundleInspection {
     /// be represented by the compatibility projection without actual events.
     pub fn planned_bands(&self) -> &[Band] {
         &self.native_planned_bands
+    }
+
+    pub fn catalog_summary(&self) -> &super::CatalogExperimentSummary {
+        &self.catalog_summary
     }
 
     pub fn into_parts(self) -> (Option<BundleContents>, BundleValidationReport) {
@@ -162,6 +169,7 @@ impl BundleStore {
                 current: None,
                 report,
                 native_planned_bands: Vec::new(),
+                catalog_summary: super::CatalogExperimentSummary::default(),
             });
         };
         if !report.allows(BundleValidationProfile::CompatibilityRead) {
@@ -169,6 +177,7 @@ impl BundleStore {
                 current: None,
                 report,
                 native_planned_bands: Vec::new(),
+                catalog_summary: super::CatalogExperimentSummary::default(),
             });
         }
 
@@ -212,6 +221,7 @@ impl BundleStore {
                 current: None,
                 report,
                 native_planned_bands: Vec::new(),
+                catalog_summary: super::CatalogExperimentSummary::default(),
             });
         };
         if manifest.schema_version != SCHEMA_VERSION_V1 {
@@ -222,6 +232,7 @@ impl BundleStore {
                 current: None,
                 report,
                 native_planned_bands: Vec::new(),
+                catalog_summary: super::CatalogExperimentSummary::default(),
             });
         }
 
@@ -331,6 +342,7 @@ impl BundleStore {
                 current: None,
                 report,
                 native_planned_bands: Vec::new(),
+                catalog_summary: super::CatalogExperimentSummary::default(),
             });
         };
 
@@ -351,10 +363,13 @@ impl BundleStore {
             .allows(BundleValidationProfile::CompatibilityRead)
             .then_some(bundle);
 
+        let current = bundle.map(CurrentBundleContents::from_v1);
+        let catalog_summary = super::CatalogExperimentSummary::from_current(current.as_ref());
         Ok(BundleInspection {
-            current: bundle.map(CurrentBundleContents::from_v1),
+            current,
             report,
             native_planned_bands: Vec::new(),
+            catalog_summary,
         })
     }
     fn inspect_root_file<T: DeserializeOwned>(

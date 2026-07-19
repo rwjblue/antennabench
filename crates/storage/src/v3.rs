@@ -40,6 +40,7 @@ impl BundleStore {
         mut report: BundleValidationReport,
     ) -> Result<BundleInspection, BundleStoreError> {
         let bundle = self.read_v3()?;
+        let catalog_summary = super::CatalogExperimentSummary::from_v3(&bundle);
         let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
         report.extend(modeled_duplicate_member_diagnostics(
             self,
@@ -81,6 +82,7 @@ impl BundleStore {
             current,
             report,
             native_planned_bands,
+            catalog_summary,
         })
     }
 

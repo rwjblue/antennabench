@@ -143,6 +143,14 @@ Finder reveal actions for the managed folder and individual entries. Refresh
 failures leave the last useful list visible, while partial-list and problem-row
 messages identify entries that could not be fully inspected.
 
+Each available row summarizes the planned repetitions, TX/RX direction
+coverage, planned cycle count, and total recorded observations. Expand
+**Experiment and evidence** for antenna labels, bands, and the stored local,
+public, and imported observation counts. These are catalog facts, not a claim
+that a run is complete or eligible for any analysis. Older bundles say when a
+plan fact is unavailable; schema and committed revision remain under
+**Technical details**.
+
 When reopening a bundle, AntennaBench checks the freshly opened lifecycle before
 choosing the destination. Ready, running, and interrupted sessions return to
 **Run** without automatically starting or resuming; ended, abandoned, and legacy

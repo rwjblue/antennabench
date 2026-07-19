@@ -89,10 +89,11 @@ function renderSavedRow(root, state, entry) {
   summary.className = "saved-plan-summary";
   const bands = (entry.bands ?? []).map(formatBand).join(", ") || "Band unavailable";
   const mode = entry.mode ? humanizeIdentifier(entry.mode).replace("Ab", "A/B") : "Plan unavailable";
-  const antennas = entry.antennaCount === null || entry.antennaCount === undefined
-    ? "antenna count unavailable"
-    : `${entry.antennaCount} ${entry.antennaCount === 1 ? "antenna" : "antennas"}`;
-  summary.textContent = `${bands} · ${mode} · ${antennas}`;
+  const repetitions = formatCount(entry.plannedRepetitions, "planned repetition");
+  const direction = formatDirectionCoverage(entry.directionCoverage);
+  const cycles = formatCount(entry.plannedCycleCount, "planned cycle");
+  const observations = formatCount(entry.observationCounts?.total, "recorded observation");
+  summary.textContent = `${repetitions} · ${direction} · ${cycles} · ${observations}`;
   const meta = root.createElement("p");
   meta.className = "saved-row-meta";
   meta.textContent = `${entry.originLabel ?? "Saved by AntennaBench"} · ${entry.bundleName}`;
@@ -105,13 +106,15 @@ function renderSavedRow(root, state, entry) {
   const details = root.createElement("details");
   details.className = "saved-row-details";
   const detailsSummary = root.createElement("summary");
-  detailsSummary.textContent = "Details";
+  detailsSummary.textContent = "Experiment and evidence";
   const detailList = root.createElement("dl");
   for (const [label, value] of [
+    ["Plan", mode],
     ["Antennas", (entry.antennaLabels ?? []).join(", ") || "Unavailable"],
     ["Bands", bands],
-    ["Schema", entry.schemaVersion ?? "Unavailable"],
-    ["Committed revision", entry.revision ?? "Legacy / unavailable"],
+    ["Local decodes", formatCount(entry.observationCounts?.localDecodes, "recorded observation")],
+    ["Public spots", formatCount(entry.observationCounts?.publicSpots, "recorded observation")],
+    ["Imported spots", formatCount(entry.observationCounts?.importedSpots, "recorded observation")],
   ]) {
     const group = root.createElement("div");
     const term = root.createElement("dt"); term.textContent = label;
@@ -125,7 +128,22 @@ function renderSavedRow(root, state, entry) {
     const item = root.createElement("li"); item.textContent = problem.message; problems.append(item);
   }
   problems.hidden = problems.childElementCount === 0;
-  details.append(detailsSummary, detailList, problems, warning);
+  const technical = root.createElement("details");
+  technical.className = "saved-technical-details";
+  const technicalSummary = root.createElement("summary");
+  technicalSummary.textContent = "Technical details";
+  const technicalList = root.createElement("dl");
+  for (const [label, value] of [
+    ["Schema", entry.schemaVersion ?? "Unavailable"],
+    ["Committed revision", entry.revision ?? "Legacy / unavailable"],
+  ]) {
+    const group = root.createElement("div");
+    const term = root.createElement("dt"); term.textContent = label;
+    const description = root.createElement("dd"); description.textContent = String(value);
+    group.append(term, description); technicalList.append(group);
+  }
+  technical.append(technicalSummary, technicalList);
+  details.append(detailsSummary, detailList, technical, problems, warning);
 
   const actions = root.createElement("div");
   actions.className = "saved-row-actions";
@@ -184,6 +202,20 @@ function managedStatusLabel(entry) {
 
 function formatBand(band) {
   return String(band).replace(/^(\d+)(m|cm)$/i, "$1 $2");
+}
+
+function formatCount(value, singular) {
+  if (value === null || value === undefined) return "Unavailable";
+  return `${value} ${value === 1 ? singular : `${singular}s`}`;
+}
+
+function formatDirectionCoverage(value) {
+  return ({
+    transmit_only: "TX only",
+    receive_only: "RX only",
+    transmit_and_receive: "TX + RX",
+    unknown: "Direction unknown",
+  })[value] ?? "Direction unavailable";
 }
 
 export function renderSetup(elements, state, root) {

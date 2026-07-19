@@ -129,6 +129,21 @@ fn supported_checkpointed_bundle_projects_bounded_plan_and_lifecycle_metadata() 
     assert_eq!(entry.schema_version, Some(6));
     assert_eq!(entry.revision, Some(0));
     assert_eq!(entry.mode, Some(ExperimentMode::WholeStationAb));
+    assert_eq!(entry.planned_repetitions, Some(2));
+    assert_eq!(
+        entry.direction_coverage,
+        Some(ManagedDirectionCoverage::TransmitAndReceive)
+    );
+    assert_eq!(entry.planned_cycle_count, Some(8));
+    assert_eq!(
+        entry.observation_counts,
+        Some(ManagedObservationCounts {
+            total: 0,
+            local_decodes: 0,
+            public_spots: 0,
+            imported_spots: 0,
+        })
+    );
     assert_eq!(entry.bands, vec![Band::M20]);
     assert_eq!(entry.antenna_labels, ["Vertical", "Dipole"]);
     assert_eq!(entry.antenna_count, Some(2));
@@ -156,6 +171,13 @@ fn legacy_bundle_has_no_invented_lifecycle_or_revision() {
     assert_eq!(entry.schema_version, Some(1));
     assert_eq!(entry.lifecycle, None);
     assert_eq!(entry.revision, None);
+    assert_eq!(entry.planned_repetitions, None);
+    assert_eq!(
+        entry.direction_coverage,
+        Some(ManagedDirectionCoverage::Unknown)
+    );
+    assert!(entry.planned_cycle_count.is_some());
+    assert!(entry.observation_counts.is_some());
 }
 
 #[test]
@@ -520,6 +542,10 @@ fn fabricated_entry(name: &str, message: &str) -> ManagedCatalogEntry {
         schema_version: None,
         revision: None,
         mode: None,
+        planned_repetitions: None,
+        direction_coverage: None,
+        planned_cycle_count: None,
+        observation_counts: None,
         bands: Vec::new(),
         antenna_labels: Vec::new(),
         antenna_count: None,

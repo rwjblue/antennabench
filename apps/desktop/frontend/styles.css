@@ -143,6 +143,8 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .saved-row-details dl > div { padding: 9px; border-radius: 8px; background: #f4f7f3; }
 .saved-row-details dt { color: #77857f; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
 .saved-row-details dd { margin: 4px 0 0; color: #315d57; font-size: 0.74rem; overflow-wrap: anywhere; }
+.saved-technical-details { margin-top: 10px; padding: 9px; border: 1px solid #e1e5df; border-radius: 8px; }
+.saved-technical-details dl { margin-bottom: 0; }
 .saved-row-details p, .saved-row-details li { color: #697873; font-size: 0.72rem; line-height: 1.5; }
 .saved-open-now { align-self: center; color: #1d6d62; font-size: 0.7rem; font-weight: 800; }
 .saved-help { margin-top: 28px; padding: 18px; border-radius: 14px; background: #eef4ef; }

@@ -231,6 +231,14 @@ filesystem indirections receive no capability. The catalog admits at most 256
 candidate children and 512 KiB of IPC output, reporting incomplete status
 whenever either bound shortens the result.
 
+The storage inspection projection also exposes bounded experiment shape and
+evidence counts for the catalog. It counts records directly by stored
+observation kind and derives current-schema repetitions and direction coverage
+from native schedule intents before compatibility projection can erase those
+facts. Schema-v3 and legacy WSPR direction remains unknown. Attachments,
+analysis eligibility, corrections, and generated report results do not alter
+the catalog counts; the UI describes them only as recorded observations.
+
 Opening is intent-driven after Rust returns a freshly inspected session
 summary; catalog lifecycle metadata is never used as routing authority. A
 managed `work` intent enters Run only for `ready`, `running`, or `interrupted`

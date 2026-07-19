@@ -11,6 +11,7 @@ use antennabench_core::{
 use serde::Deserialize;
 use thiserror::Error;
 
+mod catalog_projection;
 mod inspection;
 mod live;
 mod lossless_copy;
@@ -20,6 +21,9 @@ mod v2;
 mod v2_attachment;
 mod v3;
 
+pub use catalog_projection::{
+    CatalogDirectionCoverage, CatalogExperimentSummary, CatalogObservationCounts,
+};
 pub use inspection::BundleInspection;
 pub use live::{
     CommitReceiptV2, DiagnosticCommitDispositionV6, DiagnosticCommitReceiptV6,

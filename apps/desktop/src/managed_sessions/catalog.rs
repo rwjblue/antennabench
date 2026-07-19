@@ -328,6 +328,7 @@ fn inspect_directory(name: &str, path: &Path) -> ProjectedEntry {
         .iter()
         .map(|antenna| antenna.label.clone())
         .collect::<Vec<_>>();
+    let catalog_summary = inspection.catalog_summary();
     let fingerprint =
         projection_fingerprint(schema_version, current, inspection.report().diagnostics()).ok();
     let mut entry = ManagedCatalogEntry {
@@ -347,6 +348,17 @@ fn inspect_directory(name: &str, path: &Path) -> ProjectedEntry {
         schema_version,
         revision: current.session_state.as_ref().map(|state| state.revision),
         mode: Some(bundle.schedule.mode),
+        planned_repetitions: catalog_summary.planned_repetitions,
+        direction_coverage: catalog_summary.direction_coverage.map(Into::into),
+        planned_cycle_count: catalog_summary.planned_cycle_count,
+        observation_counts: catalog_summary.observation_counts.map(|counts| {
+            super::ManagedObservationCounts {
+                total: counts.total,
+                local_decodes: counts.local_decodes,
+                public_spots: counts.public_spots,
+                imported_spots: counts.imported_spots,
+            }
+        }),
         bands,
         antenna_labels,
         antenna_count: Some(bundle.antennas.antennas.len()),
@@ -667,6 +679,10 @@ impl ManagedCatalogEntry {
             schema_version: None,
             revision: None,
             mode: None,
+            planned_repetitions: None,
+            direction_coverage: None,
+            planned_cycle_count: None,
+            observation_counts: None,
             bands: Vec::new(),
             antenna_labels: Vec::new(),
             antenna_count: None,

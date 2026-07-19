@@ -6,6 +6,7 @@ use std::{
 };
 
 use antennabench_core::{v2::SessionLifecycleV2, Band, ExperimentMode};
+use antennabench_storage::CatalogDirectionCoverage;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -82,6 +83,35 @@ pub(crate) struct ManagedSessionProblem {
     message: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ManagedDirectionCoverage {
+    TransmitOnly,
+    ReceiveOnly,
+    TransmitAndReceive,
+    Unknown,
+}
+
+impl From<CatalogDirectionCoverage> for ManagedDirectionCoverage {
+    fn from(value: CatalogDirectionCoverage) -> Self {
+        match value {
+            CatalogDirectionCoverage::TransmitOnly => Self::TransmitOnly,
+            CatalogDirectionCoverage::ReceiveOnly => Self::ReceiveOnly,
+            CatalogDirectionCoverage::TransmitAndReceive => Self::TransmitAndReceive,
+            CatalogDirectionCoverage::Unknown => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedObservationCounts {
+    total: usize,
+    local_decodes: usize,
+    public_spots: usize,
+    imported_spots: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ManagedCatalogEntry {
@@ -105,6 +135,14 @@ pub(crate) struct ManagedCatalogEntry {
     revision: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<ExperimentMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    planned_repetitions: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    direction_coverage: Option<ManagedDirectionCoverage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    planned_cycle_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    observation_counts: Option<ManagedObservationCounts>,
     bands: Vec<Band>,
     antenna_labels: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

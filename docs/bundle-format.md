@@ -43,6 +43,12 @@ AntennaBench keeps these fact types distinct. It does not turn a planned switch
 into a confirmed switch, treat a missing [spot](glossary.md#spot) as a zero, or
 hide a correction by rewriting the original record.
 
+The **Saved sessions** catalog reads only bounded plan metadata and the records
+in `observations.jsonl`. Its local-decode, public-spot, and imported-spot totals
+describe recorded observations only: attachments are not observations, and
+the totals do not establish run completeness, analysis eligibility, or report
+quality.
+
 ## What Is Inside?
 
 You do not need to inspect the files to use AntennaBench, but the layout is
