@@ -35,6 +35,7 @@ mod checkpoint;
 mod diagnostic;
 mod durability;
 mod error;
+mod lock;
 mod mutation;
 mod recovery;
 mod runtime_context;
@@ -298,7 +299,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open snapshot lock", &lock_path, source))?;
-        match lock.try_lock_shared() {
+        match lock::try_lock_shared(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {
@@ -322,7 +323,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open checkpointed export lock", &lock_path, source))?;
-        match lock.try_lock_shared() {
+        match lock::try_lock_shared(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {
@@ -392,7 +393,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open checkpointed export lock", &lock_path, source))?;
-        match lock.try_lock_shared() {
+        match lock::try_lock_shared(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {
@@ -595,7 +596,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open snapshot lock", &lock_path, source))?;
-        match lock.try_lock_shared() {
+        match lock::try_lock_shared(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {
@@ -628,7 +629,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open recovery lock", &lock_path, source))?;
-        match lock.try_lock() {
+        match lock::try_lock_exclusive(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {
@@ -806,7 +807,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open writer lock", &lock_path, source))?;
-        match lock.try_lock() {
+        match lock::try_lock_exclusive(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {
@@ -853,7 +854,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open recovery lock", &lock_path, source))?;
-        match lock.try_lock() {
+        match lock::try_lock_exclusive(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {

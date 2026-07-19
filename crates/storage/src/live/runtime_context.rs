@@ -6,8 +6,9 @@ use antennabench_core::{
 use chrono::{DateTime, Utc};
 
 use super::{
-    checkpoint::verify_exact_checkpoint, live_io, probe_live_persistence, LivePersistenceError,
-    LivePersistenceHooks, LiveSessionV3, RecoveryReportV2, SystemLivePersistenceHooks, LOCK_FILE,
+    checkpoint::verify_exact_checkpoint, live_io, lock, probe_live_persistence,
+    LivePersistenceError, LivePersistenceHooks, LiveSessionV3, RecoveryReportV2,
+    SystemLivePersistenceHooks, LOCK_FILE,
 };
 use crate::BundleStore;
 
@@ -82,7 +83,7 @@ impl BundleStore {
             .truncate(false)
             .open(&lock_path)
             .map_err(|source| live_io("open writer lock", &lock_path, source))?;
-        match lock.try_lock() {
+        match lock::try_lock_exclusive(&lock) {
             Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
             Err(fs::TryLockError::Error(source)) => {

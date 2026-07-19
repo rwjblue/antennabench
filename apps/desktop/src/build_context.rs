@@ -1,6 +1,3 @@
-#[cfg(target_os = "macos")]
-use std::process::Command;
-
 use antennabench_core::{
     v2::MutationMember,
     v6::{
@@ -12,7 +9,7 @@ use antennabench_storage::{
     BundleStore, LivePersistenceError, LivePersistenceHooks, LiveSessionV3, RecoveryReportV2,
 };
 use chrono::{DateTime, Utc};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 const APPLICATION_ID: &str = "com.rwjblue.antennabench";
 
@@ -111,19 +108,50 @@ pub(crate) fn current_runtime_context(
 }
 
 fn os_version() -> Option<String> {
+    // The OS version cannot change within a process, so detect it once.
+    static OS_VERSION: OnceLock<Option<String>> = OnceLock::new();
+    OS_VERSION.get_or_init(detect_os_version).clone()
+}
+
+fn detect_os_version() -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        let output = Command::new("/usr/bin/sw_vers")
-            .arg("-productVersion")
-            .output()
-            .ok()?;
-        output.status.success().then(|| {
-            String::from_utf8_lossy(&output.stdout)
-                .trim()
-                .chars()
-                .take(64)
-                .collect()
-        })
+        use std::ffi::{c_char, c_int, c_void};
+
+        // The sysctl equivalent of `sw_vers -productVersion`, read in-process:
+        // spawning a helper clones the descriptor table and can briefly pin
+        // bundle writer locks held on other threads.
+        unsafe extern "C" {
+            fn sysctlbyname(
+                name: *const c_char,
+                oldp: *mut c_void,
+                oldlenp: *mut usize,
+                newp: *mut c_void,
+                newlen: usize,
+            ) -> c_int;
+        }
+
+        let mut buffer = [0u8; 64];
+        let mut length = buffer.len();
+        let status = unsafe {
+            sysctlbyname(
+                c"kern.osproductversion".as_ptr(),
+                buffer.as_mut_ptr().cast(),
+                &mut length,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if status != 0 {
+            return None;
+        }
+        let bytes = &buffer[..length.min(buffer.len())];
+        let end = bytes
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(bytes.len());
+        let value = std::str::from_utf8(&bytes[..end]).ok()?.trim().to_string();
+        (!value.is_empty()).then_some(value)
     }
     #[cfg(target_os = "linux")]
     {
