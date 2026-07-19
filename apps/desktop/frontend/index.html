@@ -181,8 +181,8 @@
                     <div class="controller-behavior field-grid">
                       <label>Run the controller<select data-setup-field="controllerInvocation"><option value="operator_triggered" selected>When I click Switch antenna</option><option value="automatic">Automatically when the next cycle is ready to prepare</option></select><small>Choose whether each switch starts from your click or when a running session reaches the next preparation step.</small></label>
                       <div class="field-control field-wide">
-                        <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerManualReviewRequired" checked> After each switch, wait for me to confirm the antenna is ready</label>
-                        <small>Keep this checked for manual review. If turned off, both the switch and verification commands must succeed before AntennaBench schedules the next eligible WSPR cycle.</small>
+                        <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerManualReviewRequired" aria-describedby="controller-manual-review-help" checked> After each switch, wait for me to confirm the antenna is ready</label>
+                        <small id="controller-manual-review-help">Keep this checked for manual review. If turned off, both the switch and verification commands must succeed before AntennaBench schedules the next eligible WSPR cycle.</small>
                       </div>
                     </div>
                     <p class="privacy-note">Before sharing a session bundle, review controller command details and output. They may contain local paths, usernames, network addresses, or credentials.</p>

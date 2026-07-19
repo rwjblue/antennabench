@@ -11,6 +11,8 @@ const reports = {
   full: readFileSync(fullPath, "utf8"),
   compact: readFileSync(compactPath, "utf8"),
 };
+const desktopHtml = readFileSync(resolve("apps/desktop/frontend/index.html"), "utf8");
+const desktopStyles = readFileSync(resolve("apps/desktop/frontend/styles.css"), "utf8");
 const models = readFileSync(resolve("apps/desktop/frontend/models.mjs"), "utf8");
 const embeddedStyles = {
   full: readFileSync(resolve("apps/desktop/frontend/report.css"), "utf8"),
@@ -51,7 +53,7 @@ async function browser(args, { json = false } = {}) {
     0,
     `agent-browser ${args[0]} failed:\n${stdout}${stderr}`,
   );
-  if (!json) return null;
+  if (!json) return stdout;
   const output = JSON.parse(stdout);
   assert.equal(output.success, true, output.error ?? `agent-browser ${args[0]} failed`);
   return output.data;
@@ -140,6 +142,19 @@ const server = createServer((request, response) => {
     response.end("html,body{margin:0}iframe{display:block;width:100%;height:800px;border:0}");
     return;
   }
+  if (url.pathname === "/styles.css") {
+    response.writeHead(200, { "content-type": "text/css; charset=utf-8" });
+    response.end(desktopStyles);
+    return;
+  }
+  if (url.pathname === "/desktop") {
+    response.writeHead(200, {
+      "content-security-policy": csp,
+      "content-type": "text/html; charset=utf-8",
+    });
+    response.end(desktopHtml);
+    return;
+  }
   if (url.pathname === "/report.css" || url.pathname === "/report-compact.css") {
     const mode = url.pathname === "/report.css" ? "full" : "compact";
     response.writeHead(200, { "content-type": "text/css; charset=utf-8" });
@@ -181,6 +196,85 @@ await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen
 const { port } = server.address();
 
 try {
+  await browser(["set", "viewport", "1200", "900"]);
+  const desktopPageUrl = `http://127.0.0.1:${port}/desktop`;
+  await browser(["open", desktopPageUrl], { json: true });
+  await browser(["wait", "body"]);
+  await browser(["eval", `(() => {
+    const checkbox = document.querySelector('[data-setup-field="controllerManualReviewRequired"]');
+    if (!checkbox) throw new Error("controller manual-review checkbox not found");
+    for (let element = checkbox.parentElement; element; element = element.parentElement) {
+      element.hidden = false;
+    }
+    checkbox.scrollIntoView({ block: "center" });
+  })()`], { json: true });
+  const accessibilitySnapshot = await browser(["snapshot", "-i"]);
+  assert.match(
+    accessibilitySnapshot,
+    /checkbox "After each switch, wait for me to confirm the antenna is ready"/,
+  );
+  for (const width of [1200, 500]) {
+    await browser(["set", "viewport", String(width), "900"]);
+    const controls = (await browser(["eval", `(() => {
+      const checkbox = document.querySelector('[data-setup-field="controllerManualReviewRequired"]');
+      const label = checkbox.closest("label");
+      const help = label.nextElementSibling;
+      const inputRect = checkbox.getBoundingClientRect();
+      const labelText = [...label.childNodes].find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
+      );
+      const textRange = document.createRange();
+      textRange.selectNode(labelText);
+      const textRect = textRange.getBoundingClientRect();
+      const confirmationWidths = [...document.querySelectorAll(".authority-confirmation input")]
+        .filter((input) => input.getClientRects().length > 0)
+        .map((input) => input.getBoundingClientRect().width);
+      return {
+        checkboxWidth: inputRect.width,
+        checkboxHeight: inputRect.height,
+        labelDisplay: getComputedStyle(label).display,
+        labelText: label.textContent.trim(),
+        inlineOverlap: Math.min(inputRect.bottom, textRect.bottom) - Math.max(inputRect.top, textRect.top),
+        checkboxBeforeText: inputRect.right <= textRect.left,
+        helpImmediatelyBelow: help === label.nextElementSibling && help.tagName === "SMALL",
+        helpId: help.id,
+        describedBy: checkbox.getAttribute("aria-describedby"),
+        confirmationWidths,
+      };
+    })()`], { json: true })).result;
+    assert.ok(controls.checkboxWidth > 0 && controls.checkboxWidth <= 24, `${width}px checkbox width`);
+    assert.ok(controls.checkboxHeight > 0 && controls.checkboxHeight <= 24, `${width}px checkbox height`);
+    assert.equal(controls.labelDisplay, "flex");
+    assert.match(controls.labelText, /After each switch, wait for me to confirm the antenna is ready/);
+    assert.ok(controls.inlineOverlap > 0, `${width}px checkbox and label text do not share a line`);
+    assert.equal(controls.checkboxBeforeText, true);
+    assert.equal(controls.helpImmediatelyBelow, true);
+    assert.equal(controls.describedBy, controls.helpId);
+    assert.ok(controls.confirmationWidths.length >= 2);
+    assert.ok(controls.confirmationWidths.every((checkboxWidth) => checkboxWidth <= 24));
+  }
+  const toggled = (await browser(["eval", `(() => {
+    const checkbox = document.querySelector('[data-setup-field="controllerManualReviewRequired"]');
+    const label = checkbox.closest("label");
+    const initiallyChecked = checkbox.checked;
+    label.click();
+    const afterLabelClick = checkbox.checked;
+    checkbox.focus();
+    return { initiallyChecked, afterLabelClick };
+  })()`], { json: true })).result;
+  assert.deepEqual(toggled, { initiallyChecked: true, afterLabelClick: false });
+  await browser(["press", "Space"]);
+  const keyboardState = (await browser(["eval", `(() => {
+    const checkbox = document.querySelector('[data-setup-field="controllerManualReviewRequired"]');
+    const label = checkbox.closest("label");
+    return {
+      checked: checkbox.checked,
+      focusOutline: getComputedStyle(label).outlineStyle,
+    };
+  })()`], { json: true })).result;
+  assert.equal(keyboardState.checked, true);
+  assert.equal(keyboardState.focusOutline, "solid");
+
   await browser(["set", "viewport", "1200", "900"]);
   for (const mode of ["full", "compact"]) {
     const pageUrl = `http://127.0.0.1:${port}/${mode}`;

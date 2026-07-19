@@ -133,12 +133,12 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .advanced-section > summary { font-family: Georgia, "Times New Roman", serif; font-size: 1.05rem; font-weight: 500; }
 .field-help { margin: 0 0 16px; color: #697873; font-size: 0.8rem; line-height: 1.55; }
 .field-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.field-grid label, .field-control { display: grid; align-content: start; gap: 7px; color: #315d57; font-size: 0.74rem; font-weight: 750; }
+.field-grid label:not(.authority-confirmation), .field-control { display: grid; align-content: start; gap: 7px; color: #315d57; font-size: 0.74rem; font-weight: 750; }
 .field-label { display: flex; align-items: center; gap: 6px; }
 .field-grid .field-wide { grid-column: 1 / -1; }
-.field-grid input, .field-grid select, .field-grid textarea { width: 100%; min-width: 0; border: 1px solid #c7d1ca; border-radius: 9px; padding: 10px 11px; color: #173131; background: #fbfcf9; font: inherit; font-weight: 500; }
+.field-grid input:not([type="checkbox"]):not([type="radio"]), .field-grid select, .field-grid textarea { width: 100%; min-width: 0; border: 1px solid #c7d1ca; border-radius: 9px; padding: 10px 11px; color: #173131; background: #fbfcf9; font: inherit; font-weight: 500; }
 .field-grid textarea { resize: vertical; }
-.field-grid input:focus, .field-grid select:focus, .field-grid textarea:focus { border-color: #3d9889; outline: 3px solid rgba(61, 152, 137, 0.14); }
+.field-grid input:not([type="checkbox"]):not([type="radio"]):focus, .field-grid select:focus, .field-grid textarea:focus { border-color: #3d9889; outline: 3px solid rgba(61, 152, 137, 0.14); }
 .field-grid label > small { color: #697873; font-size: 0.68rem; font-weight: 500; line-height: 1.4; }
 .field-grid [aria-invalid="true"] { border-color: #b6543f; background: #fff9f7; }
 .field-grid [aria-invalid="true"]:focus { border-color: #a04734; outline-color: rgba(182, 84, 63, 0.17); }
@@ -300,7 +300,8 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .action-list article > div > span { display: block; margin-bottom: 8px; color: #9b6a2b; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .action-list p { margin-bottom: 0; }
 .action-list p a { color: #245451; font-weight: 700; }
-.authority-confirmation { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; color: #435b57; font-size: 0.78rem; line-height: 1.45; }
+.authority-confirmation { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; color: #435b57; font-size: 0.78rem; line-height: 1.45; cursor: pointer; }
+.authority-confirmation:has(input:focus-visible) { outline: 3px solid rgba(210, 139, 47, 0.35); outline-offset: 2px; }
 .authority-confirmation input { flex: 0 0 auto; margin-top: 2px; accent-color: #245451; }
 .privacy-note { margin-top: 12px; padding: 10px 12px; border-left: 3px solid #b97925; background: #fff8ea; color: #65461d; font-size: 0.78rem; line-height: 1.5; }
 .controller-diagnostic { max-height: 18rem; overflow: auto; padding: 12px; border: 1px solid #d8ddd6; border-radius: 10px; background: #f7f9f7; font-size: 0.72rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -9,6 +9,10 @@ const DESKTOP_HTML = readFileSync(
   path.join(process.cwd(), "frontend", "index.html"),
   "utf8",
 );
+const DESKTOP_CSS = readFileSync(
+  path.join(process.cwd(), "frontend", "styles.css"),
+  "utf8",
+);
 
 function loadDesktopDocument() {
   document.open();
@@ -47,6 +51,35 @@ function conductorView(overrides = {}) {
     ...overrides,
   };
 }
+
+test("controller manual review keeps native checkbox, label, and help semantics", () => {
+  const elements = loadDesktopDocument();
+  const checkbox = elements.setupForm.querySelector(
+    '[data-setup-field="controllerManualReviewRequired"]',
+  );
+  const label = checkbox.closest("label");
+  const help = label.nextElementSibling;
+
+  assert.equal(label.className, "authority-confirmation");
+  assert.match(label.textContent, /After each switch, wait for me to confirm the antenna is ready/);
+  assert.equal(help.tagName, "SMALL");
+  assert.equal(checkbox.getAttribute("aria-describedby"), help.id);
+  assert.match(help.textContent, /Keep this checked for manual review/);
+  assert.equal(checkbox.checked, true);
+  label.click();
+  assert.equal(checkbox.checked, false);
+  checkbox.disabled = true;
+  label.click();
+  assert.equal(checkbox.checked, false);
+
+  assert.match(DESKTOP_CSS, /\.field-grid label:not\(\.authority-confirmation\)/);
+  assert.match(
+    DESKTOP_CSS,
+    /\.field-grid input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)/,
+  );
+  assert.doesNotMatch(DESKTOP_CSS, /\.field-grid input, \.field-grid select/);
+  assert.match(DESKTOP_CSS, /\.authority-confirmation:has\(input:focus-visible\)/);
+});
 
 test("the headless desktop completes location, review, and creation through mounted DOM events", async () => {
   const elements = loadDesktopDocument();
