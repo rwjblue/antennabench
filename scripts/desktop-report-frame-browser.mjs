@@ -275,6 +275,81 @@ try {
   assert.equal(keyboardState.checked, true);
   assert.equal(keyboardState.focusOutline, "solid");
 
+  await browser(["set", "viewport", "1120", "760"]);
+  const desktopShell = (await browser(["eval", `(() => {
+    const content = document.querySelector(".content");
+    const topbar = document.querySelector(".topbar").getBoundingClientRect();
+    const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    content.scrollTop = 0;
+    content.focus();
+    return {
+      documentClientHeight: document.documentElement.clientHeight,
+      documentScrollHeight: document.documentElement.scrollHeight,
+      documentScrollTop: document.scrollingElement.scrollTop,
+      contentClientHeight: content.clientHeight,
+      contentScrollHeight: content.scrollHeight,
+      contentOverflow: getComputedStyle(content).overflowY,
+      topbar: { top: topbar.top, bottom: topbar.bottom },
+      sidebar: { top: sidebar.top, bottom: sidebar.bottom },
+    };
+  })()`], { json: true })).result;
+  assert.equal(desktopShell.documentScrollHeight, desktopShell.documentClientHeight);
+  assert.equal(desktopShell.documentScrollTop, 0);
+  assert.ok(desktopShell.contentScrollHeight > desktopShell.contentClientHeight * 2);
+  assert.equal(desktopShell.contentOverflow, "auto");
+  assert.ok(desktopShell.topbar.top >= 0 && desktopShell.topbar.bottom <= 760);
+  assert.ok(desktopShell.sidebar.top >= 0 && desktopShell.sidebar.bottom <= 760);
+  await browser(["press", "PageDown"]);
+  await browser(["wait", "200"]);
+  const pagedShell = (await browser(["eval", `(() => {
+    const content = document.querySelector(".content");
+    const topbar = document.querySelector(".topbar").getBoundingClientRect();
+    const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    return {
+      contentScrollTop: content.scrollTop,
+      documentScrollTop: document.scrollingElement.scrollTop,
+      topbar: { top: topbar.top, bottom: topbar.bottom },
+      sidebar: { top: sidebar.top, bottom: sidebar.bottom },
+    };
+  })()`], { json: true })).result;
+  assert.ok(pagedShell.contentScrollTop > 0);
+  assert.equal(pagedShell.documentScrollTop, 0);
+  assert.deepEqual(pagedShell.topbar, desktopShell.topbar);
+  assert.deepEqual(pagedShell.sidebar, desktopShell.sidebar);
+
+  const focusedReview = (await browser(["eval", `(() => {
+    const content = document.querySelector(".content");
+    const review = document.querySelector("[data-setup-review]");
+    review.hidden = false;
+    content.scrollTop = 0;
+    review.focus();
+    const contentRect = content.getBoundingClientRect();
+    const reviewRect = review.getBoundingClientRect();
+    return {
+      contentScrollTop: content.scrollTop,
+      documentScrollTop: document.scrollingElement.scrollTop,
+      visibleTop: reviewRect.top >= contentRect.top,
+      visibleBottom: reviewRect.top < contentRect.bottom,
+    };
+  })()`], { json: true })).result;
+  assert.ok(focusedReview.contentScrollTop > 0);
+  assert.equal(focusedReview.documentScrollTop, 0);
+  assert.equal(focusedReview.visibleTop, true);
+  assert.equal(focusedReview.visibleBottom, true);
+
+  await browser(["set", "viewport", "900", "760"]);
+  const compactShell = (await browser(["eval", `(() => ({
+    documentClientHeight: document.documentElement.clientHeight,
+    documentScrollHeight: document.documentElement.scrollHeight,
+    contentOverflow: getComputedStyle(document.querySelector(".content")).overflowY,
+    workspaceColumns: getComputedStyle(document.querySelector(".workspace")).gridTemplateColumns,
+    navigationColumns: getComputedStyle(document.querySelector(".sidebar nav")).gridTemplateColumns,
+  }))()`], { json: true })).result;
+  assert.ok(compactShell.documentScrollHeight > compactShell.documentClientHeight);
+  assert.equal(compactShell.contentOverflow, "visible");
+  assert.doesNotMatch(compactShell.workspaceColumns, /\s/);
+  assert.equal(compactShell.navigationColumns.trim().split(/\s+/).length, 4);
+
   await browser(["set", "viewport", "1200", "900"]);
   for (const mode of ["full", "compact"]) {
     const pageUrl = `http://127.0.0.1:${port}/${mode}`;

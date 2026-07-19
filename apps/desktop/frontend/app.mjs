@@ -14,6 +14,7 @@ import {
 } from "./forms.mjs";
 import {
   createReportDocumentUrls,
+  createWorkflowScrollMemory,
   focusSetupOutcome,
   installContextualHelp,
   locationLookupMessage,
@@ -39,6 +40,7 @@ export function mount(root, browserWindow) {
   let countdownAnchor = null;
   let countdownAnchorKey = null;
   let noteShortcutInitialized = false;
+  const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const elements = collectDesktopElements(root);
   const reportDocuments = createReportDocumentUrls(browserWindow);
@@ -155,6 +157,10 @@ export function mount(root, browserWindow) {
   installContextualHelp(root);
 
   const render = () => {
+    const workflowScrollTop = workflowScrollMemory.transition(
+      state.activeWorkflow,
+      mainContent.scrollTop,
+    );
     renderNavigation(elements, state);
     renderSetup(elements, state, root);
     const countdown = renderRun(elements, state, root, {
@@ -166,6 +172,7 @@ export function mount(root, browserWindow) {
     countdownAnchorKey = countdown.key;
     renderTransfer(elements, state);
     renderReport(elements, state, reportDocuments);
+    if (workflowScrollTop !== null) mainContent.scrollTop = workflowScrollTop;
   };
 
 
@@ -295,7 +302,10 @@ export function mount(root, browserWindow) {
   openCorrections.addEventListener("click", () => {
     entryPanel.open = true;
     correctionsPanel.open = true;
-    correctionsPanel.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    const behavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth";
+    correctionsPanel.scrollIntoView?.({ behavior, block: "start" });
   });
 
   evidenceForm.addEventListener("submit", async (event) => {

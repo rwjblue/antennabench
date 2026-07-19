@@ -44,6 +44,7 @@ import {
   WORKFLOWS,
   conductorActionAvailable,
   createCountdownAnchor,
+  createWorkflowScrollMemory,
   formatActiveRunTime,
   focusSetupOutcome,
   locationLookupMessage,
@@ -413,6 +414,30 @@ test("question cards preserve native keyboard controls and collapse on narrow sc
       && html.indexOf("data-setup-review") < html.indexOf("data-create-session"),
     "Create session follows the reviewed plan instead of competing with Review plan",
   );
+});
+
+test("desktop shell gives long workflows one bounded scroll owner", () => {
+  const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../frontend/app.mjs", import.meta.url), "utf8");
+  assert.match(css, /html, body \{[^}]*height: 100%[^}]*overflow: hidden/);
+  assert.match(css, /\.app-shell \{[^}]*grid-template-rows: 74px minmax\(0, 1fr\)[^}]*height: 100dvh[^}]*overflow: hidden/);
+  assert.match(css, /\.workspace \{[^}]*height: 100%[^}]*min-height: 0/);
+  assert.match(css, /\.content \{[^}]*min-height: 0[^}]*overflow-y: auto[^}]*overscroll-behavior-y: contain/);
+  assert.match(
+    css,
+    /@media \(max-width: 900px\)[\s\S]*html, body \{[^}]*height: auto[^}]*overflow: visible[\s\S]*\.content \{[^}]*overflow: visible/,
+  );
+  assert.match(css, /env\(safe-area-inset-top\)/);
+  assert.match(app, /prefers-reduced-motion: reduce/);
+});
+
+test("workflow scroll memory restores each panel without disturbing same-panel renders", () => {
+  const memory = createWorkflowScrollMemory("setup");
+  assert.equal(memory.transition("setup", 480), null);
+  assert.equal(memory.transition("run", 480), 0);
+  assert.equal(memory.transition("report", 225), 0);
+  assert.equal(memory.transition("setup", 90), 480);
+  assert.equal(memory.transition("run", 640), 225);
 });
 
 test("Active Run help stays grouped with its subject across responsive layouts", () => {

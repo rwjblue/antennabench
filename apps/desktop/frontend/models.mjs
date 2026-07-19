@@ -164,6 +164,19 @@ export function workflowFromHash(hash) {
   return WORKFLOWS.includes(workflow) ? workflow : "setup";
 }
 
+export function createWorkflowScrollMemory(initialWorkflow) {
+  let activeWorkflow = initialWorkflow;
+  const positions = new Map([[activeWorkflow, 0]]);
+  return {
+    transition(nextWorkflow, currentScrollTop) {
+      if (nextWorkflow === activeWorkflow) return null;
+      positions.set(activeWorkflow, currentScrollTop);
+      activeWorkflow = nextWorkflow;
+      return positions.get(activeWorkflow) ?? 0;
+    },
+  };
+}
+
 export function maidenheadGrid(latitude, longitude) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     throw new TypeError("Location coordinates must be finite numbers.");
