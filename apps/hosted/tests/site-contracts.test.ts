@@ -85,4 +85,22 @@ describe("public project site contracts", () => {
     expect(workflow).toContain("secrets.CLOUDFLARE_API_TOKEN");
     expect(workflow).not.toContain("pull_request:");
   });
+
+  it("publishes the WSPR and RBN choice as user-facing site guidance", () => {
+    const page = read("../src/pages/why-wspr.astro");
+    const header = read("../src/components/SiteHeader.astro");
+    const footer = read("../src/components/SiteFooter.astro");
+    const sitemap = read("../src/pages/sitemap.xml.ts");
+    const doc = read("../../../docs/why-not-just-use-rbn.md");
+
+    expect(page).toContain("receiver-census-summary.json");
+    expect(page).toContain("four-character Maidenhead grids");
+    expect(page).toContain("Use both networks, in sequence.");
+    expect(header).toContain('href="/why-wspr/"');
+    expect(footer).toContain('href="/why-wspr/"');
+    expect(sitemap).toContain('"/why-wspr/"');
+    expect(doc).toContain("https://antennabench.com/why-wspr/");
+    expect(doc).toContain("BEGIN GENERATED RECEIVER SNAPSHOT");
+    expect(doc).toContain("END GENERATED RECEIVER SNAPSHOT");
+  });
 });

@@ -1,47 +1,40 @@
 # Why not just use the Reverse Beacon Network?
 
-For a CW operator, the Reverse Beacon Network (RBN) is the obvious alternative
-to WSPR. It listens for the signal you actually transmit, reports quickly, and
-can be an excellent antenna-testing tool.
+The operator-facing answer now lives on the AntennaBench website:
 
-AntennaBench does **not** treat RBN as inferior. It uses WSPR as the default
-because the default experiment is intended to be repeatable across many paths
-and usable by operators who do not send CW. RBN remains valuable for
-controlled CW and RTTY work and, especially, for validating that a result still
-holds for the signal you actually use on the air.
+**[Why WSPR is the default—and where RBN wins](https://antennabench.com/why-wspr/)**
 
-> **Use RBN when the question is:** “Where is my real CW signal being copied?”
->
-> **Use WSPR when the question is:** “Across interleaved
-> [matched pairs](glossary.md#matched-pair-internally-paired-row), does antenna A
-> consistently produce stronger or more complete evidence than antenna B?”
+That page is the maintained public explanation for CW and RTTY operators. The
+short answer is that AntennaBench does **not** treat the Reverse Beacon Network
+(RBN) as inferior. WSPR is the default for a controlled, repeatable A/B
+experiment; RBN is often the better tool for checking how the CW or RTTY signal
+you actually operate is being copied.
 
-## They observe different things
+This document retains the generated snapshot boundary, interpretation notes,
+and regeneration instructions used by maintainers.
 
-An RBN CW [spot](glossary.md#spot) is the end of a recognition pipeline. A
-skimmer must hear an accepted keyword such as `CQ` or `TEST`, collect enough
-repetitions of the callsign, and decode sufficiently clean code. Those
-requirements are useful for finding stations that are calling CQ. They also mean
-that message construction, keying quality, callsign recognition, decoder state,
-and duplicate suppression can become variables in an antenna experiment.
+## Maintainer summary
 
-WSPR starts with a more standardized test signal. Its messages carry a callsign,
-locator, and reported power using a narrow-band, strongly coded waveform in
-two-minute sequences. The WSJT-X documentation describes WSPR as a mode for
-probing propagation paths and gives a nominal decoding threshold near -31 dB in
-a 2500 Hz reference bandwidth. That does not make WSPR “better radio.” It
-makes the stimulus easier to repeat while propagation and antennas are changing.
+- WSPR supplies a standardized weak-signal transmission and fixed two-minute
+  cadence that make frequent, counterbalanced antenna changes practical.
+- The measured WSPR receiver population and occupied four-character Maidenhead
+  grid footprint were larger than the active RBN population on 40, 20, and 15
+  meters.
+- RBN directly measures real CW and RTTY operating performance and is especially
+  useful for operational validation, beam-heading checks, and deliberately
+  selected skimmer paths.
+- A missing spot is not a zero in either network, and WSPR and RBN SNR values are
+  not interchangeable.
+- The strongest workflow is often WSPR for the controlled comparison, followed
+  by RBN validation in the mode actually used on the air.
 
-RBN is also not literally CW-only. Its standard spot feed carries CW and RTTY,
-and a separate feed carries FT8 reports. The practical limitation is that node
-capabilities vary, while the most uniform and familiar RBN path remains CW.
+## Current bounded snapshot
 
-## What the current receiver populations look like
-
-These figures come from bounded WSPR.live database queries over 24-hour,
-72-hour, and seven-day windows, plus a point-in-time pull of the RBN
-active-node endpoint. The WSPR windows and the RBN snapshot are the two
-populations being compared below.
+The WSPR values below are distinct reporting callsigns observed during bounded
+time windows. The RBN values are nodes online in one active-node snapshot and
+advertising the selected band. These populations are useful for understanding
+receiver opportunity, but they are not a calibrated sensitivity or availability
+comparison.
 
 <!-- BEGIN GENERATED RECEIVER SNAPSHOT -->
 **Snapshot interval:** WSPR data from `2026-07-10T17:00:00Z` through `2026-07-17T17:00:00Z`; RBN active nodes fetched near the end of that interval.
@@ -55,146 +48,31 @@ populations being compared below.
 The all-HF WSPR queries found 1,466 distinct reporter calls in 24 hours, 1,825 in 72 hours, and 2,436 in seven days. The RBN endpoint returned 207 active nodes in its point-in-time snapshot.
 <!-- END GENERATED RECEIVER SNAPSHOT -->
 
-![Receiver counts by band and time window](assets/why-not-rbn/receiver-counts-by-band.svg)
+## Interpretation guardrails
 
-The longer WSPR windows are not intended to make the largest possible number.
-They answer a different question: how many distinct reporting stations might be
-available during an experiment that lasts hours or days? The 24-hour column is
-the closest comparison to a current network snapshot, while the 72-hour and
-seven-day columns show the additional receivers that appear intermittently.
+The public page describes geographic footprint using occupied four-character
+Maidenhead grid squares, not a percentage of the globe covered. Grid occupancy
+reduces the effect of dense local receiver clusters, but it still does not
+measure continuous geographic coverage.
 
-The counts are not perfectly apples-to-apples:
+Additional cautions:
 
-- WSPR counts are distinct reporting callsigns seen during a time window.
-- RBN counts are nodes online in one active-node snapshot and advertising the
-  selected band.
-- A callsign can move or report more than one locator, so the maps use distinct
-  callsign/locator pairs while the headline table uses distinct callsigns.
+- A callsign can move or report more than one locator. Maps therefore use
+  distinct callsign/locator pairs while the headline table uses callsigns.
 - Neither count measures receiver quality, antenna performance, local noise, or
   continuous availability.
+- RBN duplicate suppression is part of the experiment design. For repeated CW
+  tests, move at least 300 Hz between transmissions or wait ten minutes.
+- Compare near-in-time A/B observations from the same receiver. Do not combine
+  RBN and WSPR SNR values as though they came from one calibrated meter.
 
-Even with those cautions, the pattern in this snapshot is clear: WSPR exposed a
-materially larger reporting population than RBN on 40, 20, and 15 meters, by
-factors of roughly 4.5× to 9× over the seven-day window.
-
-## Geography matters as much as the total
-
-A large receiver count does not guarantee useful geometry. Volunteer receivers
-cluster around population centers, and both networks leave sparse regions.
-The comparison below plots every recovered WSPR callsign/locator pair seen in
-the seven-day window and every RBN node advertising the corresponding band.
-Locations are plotted at the centers of reported Maidenhead locators, not exact
-station addresses.
-
-![WSPR and RBN receiver footprints on 40, 20, and 15 meters](assets/why-not-rbn/receiver-footprint-by-band.svg)
-
-Raw station count can also exaggerate dense local clusters. A second useful
-measure is the number of occupied four-character Maidenhead grid squares. It is
-still imperfect, but it asks whether the network reaches more distinct regions
-rather than merely containing more receivers in the same metropolitan areas.
-
-![Distinct four-character grid squares by band](assets/why-not-rbn/receiver-grid-footprint-by-band.svg)
-
-For closer inspection, open the
-[interactive band explorer](assets/why-not-rbn/receiver-network-band-explorer.html).
-It can switch among 40, 20, and 15 meters, select the WSPR time window, and show
-or hide either network.
-
-## Why this affects an antenna comparison
-
-### More paths reduce dependence on one receiver
-
-A single remote receiver can be unusually quiet, noisy, directional, overloaded,
-or temporarily misconfigured. A larger and more geographically varied reporting
-population creates more opportunities for matched pairs on the same
-[remote path](glossary.md#remote-path). AntennaBench still treats each path
-separately; it does not assume that 1,000 heterogeneous receivers form one
-calibrated instrument.
-
-### WSPR gives the experiment a fixed cadence
-
-AntennaBench can alternate antennas around WSPR's two-minute UTC sequence. That
-makes it practical to interleave A and B frequently, reducing the risk that one
-antenna is tested only before a band opening and the other only after it.
-
-RBN can also support a disciplined comparison, but repeated CW transmissions
-have an additional rule. RBN's own guidance says to move at least 300 Hz between
-transmissions or wait ten minutes; otherwise a node that already spotted the
-station may suppress the duplicate. This is not browser caching. It is a
-reporting rule that must be included in the experiment design.
-
-### A Missing Spot Is Not A Zero
-
-For both networks, no spot means only that no qualifying spot was observed. A
-signal may have been below threshold, covered by interference, rejected by the
-decoder, suppressed as a duplicate, lost during upload, or received by a station
-that was not monitoring that band. AntennaBench therefore discloses missing and
-unmatched observations rather than treating them as zero-strength signals.
-
-### The [SNR](glossary.md#snr) Numbers Are Not Interchangeable
-
-RBN and WSPR use different waveforms, decoders, bandwidth conventions, and
-reporting paths. An RBN SNR cannot be merged with a WSPR SNR as though both were
-readings from one calibrated meter. Within either network, the strongest design
-is a same-receiver, near-in-time A/B comparison with fixed power and settings.
-
-## Where RBN is the better tool
-
-RBN is often the better answer when the operating signal itself is part of the
-question:
-
-- checking where an actual CW CQ or contest exchange is reaching;
-- verifying that keying and message construction are decoded reliably;
-- making a quick beam-heading or band-opening check;
-- validating a WSPR result in the mode you actually operate; or
-- comparing antennas against a deliberately selected set of known skimmers.
-
-For a controlled RBN test, use a memory keyer, keep the message and power fixed,
-alternate antennas, record the exact frequencies, and either move at least 300 Hz
-between adjacent transmissions or wait ten minutes. Compare matched pairs of
-reports from the same skimmer over nearby times.
-
-## Where WSPR is the easier default
-
-WSPR is usually the easier default when the goal is a general-purpose antenna
-experiment:
-
-- the operator does not need to send CW;
-- the transmitted waveform, message, and nominal power are standardized;
-- the two-minute cadence supports frequent interleaving;
-- weak-path decoding increases the number of observable paths; and
-- the current public receiver population is substantially larger on the popular
-  HF bands measured here.
-
-WSPR is also better aligned with receive-side testing. Remote RBN spots describe
-how other stations receive your transmission; they cannot measure your own
-receive antenna. A local WSJT-X/WSPR decoding path can be switched with the
-antenna and recorded as receive evidence.
-
-## Practical choice
-
-| Question | Better starting point |
-| --- | --- |
-| “Where is my normal CW CQ being heard right now?” | RBN |
-| “Did changing beam heading improve my CW reports?” | RBN, with duplicate-suppression discipline |
-| “Which antenna performs better over many automatically reported paths?” | WSPR |
-| “I do not operate CW.” | WSPR, or another mode-specific reporting network |
-| “Which receive antenna decodes more weak signals at my station?” | Local WSPR/WSJT-X evidence |
-| “Does the WSPR result carry over to real CW?” | Use WSPR for the controlled test, then validate with RBN |
-
-## Bottom line
-
-“Why not just use RBN?” has a legitimate answer: sometimes you should. RBN is a
-direct and useful measurement of real CW operating performance. WSPR is the
-more convenient default for AntennaBench because it supplies a repeatable test
-signal, a fixed cadence, receive-side options, and—in the measured 40, 20, and
-15 meter snapshot—a much larger and broader reporting population.
-
-The strongest workflow is often to use both: WSPR for the controlled A/B
-experiment, then RBN for operational CW validation.
+The checked-in supporting figures remain available under
+[`docs/assets/why-not-rbn/`](assets/why-not-rbn/), including the receiver-count,
+receiver-footprint, occupied-grid, and interactive band-explorer views.
 
 ## Sources and reproducibility
 
+- [Public WSPR and RBN explanation](https://antennabench.com/why-wspr/)
 - [AntennaBench product overview](product.md)
 - [AntennaBench attribution and external-data policy](attribution.md)
 - [RBN: How to get spotted](https://www.reversebeacon.net/pages/How%2Bto%2Bget%2Bspotted%2Bby%2Bthe%2BRBN%2B44)
@@ -216,6 +94,6 @@ python3 tools/why-not-rbn/refresh_receiver_comparison.py --refresh
 ```
 
 to make four bounded WSPR.live queries, fetch the RBN active-node list once, and
-regenerate the snapshot, article table, static graphics, and interactive explorer.
-The refresh path sleeps between WSPR.live requests and keeps every query bounded
-by time and band.
+regenerate the snapshot, article table, static graphics, and interactive
+explorer. The refresh path sleeps between WSPR.live requests and keeps every
+query bounded by time and band.

@@ -106,6 +106,7 @@ for (const expected of [
   "index.html",
   "404.html",
   "how-it-works/index.html",
+  "why-wspr/index.html",
   "sample-report/index.html",
   "robots.txt",
   "sitemap.xml",
@@ -169,6 +170,20 @@ const home = readFileSync(join(outputRoot, "index.html"), "utf8");
 invariant(home.includes('class="skip-link"'), "Home page is missing its keyboard skip link");
 invariant(home.includes('aria-label="Main navigation"'), "Home page is missing its navigation label");
 invariant(home.includes('title="AntennaBench canonical sample evidence report"'), "Report preview is missing its accessible title");
+invariant(home.includes('href="/why-wspr/"'), "Home page is missing the WSPR and RBN explanation link");
+
+const whyWspr = readFileSync(join(outputRoot, "why-wspr", "index.html"), "utf8");
+for (const networkChoiceContract of [
+  "Why WSPR is the default",
+  "four-character Maidenhead grids",
+  "Use both networks, in sequence.",
+  "A missing spot is still not a zero.",
+]) {
+  invariant(
+    whyWspr.includes(networkChoiceContract),
+    `WSPR and RBN explanation is missing its content contract: ${networkChoiceContract}`,
+  );
+}
 
 const stylesheet = outputFiles
   .filter((path) => path.endsWith(".css"))
