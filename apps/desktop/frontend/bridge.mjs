@@ -6,6 +6,18 @@ export function invokeOpenManagedSession(invoke, locatorId) {
   return invoke("open_managed_session", { locatorId });
 }
 
+export function invokeListManagedSessions(invoke) {
+  return invoke("list_managed_sessions");
+}
+
+export function invokeRevealManagedSessionsDirectory(invoke) {
+  return invoke("reveal_managed_sessions_directory");
+}
+
+export function invokeRevealManagedSession(invoke, locatorId) {
+  return invoke("reveal_managed_session", { locatorId });
+}
+
 export function invokeReviewSessionSetup(invoke, draft) {
   return invoke("review_session_setup", { draft });
 }

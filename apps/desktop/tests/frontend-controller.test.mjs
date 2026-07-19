@@ -73,7 +73,16 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
 
   const created = harness({
     review_session_setup: { valid: true, reviewId: "review-3" },
-    create_session_from_review: { status: "created", session: session() },
+    create_session_from_review: {
+      status: "created",
+      session: session(),
+      managedLocation: {
+        locatorId: "locator-created",
+        bundleName: "test.session.antennabundle",
+        origin: "managed",
+        originLabel: "Saved by AntennaBench",
+      },
+    },
     refresh_active_session_report: {
       presentationId: 4,
       reportHtml: "<p>fresh</p>",
@@ -89,6 +98,7 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
   await created.controller.reviewSetup({ station: {} });
   await created.controller.createSession();
   assert.equal(created.controller.state.setupStatus, "created");
+  assert.equal(created.controller.state.managedLocationNotice.locatorId, "locator-created");
   assert.deepEqual(created.navigations, ["run"]);
   assert.deepEqual(created.calls.map(([command]) => command), [
     "review_session_setup",
@@ -135,6 +145,61 @@ test("controller profiles can be explicitly saved and deleted during setup", asy
     "delete_antenna_controller_profile",
     "antenna_controller_profiles",
   ]);
+});
+
+test("saved sessions load on entry, retain stale rows, and own sessionless routing", async () => {
+  const catalog = {
+    status: "complete",
+    entries: [{ locatorId: "locator-1", bundleName: "one.session.antennabundle" }],
+    diagnostics: [],
+  };
+  let loads = 0;
+  const run = harness({
+    list_managed_sessions: () => {
+      loads += 1;
+      if (loads === 2) throw new Error("temporary catalog failure");
+      return catalog;
+    },
+  });
+
+  await run.controller.selectWorkflow("saved");
+  assert.equal(run.controller.state.managedCatalog, catalog);
+  assert.equal(run.controller.state.catalogStatus, "ready");
+
+  await run.controller.loadManagedSessions();
+  assert.equal(run.controller.state.managedCatalog, catalog);
+  assert.equal(run.controller.state.catalogStatus, "error");
+  assert.match(run.controller.state.catalogError.detail, /temporary catalog failure/);
+
+  await run.controller.routeWorkflow("report");
+  assert.equal(run.controller.state.activeWorkflow, "saved");
+  assert.deepEqual(run.navigations, ["saved"]);
+});
+
+test("saved-session reveal actions use opaque locators and isolate row failures", async () => {
+  const state = initialState("saved");
+  state.catalogStatus = "ready";
+  state.managedCatalog = {
+    status: "complete",
+    entries: [{ locatorId: "locator-1", bundleName: "one.session.antennabundle" }],
+    diagnostics: [],
+  };
+  const revealed = harness({
+    reveal_managed_sessions_directory: undefined,
+    reveal_managed_session: undefined,
+  }, { state });
+  await revealed.controller.revealManagedSessionsDirectory();
+  await revealed.controller.revealManagedSession("locator-1");
+  assert.deepEqual(revealed.calls, [
+    ["reveal_managed_sessions_directory", undefined],
+    ["reveal_managed_session", { locatorId: "locator-1" }],
+  ]);
+
+  const failed = harness({ open_managed_session: new Error("bundle moved") }, { state });
+  await failed.controller.openManagedSession("locator-1", "report");
+  assert.equal(failed.controller.state.managedCatalog, state.managedCatalog);
+  assert.equal(failed.controller.state.catalogRowError.locatorId, "locator-1");
+  assert.match(failed.controller.state.catalogRowError.error.detail, /bundle moved/);
 });
 
 test("open cancellation, failure, and success retain focused state and refresh reports", async () => {

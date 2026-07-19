@@ -12,10 +12,13 @@ import {
   invokeImportActiveSessionRbn,
   invokeImportActiveSessionWsprLive,
   invokeLoadStationPreferences,
+  invokeListManagedSessions,
   invokeMutateSessionConductor,
   invokeOpenManagedSession,
   invokeOpenSessionFromAnotherLocation,
   invokeRefreshActiveSessionReport,
+  invokeRevealManagedSession,
+  invokeRevealManagedSessionsDirectory,
   invokeReviewSessionSetup,
   invokeRunSessionAntennaController,
   invokeSaveAntennaControllerProfile,
@@ -35,6 +38,8 @@ import {
   beginConductorLoad,
   beginConductorMutation,
   beginExportSession,
+  beginManagedCatalogLoad,
+  beginManagedReveal,
   beginOpenSession,
   beginReportExport,
   beginReportRefresh,
@@ -52,6 +57,10 @@ import {
   exportSessionFailed,
   exportSessionSucceeded,
   initialState,
+  managedCatalogLoadFailed,
+  managedCatalogLoadSucceeded,
+  managedRevealFailed,
+  managedRevealSucceeded,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
@@ -129,7 +138,7 @@ export function createDesktopController(options = {}) {
       await controller.refreshReport();
     }
   };
-  const openSession = async ({ source, intent = null, open }) => {
+  const openSession = async ({ source, intent = null, locatorId = null, open }) => {
     if (
       state.openStatus === "loading"
       || state.reportStatus === "refreshing"
@@ -137,7 +146,7 @@ export function createDesktopController(options = {}) {
       || reportPollInFlight
       || conductorPollInFlight
     ) return state;
-    commit(beginOpenSession(state, source, intent));
+    commit(beginOpenSession(state, source, intent, locatorId));
     let destination = null;
     try {
       const outcome = await open();
@@ -301,7 +310,7 @@ export function createDesktopController(options = {}) {
         if (outcome.status === "cancelled") {
           commit(setupCreationCancelled(state));
         } else if (outcome.status === "created" && outcome.session) {
-          commit(setupCreationSucceeded(state, outcome.session));
+          commit(setupCreationSucceeded(state, outcome.session, outcome.managedLocation ?? null));
         } else {
           throw unexpectedResponse();
         }
@@ -322,6 +331,7 @@ export function createDesktopController(options = {}) {
       return openSession({
         source: "managed",
         intent,
+        locatorId,
         open: () => invokeOpenManagedSession(invoke(), locatorId),
       });
     },
@@ -331,6 +341,41 @@ export function createDesktopController(options = {}) {
         source: "external",
         open: () => invokeOpenSessionFromAnotherLocation(invoke()),
       });
+    },
+
+    async loadManagedSessions() {
+      if (["loading", "refreshing"].includes(state.catalogStatus)) return state;
+      commit(beginManagedCatalogLoad(state));
+      try {
+        commit(managedCatalogLoadSucceeded(state, await invokeListManagedSessions(invoke())));
+      } catch (error) {
+        commit(managedCatalogLoadFailed(state, error));
+      }
+      return state;
+    },
+
+    async revealManagedSessionsDirectory() {
+      if (state.catalogRowOperation) return state;
+      commit(beginManagedReveal(state));
+      try {
+        await invokeRevealManagedSessionsDirectory(invoke());
+        commit(managedRevealSucceeded(state));
+      } catch (error) {
+        commit(managedRevealFailed(state, error));
+      }
+      return state;
+    },
+
+    async revealManagedSession(locatorId) {
+      if (state.catalogRowOperation) return state;
+      commit(beginManagedReveal(state, locatorId));
+      try {
+        await invokeRevealManagedSession(invoke(), locatorId);
+        commit(managedRevealSucceeded(state));
+      } catch (error) {
+        commit(managedRevealFailed(state, error));
+      }
+      return state;
     },
 
     async exportSession() {
@@ -542,13 +587,18 @@ export function createDesktopController(options = {}) {
     async selectWorkflow(workflow) {
       commit(selectWorkflow(state, workflow));
       effects.navigate(state.activeWorkflow);
+      if (state.activeWorkflow === "saved") await controller.loadManagedSessions();
       if (state.activeWorkflow === "run" && state.session) await controller.refreshConductor();
       if (state.activeWorkflow === "report" && state.session) await controller.refreshReport(true);
       return state;
     },
 
     async routeWorkflow(workflow) {
-      commit(selectWorkflow(state, workflow));
+      const destination = !state.session && ["run", "transfer", "report"].includes(workflow)
+        ? "saved"
+        : workflow;
+      commit(selectWorkflow(state, destination));
+      if (state.activeWorkflow === "saved") await controller.loadManagedSessions();
       if (state.activeWorkflow === "run" && state.session) await controller.refreshConductor();
       if (state.activeWorkflow === "report" && state.session) await controller.refreshReport(true);
       return state;
@@ -571,6 +621,9 @@ export function createDesktopController(options = {}) {
     },
 
     refreshOnReturn() {
+      if (effects.isVisible() && state.activeWorkflow === "saved") {
+        void controller.loadManagedSessions();
+      }
       if (effects.isVisible() && state.activeWorkflow === "run" && state.session) {
         void controller.refreshConductor(true, true);
       }
@@ -612,7 +665,7 @@ export function createDesktopController(options = {}) {
       cleanups.push(() => effects.clearInterval(countdownTimer));
       cleanups.push(effects.onFocus(() => controller.refreshOnReturn()));
       cleanups.push(effects.onVisibilityChange(() => controller.refreshOnReturn()));
-      cleanups.push(effects.onHashChange((workflow) => void controller.routeWorkflow(workflow)));
+      cleanups.push(effects.onHashChange((workflow) => controller.routeWorkflow(workflow)));
       return controller;
     },
 

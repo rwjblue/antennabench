@@ -15,7 +15,7 @@
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#setup" aria-label="AntennaBench home">
+        <a class="brand" href="#saved" aria-label="AntennaBench home">
           <img src="mark.svg" alt="" width="40" height="40" />
           <span>
             <strong>AntennaBench</strong>
@@ -27,6 +27,12 @@
 
       <div class="workspace">
         <aside class="sidebar">
+          <nav class="app-navigation" aria-label="Application">
+            <button class="nav-item app-nav-item" type="button" data-workflow="saved">
+              <span class="step" aria-hidden="true">⌂</span>
+              <span><strong>Saved sessions</strong><small>Open or resume an experiment</small></span>
+            </button>
+          </nav>
           <p class="eyebrow">Session workflow</p>
           <nav aria-label="Session workflow">
             <button class="nav-item" type="button" data-workflow="setup">
@@ -54,6 +60,35 @@
         </aside>
 
         <main class="content" tabindex="-1">
+          <section class="workflow-panel" data-panel="saved" aria-labelledby="saved-title">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Your experiment library</p><h1 id="saved-title">Saved sessions</h1></div>
+              <span class="status-chip muted" data-saved-status>Loading</span>
+            </div>
+            <p class="lede">Sessions created by AntennaBench are saved automatically. Continue active work, inspect a committed report, or open a portable session from another location.</p>
+            <div class="saved-header-actions">
+              <button class="primary-action" type="button" data-saved-new>New session</button>
+              <button type="button" data-saved-open-external>Open from another location…</button>
+              <button type="button" data-saved-reveal-folder>Reveal sessions folder</button>
+              <button type="button" data-saved-refresh>Refresh</button>
+            </div>
+            <div class="open-feedback" data-saved-feedback hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div><strong data-saved-feedback-message></strong><p data-saved-feedback-detail></p></div>
+            </div>
+            <div class="saved-empty" data-saved-empty hidden>
+              <span class="empty-icon" aria-hidden="true">◌</span>
+              <h2>No saved sessions yet</h2>
+              <p>New sessions are saved here automatically. Create an experiment or open a portable session from another location.</p>
+              <div class="saved-empty-actions"><button type="button" data-saved-empty-new>New session</button><button type="button" data-saved-empty-open>Open from another location…</button></div>
+            </div>
+            <div class="saved-catalog" data-saved-catalog aria-live="polite"></div>
+            <section class="saved-help" aria-labelledby="saved-help-title">
+              <h2 id="saved-help-title">Working with a saved session</h2>
+              <p><strong>Start, Continue, or Resume</strong> opens nonterminal work in Active run. Add notes and correct recorded actions there; those changes append evidence rather than rewriting history. Setup and defaults apply to new experiments. A started session’s station, antennas, and plan are historical, while ended and abandoned sessions remain terminal reports.</p>
+            </section>
+          </section>
+
           <section class="workflow-panel" data-panel="setup" aria-labelledby="setup-title">
             <div class="panel-heading">
               <div><p class="eyebrow">Prepare an experiment</p><h1 id="setup-title">Session setup</h1></div>
@@ -261,10 +296,15 @@
             </div>
             <p class="lede">Follow one next action at a time. AntennaBench will call out antenna changes and the WSJT-X transmit/receive setting required for each WSPR period.</p>
 
+            <div class="open-feedback" data-managed-location-notice hidden role="status" aria-live="polite">
+              <span class="feedback-mark" aria-hidden="true"></span>
+              <div><strong data-managed-location-message></strong><p data-managed-location-detail></p><button type="button" data-managed-location-reveal>Reveal in Finder</button></div>
+            </div>
+
             <div class="empty-state" data-conductor-empty>
               <span class="empty-icon" aria-hidden="true">◌</span>
               <h2>No active session</h2>
-              <p>Create a validated session or open one from Import / export, then return here.</p>
+              <p>Create a new experiment or choose one from Saved sessions, then return here.</p>
               <button type="button" data-conductor-refresh>Load active session</button>
             </div>
 
@@ -409,14 +449,9 @@
             </div>
             <p class="lede">Bundle operations will stay behind narrow Rust services. The webview receives no general filesystem authority.</p>
             <div class="action-list">
-              <article><div><span>Open</span><h2>Choose a session bundle</h2><p>Normalize, validate, and prepare a local report without changing the source.</p></div><button class="primary-action" type="button" data-open-session>Choose bundle</button></article>
               <article><div><span>Recovery import</span><h2>Add a saved WSPR.live response</h2><p>If automatic acquisition was interrupted, select a <a href="https://wspr.live/" target="_blank" rel="noreferrer">WSPR.live</a> JSON response for the active session. AntennaBench validates it against the session before importing any spots.</p></div><button class="secondary-action" type="button" data-import-wspr-live disabled>Open a running session first</button></article>
               <article><div><span>Import evidence</span><h2>Add an RBN daily ZIP archive</h2><p>Select an official <a href="https://www.reversebeacon.net/raw_data/" target="_blank" rel="noreferrer">Reverse Beacon Network daily archive</a>. AntennaBench performs no download: it filters the selected local ZIP to the session callsign, experiment window, and bands, then preserves the exact ZIP in the bundle.</p></div><button class="secondary-action" type="button" data-import-rbn disabled>Open a session first</button></article>
               <article><div><span>Lossless export</span><h2>Export the complete session bundle</h2><p>Preserve the original durable files and attachments losslessly. This is the authoritative session record.</p></div><button class="secondary-action" type="button" data-export-session disabled>Open a bundle first</button></article>
-            </div>
-            <div class="open-feedback" data-open-feedback hidden role="status" aria-live="polite">
-              <span class="feedback-mark" aria-hidden="true"></span>
-              <div><strong data-feedback-message></strong><p data-feedback-detail></p></div>
             </div>
             <div class="open-feedback" data-export-feedback hidden role="status" aria-live="polite">
               <span class="feedback-mark" aria-hidden="true"></span>
@@ -435,7 +470,7 @@
             </div>
             <div class="report-placeholder" data-report-placeholder>
               <div class="report-bars" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-              <div><h2>Open a valid session to view its report</h2><p>Choose a directory bundle from Import / export. AntennaBench reads, normalizes, validates, analyzes, and renders it locally.</p></div>
+              <div><h2>Choose a saved session to view its report</h2><p>Open Saved sessions to select a local experiment or a portable session from another location.</p></div>
             </div>
             <div class="report-viewer" data-report-viewer hidden>
               <div class="report-context">

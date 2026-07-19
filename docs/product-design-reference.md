@@ -269,6 +269,19 @@ to Reports with an explanation. No opening path starts or resumes a session;
 those remain explicit operator actions. Ended and abandoned sessions are
 terminal, and schema-v1 sources remain read-only.
 
+Saved sessions is the app-level home and the startup fallback when a session-only
+destination is requested before any session is active. Its
+header keeps new-session, external-open, managed-folder reveal, and refresh
+actions available without mixing session opening into Import / export. Each
+managed entry leads with callsign, creation time, lifecycle, compact immutable
+plan facts, origin, and bundle name. Correctable evidence remains in a details
+disclosure; duplicate session identities are warnings on distinct rows, not a
+merge. Lifecycle-specific work/report actions, problem-only detail and reveal
+actions, row-local failures, partial results, and stale-list refresh failures
+keep catalog truth visible without converting catalog metadata into authority.
+Successful creation also identifies the managed location on Run and offers a
+Finder reveal action.
+
 The routine presentation shows one prominent next action. It says whether to
 keep or switch the named antenna and, independently, whether to turn WSJT-X
 Enable Tx on or off before pressing ready. While a WSPR period is active, the

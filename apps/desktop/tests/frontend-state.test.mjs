@@ -17,10 +17,13 @@ import {
   invokeImportActiveSessionRbn,
   invokeImportActiveSessionWsprLive,
   invokeLoadStationPreferences,
+  invokeListManagedSessions,
   invokeMutateSessionConductor,
   invokeOpenManagedSession,
   invokeOpenSessionFromAnotherLocation,
   invokeRefreshActiveSessionReport,
+  invokeRevealManagedSession,
+  invokeRevealManagedSessionsDirectory,
   invokeReviewSessionSetup,
   invokeRunSessionAntennaController,
   invokeSaveAntennaControllerProfile,
@@ -55,6 +58,7 @@ import {
   releaseReportFrame,
   sessionOpenDestination,
   setupPlanEstimate,
+  startupWorkflowFromHash,
   updateReportFrame,
   viewModel,
   workflowFromHash,
@@ -65,6 +69,8 @@ import {
   beginConductorLoad,
   beginConductorMutation,
   beginExportSession,
+  beginManagedCatalogLoad,
+  beginManagedReveal,
   beginOpenSession,
   beginReportExport,
   beginReportRefresh,
@@ -82,6 +88,10 @@ import {
   exportSessionFailed,
   exportSessionSucceeded,
   initialState,
+  managedCatalogLoadFailed,
+  managedCatalogLoadSucceeded,
+  managedRevealFailed,
+  managedRevealSucceeded,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
@@ -170,12 +180,19 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
   ]);
 });
 
-test("the shell starts in session setup", () => {
+test("the shell starts in saved sessions", () => {
   assert.deepEqual(initialState(), {
-    activeWorkflow: "setup",
+    activeWorkflow: "saved",
     openStatus: "idle",
     openSource: null,
     openIntent: null,
+    catalogStatus: "idle",
+    managedCatalog: null,
+    catalogError: null,
+    catalogRowOperation: null,
+    catalogRowError: null,
+    managedLocationNotice: null,
+    activeManagedLocatorId: null,
     session: null,
     reportPresentationId: 0,
     reportStatus: "idle",
@@ -684,7 +701,13 @@ test("setup creation cancellation, failure, and success preserve coherent state"
     bundleName: "created.session.antennabundle",
     reportHtml: "<!doctype html>",
   };
-  const created = setupCreationSucceeded(creating, session);
+  const managedLocation = {
+    locatorId: "locator-created",
+    bundleName: session.bundleName,
+    origin: "managed",
+    originLabel: "Saved by AntennaBench",
+  };
+  const created = setupCreationSucceeded(creating, session, managedLocation);
 
   assert.equal(cancelled.setupStatus, "reviewed");
   assert.equal(cancelled.setupReview.reviewId, "review-1");
@@ -695,6 +718,8 @@ test("setup creation cancellation, failure, and success preserve coherent state"
   assert.equal(created.session, session);
   assert.equal(created.openStatus, "ready");
   assert.equal(created.reportPresentationId, 1);
+  assert.equal(created.managedLocationNotice, managedLocation);
+  assert.equal(created.activeManagedLocatorId, "locator-created");
 });
 
 test("the conductor retains its coherent view through refresh, mutation, and typed failure", () => {
@@ -1167,7 +1192,7 @@ test("setup native errors remain typed and editable", () => {
 });
 
 test("opening a session transitions through loading and ready", () => {
-  const loading = beginOpenSession(initialState("transfer"), "managed", "work");
+  const loading = beginOpenSession(initialState("transfer"), "managed", "work", "locator-1");
   const session = { sessionId: "session-1", reportHtml: "<!doctype html>" };
   const ready = openSessionSucceeded(loading, session, "run");
 
@@ -1178,6 +1203,7 @@ test("opening a session transitions through loading and ready", () => {
   assert.equal(ready.activeWorkflow, "run");
   assert.equal(ready.session, session);
   assert.equal(ready.reportPresentationId, 1);
+  assert.equal(ready.activeManagedLocatorId, "locator-1");
 });
 
 test("fresh lifecycle and explicit intent determine the opening destination", () => {
@@ -1442,6 +1468,34 @@ test("RBN import preserves focused state and refreshes the schema-v3 summary", (
   assert.equal(failed.session, active.session);
 });
 
+test("managed catalog refresh and reveal transitions retain useful stale data", () => {
+  const catalog = {
+    status: "complete",
+    entries: [{ locatorId: "locator-1", bundleName: "one.session.antennabundle" }],
+    diagnostics: [],
+  };
+  const loading = beginManagedCatalogLoad(initialState());
+  const ready = managedCatalogLoadSucceeded(loading, catalog);
+  const refreshing = beginManagedCatalogLoad(ready);
+  const stale = managedCatalogLoadFailed(refreshing, new Error("catalog offline"));
+  const revealing = beginManagedReveal(stale, "locator-1");
+  const revealFailed = managedRevealFailed(revealing, new Error("cannot reveal"));
+
+  assert.equal(loading.catalogStatus, "loading");
+  assert.equal(ready.catalogStatus, "ready");
+  assert.equal(refreshing.catalogStatus, "refreshing");
+  assert.equal(stale.managedCatalog, catalog);
+  assert.match(stale.catalogError.detail, /catalog offline/);
+  assert.deepEqual(revealing.catalogRowOperation, {
+    locatorId: "locator-1",
+    kind: "revealing",
+  });
+  assert.equal(revealFailed.managedCatalog, catalog);
+  assert.equal(revealFailed.catalogRowError.locatorId, "locator-1");
+  assert.match(revealFailed.catalogRowError.error.detail, /cannot reveal/);
+  assert.equal(managedRevealSucceeded(revealing).catalogRowOperation, null);
+});
+
 test("the frontend invokes only the narrow session commands", async () => {
   const calls = [];
   const invoke = async (...args) => {
@@ -1455,6 +1509,9 @@ test("the frontend invokes only the narrow session commands", async () => {
 
   const result = await invokeOpenSessionFromAnotherLocation(invoke);
   const managed = await invokeOpenManagedSession(invoke, "locator-1");
+  const catalog = await invokeListManagedSessions(invoke);
+  const revealedFolder = await invokeRevealManagedSessionsDirectory(invoke);
+  const revealedSession = await invokeRevealManagedSession(invoke, "locator-1");
   const report = await invokeActiveSessionReport(invoke);
   const exported = await invokeExportSession(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
@@ -1465,6 +1522,9 @@ test("the frontend invokes only the narrow session commands", async () => {
   assert.deepEqual(calls, [
     ["open_session_bundle"],
     ["open_managed_session", { locatorId: "locator-1" }],
+    ["list_managed_sessions"],
+    ["reveal_managed_sessions_directory"],
+    ["reveal_managed_session", { locatorId: "locator-1" }],
     ["active_session_report"],
     ["export_active_session"],
     ["refresh_active_session_report"],
@@ -1474,6 +1534,9 @@ test("the frontend invokes only the narrow session commands", async () => {
   ]);
   assert.equal(result.status, "opened");
   assert.equal(managed.status, "exported");
+  assert.equal(catalog.status, "exported");
+  assert.equal(revealedFolder.status, "exported");
+  assert.equal(revealedSession.status, "exported");
   assert.equal(report, "<!doctype html>");
   assert.equal(exported.status, "exported");
   assert.equal(refreshed.status, "exported");
@@ -1490,7 +1553,7 @@ test("each declared workflow can become active without mutating prior state", ()
     state = selectWorkflow(state, workflow);
 
     assert.equal(state.activeWorkflow, workflow);
-    assert.equal(previous.activeWorkflow, WORKFLOWS[WORKFLOWS.indexOf(workflow) - 1] ?? "setup");
+    assert.equal(previous.activeWorkflow, WORKFLOWS[WORKFLOWS.indexOf(workflow) - 1] ?? "saved");
   }
 });
 
@@ -1506,10 +1569,18 @@ test("unknown workflow transitions are rejected", () => {
   );
 });
 
-test("hash routing falls back to setup for unsupported values", () => {
+test("hash routing falls back to saved sessions for unsupported values", () => {
   assert.equal(workflowFromHash("#transfer"), "transfer");
-  assert.equal(workflowFromHash("#settings"), "setup");
-  assert.equal(workflowFromHash(""), "setup");
+  assert.equal(workflowFromHash("#settings"), "saved");
+  assert.equal(workflowFromHash(""), "saved");
+});
+
+test("session-only startup hashes fall back to Saved sessions without an active session", () => {
+  assert.equal(startupWorkflowFromHash("#run"), "saved");
+  assert.equal(startupWorkflowFromHash("#transfer"), "saved");
+  assert.equal(startupWorkflowFromHash("#report"), "saved");
+  assert.equal(startupWorkflowFromHash("#setup"), "setup");
+  assert.equal(startupWorkflowFromHash("#saved"), "saved");
 });
 
 test("the view model marks exactly one workflow active", () => {

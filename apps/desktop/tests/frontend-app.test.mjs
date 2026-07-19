@@ -81,7 +81,8 @@ test("controller manual review keeps native checkbox, label, and help semantics"
   assert.match(DESKTOP_CSS, /\.authority-confirmation:has\(input:focus-visible\)/);
 });
 
-test("the headless desktop completes location, review, and creation through mounted DOM events", async () => {
+test("the headless desktop relaunches into Saved sessions before creating a managed session", async () => {
+  window.history.replaceState(null, "", "#saved");
   const elements = loadDesktopDocument();
   elements.setupReviewPanel.scrollIntoView = vi.fn();
   const reportDocumentUrls = [];
@@ -141,22 +142,81 @@ test("the headless desktop completes location, review, and creation through moun
     reportHtml: "<!doctype html><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>body{color:#172033}</style><p>headless report</p>",
     revision: 1,
   };
+  let managedOpenAttempts = 0;
+  let reportRefreshes = 0;
   const responses = {
     load_station_preferences: null,
     antenna_controller_profiles: { inputStyle: "one_line", profiles: [] },
+    list_managed_sessions: {
+      status: "complete",
+      diagnostics: [],
+      entries: [{
+        locatorId: "locator-existing",
+        bundleName: "existing.session.antennabundle",
+        origin: "managed",
+        originLabel: "Saved by AntennaBench",
+        status: "available",
+        sessionId: "session-existing",
+        callsign: "W1AW",
+        createdAt: "2026-07-17T14:00:00Z",
+        lifecycle: "ended",
+        schemaVersion: 5,
+        revision: 9,
+        mode: "tx_focused",
+        bands: ["20m"],
+        antennaLabels: ["Dipole", "Vertical"],
+        antennaCount: 2,
+        sameSessionIdCount: 1,
+        problems: [],
+      }],
+    },
     request_station_location: {
       status: "success",
       latitude: 42.3601,
       longitude: -71.0589,
     },
     review_session_setup: review,
-    create_session_from_review: { status: "created", session },
-    refresh_active_session_report: {
-      presentationId: 1,
-      reportHtml: session.reportHtml,
-      revision: 1,
-      lifecycle: "running",
-      completeness: "full_detail",
+    create_session_from_review: {
+      status: "created",
+      session,
+      managedLocation: {
+        locatorId: "locator-headless",
+        bundleName: session.bundleName,
+        origin: "managed",
+        originLabel: "Saved by AntennaBench",
+      },
+    },
+    open_managed_session: () => {
+      managedOpenAttempts += 1;
+      if (managedOpenAttempts === 2) throw new Error("The saved bundle moved.");
+      return {
+        status: "opened",
+        session: {
+          ...session,
+          bundleName: "existing.session.antennabundle",
+          lifecycle: "ended",
+          revision: 9,
+        },
+      };
+    },
+    reveal_managed_session: undefined,
+    refresh_active_session_report: () => {
+      reportRefreshes += 1;
+      return reportRefreshes === 1
+        ? {
+          presentationId: 1,
+          reportHtml: "<p>existing saved report</p>",
+          revision: 9,
+          lifecycle: "ended",
+          completeness: "full_detail",
+        }
+        : {
+          presentationId: 2,
+          reportHtml: session.reportHtml,
+          revision: 1,
+          lifecycle: "running",
+          completeness: "full_detail",
+        };
     },
     active_session_conductor: conductorView({
       lifecycle: "ready",
@@ -188,7 +248,8 @@ test("the headless desktop completes location, review, and creation through moun
   const invoke = vi.fn(async (command, payload) => {
     calls.push([command, payload]);
     assert.ok(command in responses, `unexpected native command ${command}`);
-    return responses[command];
+    const response = responses[command];
+    return typeof response === "function" ? response(payload, calls) : response;
   });
   window.__TAURI__ = { core: { invoke } };
   const uncaught = [];
@@ -197,6 +258,31 @@ test("the headless desktop completes location, review, and creation through moun
   window.addEventListener("unhandledrejection", recordError);
   await import("../frontend/app.mjs?headless-composition");
   try {
+    await vi.waitFor(() => {
+      assert.equal(document.querySelector('[data-panel="saved"]').hidden, false);
+      assert.match(elements.savedCatalog.textContent, /W1AW/);
+      assert.match(elements.savedCatalog.textContent, /View report/);
+    });
+    elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
+    await vi.waitFor(() => {
+      assert.equal(window.location.hash, "#report");
+      assert.ok(calls.some(([command, payload]) => command === "open_managed_session"
+        && payload.locatorId === "locator-existing"));
+      assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-1");
+    });
+    elements.navigation.find((button) => button.dataset.workflow === "saved").click();
+    await vi.waitFor(() => assert.equal(window.location.hash, "#saved"));
+    elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
+    await vi.waitFor(() => {
+      assert.match(elements.savedCatalog.textContent, /saved bundle moved/);
+      assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-1");
+    });
+    elements.savedNew.click();
+    await vi.waitFor(() => {
+      assert.equal(window.location.hash, "#setup");
+      assert.equal(document.activeElement.id, "setup-title");
+    });
+
     const callsign = elements.setupForm.querySelector('[data-setup-field="callsign"]');
     const grid = elements.setupForm.querySelector('[data-setup-field="grid"]');
     callsign.value = "n1rwj";
@@ -287,8 +373,15 @@ test("the headless desktop completes location, review, and creation through moun
       assert.match(elements.setupStatus.textContent, /Session ready/);
     });
     assert.ok(calls.some(([command]) => command === "create_session_from_review"));
-    assert.deepEqual(reportDocumentUrls, ["blob:headless-report-1"]);
-    assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-1");
+    assert.equal(elements.managedLocationNotice.hidden, false);
+    assert.match(elements.managedLocationNotice.textContent, /Session saved in AntennaBench Sessions/);
+    elements.managedLocationReveal.click();
+    await vi.waitFor(() => {
+      assert.ok(calls.some(([command, payload]) => command === "reveal_managed_session"
+        && payload.locatorId === "locator-headless"));
+    });
+    assert.deepEqual(reportDocumentUrls, ["blob:headless-report-1", "blob:headless-report-2"]);
+    assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-2");
 
     const start = elements.lifecycleButtons.find(
       (button) => button.dataset.conductorAction === "start",

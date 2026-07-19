@@ -1,4 +1,4 @@
-export const WORKFLOWS = Object.freeze(["setup", "run", "transfer", "report"]);
+export const WORKFLOWS = Object.freeze(["saved", "setup", "run", "transfer", "report"]);
 export const OPEN_INTENTS = Object.freeze(["work", "report"]);
 
 const WORK_LIFECYCLES = Object.freeze(["ready", "running", "interrupted"]);
@@ -178,7 +178,12 @@ export function installContextualHelp(root) {
 
 export function workflowFromHash(hash) {
   const workflow = hash.replace(/^#/, "");
-  return WORKFLOWS.includes(workflow) ? workflow : "setup";
+  return WORKFLOWS.includes(workflow) ? workflow : "saved";
+}
+
+export function startupWorkflowFromHash(hash) {
+  const requested = workflowFromHash(hash);
+  return ["run", "transfer", "report"].includes(requested) ? "saved" : requested;
 }
 
 export function createWorkflowScrollMemory(initialWorkflow) {

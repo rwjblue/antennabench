@@ -24,6 +24,168 @@ export function renderNavigation(elements, state) {
   }
 }
 
+export function renderSavedSessions(elements, state, root) {
+  const {
+    savedStatus, savedRefresh, savedRevealFolder, savedFeedback, savedFeedbackMessage,
+    savedFeedbackDetail, savedEmpty, savedCatalog,
+  } = elements;
+  const loading = ["loading", "refreshing"].includes(state.catalogStatus);
+  const entries = state.managedCatalog?.entries ?? [];
+  savedStatus.textContent = state.catalogStatus === "loading"
+    ? "Loading"
+    : state.catalogStatus === "refreshing"
+      ? "Refreshing"
+      : state.managedCatalog?.status === "incomplete"
+        ? "Partial list"
+        : state.catalogStatus === "error" && !state.managedCatalog
+          ? "Unavailable"
+          : `${entries.length} saved`;
+  savedStatus.classList.toggle("muted", state.catalogStatus !== "ready");
+  savedRefresh.disabled = loading;
+  savedRefresh.textContent = loading ? "Refreshing…" : "Refresh";
+  savedRevealFolder.disabled = state.catalogRowOperation !== null;
+  savedEmpty.hidden = !(
+    state.catalogStatus === "ready"
+    && state.managedCatalog?.status === "complete"
+    && entries.length === 0
+  );
+
+  const catalogMessage = state.catalogError
+    ? { kind: "error", ...state.catalogError }
+    : state.managedCatalog?.status === "incomplete"
+      ? {
+        kind: "error",
+        message: "Only part of Saved sessions could be inspected.",
+        detail: state.managedCatalog.diagnostics?.map((item) => item.message).join(" ")
+          || "Refresh after reducing the number or size of saved session entries.",
+      }
+      : openFeedbackModel(state);
+  renderFeedback(savedFeedback, savedFeedbackMessage, savedFeedbackDetail, catalogMessage);
+
+  savedCatalog.setAttribute("aria-busy", String(loading));
+  savedCatalog.replaceChildren(...entries.map((entry) => renderSavedRow(root, state, entry)));
+}
+
+function renderSavedRow(root, state, entry) {
+  const row = root.createElement("article");
+  row.className = `saved-row saved-row-${entry.status}`;
+  row.dataset.locatorId = entry.locatorId ?? "";
+  const heading = root.createElement("div");
+  heading.className = "saved-row-heading";
+  const identity = root.createElement("div");
+  const callsign = root.createElement("h2");
+  callsign.textContent = entry.callsign || entry.bundleName;
+  const created = root.createElement("p");
+  created.textContent = entry.createdAt
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.createdAt))
+    : "Creation time unavailable";
+  identity.append(callsign, created);
+  const lifecycle = root.createElement("span");
+  lifecycle.className = "status-chip saved-lifecycle";
+  lifecycle.textContent = managedStatusLabel(entry);
+  heading.append(identity, lifecycle);
+
+  const summary = root.createElement("p");
+  summary.className = "saved-plan-summary";
+  const bands = (entry.bands ?? []).map(formatBand).join(", ") || "Band unavailable";
+  const mode = entry.mode ? humanizeIdentifier(entry.mode).replace("Ab", "A/B") : "Plan unavailable";
+  const antennas = entry.antennaCount === null || entry.antennaCount === undefined
+    ? "antenna count unavailable"
+    : `${entry.antennaCount} ${entry.antennaCount === 1 ? "antenna" : "antennas"}`;
+  summary.textContent = `${bands} · ${mode} · ${antennas}`;
+  const meta = root.createElement("p");
+  meta.className = "saved-row-meta";
+  meta.textContent = `${entry.originLabel ?? "Saved by AntennaBench"} · ${entry.bundleName}`;
+
+  const duplicate = root.createElement("p");
+  duplicate.className = "saved-warning";
+  duplicate.textContent = "Another saved bundle has the same session identity.";
+  duplicate.hidden = !(entry.sameSessionIdCount > 1);
+
+  const details = root.createElement("details");
+  details.className = "saved-row-details";
+  const detailsSummary = root.createElement("summary");
+  detailsSummary.textContent = "Details";
+  const detailList = root.createElement("dl");
+  for (const [label, value] of [
+    ["Antennas", (entry.antennaLabels ?? []).join(", ") || "Unavailable"],
+    ["Bands", bands],
+    ["Schema", entry.schemaVersion ?? "Unavailable"],
+    ["Committed revision", entry.revision ?? "Legacy / unavailable"],
+  ]) {
+    const group = root.createElement("div");
+    const term = root.createElement("dt"); term.textContent = label;
+    const description = root.createElement("dd"); description.textContent = String(value);
+    group.append(term, description); detailList.append(group);
+  }
+  const warning = root.createElement("p");
+  warning.textContent = "This portable directory is the session record. Use AntennaBench actions instead of editing its files by hand.";
+  const problems = root.createElement("ul");
+  for (const problem of entry.problems ?? []) {
+    const item = root.createElement("li"); item.textContent = problem.message; problems.append(item);
+  }
+  problems.hidden = problems.childElementCount === 0;
+  details.append(detailsSummary, detailList, problems, warning);
+
+  const actions = root.createElement("div");
+  actions.className = "saved-row-actions";
+  const action = managedOpenAction(entry);
+  if (action) actions.append(savedActionButton(root, action.label, "open", entry.locatorId, action.intent, true));
+  if (action?.intent === "work") {
+    actions.append(savedActionButton(root, "View report", "open", entry.locatorId, "report"));
+  }
+  if (!action) actions.append(savedActionButton(root, "View details", "details", entry.locatorId, null, true));
+  if (entry.locatorId) actions.append(savedActionButton(root, "Reveal in Finder", "reveal", entry.locatorId));
+  for (const button of actions.querySelectorAll("button")) {
+    button.disabled = state.catalogRowOperation !== null;
+  }
+  if (state.activeManagedLocatorId === entry.locatorId) {
+    const active = root.createElement("span"); active.className = "saved-open-now"; active.textContent = "Open now";
+    actions.prepend(active);
+  }
+  if (state.catalogRowError?.locatorId === entry.locatorId) {
+    const error = root.createElement("p"); error.className = "saved-row-error";
+    error.textContent = `${state.catalogRowError.error.message} ${state.catalogRowError.error.detail}`.trim();
+    row.append(heading, summary, meta, duplicate, details, actions, error);
+  } else {
+    row.append(heading, summary, meta, duplicate, details, actions);
+  }
+  return row;
+}
+
+function savedActionButton(root, label, action, locatorId, intent = null, primary = false) {
+  const button = root.createElement("button");
+  button.type = "button"; button.textContent = label; button.dataset.savedAction = action;
+  button.dataset.locatorId = locatorId ?? "";
+  if (intent) button.dataset.intent = intent;
+  if (primary) button.className = "primary-action";
+  return button;
+}
+
+function managedOpenAction(entry) {
+  if (entry.status !== "available" || entry.lifecycle === "draft" || !entry.locatorId) return null;
+  switch (entry.lifecycle) {
+    case "ready": return { label: "Start session", intent: "work" };
+    case "running": return { label: "Continue session", intent: "work" };
+    case "interrupted": return { label: "Resume session", intent: "work" };
+    default: return { label: "View report", intent: "report" };
+  }
+}
+
+function managedStatusLabel(entry) {
+  if (entry.status !== "available") return ({
+    invalid: "Invalid session bundle",
+    unsupported: "Unsupported version",
+    unreadable: "Could not read",
+    unsafe: "Unsafe filesystem entry",
+  })[entry.status] ?? "Session problem";
+  return humanizeIdentifier(entry.lifecycle ?? "legacy report");
+}
+
+function formatBand(band) {
+  return String(band).replace(/^(\d+)(m|cm)$/i, "$1 $2");
+}
+
 export function renderSetup(elements, state, root) {
   const {
     setupForm, setupReviewButton, setupCreateButton, setupStatus, setupFeedback,
@@ -308,7 +470,15 @@ export function renderRun(elements, state, root, options = {}) {
     antennaControllerAttach,
     antennaControllerRun, antennaControllerRetry, antennaControllerEditor,
     antennaControllerOneLine, antennaControllerStructured,
+    managedLocationNotice, managedLocationMessage, managedLocationDetail,
+    managedLocationReveal,
   } = elements;
+  managedLocationNotice.hidden = state.managedLocationNotice === null;
+  if (state.managedLocationNotice) {
+    managedLocationMessage.textContent = "Session saved in AntennaBench Sessions.";
+    managedLocationDetail.textContent = state.managedLocationNotice.bundleName;
+    managedLocationReveal.disabled = state.catalogRowOperation !== null;
+  }
   const conductorBusy = ["loading", "refreshing", "mutating"].includes(state.conductorStatus);
   const hasConductor = state.conductor !== null;
   conductorPanel.hidden = !hasConductor;
@@ -507,13 +677,10 @@ export function renderRun(elements, state, root, options = {}) {
 
 export function renderTransfer(elements, state) {
   const {
-    openButton, exportButton, importWsprLiveButton, importRbnButton, transferStatus,
-    openFeedback, feedbackMessage, feedbackDetail, exportFeedback,
+    exportButton, importWsprLiveButton, importRbnButton, transferStatus, exportFeedback,
     exportFeedbackMessage, exportFeedbackDetail, importFeedback,
     importFeedbackMessage, importFeedbackDetail,
   } = elements;
-  openButton.disabled = state.openStatus === "loading";
-  openButton.textContent = state.openStatus === "loading" ? "Opening…" : "Choose bundle";
   const exportLoading = state.exportStatus === "loading";
   const importLoading = state.importStatus === "loading";
   exportButton.disabled = state.session === null || state.openStatus === "loading" || exportLoading;
@@ -530,8 +697,7 @@ export function renderTransfer(elements, state) {
       ? "This older session cannot import RBN evidence"
       : !rbnEligible ? "Start the session first" : importLoading ? "Importing…" : "Choose RBN ZIP";
   transferStatus.textContent = transferStatusText(state);
-  transferStatus.classList.toggle("muted", state.openStatus !== "ready");
-  renderFeedback(openFeedback, feedbackMessage, feedbackDetail, openFeedbackModel(state));
+  transferStatus.classList.toggle("muted", state.session === null);
   renderFeedback(exportFeedback, exportFeedbackMessage, exportFeedbackDetail, exportFeedbackModel(state));
   renderFeedback(importFeedback, importFeedbackMessage, importFeedbackDetail, importFeedbackModel(state));
 }
@@ -717,12 +883,7 @@ function conductorEventElement(root, event, disabled) {
 function transferStatusText(state) {
   if (state.importStatus === "loading") return "Importing evidence";
   if (state.importStatus === "error") return "Import failed";
-  if (state.openStatus === "loading") {
-    return state.openSource === "managed" ? "Opening saved session" : "Opening bundle";
-  }
-  if (state.openStatus === "ready") return "Bundle open";
-  if (state.openStatus === "error") return "Open failed";
-  return "No bundle open";
+  return state.session ? "Session active" : "No active session";
 }
 
 function setupStatusText(state) {

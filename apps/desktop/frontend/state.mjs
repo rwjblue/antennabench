@@ -1,12 +1,19 @@
 import { WORKFLOWS, wsjtxReadinessModel } from "./models.mjs";
 
-export function initialState(workflow = "setup") {
+export function initialState(workflow = "saved") {
   return selectWorkflow(
     {
       activeWorkflow: "setup",
       openStatus: "idle",
       openSource: null,
       openIntent: null,
+      catalogStatus: "idle",
+      managedCatalog: null,
+      catalogError: null,
+      catalogRowOperation: null,
+      catalogRowError: null,
+      managedLocationNotice: null,
+      activeManagedLocatorId: null,
       session: null,
       reportPresentationId: 0,
       reportStatus: "idle",
@@ -62,12 +69,14 @@ export function selectWorkflow(state, workflow) {
   return { ...state, activeWorkflow: workflow };
 }
 
-export function beginOpenSession(state, source = "external", intent = null) {
+export function beginOpenSession(state, source = "external", intent = null, locatorId = null) {
   return {
     ...state,
     openStatus: "loading",
     openSource: source,
     openIntent: intent,
+    catalogRowOperation: locatorId ? { locatorId, kind: "opening" } : null,
+    catalogRowError: null,
     error: null,
     notice: null,
   };
@@ -138,7 +147,7 @@ export function setupCreationCancelled(state) {
   };
 }
 
-export function setupCreationSucceeded(state, session) {
+export function setupCreationSucceeded(state, session, managedLocation = null) {
   return {
     ...state,
     activeWorkflow: "run",
@@ -156,6 +165,8 @@ export function setupCreationSucceeded(state, session) {
     reportExportNotice: null,
     error: null,
     notice: null,
+    managedLocationNotice: managedLocation,
+    activeManagedLocatorId: managedLocation?.locatorId ?? null,
     exportStatus: "idle",
     exportError: null,
     exportNotice: null,
@@ -210,6 +221,11 @@ export function openSessionSucceeded(
     reportExportNotice: null,
     error: null,
     notice,
+    activeManagedLocatorId: state.openSource === "managed"
+      ? state.catalogRowOperation?.locatorId ?? null
+      : null,
+    catalogRowOperation: null,
+    catalogRowError: null,
     exportStatus: "idle",
     exportError: null,
     exportNotice: null,
@@ -237,11 +253,71 @@ export function openSessionCancelled(state) {
     openStatus: state.session ? "ready" : "idle",
     error: null,
     notice: "cancelled",
+    catalogRowOperation: null,
   };
 }
 
 export function openSessionFailed(state, error) {
-  return { ...state, openStatus: "error", error: normalizeOpenError(error), notice: null };
+  const normalized = normalizeOpenError(error);
+  return {
+    ...state,
+    openStatus: "error",
+    error: normalized,
+    notice: null,
+    catalogRowError: state.catalogRowOperation
+      ? { locatorId: state.catalogRowOperation.locatorId, error: normalized }
+      : null,
+    catalogRowOperation: null,
+  };
+}
+
+export function beginManagedCatalogLoad(state) {
+  return {
+    ...state,
+    catalogStatus: state.managedCatalog ? "refreshing" : "loading",
+    catalogError: null,
+  };
+}
+
+export function managedCatalogLoadSucceeded(state, catalog) {
+  return {
+    ...state,
+    catalogStatus: "ready",
+    managedCatalog: catalog,
+    catalogError: null,
+  };
+}
+
+export function managedCatalogLoadFailed(state, error) {
+  return {
+    ...state,
+    catalogStatus: "error",
+    catalogError: normalizeOpenError(error),
+  };
+}
+
+export function beginManagedReveal(state, locatorId = null) {
+  return {
+    ...state,
+    catalogRowOperation: { locatorId, kind: locatorId ? "revealing" : "revealing_folder" },
+    catalogRowError: null,
+  };
+}
+
+export function managedRevealSucceeded(state) {
+  return { ...state, catalogRowOperation: null, catalogRowError: null };
+}
+
+export function managedRevealFailed(state, error) {
+  const normalized = normalizeOpenError(error);
+  return {
+    ...state,
+    catalogRowError: state.catalogRowOperation?.locatorId
+      ? { locatorId: state.catalogRowOperation.locatorId, error: normalized }
+      : null,
+    catalogError: state.catalogRowOperation?.locatorId ? state.catalogError : normalized,
+    catalogRowOperation: null,
+  };
 }
 
 export function beginExportSession(state) {

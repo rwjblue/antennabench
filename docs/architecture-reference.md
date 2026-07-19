@@ -242,6 +242,16 @@ lifecycle defaults to Reports. Both sources share one open-in-flight state
 machine, and cancellation or failure retains the prior active workflow and
 report presentation.
 
+The Saved sessions frontend is a dedicated disposable catalog state machine,
+controller surface, and renderer. It consumes only the typed catalog response
+and opaque locator commands: JavaScript never receives or reconstructs a
+managed path. Initial load, explicit refresh, return-to-app refresh, incomplete
+catalogs, total failures, stale-data failures, and per-row open/reveal failures
+remain distinct states. A failed refresh preserves the previous catalog, and a
+row failure does not clear the active session or unrelated rows. The renderer
+uses catalog lifecycle only to label the operator's requested intent; the fresh
+Rust open result remains routing authority.
+
 This direct projection is the simple in-memory approach anticipated by ADR
 0020, not evidence that a persistent cross-session index is required. Any
 future cache lives outside bundles, keys generations by strong
@@ -424,8 +434,8 @@ owns the fixed Tauri command names and payload construction, `models.mjs` owns
 pure formatting and derived presentation models plus contextual-help behavior,
 and `forms.mjs` owns setup and evidence input normalization. `elements.mjs`
 owns the fail-fast checked-in HTML selector contract, while `renderers.mjs`
-owns navigation, setup, active-run, transfer, and report presentation through
-explicit element capabilities. `app.mjs` remains the browser entry module and
+owns navigation, saved-session catalog, setup, active-run, transfer, and report
+presentation through explicit element capabilities. `app.mjs` remains the browser entry module and
 owns only platform binding and UI event wiring.
 `controller.mjs` owns mutable application state and asynchronous command
 sequencing through injected invoke, navigation, clock, timer, focus/visibility,

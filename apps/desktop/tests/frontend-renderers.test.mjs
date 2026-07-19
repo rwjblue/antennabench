@@ -15,6 +15,7 @@ import {
   renderNavigation,
   renderReport,
   renderRun,
+  renderSavedSessions,
   renderSetup,
   renderTransfer,
 } from "../frontend/renderers.mjs";
@@ -58,6 +59,10 @@ test("the checked-in HTML satisfies the fail-fast renderer element inventory", (
     () => collectDesktopElements(emptyDocument),
     /Missing required desktop element mainContent/,
   );
+  assert.equal(document.querySelector("[data-open-session]"), null);
+  assert.doesNotMatch(DESKTOP_HTML, /Choose bundle|Edit session|>Tweak</);
+  assert.match(document.querySelector('[data-panel="run"] [data-conductor-empty]').textContent, /Saved sessions/);
+  assert.match(document.querySelector('[data-panel="report"] [data-report-placeholder]').textContent, /Saved sessions/);
 });
 
 test("contextual help is centralized, keyboard accessible, and fully inventoried", () => {
@@ -117,9 +122,115 @@ test("contextual help accepts the document root used by the desktop mount", () =
 test("navigation renders exactly one active accessible workflow", () => {
   const e = loadDesktopDocument();
   renderNavigation(e, { activeWorkflow: "transfer" });
-  assert.deepEqual(e.navigation.map((node) => node.getAttribute("aria-current")), ["false", "false", "page", "false"]);
-  assert.deepEqual(e.panels.map((node) => node.hidden), [true, true, false, true]);
+  assert.deepEqual(e.navigation.map((node) => node.getAttribute("aria-current")), ["false", "false", "false", "page", "false"]);
+  assert.deepEqual(e.panels.map((node) => node.hidden), [true, true, true, false, true]);
   assert.equal(e.navigation.filter((node) => node.classList.contains("active")).length, 1);
+});
+
+test("saved sessions render lifecycle actions, problems, duplicates, and distinct catalog states", () => {
+  const e = loadDesktopDocument();
+  const entry = (locatorId, lifecycle, overrides = {}) => ({
+    locatorId,
+    bundleName: `${locatorId}.session.antennabundle`,
+    origin: "managed",
+    originLabel: "Saved by AntennaBench",
+    status: "available",
+    callsign: "N1RWJ",
+    createdAt: "2026-07-18T14:00:00Z",
+    lifecycle,
+    schemaVersion: 5,
+    revision: 3,
+    mode: "whole_station_ab",
+    bands: ["20m", "70cm"],
+    antennaLabels: ["DXC", "Attic EFHW"],
+    antennaCount: 2,
+    sameSessionIdCount: 1,
+    problems: [],
+    ...overrides,
+  });
+  const state = initialState("saved");
+  state.catalogStatus = "ready";
+  state.managedCatalog = {
+    status: "complete",
+    diagnostics: [],
+    entries: [
+      entry("ready", "ready"),
+      entry("running", "running"),
+      entry("interrupted", "interrupted"),
+      entry("ended", "ended", { sameSessionIdCount: 2 }),
+      entry("abandoned", "abandoned", { sameSessionIdCount: 2 }),
+      entry("legacy", null, { revision: null }),
+      entry("draft", "draft"),
+      entry(null, null, {
+        bundleName: "broken.session.antennabundle",
+        status: "invalid",
+        callsign: null,
+        createdAt: null,
+        schemaVersion: null,
+        revision: null,
+        mode: null,
+        bands: [],
+        antennaLabels: [],
+        antennaCount: null,
+        problems: [{ code: "bundle.invalid", severity: "error", message: "Manifest is invalid." }],
+      }),
+    ],
+  };
+  state.activeManagedLocatorId = "running";
+  state.catalogRowError = {
+    locatorId: "ended",
+    error: { message: "Could not open.", detail: "The bundle moved." },
+  };
+  renderSavedSessions(e, state, document);
+
+  const rows = [...e.savedCatalog.querySelectorAll(".saved-row")];
+  const primaryLabels = rows.map((row) => row.querySelector(".primary-action")?.textContent ?? null);
+  assert.deepEqual(primaryLabels, [
+    "Start session", "Continue session", "Resume session", "View report",
+    "View report", "View report", "View details", "View details",
+  ]);
+  assert.match(rows[0].querySelector(".saved-plan-summary").textContent, /20 m, 70 cm · Whole Station A\/B · 2 antennas/);
+  assert.match(rows[3].querySelector(".saved-warning").textContent, /same session identity/);
+  assert.equal(rows[3].querySelector(".saved-warning").hidden, false);
+  assert.equal(rows[4].querySelector(".saved-warning").hidden, false);
+  assert.match(rows[3].querySelector(".saved-row-error").textContent, /bundle moved/);
+  assert.equal(rows[1].querySelector(".saved-open-now").textContent, "Open now");
+  assert.equal(rows[7].querySelector(".saved-lifecycle").textContent, "Invalid session bundle");
+  assert.match(rows[7].querySelector("details").textContent, /Manifest is invalid/);
+  assert.equal(e.savedEmpty.hidden, true);
+
+  state.managedCatalog.status = "incomplete";
+  state.managedCatalog.diagnostics = [{ message: "Inspection budget reached." }];
+  renderSavedSessions(e, state, document);
+  assert.equal(e.savedStatus.textContent, "Partial list");
+  assert.match(e.savedFeedback.textContent, /Only part.*Inspection budget reached/s);
+
+  state.catalogStatus = "error";
+  state.catalogError = { message: "Could not refresh.", detail: "Try again." };
+  renderSavedSessions(e, state, document);
+  assert.equal(e.savedCatalog.children.length, 8, "a failed refresh keeps stale rows visible");
+  assert.match(e.savedFeedback.textContent, /Could not refresh/);
+
+  state.catalogStatus = "ready";
+  state.catalogError = null;
+  state.managedCatalog = { status: "complete", entries: [], diagnostics: [] };
+  renderSavedSessions(e, state, document);
+  assert.equal(e.savedEmpty.hidden, false);
+  assert.equal(e.savedCatalog.children.length, 0);
+
+  state.catalogStatus = "loading";
+  state.managedCatalog = null;
+  renderSavedSessions(e, state, document);
+  assert.equal(e.savedStatus.textContent, "Loading");
+  assert.equal(e.savedCatalog.getAttribute("aria-busy"), "true");
+  assert.equal(e.savedEmpty.hidden, true);
+
+  state.catalogStatus = "error";
+  state.catalogError = { message: "Saved sessions are unavailable.", detail: "Try again." };
+  renderSavedSessions(e, state, document);
+  assert.equal(e.savedStatus.textContent, "Unavailable");
+  assert.equal(e.savedCatalog.children.length, 0);
+  assert.match(e.savedFeedback.textContent, /Saved sessions are unavailable/);
 });
 
 test("setup renderer covers editing, review, diagnostics, creating, invalid, and created states", () => {
@@ -473,30 +584,7 @@ test("transfer renderer covers lifecycle/schema eligibility and feedback outcome
   assert.equal(e.importWsprLiveButton.disabled, false);
   assert.equal(e.importRbnButton.disabled, false);
 
-  state.notice = "cancelled";
-  state.openStatus = "idle";
-  renderTransfer(e, state);
-  assert.equal(e.openFeedback.dataset.kind, "cancelled");
-  state.notice = null;
-  state.error = { message: "bad bundle", detail: "invalid JSON" };
-  state.openStatus = "error";
-  renderTransfer(e, state);
-  assert.equal(e.openFeedback.dataset.kind, "error");
-  assert.equal(e.feedbackDetail.textContent, "invalid JSON");
-
-  state.error = null;
-  state.openStatus = "loading";
-  state.openSource = "managed";
-  renderTransfer(e, state);
-  assert.equal(e.transferStatus.textContent, "Opening saved session");
-  assert.match(e.feedbackMessage.textContent, /saved session/i);
-
-  state.openStatus = "ready";
-  state.notice = "work_redirected";
-  state.session = { lifecycle: "ended", schemaVersion: 5, bundleName: "ended" };
-  renderTransfer(e, state);
-  assert.match(e.feedbackMessage.textContent, /opened in Reports/);
-  assert.match(e.feedbackDetail.textContent, /run services were not loaded/);
+  assert.equal(e.transferStatus.textContent, "Session active");
 });
 
 test("report renderer covers unavailable, refreshing, ready, exporting, error, and frame identity", () => {

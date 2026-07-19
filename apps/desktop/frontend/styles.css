@@ -80,6 +80,8 @@ body {
 .eyebrow { margin: 0 0 10px; color: #6b817d; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
 .sidebar > .eyebrow { padding: 0 12px; color: #83aaa2; }
 .sidebar nav { display: grid; gap: 7px; }
+.sidebar .app-navigation { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+.app-nav-item { grid-template-columns: 30px 1fr; }
 
 .nav-item {
   display: grid;
@@ -115,6 +117,38 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .status-chip { flex: 0 0 auto; color: #1d6d62; border-color: #abd2c9; background: #e5f4ef; }
 .status-chip.muted { color: #6f7770; border-color: #d1d5cd; background: #f0f1ec; }
 .lede { max-width: 720px; margin-bottom: 34px; color: #5c6e6a; font-size: 1.05rem; line-height: 1.75; }
+
+.saved-header-actions, .saved-empty-actions, .saved-row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.saved-header-actions { margin-bottom: 20px; }
+.saved-header-actions button, .saved-empty-actions button, .saved-row-actions button, [data-managed-location-reveal] { border: 1px solid #8ab3aa; border-radius: 9px; padding: 9px 12px; color: #245451; background: #fff; font-size: 0.73rem; font-weight: 800; cursor: pointer; }
+.saved-header-actions .primary-action, .saved-row-actions .primary-action { border-color: #245451; color: #fff; background: #245451; }
+.saved-header-actions button:disabled, .saved-row-actions button:disabled { color: #87948f; border-color: #cbd3ce; background: #eef0ed; cursor: wait; }
+.saved-empty { margin: 20px 0; padding: 28px; border: 1px dashed #bfcac3; border-radius: 18px; text-align: center; background: #f6f8f4; }
+.saved-empty .empty-icon { display: block; margin-bottom: 8px; color: #699188; font-size: 2rem; }
+.saved-empty-actions { justify-content: center; }
+.saved-catalog { display: grid; gap: 14px; margin-top: 20px; }
+.saved-row { padding: 20px; border: 1px solid #d7ddd5; border-radius: 17px; background: #fff; box-shadow: 0 8px 24px rgba(40, 63, 59, 0.05); }
+.saved-row-invalid, .saved-row-unsupported, .saved-row-unreadable, .saved-row-unsafe { border-left: 4px solid #b6543f; }
+.saved-row-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.saved-row-heading h2 { margin-bottom: 4px; color: #1c403d; font: 500 1.45rem Georgia, "Times New Roman", serif; }
+.saved-row-heading p, .saved-plan-summary, .saved-row-meta { margin-bottom: 8px; color: #697873; font-size: 0.76rem; line-height: 1.5; }
+.saved-plan-summary { color: #315d57; font-size: 0.86rem; font-weight: 750; }
+.saved-row-meta { overflow-wrap: anywhere; }
+.saved-lifecycle { font-size: 0.66rem; }
+.saved-warning, .saved-row-error { margin: 10px 0; padding: 9px 11px; border-radius: 8px; color: #744c1e; background: #fff3d9; font-size: 0.72rem; font-weight: 750; }
+.saved-row-error { color: #793728; background: #faece8; }
+.saved-row-details { margin: 12px 0; padding: 10px 0; border-top: 1px solid #e1e5df; }
+.saved-row-details summary { color: #315d57; font-size: 0.75rem; font-weight: 800; cursor: pointer; }
+.saved-row-details dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.saved-row-details dl > div { padding: 9px; border-radius: 8px; background: #f4f7f3; }
+.saved-row-details dt { color: #77857f; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
+.saved-row-details dd { margin: 4px 0 0; color: #315d57; font-size: 0.74rem; overflow-wrap: anywhere; }
+.saved-row-details p, .saved-row-details li { color: #697873; font-size: 0.72rem; line-height: 1.5; }
+.saved-open-now { align-self: center; color: #1d6d62; font-size: 0.7rem; font-weight: 800; }
+.saved-help { margin-top: 28px; padding: 18px; border-radius: 14px; background: #eef4ef; }
+.saved-help h2 { margin-bottom: 8px; color: #1c403d; font: 500 1.1rem Georgia, "Times New Roman", serif; }
+.saved-help p { margin: 0; color: #5d706b; font-size: 0.78rem; line-height: 1.6; }
+[data-managed-location-notice] button { margin-top: 8px; }
 
 .setup-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .card { position: relative; min-height: 250px; padding: 26px 22px; overflow: hidden; border: 1px solid #d7ddd5; border-radius: 18px; background: #ffffff; box-shadow: 0 8px 24px rgba(40, 63, 59, 0.05); }

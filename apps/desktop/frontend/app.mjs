@@ -21,6 +21,7 @@ import {
   maidenheadGrid,
   recommendedNoteTarget,
   releaseReportFrame,
+  startupWorkflowFromHash,
   wsjtxReadinessModel,
   workflowFromHash,
 } from "./models.mjs";
@@ -30,13 +31,14 @@ import {
   renderNavigation,
   renderReport,
   renderRun,
+  renderSavedSessions,
   renderSetup,
   renderTransfer,
 } from "./renderers.mjs";
 
 export function mount(root, browserWindow) {
   const rootDocument = root.ownerDocument ?? root;
-  let state = initialState(workflowFromHash(browserWindow.location.hash));
+  let state = initialState(startupWorkflowFromHash(browserWindow.location.hash));
   let countdownAnchor = null;
   let countdownAnchorKey = null;
   let noteShortcutInitialized = false;
@@ -49,6 +51,14 @@ export function mount(root, browserWindow) {
   const reportDocuments = createReportDocumentUrls(browserWindow);
   const {
     mainContent,
+    savedNew,
+    savedOpenExternal,
+    savedRevealFolder,
+    savedRefresh,
+    savedEmptyNew,
+    savedEmptyOpen,
+    savedCatalog,
+    managedLocationReveal,
     setupForm,
     setupStatus,
     setupReviewButton,
@@ -125,14 +135,10 @@ export function mount(root, browserWindow) {
     wsjtxRequirement,
     wsjtxCounts,
     wsjtxDiagnostic,
-    openButton,
     exportButton,
     importWsprLiveButton,
     importRbnButton,
     transferStatus,
-    openFeedback,
-    feedbackMessage,
-    feedbackDetail,
     exportFeedback,
     exportFeedbackMessage,
     exportFeedbackDetail,
@@ -165,6 +171,7 @@ export function mount(root, browserWindow) {
       mainContent.scrollTop,
     );
     renderNavigation(elements, state);
+    renderSavedSessions(elements, state, root);
     renderSetup(elements, state, root);
     const countdown = renderRun(elements, state, root, {
       monotonicNow,
@@ -201,7 +208,10 @@ export function mount(root, browserWindow) {
       return () => rootDocument.removeEventListener?.("visibilitychange", callback);
     },
     onHashChange(callback) {
-      const listener = () => callback(workflowFromHash(browserWindow.location.hash));
+      const listener = async () => {
+        await callback(workflowFromHash(browserWindow.location.hash));
+        focusActiveHeading(elements, state.activeWorkflow);
+      };
       browserWindow.addEventListener("hashchange", listener);
       return () => browserWindow.removeEventListener?.("hashchange", listener);
     },
@@ -221,9 +231,46 @@ export function mount(root, browserWindow) {
   for (const button of navigation) {
     button.addEventListener("click", async () => {
       await controller.selectWorkflow(button.dataset.workflow);
-      mainContent.focus({ preventScroll: true });
+      focusActiveHeading(elements, state.activeWorkflow);
     });
   }
+
+  const startNewSession = async () => {
+    await controller.selectWorkflow("setup");
+    focusActiveHeading(elements, "setup");
+  };
+  savedNew.addEventListener("click", startNewSession);
+  savedEmptyNew.addEventListener("click", startNewSession);
+  const openExternal = async () => {
+    await controller.openSessionFromAnotherLocation();
+    focusActiveHeading(elements, state.activeWorkflow);
+  };
+  savedOpenExternal.addEventListener("click", openExternal);
+  savedEmptyOpen.addEventListener("click", openExternal);
+  savedRevealFolder.addEventListener("click", () => controller.revealManagedSessionsDirectory());
+  savedRefresh.addEventListener("click", () => controller.loadManagedSessions());
+  savedCatalog.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-saved-action]");
+    if (!button) return;
+    const row = button.closest(".saved-row");
+    if (button.dataset.savedAction === "details") {
+      const details = row?.querySelector("details");
+      if (details) details.open = true;
+      details?.querySelector("summary")?.focus();
+      return;
+    }
+    if (button.dataset.savedAction === "reveal") {
+      await controller.revealManagedSession(button.dataset.locatorId);
+      return;
+    }
+    await controller.openManagedSession(button.dataset.locatorId, button.dataset.intent);
+    focusActiveHeading(elements, state.activeWorkflow);
+  });
+  managedLocationReveal.addEventListener("click", () => {
+    const locatorId = state.managedLocationNotice?.locatorId;
+    if (locatorId) return controller.revealManagedSession(locatorId);
+    return undefined;
+  });
 
   conductorRefreshButtons.forEach((button) => {
     button.addEventListener("click", () => controller.refreshConductor());
@@ -524,10 +571,6 @@ export function mount(root, browserWindow) {
     controller.editSetup();
   });
 
-  openButton.addEventListener("click", async () => {
-    await controller.openSessionFromAnotherLocation();
-  });
-
   exportButton.addEventListener("click", async () => {
     await controller.exportSession();
   });
@@ -558,9 +601,18 @@ export function mount(root, browserWindow) {
       .then((preferences) => applyStationPreferences(setupForm, preferences))
       .catch(() => {});
     void controller.loadAntennaControllerProfiles();
+    if (state.activeWorkflow === "saved") void controller.loadManagedSessions();
   }
   controller.start();
   return controller;
+}
+
+function focusActiveHeading(elements, workflow) {
+  const panel = elements.panels.find((candidate) => candidate.dataset.panel === workflow);
+  const heading = panel?.querySelector("h1");
+  if (!heading) return;
+  heading.tabIndex = -1;
+  heading.focus({ preventScroll: true });
 }
 
 function canonicalCommandLine(command) {

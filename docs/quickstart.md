@@ -27,7 +27,8 @@ switch the radio or antenna for this manual run.
 ## Run The Comparison
 
 1. **Launch AntennaBench.** From the repository checkout, run
-   `mise run desktop:dev`. The app opens on **Session setup**.
+   `mise run desktop:dev`. The app opens on **Saved sessions**. Select **New
+   session** to begin this comparison.
 
 2. **Choose the question.** Under **What do you want to learn?**, select
    **Compare the whole station**. Leave **Experiment mode** as
@@ -113,12 +114,19 @@ switch the radio or antenna for this manual run.
     - Under **Import / export**, **Export the complete session bundle** saves the
       lossless durable record from which reports can be regenerated.
 
-When reopening a bundle from another location, AntennaBench checks the freshly
-opened lifecycle before choosing the destination. Ready, running, and
-interrupted sessions return to **Run** without automatically starting or
-resuming; ended, abandoned, and legacy bundles open in **Local report**. Merely
-opening a report does not run crash recovery or load acquisition and controller
-services.
+**Saved sessions** lists experiments created in AntennaBench's managed sessions
+folder. Use **Start session**, **Continue session**, or **Resume session** for
+workable sessions; use **View report** for terminal and legacy sessions. The
+screen also provides **Open from another location…** for portable bundles and
+Finder reveal actions for the managed folder and individual entries. Refresh
+failures leave the last useful list visible, while partial-list and problem-row
+messages identify entries that could not be fully inspected.
+
+When reopening a bundle, AntennaBench checks the freshly opened lifecycle before
+choosing the destination. Ready, running, and interrupted sessions return to
+**Run** without automatically starting or resuming; ended, abandoned, and legacy
+bundles open in **Local report**. Merely opening a report does not run crash
+recovery or load acquisition and controller services.
 
 For help interpreting the result, continue with
 [Reading The Report](product.md#reading-the-report). Use the
