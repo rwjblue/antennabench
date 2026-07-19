@@ -66,7 +66,7 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         .sum::<usize>();
 
     out.push_str("<section id=\"what-run-show\" class=\"panel overview\" aria-labelledby=\"what-run-show-title\"><p class=\"eyebrow\">Answer first</p><h2 id=\"what-run-show-title\">What did the run show?</h2>");
-    render_plain_language_answer(out, overview);
+    render_plain_language_answer(out, report);
     write_html!(
         out,
         "<p class=\"scope-line\">Station <strong>{}</strong> at <strong>{}</strong>; goal: <strong>{}</strong>.</p>",
@@ -176,14 +176,15 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     render_visible_acquisition_limitations(out, report, audit_reference);
     out.push_str("</section>");
 }
-fn render_plain_language_answer(out: &mut CheckedHtmlWriter<'_>, overview: &crate::ReportOverview) {
+fn render_plain_language_answer(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     write_html!(
         out,
         "<p class=\"answer plain-language-answer\">{}</p>",
-        plain_language_answer(overview)
+        plain_language_answer(report)
     );
 }
-fn plain_language_answer(overview: &crate::ReportOverview) -> String {
+fn plain_language_answer(report: &SessionReport) -> String {
+    let overview = &report.overview;
     let mut sentences = match overview.comparison_availability {
         antennabench_analysis::ComparisonAvailability::NotApplicable => vec![
             "This session profiled one antenna, so there is no A/B comparison to show."
@@ -198,12 +199,9 @@ fn plain_language_answer(overview: &crate::ReportOverview) -> String {
                 .to_string(),
             "To make a future run answerable, complete more repetitions.".to_string(),
         ],
-        antennabench_analysis::ComparisonAvailability::NoMatchedPaths => vec![
-            "Both antennas produced evidence, but no station reported both antennas under matching conditions, so this run cannot compare them."
-                .to_string(),
-            "To make a future run more likely to produce matched pairs, run longer or concentrate on one band."
-                .to_string(),
-        ],
+        antennabench_analysis::ComparisonAvailability::NoMatchedPaths => {
+            no_matched_path_sentences(report)
+        }
         antennabench_analysis::ComparisonAvailability::DescriptivePairsAvailable => {
             descriptive_group_sentences(overview)
         }
@@ -220,6 +218,81 @@ fn plain_language_answer(overview: &crate::ReportOverview) -> String {
         );
     }
     sentences.join(" ")
+}
+fn no_matched_path_sentences(report: &SessionReport) -> Vec<String> {
+    let overview = &report.overview;
+    let usable_count = report.evidence.overall.observation_counts.usable;
+    let (left_label, right_label) = report_antenna_labels(report);
+    let reach_rows = overview
+        .strata
+        .iter()
+        .filter(|row| {
+            row.reach.left_only_unique_path_count
+                + row.reach.both_unique_path_count
+                + row.reach.right_only_unique_path_count
+                > 0
+        })
+        .collect::<Vec<_>>();
+    if usable_count == 0 {
+        return vec![
+            "No usable observations were recorded, so this run has no reach evidence and no same-path signal delta to summarize."
+                .to_string(),
+        ];
+    }
+    if reach_rows.is_empty() {
+        return vec![
+            format!(
+                "This run retained {usable_count} usable observation{} but no usable remote-path reach evidence.",
+                plural_suffix(usable_count)
+            ),
+            "No per-antenna reach counts or same-path signal delta can be computed."
+                .to_string(),
+        ];
+    }
+
+    let left_path_count = reach_rows
+        .iter()
+        .map(|row| row.reach.left_only_unique_path_count + row.reach.both_unique_path_count)
+        .sum::<usize>();
+    let right_path_count = reach_rows
+        .iter()
+        .map(|row| row.reach.right_only_unique_path_count + row.reach.both_unique_path_count)
+        .sum::<usize>();
+    let mut sentences = vec![match (left_path_count > 0, right_path_count > 0) {
+        (true, true) => {
+            format!("Both {left_label} and {right_label} produced usable path evidence.")
+        }
+        (true, false) => format!(
+            "{left_label} produced usable path evidence; no usable {right_label} path evidence was recorded."
+        ),
+        (false, true) => format!(
+            "{right_label} produced usable path evidence; no usable {left_label} path evidence was recorded."
+        ),
+        (false, false) => unreachable!("nonempty reach rows contain a path count"),
+    }];
+    sentences.extend(reach_rows.into_iter().map(|row| {
+        format!(
+            "On {}: {} {left_label}-only, {} shared, and {} {right_label}-only unique path{}.",
+            comparison_stratum(&row.stratum),
+            row.reach.left_only_unique_path_count,
+            row.reach.both_unique_path_count,
+            row.reach.right_only_unique_path_count,
+            plural_suffix(
+                row.reach.left_only_unique_path_count
+                    + row.reach.both_unique_path_count
+                    + row.reach.right_only_unique_path_count
+            )
+        )
+    }));
+    sentences.push(
+        "No same-path signal delta can be computed because no remote path had usable finite-SNR reports for both antennas within the same eligible block and comparison group."
+            .to_string(),
+    );
+    sentences.push(
+        "To make a future run more likely to produce matched pairs, run longer or concentrate on one band."
+            .to_string(),
+    );
+    sentences
 }
 fn descriptive_group_sentences(overview: &crate::ReportOverview) -> Vec<String> {
     let orientation = overview.scope.delta_orientation.as_ref();

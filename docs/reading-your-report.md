@@ -70,6 +70,15 @@ not overlap, or that [evidence coverage](glossary.md#evidence-coverage) was too
 limited for a display. Keeping those cases separate tells you what happened and
 what a future run could improve.
 
+For a concrete **No matched paths** example, suppose the 20 m public-report
+group contains two Vertical-only paths, no shared paths, and two Inverted
+V-only paths. The answer-first paragraph reports those three reach counts for
+that group before saying that no same-path signal delta can be computed. It
+does not turn a missing report into zero signal, compare the unmatched path
+populations, or combine those counts with 40 m, imported, or receive-path
+groups. If the run has no usable observations at all, the paragraph instead
+says that no usable reach evidence is available.
+
 ## Read The Per-Group Result Table
 
 The **Descriptive result by comparison group** table is the quickest structured

@@ -788,7 +788,7 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
         ),
         (
             ComparisonAvailability::NoMatchedPaths,
-            "Both antennas produced evidence, but no station reported both antennas under matching conditions, so this run cannot compare them. To make a future run more likely to produce matched pairs, run longer or concentrate on one band.",
+            "Both A and B produced usable path evidence.",
         ),
     ] {
         let mut report = paired_report(false);
@@ -801,6 +801,9 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
         ] {
             let answer = plain_language_answer_from(&html);
             assert!(answer.contains(expected), "missing headline for {availability:?}");
+            if availability == ComparisonAvailability::NoMatchedPaths {
+                assert!(answer.contains("No same-path signal delta can be computed"));
+            }
             for forbidden in ["winner", "significant", "better antenna", "confidence"] {
                 assert!(
                     !answer.to_ascii_lowercase().contains(forbidden),
@@ -825,6 +828,74 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
             "For scale:</strong> a 3 dB difference is the same change as doubling transmit power. Individual WSPR reports are whole-dB values that vary cycle to cycle."
         ));
     }
+}
+
+#[test]
+fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_compact_reports() {
+    let report = canonical_report();
+    assert_eq!(
+        report.overview.comparison_availability,
+        ComparisonAvailability::NoMatchedPaths
+    );
+    assert!(report.evidence.overall.observation_counts.usable > 0);
+
+    let full = render_standalone_html(&report).unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+    let full_answer = plain_language_answer_from(&full);
+    let compact_answer = plain_language_answer_from(&compact);
+    assert_eq!(full_answer, compact_answer);
+    assert!(full_answer.starts_with("Both Vertical and Inverted V produced usable path evidence."));
+    for expected in [
+        "On TX path · 40 m · WSPR · Public report · WSPRnet: 1 Vertical-only, 0 shared, and 1 Inverted V-only unique paths.",
+        "On TX path · 40 m · WSPR · Imported spot · Imported file: 0 Vertical-only, 0 shared, and 2 Inverted V-only unique paths.",
+        "On TX path · 20 m · WSPR · Public report · WSPRnet: 2 Vertical-only, 0 shared, and 2 Inverted V-only unique paths.",
+        "On TX path · 20 m · WSPR · Imported spot · Imported file: 0 Vertical-only, 0 shared, and 1 Inverted V-only unique path.",
+        "On RX path · 40 m · WSPR · Local decode · WSJT-X UDP (direct/local): 1 Vertical-only, 0 shared, and 0 Inverted V-only unique path.",
+        "On RX path · 40 m · WSPR · Local decode · WSJT-X log: 1 Vertical-only, 0 shared, and 1 Inverted V-only unique paths.",
+        "On RX path · 20 m · WSPR · Local decode · WSJT-X UDP (direct/local): 1 Vertical-only, 0 shared, and 0 Inverted V-only unique path.",
+        "On RX path · 20 m · WSPR · Local decode · WSJT-X log: 1 Vertical-only, 0 shared, and 0 Inverted V-only unique path.",
+    ] {
+        assert!(full_answer.contains(expected), "missing reach fact: {expected}");
+    }
+    assert!(full_answer.contains(
+        "No same-path signal delta can be computed because no remote path had usable finite-SNR reports for both antennas within the same eligible block and comparison group."
+    ));
+    for prohibited in [
+        "winner",
+        "superiority",
+        "coverage score",
+        "equivalent",
+        "inferred zero",
+    ] {
+        assert!(!full_answer.to_ascii_lowercase().contains(prohibited));
+    }
+}
+
+#[test]
+fn no_matched_paths_with_zero_usable_observations_does_not_claim_reach_evidence() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/canonical-sample-report.session.wsprabundle");
+    let mut bundle = BundleStore::new(fixture)
+        .read_normalized_validated()
+        .expect("canonical sample should be valid");
+    bundle.observations.clear();
+    let report = build_report(&bundle).unwrap();
+    assert_eq!(
+        report.overview.comparison_availability,
+        ComparisonAvailability::NoMatchedPaths
+    );
+    assert_eq!(report.evidence.overall.observation_counts.usable, 0);
+
+    let full = render_standalone_html(&report).unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+    let full_answer = plain_language_answer_from(&full);
+    assert_eq!(full_answer, plain_language_answer_from(&compact));
+    assert_eq!(
+        full_answer,
+        "No usable observations were recorded, so this run has no reach evidence and no same-path signal delta to summarize."
+    );
+    assert!(!full_answer.contains("Both"));
+    assert!(!full_answer.contains("unique path"));
 }
 
 #[test]
