@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Build the release app and install it in /Applications"
+
+set -euo pipefail
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "desktop:install is only supported on macOS" >&2
+  exit 1
+fi
+
+repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+app="$repo_root/target/release/bundle/macos/AntennaBench.app"
+destination="/Applications/AntennaBench.app"
+
+cd "$repo_root/apps/desktop"
+MACOSX_DEPLOYMENT_TARGET=15.0 cargo-tauri build --bundles app --ci --no-sign
+
+if [[ ! -d "$app" ]]; then
+  echo "Release build did not produce $app" >&2
+  exit 1
+fi
+
+staging_directory="$(mktemp -d /Applications/.AntennaBench.install.XXXXXX)"
+trap 'rm -rf "$staging_directory"' EXIT
+
+ditto "$app" "$staging_directory/AntennaBench.app"
+rm -rf "$destination"
+mv "$staging_directory/AntennaBench.app" "$destination"
+rmdir "$staging_directory"
+trap - EXIT
+
+echo "Installed AntennaBench.app in /Applications"
