@@ -113,6 +113,13 @@ switch the radio or antenna for this manual run.
     - Under **Import / export**, **Export the complete session bundle** saves the
       lossless durable record from which reports can be regenerated.
 
+When reopening a bundle from another location, AntennaBench checks the freshly
+opened lifecycle before choosing the destination. Ready, running, and
+interrupted sessions return to **Run** without automatically starting or
+resuming; ended, abandoned, and legacy bundles open in **Local report**. Merely
+opening a report does not run crash recovery or load acquisition and controller
+services.
+
 For help interpreting the result, continue with
 [Reading The Report](product.md#reading-the-report). Use the
 [Operator Glossary](glossary.md) whenever a report or guide term is unfamiliar.

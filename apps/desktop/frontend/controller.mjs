@@ -13,7 +13,8 @@ import {
   invokeImportActiveSessionWsprLive,
   invokeLoadStationPreferences,
   invokeMutateSessionConductor,
-  invokeOpenSession,
+  invokeOpenManagedSession,
+  invokeOpenSessionFromAnotherLocation,
   invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
   invokeRunSessionAntennaController,
@@ -22,7 +23,7 @@ import {
   invokeStationLocation,
   invokeStopSessionWsjtx,
 } from "./bridge.mjs";
-import { projectCountdown } from "./models.mjs";
+import { OPEN_INTENTS, projectCountdown, sessionOpenDestination } from "./models.mjs";
 import {
   antennaControllerActionFailed,
   antennaControllerCatalogSucceeded,
@@ -115,6 +116,52 @@ export function createDesktopController(options = {}) {
   const invoke = () => {
     if (typeof effects.invoke !== "function") throw bridgeUnavailable();
     return effects.invoke;
+  };
+  const loadWorkSession = async () => {
+    await controller.refreshReport();
+    const reportRevision = state.session?.revision;
+    const reportLifecycle = state.session?.lifecycle;
+    await controller.refreshConductor();
+    if (
+      state.session
+      && (state.session.revision !== reportRevision || state.session.lifecycle !== reportLifecycle)
+    ) {
+      await controller.refreshReport();
+    }
+  };
+  const openSession = async ({ source, intent = null, open }) => {
+    if (
+      state.openStatus === "loading"
+      || state.reportStatus === "refreshing"
+      || ["loading", "refreshing", "mutating"].includes(state.conductorStatus)
+      || reportPollInFlight
+      || conductorPollInFlight
+    ) return state;
+    commit(beginOpenSession(state, source, intent));
+    let destination = null;
+    try {
+      const outcome = await open();
+      if (outcome.status === "cancelled") {
+        commit(openSessionCancelled(state));
+      } else if (outcome.status === "opened" && outcome.session) {
+        destination = sessionOpenDestination(outcome.session, intent);
+        commit(openSessionSucceeded(
+          state,
+          outcome.session,
+          destination.workflow,
+          destination.redirected ? "work_redirected" : null,
+          destination.intent,
+        ));
+        effects.navigate(destination.workflow);
+      } else {
+        throw unexpectedResponse();
+      }
+    } catch (error) {
+      commit(openSessionFailed(state, error));
+    }
+    if (destination?.workflow === "run") await loadWorkSession();
+    if (destination?.workflow === "report") await controller.refreshReport();
+    return state;
   };
 
   const controller = {
@@ -263,30 +310,27 @@ export function createDesktopController(options = {}) {
       }
       if (state.setupStatus === "created") {
         effects.navigate("run");
-        await controller.refreshReport();
-        await controller.refreshConductor();
+        await loadWorkSession();
       }
       return state;
     },
 
-    async openSession() {
-      if (state.openStatus === "loading") return state;
-      commit(beginOpenSession(state));
-      try {
-        const outcome = await invokeOpenSession(invoke());
-        if (outcome.status === "cancelled") {
-          commit(openSessionCancelled(state));
-        } else if (outcome.status === "opened" && outcome.session) {
-          commit(openSessionSucceeded(state, outcome.session));
-          effects.navigate("report");
-        } else {
-          throw unexpectedResponse();
-        }
-      } catch (error) {
-        commit(openSessionFailed(state, error));
+    async openManagedSession(locatorId, intent) {
+      if (!OPEN_INTENTS.includes(intent)) {
+        throw new RangeError(`Unknown session opening intent: ${intent}`);
       }
-      if (state.openStatus === "ready") await controller.refreshReport();
-      return state;
+      return openSession({
+        source: "managed",
+        intent,
+        open: () => invokeOpenManagedSession(invoke(), locatorId),
+      });
+    },
+
+    async openSessionFromAnotherLocation() {
+      return openSession({
+        source: "external",
+        open: () => invokeOpenSessionFromAnotherLocation(invoke()),
+      });
     },
 
     async exportSession() {
@@ -348,7 +392,12 @@ export function createDesktopController(options = {}) {
     },
 
     async refreshReport(silent = false) {
-      if (!state.session || state.reportStatus === "refreshing" || state.reportExportStatus === "loading") {
+      if (
+        !state.session
+        || state.openStatus === "loading"
+        || state.reportStatus === "refreshing"
+        || state.reportExportStatus === "loading"
+      ) {
         return state;
       }
       if (reportPollInFlight) {
@@ -444,7 +493,8 @@ export function createDesktopController(options = {}) {
     },
 
     async refreshConductor(advanceAcquisition = true, silent = false) {
-      if (["loading", "refreshing", "mutating"].includes(state.conductorStatus)
+      if (state.openStatus === "loading"
+        || ["loading", "refreshing", "mutating"].includes(state.conductorStatus)
         || conductorPollInFlight) return state;
       if (silent) conductorPollInFlight = true;
       else commit(beginConductorLoad(state));

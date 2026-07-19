@@ -525,7 +525,7 @@ export function mount(root, browserWindow) {
   });
 
   openButton.addEventListener("click", async () => {
-    await controller.openSession();
+    await controller.openSessionFromAnotherLocation();
   });
 
   exportButton.addEventListener("click", async () => {

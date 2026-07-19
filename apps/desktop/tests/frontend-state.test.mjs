@@ -18,7 +18,8 @@ import {
   invokeImportActiveSessionWsprLive,
   invokeLoadStationPreferences,
   invokeMutateSessionConductor,
-  invokeOpenSession,
+  invokeOpenManagedSession,
+  invokeOpenSessionFromAnotherLocation,
   invokeRefreshActiveSessionReport,
   invokeReviewSessionSetup,
   invokeRunSessionAntennaController,
@@ -52,6 +53,7 @@ import {
   projectCountdown,
   recommendedNoteTarget,
   releaseReportFrame,
+  sessionOpenDestination,
   setupPlanEstimate,
   updateReportFrame,
   viewModel,
@@ -172,6 +174,8 @@ test("the shell starts in session setup", () => {
   assert.deepEqual(initialState(), {
     activeWorkflow: "setup",
     openStatus: "idle",
+    openSource: null,
+    openIntent: null,
     session: null,
     reportPresentationId: 0,
     reportStatus: "idle",
@@ -719,7 +723,10 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
   assert.equal(loading.conductorStatus, "loading");
   assert.equal(ready.conductorStatus, "ready");
   assert.equal(ready.conductor, conductor);
+  assert.equal(ready.session.lifecycle, "running");
+  assert.equal(ready.session.revision, 4);
   assert.equal(silentlyPolled.conductorStatus, "ready");
+  assert.equal(silentlyPolled.session.revision, 4);
   assert.equal(silentlyPolled.conductorNotice, "Session started.");
   assert.equal(mutating.conductorStatus, "mutating");
   assert.equal(mutating.conductorPendingAction, "start");
@@ -1160,15 +1167,48 @@ test("setup native errors remain typed and editable", () => {
 });
 
 test("opening a session transitions through loading and ready", () => {
-  const loading = beginOpenSession(initialState("transfer"));
+  const loading = beginOpenSession(initialState("transfer"), "managed", "work");
   const session = { sessionId: "session-1", reportHtml: "<!doctype html>" };
-  const ready = openSessionSucceeded(loading, session);
+  const ready = openSessionSucceeded(loading, session, "run");
 
   assert.equal(loading.openStatus, "loading");
+  assert.equal(loading.openSource, "managed");
+  assert.equal(loading.openIntent, "work");
   assert.equal(ready.openStatus, "ready");
-  assert.equal(ready.activeWorkflow, "report");
+  assert.equal(ready.activeWorkflow, "run");
   assert.equal(ready.session, session);
   assert.equal(ready.reportPresentationId, 1);
+});
+
+test("fresh lifecycle and explicit intent determine the opening destination", () => {
+  for (const lifecycle of ["ready", "running", "interrupted"]) {
+    assert.deepEqual(sessionOpenDestination({ lifecycle }), {
+      intent: "work",
+      workflow: "run",
+      redirected: false,
+    });
+    assert.deepEqual(sessionOpenDestination({ lifecycle }, "report"), {
+      intent: "report",
+      workflow: "report",
+      redirected: false,
+    });
+  }
+  for (const lifecycle of ["ended", "abandoned", "draft", null]) {
+    assert.deepEqual(sessionOpenDestination({ lifecycle }), {
+      intent: "report",
+      workflow: "report",
+      redirected: false,
+    });
+    assert.deepEqual(sessionOpenDestination({ lifecycle }, "work"), {
+      intent: "work",
+      workflow: "report",
+      redirected: true,
+    });
+  }
+  assert.throws(
+    () => sessionOpenDestination({ lifecycle: "ready" }, "edit"),
+    /Unknown session opening intent/,
+  );
 });
 
 test("same-ID successful opens refresh only the new report presentation", () => {
@@ -1413,7 +1453,8 @@ test("the frontend invokes only the narrow session commands", async () => {
         : { status: "exported", bundleName: "session-1-copy.session.wsprabundle" };
   };
 
-  const result = await invokeOpenSession(invoke);
+  const result = await invokeOpenSessionFromAnotherLocation(invoke);
+  const managed = await invokeOpenManagedSession(invoke, "locator-1");
   const report = await invokeActiveSessionReport(invoke);
   const exported = await invokeExportSession(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
@@ -1423,6 +1464,7 @@ test("the frontend invokes only the narrow session commands", async () => {
 
   assert.deepEqual(calls, [
     ["open_session_bundle"],
+    ["open_managed_session", { locatorId: "locator-1" }],
     ["active_session_report"],
     ["export_active_session"],
     ["refresh_active_session_report"],
@@ -1431,6 +1473,7 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["import_active_session_rbn"],
   ]);
   assert.equal(result.status, "opened");
+  assert.equal(managed.status, "exported");
   assert.equal(report, "<!doctype html>");
   assert.equal(exported.status, "exported");
   assert.equal(refreshed.status, "exported");

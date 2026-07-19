@@ -228,8 +228,19 @@ the direct child and inspected committed projection have not changed, then uses
 the same active-session path as picker opening. Invalid and unsupported direct
 children can be revealed through their native capability but cannot be opened;
 filesystem indirections receive no capability. The catalog admits at most 256
-candidates and 512 KiB of IPC output, reporting incomplete status whenever
-either bound shortens the result.
+candidate children and 512 KiB of IPC output, reporting incomplete status
+whenever either bound shortens the result.
+
+Opening is intent-driven after Rust returns a freshly inspected session
+summary; catalog lifecycle metadata is never used as routing authority. A
+managed `work` intent enters Run only for `ready`, `running`, or `interrupted`
+sessions. A terminal, legacy, or otherwise read-only fresh result is redirected
+to its report with an explicit notice. A managed `report` intent refreshes only
+the committed report projection. The external picker remains a single action:
+its fresh resumable lifecycle defaults to Run and a terminal or absent
+lifecycle defaults to Reports. Both sources share one open-in-flight state
+machine, and cancellation or failure retains the prior active workflow and
+report presentation.
 
 This direct projection is the simple in-memory approach anticipated by ADR
 0020, not evidence that a persistent cross-session index is required. Any
@@ -488,7 +499,13 @@ cannot leave an orphan receiver.
 
 The allowlisted `open_session_bundle` application command owns the native
 directory picker and selects a coherent committed snapshot in Rust. It returns
-only a small session summary. `active_session_report` reads the retained
+only a small session summary. The corresponding managed command accepts only a
+refresh-local locator. The frontend commits that fresh summary before routing:
+report intent refreshes the report alone, while work intent refreshes the
+report, then loads the conductor and the same run services used after creation.
+If conductor recovery changes lifecycle or revision, the summary is reconciled
+from the conductor response and the report is refreshed again. Neither path
+implicitly starts or resumes a session. `active_session_report` reads the retained
 presentation, while `refresh_active_session_report` builds and verifies a
 revision-keyed replacement without discarding the prior presentation on error.
 `export_active_session_report` writes exactly that retained standalone HTML with

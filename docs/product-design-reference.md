@@ -258,8 +258,16 @@ occupancy effect. A Rust-issued action token binds the first submission time and
 idempotent mutation identity;
 retrying a lost response cannot duplicate evidence, while a stale revision
 fails without overwrite. Opening a session left running records one durable
-recovery-system interruption before resume/end actions are offered. Ended and
-abandoned sessions are terminal, and schema-v1 sources remain read-only.
+recovery-system interruption before resume/end actions are offered, but only
+when the operator opens it to work and the conductor is loaded. Opening the
+same committed session for its report does not recover it or start run
+services. Saved-session actions make that `work` versus `report` intent
+explicit. The external picker defaults a freshly opened ready, running, or
+interrupted session to Run and a terminal or legacy session to Reports. A stale
+work request that opens a now-terminal or read-only session is safely redirected
+to Reports with an explanation. No opening path starts or resumes a session;
+those remain explicit operator actions. Ended and abandoned sessions are
+terminal, and schema-v1 sources remain read-only.
 
 The routine presentation shows one prominent next action. It says whether to
 keep or switch the named antenna and, independently, whether to turn WSJT-X

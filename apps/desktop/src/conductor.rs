@@ -269,8 +269,8 @@ mod tests {
     };
     use crate::{
         open_session::{
-            activate_created_bundle, e2e_report_snapshot, export_e2e_snapshots, ActiveSessionState,
-            SessionErrorKind,
+            activate_created_bundle, e2e_report_snapshot, export_e2e_snapshots,
+            open_session_at_path, ActiveSessionState, SessionErrorKind,
         },
         setup::{create_e2e_session, create_e2e_signal_session},
         wsjtx_session::inject_e2e_wsjtx_sequence,
@@ -436,6 +436,26 @@ mod tests {
         let state = ActiveSessionState::default();
         activate_created_bundle(&state, store.root().to_path_buf()).unwrap();
         state
+    }
+
+    fn snapshot_files(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+        fn collect(root: &Path, current: &Path, files: &mut Vec<(PathBuf, Vec<u8>)>) {
+            for entry in fs::read_dir(current).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    collect(root, &path, files);
+                } else {
+                    files.push((
+                        path.strip_prefix(root).unwrap().to_path_buf(),
+                        fs::read(path).unwrap(),
+                    ));
+                }
+            }
+        }
+        let mut files = Vec::new();
+        collect(root, root, &mut files);
+        files.sort_by(|left, right| left.0.cmp(&right.0));
+        files
     }
 
     fn request(view: &super::ConductorView, action: ConductorAction) -> ConductorMutationRequest {
@@ -1371,6 +1391,44 @@ mod tests {
         assert_eq!(recovered.lifecycle, SessionLifecycleV2::Interrupted);
         assert!(recovered.recovery.unwrap().interruption_recorded);
         assert_eq!(store.read_v2().unwrap().events.len(), 2);
+    }
+
+    #[test]
+    fn report_open_is_observational_and_work_recovery_interrupts_once() {
+        let start = Utc.with_ymd_and_hms(2026, 7, 15, 2, 0, 0).unwrap();
+        let temp = TempDir::new().unwrap();
+        let store = ready_store(&temp, start);
+        let active = activate(&store);
+        let hooks = Arc::new(TestHooks::new(start));
+        let conductor = ConductorSessionState::default();
+        let ready = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+        let running = mutate_conductor_with_hooks(
+            &active,
+            &conductor,
+            request(&ready, ConductorAction::Start { note: None }),
+            hooks.clone(),
+        )
+        .unwrap();
+        assert_eq!(running.lifecycle, SessionLifecycleV2::Running);
+
+        let before_open = snapshot_files(store.root());
+        let reopened = ActiveSessionState::default();
+        open_session_at_path(&reopened, store.root().to_path_buf()).unwrap();
+        assert_eq!(snapshot_files(store.root()), before_open);
+
+        let restarted_conductor = ConductorSessionState::default();
+        let recovered =
+            read_conductor_with_hooks(&reopened, &restarted_conductor, hooks.clone()).unwrap();
+        assert_eq!(recovered.lifecycle, SessionLifecycleV2::Interrupted);
+        assert_eq!(recovered.revision, running.revision + 1);
+        assert!(recovered.recovery.unwrap().interruption_recorded);
+        let after_recovery = snapshot_files(store.root());
+        assert_ne!(after_recovery, before_open);
+
+        let reread = read_conductor_with_hooks(&reopened, &restarted_conductor, hooks).unwrap();
+        assert_eq!(reread.lifecycle, SessionLifecycleV2::Interrupted);
+        assert_eq!(reread.revision, recovered.revision);
+        assert_eq!(snapshot_files(store.root()), after_recovery);
     }
 
     #[test]

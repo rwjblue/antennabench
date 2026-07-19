@@ -5,6 +5,8 @@ export function initialState(workflow = "setup") {
     {
       activeWorkflow: "setup",
       openStatus: "idle",
+      openSource: null,
+      openIntent: null,
       session: null,
       reportPresentationId: 0,
       reportStatus: "idle",
@@ -60,8 +62,15 @@ export function selectWorkflow(state, workflow) {
   return { ...state, activeWorkflow: workflow };
 }
 
-export function beginOpenSession(state) {
-  return { ...state, openStatus: "loading", error: null, notice: null };
+export function beginOpenSession(state, source = "external", intent = null) {
+  return {
+    ...state,
+    openStatus: "loading",
+    openSource: source,
+    openIntent: intent,
+    error: null,
+    notice: null,
+  };
 }
 
 export function editSessionSetup(state) {
@@ -179,11 +188,18 @@ export function setupCreationFailed(state, error) {
   };
 }
 
-export function openSessionSucceeded(state, session) {
+export function openSessionSucceeded(
+  state,
+  session,
+  workflow = "report",
+  notice = null,
+  intent = state.openIntent,
+) {
   return {
     ...state,
-    activeWorkflow: "report",
+    activeWorkflow: workflow,
     openStatus: "ready",
+    openIntent: intent,
     session,
     reportPresentationId: session.presentationId
       ?? (session.reportHtml ? state.reportPresentationId + 1 : state.reportPresentationId),
@@ -193,7 +209,7 @@ export function openSessionSucceeded(state, session) {
     reportExportError: null,
     reportExportNotice: null,
     error: null,
-    notice: null,
+    notice,
     exportStatus: "idle",
     exportError: null,
     exportNotice: null,
@@ -369,6 +385,7 @@ export function conductorLoadSucceeded(state, conductor) {
     ...state,
     conductorStatus: "ready",
     conductor,
+    session: reconcileSessionWithConductor(state.session, conductor),
     conductorError: null,
     conductorPendingAction: null,
     conductorNotice: completedAction
@@ -381,6 +398,16 @@ export function conductorPollSucceeded(state, conductor) {
   return {
     ...state,
     conductor,
+    session: reconcileSessionWithConductor(state.session, conductor),
+  };
+}
+
+function reconcileSessionWithConductor(session, conductor) {
+  if (!session) return session;
+  return {
+    ...session,
+    lifecycle: conductor.lifecycle,
+    revision: conductor.revision,
   };
 }
 

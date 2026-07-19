@@ -104,6 +104,16 @@ Static `read_v2()` remains useful for already quiescent bundles. Active report
 and export code should use the checkpointed APIs so one derived result cannot
 mix revisions.
 
+Opening a bundle for activation or report is an observational checkpointed
+read. It does not acquire a writer, clean recovery artifacts, append an
+interruption, or otherwise change bundle bytes. The desktop loads only the
+committed report for report intent. Work intent crosses the recovery boundary
+only when it subsequently requests the active-session conductor; that first
+conductor load owns recovery and returns the authoritative post-recovery
+lifecycle and revision. The frontend reconciles those fields into its session
+summary and refreshes a report that recovery made stale. It never issues an
+implicit Start or Resume action.
+
 Schema v3 provides corresponding `read_v3_checkpointed()` and
 `export_v3_checkpointed_to()` boundaries. Its writer appends correctable
 operator events and attachment-backed adapter evidence plus observations while

@@ -1,4 +1,21 @@
 export const WORKFLOWS = Object.freeze(["setup", "run", "transfer", "report"]);
+export const OPEN_INTENTS = Object.freeze(["work", "report"]);
+
+const WORK_LIFECYCLES = Object.freeze(["ready", "running", "interrupted"]);
+
+export function sessionOpenDestination(session, requestedIntent = null) {
+  if (requestedIntent !== null && !OPEN_INTENTS.includes(requestedIntent)) {
+    throw new RangeError(`Unknown session opening intent: ${requestedIntent}`);
+  }
+  const workEligible = WORK_LIFECYCLES.includes(session?.lifecycle);
+  const intent = requestedIntent ?? (workEligible ? "work" : "report");
+  const workflow = intent === "work" && workEligible ? "run" : "report";
+  return {
+    intent,
+    workflow,
+    redirected: requestedIntent === "work" && workflow === "report",
+  };
+}
 
 export const CONTEXT_HELP = Object.freeze({
   setup_question: {

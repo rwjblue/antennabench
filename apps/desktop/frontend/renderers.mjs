@@ -717,7 +717,9 @@ function conductorEventElement(root, event, disabled) {
 function transferStatusText(state) {
   if (state.importStatus === "loading") return "Importing evidence";
   if (state.importStatus === "error") return "Import failed";
-  if (state.openStatus === "loading") return "Opening bundle";
+  if (state.openStatus === "loading") {
+    return state.openSource === "managed" ? "Opening saved session" : "Opening bundle";
+  }
   if (state.openStatus === "ready") return "Bundle open";
   if (state.openStatus === "error") return "Open failed";
   return "No bundle open";
@@ -747,9 +749,12 @@ function setupFeedbackModel(state) {
 }
 
 function openFeedbackModel(state) {
-  if (state.openStatus === "loading") return { kind: "loading", message: "Reading and validating the selected bundle…", detail: "The source directory will not be changed." };
+  if (state.openStatus === "loading") return state.openSource === "managed"
+    ? { kind: "loading", message: "Opening the saved session…", detail: "Its current lifecycle will be checked before choosing the destination." }
+    : { kind: "loading", message: "Reading and validating the selected bundle…", detail: "The source directory will not be changed." };
   if (state.error) return { kind: "error", ...state.error };
   if (state.notice === "cancelled") return { kind: "cancelled", message: "Open cancelled.", detail: "No session was changed." };
+  if (state.notice === "work_redirected" && state.session) return { kind: "ready", message: `${state.session.bundleName} opened in Reports.`, detail: "Its current lifecycle is terminal or read-only, so run services were not loaded." };
   if (state.session) return { kind: "ready", message: `${state.session.bundleName} is ready.`, detail: "Its local report was rebuilt in memory from the source bundle." };
   return null;
 }

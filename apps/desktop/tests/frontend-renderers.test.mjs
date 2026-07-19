@@ -483,6 +483,20 @@ test("transfer renderer covers lifecycle/schema eligibility and feedback outcome
   renderTransfer(e, state);
   assert.equal(e.openFeedback.dataset.kind, "error");
   assert.equal(e.feedbackDetail.textContent, "invalid JSON");
+
+  state.error = null;
+  state.openStatus = "loading";
+  state.openSource = "managed";
+  renderTransfer(e, state);
+  assert.equal(e.transferStatus.textContent, "Opening saved session");
+  assert.match(e.feedbackMessage.textContent, /saved session/i);
+
+  state.openStatus = "ready";
+  state.notice = "work_redirected";
+  state.session = { lifecycle: "ended", schemaVersion: 5, bundleName: "ended" };
+  renderTransfer(e, state);
+  assert.match(e.feedbackMessage.textContent, /opened in Reports/);
+  assert.match(e.feedbackDetail.textContent, /run services were not loaded/);
 });
 
 test("report renderer covers unavailable, refreshing, ready, exporting, error, and frame identity", () => {

@@ -1,5 +1,9 @@
-export function invokeOpenSession(invoke) {
+export function invokeOpenSessionFromAnotherLocation(invoke) {
   return invoke("open_session_bundle");
+}
+
+export function invokeOpenManagedSession(invoke, locatorId) {
+  return invoke("open_managed_session", { locatorId });
 }
 
 export function invokeReviewSessionSetup(invoke, draft) {

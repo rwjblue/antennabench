@@ -139,32 +139,282 @@ test("controller profiles can be explicitly saved and deleted during setup", asy
 
 test("open cancellation, failure, and success retain focused state and refresh reports", async () => {
   const cancelled = harness({ open_session_bundle: { status: "cancelled" } });
-  await cancelled.controller.openSession();
+  await cancelled.controller.openSessionFromAnotherLocation();
   assert.equal(cancelled.controller.state.openStatus, "idle");
   assert.equal(cancelled.controller.state.notice, "cancelled");
 
   const failed = harness({ open_session_bundle: new Error("cannot open") });
-  await failed.controller.openSession();
+  await failed.controller.openSessionFromAnotherLocation();
   assert.equal(failed.controller.state.openStatus, "error");
   assert.match(failed.controller.state.error.detail, /cannot open/);
 
   const opened = harness({
-    open_session_bundle: { status: "opened", session: session() },
+    open_session_bundle: { status: "opened", session: session({ lifecycle: "ended" }) },
     refresh_active_session_report: {
       presentationId: 5,
       reportHtml: "<p>opened</p>",
       revision: 5,
-      lifecycle: "running",
+      lifecycle: "ended",
       completeness: "full_detail",
     },
   });
-  await opened.controller.openSession();
+  await opened.controller.openSessionFromAnotherLocation();
   assert.deepEqual(opened.navigations, ["report"]);
   assert.deepEqual(opened.calls.map(([command]) => command), [
     "open_session_bundle",
     "refresh_active_session_report",
   ]);
   assert.equal(opened.controller.state.session.reportHtml, "<p>opened</p>");
+});
+
+test("managed opening obeys explicit report and work intents from the fresh summary", async () => {
+  for (const lifecycle of ["ready", "running", "interrupted", "ended", "abandoned", null]) {
+    const reportOnly = harness({
+      open_managed_session: { status: "opened", session: session({ lifecycle }) },
+      refresh_active_session_report: {
+        presentationId: 4,
+        reportHtml: "<p>report only</p>",
+        revision: lifecycle === null ? null : 3,
+        lifecycle,
+        completeness: "full_detail",
+      },
+    });
+    await reportOnly.controller.openManagedSession(`locator-${lifecycle}`, "report");
+    assert.deepEqual(reportOnly.navigations, ["report"]);
+    assert.deepEqual(reportOnly.calls, [
+      ["open_managed_session", { locatorId: `locator-${lifecycle}` }],
+      ["refresh_active_session_report", undefined],
+    ]);
+    assert.equal(reportOnly.controller.state.conductor, null);
+  }
+
+  for (const lifecycle of ["ready", "interrupted"]) {
+    const work = harness({
+      open_managed_session: { status: "opened", session: session({ lifecycle }) },
+      refresh_active_session_report: {
+        presentationId: 4,
+        reportHtml: `<p>${lifecycle}</p>`,
+        revision: 3,
+        lifecycle,
+        completeness: "full_detail",
+      },
+      active_session_conductor: conductor({ lifecycle }),
+      active_session_antenna_controller: {
+        policy: "manual",
+        attached: false,
+        armed: false,
+        targets: {},
+      },
+      active_session_wsjtx_status: { phase: "stopped" },
+    });
+    await work.controller.openManagedSession(`locator-${lifecycle}`, "work");
+    assert.deepEqual(work.navigations, ["run"]);
+    assert.deepEqual(work.calls.map(([command]) => command), [
+      "open_managed_session",
+      "refresh_active_session_report",
+      "active_session_conductor",
+      "active_session_antenna_controller",
+      "active_session_wsjtx_status",
+    ]);
+    assert.equal(work.calls.some(([command]) => command === "mutate_active_session_conductor"), false);
+  }
+
+  let reportCount = 0;
+  const recoveredWork = harness({
+    open_managed_session: {
+      status: "opened",
+      session: session({ lifecycle: "running", revision: 3 }),
+    },
+    refresh_active_session_report: () => {
+      reportCount += 1;
+      return {
+        presentationId: 4 + reportCount,
+        reportHtml: `<p>revision ${reportCount === 1 ? 3 : 4}</p>`,
+        revision: reportCount === 1 ? 3 : 4,
+        lifecycle: reportCount === 1 ? "running" : "interrupted",
+        completeness: "full_detail",
+      };
+    },
+    active_session_conductor: conductor({ lifecycle: "interrupted", revision: 4 }),
+    active_session_antenna_controller: {
+      policy: "manual",
+      attached: false,
+      armed: false,
+      targets: {},
+    },
+    active_session_wsjtx_status: { phase: "stopped" },
+  });
+  await recoveredWork.controller.openManagedSession("locator-work", "work");
+  assert.deepEqual(recoveredWork.navigations, ["run"]);
+  assert.deepEqual(recoveredWork.calls.map(([command]) => command), [
+    "open_managed_session",
+    "refresh_active_session_report",
+    "active_session_conductor",
+    "active_session_antenna_controller",
+    "active_session_wsjtx_status",
+    "refresh_active_session_report",
+  ]);
+  assert.equal(recoveredWork.controller.state.session.lifecycle, "interrupted");
+  assert.equal(recoveredWork.controller.state.session.revision, 4);
+  assert.match(recoveredWork.controller.state.session.reportHtml, /revision 4/);
+});
+
+test("terminal work requests redirect to report without loading run services", async () => {
+  const run = harness({
+    open_managed_session: {
+      status: "opened",
+      session: session({ lifecycle: "ended", revision: 8 }),
+    },
+    refresh_active_session_report: {
+      presentationId: 8,
+      reportHtml: "<p>ended</p>",
+      revision: 8,
+      lifecycle: "ended",
+      completeness: "full_detail",
+    },
+  });
+
+  await run.controller.openManagedSession("locator-ended", "work");
+
+  assert.deepEqual(run.navigations, ["report"]);
+  assert.equal(run.controller.state.notice, "work_redirected");
+  assert.deepEqual(run.calls.map(([command]) => command), [
+    "open_managed_session",
+    "refresh_active_session_report",
+  ]);
+});
+
+test("the external picker defaults fresh resumable sessions to work", async () => {
+  const run = harness({
+    open_session_bundle: { status: "opened", session: session({ lifecycle: "ready" }) },
+    refresh_active_session_report: {
+      presentationId: 3,
+      reportHtml: "<p>ready</p>",
+      revision: 3,
+      lifecycle: "ready",
+      completeness: "full_detail",
+    },
+    active_session_conductor: conductor({ lifecycle: "ready" }),
+    active_session_antenna_controller: {
+      policy: "manual",
+      attached: false,
+      armed: false,
+      targets: {},
+    },
+    active_session_wsjtx_status: { phase: "stopped" },
+  });
+
+  await run.controller.openSessionFromAnotherLocation();
+
+  assert.deepEqual(run.navigations, ["run"]);
+  assert.equal(run.controller.state.openIntent, "work");
+  assert.deepEqual(run.calls.map(([command]) => command), [
+    "open_session_bundle",
+    "refresh_active_session_report",
+    "active_session_conductor",
+    "active_session_antenna_controller",
+    "active_session_wsjtx_status",
+  ]);
+});
+
+test("the external picker defaults terminal and legacy sessions to report", async () => {
+  for (const lifecycle of ["ended", "abandoned", null]) {
+    const run = harness({
+      open_session_bundle: { status: "opened", session: session({ lifecycle }) },
+      refresh_active_session_report: {
+        presentationId: 3,
+        reportHtml: "<p>historical</p>",
+        revision: lifecycle === null ? null : 3,
+        lifecycle,
+        completeness: "full_detail",
+      },
+    });
+    await run.controller.openSessionFromAnotherLocation();
+    assert.deepEqual(run.navigations, ["report"]);
+    assert.equal(run.controller.state.openIntent, "report");
+    assert.deepEqual(run.calls.map(([command]) => command), [
+      "open_session_bundle",
+      "refresh_active_session_report",
+    ]);
+  }
+});
+
+test("one opening state machine serializes managed and picker requests", async () => {
+  let resolveManaged;
+  const run = harness({
+    open_managed_session: () => new Promise((resolve) => { resolveManaged = resolve; }),
+    refresh_active_session_report: {
+      presentationId: 1,
+      reportHtml: "<p>ended</p>",
+      revision: 3,
+      lifecycle: "ended",
+      completeness: "full_detail",
+    },
+  });
+
+  const first = run.controller.openManagedSession("locator-1", "report");
+  const second = run.controller.openSessionFromAnotherLocation();
+  assert.deepEqual(run.calls, [["open_managed_session", { locatorId: "locator-1" }]]);
+  resolveManaged({ status: "opened", session: session({ lifecycle: "ended" }) });
+  await Promise.all([first, second]);
+  assert.equal(run.calls.filter(([command]) => command === "open_session_bundle").length, 0);
+  await assert.rejects(
+    () => run.controller.openManagedSession("locator-1", "edit"),
+    /Unknown session opening intent/,
+  );
+});
+
+test("open, report, and conductor foreground operations do not overlap", async () => {
+  const prior = openSessionSucceeded(initialState("report"), session({ lifecycle: "ended" }));
+  let resolveReport;
+  const reportFirst = harness({
+    refresh_active_session_report: () => new Promise((resolve) => { resolveReport = resolve; }),
+  }, { state: prior });
+  const refresh = reportFirst.controller.refreshReport();
+  await reportFirst.controller.openSessionFromAnotherLocation();
+  assert.deepEqual(reportFirst.calls.map(([command]) => command), [
+    "refresh_active_session_report",
+  ]);
+  resolveReport({
+    presentationId: 5,
+    reportHtml: "<p>fresh</p>",
+    revision: 3,
+    lifecycle: "ended",
+    completeness: "full_detail",
+  });
+  await refresh;
+
+  let resolveOpen;
+  const openFirst = harness({
+    open_managed_session: () => new Promise((resolve) => { resolveOpen = resolve; }),
+  }, { state: prior });
+  const opening = openFirst.controller.openManagedSession("locator-1", "report");
+  await Promise.all([
+    openFirst.controller.refreshReport(),
+    openFirst.controller.refreshConductor(),
+  ]);
+  assert.deepEqual(openFirst.calls.map(([command]) => command), ["open_managed_session"]);
+  resolveOpen({ status: "cancelled" });
+  await opening;
+});
+
+test("cancelled and failed replacement opens preserve the prior presentation", async () => {
+  const priorSession = session({ lifecycle: "ended", reportHtml: "<p>prior</p>" });
+  const prior = openSessionSucceeded(initialState("report"), priorSession);
+  prior.activeWorkflow = "transfer";
+  const cancelled = harness({ open_session_bundle: { status: "cancelled" } }, { state: prior });
+  await cancelled.controller.openSessionFromAnotherLocation();
+  assert.equal(cancelled.controller.state.session, priorSession);
+  assert.equal(cancelled.controller.state.activeWorkflow, "transfer");
+  assert.equal(cancelled.controller.state.reportPresentationId, prior.reportPresentationId);
+  assert.deepEqual(cancelled.calls.map(([command]) => command), ["open_session_bundle"]);
+
+  const failed = harness({ open_managed_session: new Error("changed") }, { state: prior });
+  await failed.controller.openManagedSession("locator-stale", "report");
+  assert.equal(failed.controller.state.session, priorSession);
+  assert.equal(failed.controller.state.activeWorkflow, "transfer");
+  assert.equal(failed.controller.state.reportPresentationId, prior.reportPresentationId);
+  assert.deepEqual(failed.calls.map(([command]) => command), ["open_managed_session"]);
 });
 
 test("conductor mutations serialize follow-up adapter, acquisition, and report refreshes", async () => {
