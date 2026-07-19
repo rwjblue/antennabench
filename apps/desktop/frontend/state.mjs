@@ -21,6 +21,8 @@ export function initialState(workflow = "saved") {
       reportExportStatus: "idle",
       reportExportError: null,
       reportExportNotice: null,
+      supportCopyStatus: "idle",
+      supportCopyError: null,
       error: null,
       notice: null,
       exportStatus: "idle",
@@ -163,6 +165,8 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     reportExportStatus: "idle",
     reportExportError: null,
     reportExportNotice: null,
+    supportCopyStatus: "idle",
+    supportCopyError: null,
     error: null,
     notice: null,
     managedLocationNotice: managedLocation,
@@ -219,6 +223,8 @@ export function openSessionSucceeded(
     reportExportStatus: "idle",
     reportExportError: null,
     reportExportNotice: null,
+    supportCopyStatus: "idle",
+    supportCopyError: null,
     error: null,
     notice,
     activeManagedLocatorId: state.openSource === "managed"
@@ -647,9 +653,26 @@ export function reportRefreshSucceeded(state, presentation) {
       lifecycle: presentation.lifecycle,
       completeness: presentation.completeness,
       hasControllerEvidence: presentation.hasControllerEvidence,
+      operationalHistory: presentation.operationalHistory ?? state.session.operationalHistory,
       presentationId: presentation.presentationId,
       reportAvailable: true,
     } : state.session,
+  };
+}
+
+export function beginSupportSummaryCopy(state) {
+  return { ...state, supportCopyStatus: "copying", supportCopyError: null };
+}
+
+export function supportSummaryCopySucceeded(state) {
+  return { ...state, supportCopyStatus: "copied", supportCopyError: null };
+}
+
+export function supportSummaryCopyFailed(state, error) {
+  return {
+    ...state,
+    supportCopyStatus: "error",
+    supportCopyError: normalizeOpenError(error),
   };
 }
 

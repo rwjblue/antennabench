@@ -94,10 +94,19 @@ rather than editing bundle files by hand.
 - Review bundles before sharing. Notes, imported source material, and controller
   diagnostics can contain station details, local paths, usernames, addresses, or
   other sensitive text.
+- For a public support request, use the in-app **Copy support summary** action
+  and review the result before posting. The bounded deterministic JSON keeps the
+  allowlisted build/platform and diagnostic facts while omitting station
+  identity/grid, filenames and paths, target identifiers, controller output,
+  attachments, and evidence rows. It names legacy, unavailable, capped, and
+  persistence-gap states instead of claiming a clean history.
 - A full HTML report with controller attempts offers an explicit choice to omit
   command details with visible markers. That choice changes only the exported
   report; it does not sanitize or modify the lossless bundle. The compact summary
   already omits controller output and identifies that omission.
+- Operational history is also omitted from full evidence HTML by default. Its
+  separate explicit inclusion choice adds the redacted support view; compact
+  HTML cannot include it. Neither report choice changes the lossless bundle.
 - A damaged or ambiguous record may receive an
   [exclusion](glossary.md#exclusion) while the report still explains the
   problem. It is not silently converted into a result.

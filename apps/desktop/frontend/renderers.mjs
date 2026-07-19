@@ -472,6 +472,7 @@ export function renderRun(elements, state, root, options = {}) {
     antennaControllerOneLine, antennaControllerStructured,
     managedLocationNotice, managedLocationMessage, managedLocationDetail,
     managedLocationReveal,
+    runHistoricalDiagnostic, runHistoricalTitle, runHistoricalSummary, runHistoricalMeta,
   } = elements;
   managedLocationNotice.hidden = state.managedLocationNotice === null;
   if (state.managedLocationNotice) {
@@ -493,6 +494,10 @@ export function renderRun(elements, state, root, options = {}) {
     conductorFeedbackMessage,
     conductorFeedbackDetail,
     conductorFeedbackModel(state),
+  );
+  renderReopenedHistoricalDiagnostic(
+    { runHistoricalDiagnostic, runHistoricalTitle, runHistoricalSummary, runHistoricalMeta },
+    state,
   );
 
   if (!hasConductor) {
@@ -708,6 +713,7 @@ export function renderReport(elements, state, reportDocuments) {
     reportCompactExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
     reportBundleName, reportRevision, reportSummary, reportControllerOptions,
     reportControllerHandling,
+    reportOperationalOptions, reportOperationalHandling,
   } = elements;
   const hasSession = state.session !== null;
   const hasReport = typeof state.session?.reportHtml === "string";
@@ -733,15 +739,154 @@ export function renderReport(elements, state, reportDocuments) {
     reportControllerHandling.value = "complete";
     reportControllerOptions.dataset.presentationId = String(state.reportPresentationId);
   }
+  reportOperationalOptions.hidden = !hasSession;
+  if (reportOperationalOptions.dataset.presentationId !== String(state.reportPresentationId)) {
+    reportOperationalHandling.value = "omitted";
+    reportOperationalOptions.dataset.presentationId = String(state.reportPresentationId);
+  }
   reportRefreshButton.textContent = state.reportStatus === "refreshing" ? "Refreshing…" : "Refresh committed snapshot";
   reportCompactExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export compact summary HTML";
   reportFullExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export full evidence HTML";
   renderFeedback(reportFeedback, reportFeedbackMessage, reportFeedbackDetail, reportFeedbackModel(state));
+  renderOperationalHistory(elements, state);
   if (!hasSession) return;
   reportBundleName.textContent = state.session.bundleName;
   reportRevision.textContent = `Revision ${state.session.revision ?? "legacy"} · ${humanizeIdentifier(state.session.lifecycle ?? "static")}`;
   reportSummary.textContent = `${state.session.callsign} · ${state.session.grid} · ${state.session.antennaCount} antennas · ${state.session.slotCount} slots · ${state.session.observationCount} observations`;
   if (hasReport) updateReportFrame(reportFrame, state, reportDocuments);
+}
+
+function renderReopenedHistoricalDiagnostic(elements, state) {
+  const { runHistoricalDiagnostic, runHistoricalTitle, runHistoricalSummary, runHistoricalMeta } = elements;
+  const running = ["running", "interrupted"].includes(state.session?.lifecycle);
+  const diagnostics = state.session?.operationalHistory?.diagnostics ?? [];
+  const relevant = diagnostics.findLast?.((diagnostic) => (
+    ["failed", "partial", "unknown"].includes(diagnostic.outcome)
+    || diagnostic.severity === "error"
+  )) ?? [...diagnostics].reverse().find((diagnostic) => (
+    ["failed", "partial", "unknown"].includes(diagnostic.outcome)
+    || diagnostic.severity === "error"
+  ));
+  runHistoricalDiagnostic.hidden = !running || !relevant;
+  if (!running || !relevant) return;
+  runHistoricalTitle.textContent = relevant.outcome === "partial"
+    ? "Earlier operation retained only part of its intended result"
+    : "Earlier operation needs attention";
+  runHistoricalSummary.textContent = relevant.summary;
+  runHistoricalMeta.textContent = [
+    relevant.code,
+    `${humanizeIdentifier(relevant.operation)} / ${humanizeIdentifier(relevant.phase)}`,
+    humanizeIdentifier(relevant.evidenceEffect),
+    relevant.occurredAt,
+  ].join(" · ");
+}
+
+function renderOperationalHistory(elements, state) {
+  const {
+    operationalHistory, operationalHistoryStatus, operationalHistoryMessage,
+    operationalHistoryContexts, operationalHistoryDiagnostics, operationalHistoryBounds,
+    copySupportSummary, copySupportStatus,
+  } = elements;
+  const history = state.session?.operationalHistory;
+  operationalHistory.hidden = state.session === null;
+  if (!state.session) return;
+  const historyState = history?.historyState ?? "unavailable";
+  operationalHistory.dataset.state = historyState;
+  operationalHistoryStatus.textContent = humanizeIdentifier(historyState);
+  operationalHistoryStatus.classList.toggle("muted", historyState !== "complete");
+  operationalHistoryMessage.textContent = operationalHistoryMessageFor(historyState, history);
+
+  const document = operationalHistory.ownerDocument;
+  operationalHistoryContexts.replaceChildren(...(history?.contexts ?? []).map((context) => {
+    const article = document.createElement("article");
+    const title = document.createElement("h3");
+    title.textContent = context.creator ? "Creator runtime" : "Subsequent runtime";
+    const build = document.createElement("p");
+    build.textContent = [
+      context.appVersion ?? "version unknown",
+      context.sourceCommit ? `SHA ${context.sourceCommit}` : "SHA unknown",
+      humanizeIdentifier(context.buildChannel ?? "unknown"),
+      humanizeIdentifier(context.sourceState ?? "unknown"),
+    ].join(" · ");
+    const platform = document.createElement("p");
+    platform.textContent = [
+      context.targetTriple,
+      context.osFamily,
+      context.osVersion,
+      context.runtimeArchitecture,
+    ].filter(Boolean).join(" · ") || "Platform unknown";
+    const recorded = document.createElement("p");
+    recorded.textContent = `${context.firstRecordedAt} · ${context.contextId}`;
+    article.append(title, build, platform, recorded);
+    return article;
+  }));
+
+  operationalHistoryDiagnostics.replaceChildren(...(history?.diagnostics ?? []).map((diagnostic) => {
+    const item = document.createElement("li");
+    item.dataset.outcome = diagnostic.outcome;
+    const title = document.createElement("h3");
+    title.textContent = `${diagnostic.code} · ${humanizeIdentifier(diagnostic.outcome)}`;
+    const summary = document.createElement("p");
+    summary.textContent = diagnostic.summary;
+    const operation = document.createElement("p");
+    operation.textContent = `${diagnostic.occurredAt} · ${humanizeIdentifier(diagnostic.operation)} / ${humanizeIdentifier(diagnostic.phase)} · context ${diagnostic.runtimeContextId}`;
+    const effect = document.createElement("p");
+    effect.textContent = `Evidence: ${humanizeIdentifier(diagnostic.evidenceEffect)} · revisions ${diagnostic.revisionBefore ?? "unknown"} → ${diagnostic.revisionAfter ?? "unchanged/unknown"} · retry: ${humanizeIdentifier(diagnostic.retryDisposition)} (${diagnostic.retryGuidanceCode})`;
+    item.append(title, summary, operation, effect);
+    for (const detail of [...(diagnostic.targets ?? []), ...(diagnostic.causes ?? [])]) {
+      const line = document.createElement("p");
+      const code = document.createElement("code");
+      code.textContent = detail;
+      line.append(code);
+      item.append(line);
+    }
+    if (diagnostic.detailTruncated) {
+      const truncated = document.createElement("p");
+      truncated.textContent = "This diagnostic reached its detail bound; some optional facts were omitted.";
+      item.append(truncated);
+    }
+    return item;
+  }));
+
+  if ((history?.diagnostics ?? []).length === 0) {
+    const empty = document.createElement("li");
+    empty.dataset.outcome = "none";
+    empty.textContent = historyState === "complete"
+      ? "No material operational diagnostics were recorded within this format's storage and process guarantees."
+      : "No diagnostic records are available for this history state.";
+    operationalHistoryDiagnostics.replaceChildren(empty);
+  }
+  const omitted = (history?.retentionOmittedCount ?? 0)
+    + (history?.presentationOmittedCount ?? 0)
+    + (history?.supportSummaryOmittedCount ?? 0);
+  operationalHistoryBounds.textContent = `Retained ${history?.retainedCount ?? 0} diagnostic records. Format bounds: ${history?.recordLimit ?? "unknown"} records / ${formatBytes(history?.byteLimit)}. This view shows the latest ${history?.diagnostics?.length ?? 0}; ${omitted} later, earlier, or support-summary records are explicitly reported as omitted. ${history?.contextOmittedCount ?? 0} runtime contexts are omitted from this view.`;
+  copySupportSummary.disabled = typeof history?.supportSummary !== "string"
+    || state.supportCopyStatus === "copying";
+  copySupportSummary.textContent = state.supportCopyStatus === "copying"
+    ? "Copying…"
+    : "Copy support summary";
+  copySupportStatus.textContent = state.supportCopyStatus === "copied"
+    ? "Copied redacted JSON."
+    : state.supportCopyStatus === "error"
+      ? state.supportCopyError?.message ?? "Copy failed."
+      : "";
+}
+
+function operationalHistoryMessageFor(state, history) {
+  switch (state) {
+    case "complete": return history?.diagnostics?.length
+      ? "Chronological material failures, partial outcomes, and recoveries retained in this bundle are shown below."
+      : "This schema-v6 checkpoint has no recorded material diagnostics within the format's guarantees; storage or process loss can still prevent a diagnostic write.";
+    case "legacy_unknown": return "This legacy bundle predates durable runtime and diagnostic streams. Earlier operational history is unknown, not clean.";
+    case "retention_capped": return "The append-only diagnostic stream reached its retention bound. Later outcomes may be absent.";
+    case "persistence_gap": return `A diagnostic write could not be durably recorded. History has a known gap${history?.reasonCode ? ` (${history.reasonCode})` : ""}.`;
+    default: return "Operational history is unavailable. AntennaBench cannot infer whether material failures occurred.";
+  }
+}
+
+function formatBytes(value) {
+  if (!Number.isFinite(value)) return "unknown bytes";
+  return `${value} bytes`;
 }
 
 function renderFeedback(container, message, detail, model) {

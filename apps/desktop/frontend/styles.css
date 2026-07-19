@@ -357,6 +357,11 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .open-feedback[data-kind="error"] strong { color: #793728; }
 .open-feedback[data-kind="cancelled"] .feedback-mark { background: #8b938d; box-shadow: 0 0 0 4px rgba(139, 147, 141, 0.12); }
 
+.historical-alert { margin-top: 16px; padding: 18px 20px; border: 1px solid #e1c28c; border-left: 5px solid #b87520; border-radius: 14px; background: #fff7e8; }
+.historical-alert h2 { margin: 0; color: #704a19; font-family: Georgia, "Times New Roman", serif; font-size: 1.15rem; }
+.historical-alert > p:not(.eyebrow) { margin: 7px 0 0; color: #665640; font-size: .78rem; line-height: 1.5; }
+.historical-alert .historical-meta { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .68rem; overflow-wrap: anywhere; }
+
 .report-placeholder { display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 38px; min-height: 360px; padding: 44px; border: 1px solid #d8ddd6; border-radius: 22px; background: #fff; }
 .report-bars { display: flex; align-items: end; justify-content: center; gap: 13px; height: 170px; padding: 24px; border-radius: 15px; background: #edf2ed; }
 .report-bars span { width: 24px; border-radius: 6px 6px 2px 2px; background: #70c5b8; }
@@ -374,6 +379,25 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .report-export-choice p { margin: 0; color: #62736f; font-size: 0.72rem; line-height: 1.5; }
 .report-actions { padding: 14px 19px; border-bottom: 1px solid #d8ddd6; }
 .report-viewer > .open-feedback { margin: 16px 19px; }
+.operational-history { display: grid; gap: 14px; margin: 18px 19px; padding: 20px; border: 1px solid #cbd8d2; border-radius: 16px; background: #fbfcf9; }
+.operational-history-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.operational-history h2 { margin: 0; color: #1c403d; font-family: Georgia, "Times New Roman", serif; font-size: 1.25rem; }
+.operational-history > p { margin: 0; color: #62736f; font-size: .76rem; line-height: 1.5; }
+.runtime-contexts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.runtime-contexts article { padding: 13px; border: 1px solid #d9e1dc; border-radius: 11px; background: #f2f6f2; }
+.runtime-contexts h3 { margin: 0 0 6px; color: #315d57; font-size: .8rem; }
+.runtime-contexts p { margin: 3px 0; color: #61736e; font-size: .68rem; overflow-wrap: anywhere; }
+.operational-diagnostics { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.operational-diagnostics li { padding: 14px; border: 1px solid #d6ddd8; border-left: 4px solid #688b84; border-radius: 11px; background: #fff; }
+.operational-diagnostics li[data-outcome="failed"] { border-left-color: #b6543f; }
+.operational-diagnostics li[data-outcome="partial"] { border-left-color: #b87520; }
+.operational-diagnostics h3 { margin: 0; color: #284f4b; font-size: .84rem; overflow-wrap: anywhere; }
+.operational-diagnostics p { margin: 5px 0 0; color: #63736f; font-size: .7rem; line-height: 1.45; overflow-wrap: anywhere; }
+.operational-diagnostics code { font-size: .66rem; }
+.history-bounds { padding-top: 11px; border-top: 1px solid #dbe2dd; }
+.support-summary-actions { display: flex; align-items: center; gap: 12px; }
+.support-summary-actions button { border: 1px solid #245451; border-radius: 9px; padding: 9px 12px; color: #245451; background: #fff; font-size: .73rem; font-weight: 800; cursor: pointer; }
+.support-summary-actions span { color: #52706b; font-size: .72rem; }
 .report-viewer iframe { display: block; width: 100%; min-height: 680px; border: 0; background: #fff; }
 
 [hidden] { display: none !important; }

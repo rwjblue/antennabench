@@ -9,11 +9,16 @@ pub(crate) struct ReportPresentation {
     pub(super) lifecycle: Option<SessionLifecycleV2>,
     pub(super) completeness: ReportCompleteness,
     pub(super) has_controller_evidence: bool,
+    pub(crate) operational_history: BundleDiagnosticsPresentation,
     pub(super) report_html: String,
     #[serde(skip)]
     pub(super) compact_summary_html: String,
     #[serde(skip)]
     pub(super) controller_omitted_report_html: Option<String>,
+    #[serde(skip)]
+    pub(super) operational_history_report_html: String,
+    #[serde(skip)]
+    pub(super) operational_history_controller_omitted_report_html: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -30,13 +35,14 @@ pub(crate) struct OpenedSession {
     pub(crate) revision: Option<u64>,
     pub(crate) lifecycle: Option<SessionLifecycleV2>,
     pub(crate) report_available: bool,
+    pub(crate) operational_history: BundleDiagnosticsPresentation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum OpenSessionOutcome {
     Cancelled,
-    Opened { session: OpenedSession },
+    Opened { session: Box<OpenedSession> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -70,6 +76,14 @@ pub(crate) enum ReportExportFormat {
     CompactSummaryHtml,
     #[default]
     FullEvidenceHtml,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum OperationalHistoryHandling {
+    #[default]
+    Omitted,
+    IncludedRedacted,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

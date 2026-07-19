@@ -236,12 +236,20 @@ All three outputs serve different purposes:
   sample or recompute the retained facts.
 - The **full evidence HTML report** is the most detailed human-readable result
   and audit presentation for one committed revision. Controller details may be
-  included or explicitly omitted at export. If a resource boundary requires a
+  included or explicitly omitted at export. Operational history is a separate
+  export choice: it is omitted by default and, when explicitly included, adds
+  only the bounded redacted support view outside the scientific findings. If a resource boundary requires a
   bounded overview, the report names the omitted detail instead of sampling it.
 - The [session bundle](glossary.md#session-bundle) is the lossless durable
   record. Reports are derived from it and can be regenerated. Keep or share the
   bundle when another person needs the complete evidence rather than only a
   standalone presentation.
+
+The in-app **Build and operational history** panel is not part of the embedded
+scientific report. Its build SHA/version/channel, platform, failure/partial/
+recovery outcomes, evidence effects, and retry guidance exist to support the
+software and must not be read as antenna-performance conclusions. Compact/public
+HTML never carries these operational details.
 
 ## What This Report Will Never Tell You Yet
 

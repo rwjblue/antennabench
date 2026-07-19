@@ -8,6 +8,7 @@ pub(super) struct LoadedSnapshot {
     pub(super) report_snapshot: ReportSnapshotContext,
     pub(super) revision: Option<u64>,
     pub(super) lifecycle: Option<SessionLifecycleV2>,
+    pub(super) operational_history: BundleDiagnosticsPresentation,
 }
 
 pub(super) fn open_bundle(path: &Path) -> Result<ActiveSession, OpenSessionError> {
@@ -38,46 +39,56 @@ pub(super) fn load_snapshot(
     let store = BundleStore::new(path);
     if bundle_name.ends_with(V2_BUNDLE_SUFFIX) {
         let schema_version = store.schema_version()?;
-        let (current, revision, lifecycle, report_snapshot, intended_cycle_count) =
-            match schema_version {
-                SCHEMA_VERSION_V2 => {
-                    let bundle = store.read_v2_checkpointed()?;
-                    let revision = bundle.session_state.revision;
-                    let lifecycle = bundle.session_state.lifecycle;
-                    let report_snapshot = report_snapshot(&bundle);
-                    let intended_cycle_count = bundle.schedule.slots.len();
-                    (
-                        bundle.into_current(),
-                        revision,
-                        lifecycle,
-                        report_snapshot,
-                        intended_cycle_count,
-                    )
-                }
-                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
-                    let bundle = store.read_v3_checkpointed()?;
-                    let revision = bundle.session_state.revision;
-                    let lifecycle = bundle.session_state.lifecycle;
-                    let report_snapshot = report_snapshot_v3(&bundle);
-                    let intended_cycle_count = bundle
-                        .schedule
-                        .wspr_cycle_intents
-                        .len()
-                        .max(bundle.schedule.slots.len());
-                    (
-                        bundle.into_current(),
-                        revision,
-                        lifecycle,
-                        report_snapshot,
-                        intended_cycle_count,
-                    )
-                }
-                actual => {
-                    return Err(OpenSessionError::Storage(
-                        BundleStoreError::UnsupportedSchemaVersion { actual },
-                    ));
-                }
-            };
+        let (
+            current,
+            revision,
+            lifecycle,
+            report_snapshot,
+            intended_cycle_count,
+            operational_history,
+        ) = match schema_version {
+            SCHEMA_VERSION_V2 => {
+                let bundle = store.read_v2_checkpointed()?;
+                let operational_history = legacy_diagnostics_presentation(schema_version);
+                let revision = bundle.session_state.revision;
+                let lifecycle = bundle.session_state.lifecycle;
+                let report_snapshot = report_snapshot(&bundle);
+                let intended_cycle_count = bundle.schedule.slots.len();
+                (
+                    bundle.into_current(),
+                    revision,
+                    lifecycle,
+                    report_snapshot,
+                    intended_cycle_count,
+                    operational_history,
+                )
+            }
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+                let bundle = store.read_v3_checkpointed()?;
+                let operational_history = present_bundle_diagnostics(schema_version, &bundle);
+                let revision = bundle.session_state.revision;
+                let lifecycle = bundle.session_state.lifecycle;
+                let report_snapshot = report_snapshot_v3(&bundle);
+                let intended_cycle_count = bundle
+                    .schedule
+                    .wspr_cycle_intents
+                    .len()
+                    .max(bundle.schedule.slots.len());
+                (
+                    bundle.into_current(),
+                    revision,
+                    lifecycle,
+                    report_snapshot,
+                    intended_cycle_count,
+                    operational_history,
+                )
+            }
+            actual => {
+                return Err(OpenSessionError::Storage(
+                    BundleStoreError::UnsupportedSchemaVersion { actual },
+                ));
+            }
+        };
         let (inspected, validation) = store.inspect()?.into_current_parts();
         let inspected = inspected.ok_or_else(|| {
             OpenSessionError::Storage(BundleStoreError::Validation {
@@ -96,17 +107,20 @@ pub(super) fn load_snapshot(
             report_snapshot,
             revision: Some(revision),
             lifecycle: Some(lifecycle),
+            operational_history,
         })
     } else {
         let (bundle, validation) = store.read_for_analysis()?;
+        let schema_version = bundle.manifest.schema_version;
         Ok(LoadedSnapshot {
             intended_cycle_count: bundle.schedule.slots.len(),
-            schema_version: bundle.manifest.schema_version,
+            schema_version,
             bundle,
             validation,
             report_snapshot: ReportSnapshotContext::default(),
             revision: None,
             lifecycle: None,
+            operational_history: legacy_diagnostics_presentation(schema_version),
         })
     }
 }
@@ -746,6 +760,7 @@ pub(super) fn build_active_session(
             revision: snapshot.revision,
             lifecycle: snapshot.lifecycle,
             report_available: presentation.is_some(),
+            operational_history: snapshot.operational_history.clone(),
         },
         presentation,
     }
@@ -772,6 +787,20 @@ pub(super) fn prepare_presentation(
             )
         })
         .transpose()?;
+    let operational_history_report_html = render_standalone_html_with_operational_history(
+        &report,
+        ControllerEvidenceHandling::Complete,
+        &snapshot.operational_history.support_summary,
+    )?;
+    let operational_history_controller_omitted_report_html = has_controller_evidence
+        .then(|| {
+            render_standalone_html_with_operational_history(
+                &report,
+                ControllerEvidenceHandling::OmittedAtExport,
+                &snapshot.operational_history.support_summary,
+            )
+        })
+        .transpose()?;
     Ok(ReportPresentation {
         presentation_id: 0,
         session_id: snapshot.bundle.manifest.session_id.clone(),
@@ -779,9 +808,12 @@ pub(super) fn prepare_presentation(
         lifecycle: snapshot.lifecycle,
         completeness: report.completeness,
         has_controller_evidence,
+        operational_history: snapshot.operational_history.clone(),
         report_html,
         compact_summary_html,
         controller_omitted_report_html,
+        operational_history_report_html,
+        operational_history_controller_omitted_report_html,
     })
 }
 

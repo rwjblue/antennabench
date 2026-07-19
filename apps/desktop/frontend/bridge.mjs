@@ -42,8 +42,13 @@ export function invokeRefreshActiveSessionReport(invoke) {
   return invoke("refresh_active_session_report");
 }
 
-export function invokeExportActiveSessionReport(invoke, format, controllerEvidence = "complete") {
-  return invoke("export_active_session_report", { format, controllerEvidence });
+export function invokeExportActiveSessionReport(
+  invoke,
+  format,
+  controllerEvidence = "complete",
+  operationalHistory = "omitted",
+) {
+  return invoke("export_active_session_report", { format, controllerEvidence, operationalHistory });
 }
 
 export function invokeExportSession(invoke) {

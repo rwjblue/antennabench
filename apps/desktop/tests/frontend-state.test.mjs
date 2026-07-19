@@ -200,6 +200,8 @@ test("the shell starts in saved sessions", () => {
     reportExportStatus: "idle",
     reportExportError: null,
     reportExportNotice: null,
+    supportCopyStatus: "idle",
+    supportCopyError: null,
     error: null,
     notice: null,
     exportStatus: "idle",
@@ -1528,7 +1530,11 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["active_session_report"],
     ["export_active_session"],
     ["refresh_active_session_report"],
-    ["export_active_session_report", { format: "full_evidence_html", controllerEvidence: "complete" }],
+    ["export_active_session_report", {
+      format: "full_evidence_html",
+      controllerEvidence: "complete",
+      operationalHistory: "omitted",
+    }],
     ["import_active_session_wspr_live"],
     ["import_active_session_rbn"],
   ]);

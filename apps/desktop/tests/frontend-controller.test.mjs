@@ -41,6 +41,28 @@ function harness(responses = {}, options = {}) {
   return { controller, calls, renders, navigations };
 }
 
+test("copy support summary uses the redacted bounded projection and reports clipboard failure", async () => {
+  const copied = [];
+  const state = openSessionSucceeded(initialState("report"), session({
+    operationalHistory: { supportSummary: "{\"privacy\":\"redacted\"}" },
+  }));
+  const success = harness({}, {
+    state,
+    effects: { copyText: async (value) => copied.push(value) },
+  });
+  await success.controller.copySupportSummary();
+  assert.deepEqual(copied, ["{\"privacy\":\"redacted\"}"]);
+  assert.equal(success.controller.state.supportCopyStatus, "copied");
+
+  const failed = harness({}, {
+    state,
+    effects: { copyText: async () => { throw new Error("clipboard denied"); } },
+  });
+  await failed.controller.copySupportSummary();
+  assert.equal(failed.controller.state.supportCopyStatus, "error");
+  assert.match(failed.controller.state.supportCopyError.detail, /clipboard denied/);
+});
+
 test("the controller composes setup review outcomes and reviewed creation", async () => {
   const invalid = harness({
     review_session_setup: { valid: false, reviewId: "review-invalid" },
@@ -563,7 +585,11 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
   assert.equal(run.controller.state.reportExportStatus, "error");
   assert.deepEqual(
     run.calls.find(([command]) => command === "export_active_session_report")[1],
-    { format: "full_evidence_html", controllerEvidence: "omitted_at_export" },
+    {
+      format: "full_evidence_html",
+      controllerEvidence: "omitted_at_export",
+      operationalHistory: "omitted",
+    },
   );
 
   const completed = harness({

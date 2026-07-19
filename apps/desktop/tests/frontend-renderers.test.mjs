@@ -639,3 +639,111 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.reportFeedback.dataset.kind, "error");
   assert.equal(e.reportFeedbackDetail.textContent, "destination exists");
 });
+
+test("operational history renders every honest accessible state and reopened-session alert", () => {
+  const e = loadDesktopDocument();
+  const reportDocuments = reportDocumentHarness();
+  const state = initialState("report");
+  state.reportStatus = "ready";
+  state.reportPresentationId = 9;
+  state.session = {
+    bundleName: "diagnostic.session.antennabundle",
+    callsign: "N1RWJ",
+    grid: "FN42",
+    antennaCount: 2,
+    slotCount: 4,
+    observationCount: 8,
+    revision: 12,
+    lifecycle: "interrupted",
+    completeness: "full_detail",
+    reportHtml: "<p>report excludes operational history</p>",
+    operationalHistory: {
+      historyState: "complete",
+      retainedCount: 2,
+      retentionOmittedCount: 0,
+      presentationOmittedCount: 0,
+      contextOmittedCount: 0,
+      supportSummaryOmittedCount: 0,
+      recordLimit: 2048,
+      byteLimit: 16 * 1024 * 1024,
+      supportSummary: "{\"schema\":\"antennabench_support_summary.v1\"}",
+      contexts: [
+        {
+          contextId: "ctx_creator", creator: true, firstRecordedAt: "2026-07-18T12:00:00Z",
+          appVersion: "0.1.0", sourceCommit: "abc123", sourceState: "clean",
+          buildChannel: "official_release", targetTriple: "aarch64-apple-darwin",
+          osFamily: "macos", osVersion: "15.5", runtimeArchitecture: "aarch64",
+        },
+        {
+          contextId: "ctx_resume", creator: false, firstRecordedAt: "2026-07-19T12:00:00Z",
+          appVersion: "0.2.0-dev", sourceCommit: "def456", sourceState: "dirty",
+          buildChannel: "development", targetTriple: "x86_64-apple-darwin",
+          osFamily: "macos", osVersion: "15.6", runtimeArchitecture: "x86_64",
+        },
+      ],
+      diagnostics: [
+        {
+          diagnosticId: "diag-1", runtimeContextId: "ctx_resume",
+          occurredAt: "2026-07-19T12:05:00Z", operation: "wspr_live_acquisition",
+          phase: "preflight", code: "resource.jsonl_line_bytes",
+          summary: "The WSPR.live response could not be committed.", outcome: "failed",
+          severity: "error", revisionBefore: 10, revisionAfter: 10,
+          evidenceEffect: "none_committed", retryDisposition: "requires_input_change",
+          retryGuidanceCode: "wspr_live.reduce_input", targets: ["window: start to end"],
+          causes: ["resource.jsonl_line_bytes (preflight) · observed_bytes=301337, limit_bytes=262144"],
+          detailTruncated: false,
+        },
+        {
+          diagnosticId: "diag-2", runtimeContextId: "ctx_resume",
+          occurredAt: "2026-07-19T12:06:00Z", operation: "wspr_live_acquisition",
+          phase: "finalize", code: "wspr_live.finalization_failed",
+          summary: "Capture committed before finalization failed.", outcome: "partial",
+          severity: "error", revisionBefore: 11, revisionAfter: 12,
+          evidenceEffect: "primary_evidence_committed", retryDisposition: "requires_state_change",
+          retryGuidanceCode: "session.resolve_state", targets: [], causes: [],
+          detailTruncated: true,
+        },
+      ],
+    },
+  };
+
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.operationalHistory.getAttribute("aria-labelledby"), "operational-history-title");
+  assert.equal(e.operationalHistoryContexts.children.length, 2);
+  assert.equal(e.operationalHistoryDiagnostics.children.length, 2);
+  assert.match(e.operationalHistoryDiagnostics.textContent, /observed_bytes=301337/);
+  assert.match(e.operationalHistoryDiagnostics.textContent, /Primary evidence committed/i);
+  assert.equal(e.reportOperationalHandling.value, "omitted", "full export is private by default");
+  assert.match(e.operationalHistoryBounds.textContent, /2048 records/);
+
+  const bothDiagnostics = state.session.operationalHistory.diagnostics;
+  state.session.operationalHistory.diagnostics = bothDiagnostics.slice(0, 1);
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.operationalHistoryDiagnostics.children.length, 1, "one-failure state");
+  state.session.operationalHistory.diagnostics = bothDiagnostics;
+
+  renderRun(e, state, document);
+  assert.equal(e.runHistoricalDiagnostic.hidden, false);
+  assert.match(e.runHistoricalTitle.textContent, /retained only part/i);
+  assert.match(e.runHistoricalMeta.textContent, /primary evidence committed/i);
+
+  const messages = new Map();
+  for (const historyState of [
+    "complete", "legacy_unknown", "retention_capped", "persistence_gap", "unavailable",
+  ]) {
+    state.session.operationalHistory = {
+      ...state.session.operationalHistory,
+      historyState,
+      diagnostics: [],
+      reasonCode: historyState === "persistence_gap" ? "diagnostic.persistence_failed" : null,
+    };
+    renderReport(e, state, reportDocuments);
+    messages.set(historyState, e.operationalHistoryMessage.textContent);
+  }
+  assert.equal(new Set(messages.values()).size, 5);
+  assert.match(messages.get("legacy_unknown"), /unknown, not clean/);
+  assert.match(messages.get("retention_capped"), /Later outcomes may be absent/);
+  assert.match(messages.get("persistence_gap"), /known gap/);
+  assert.match(messages.get("unavailable"), /cannot infer/);
+  assert.match(messages.get("complete"), /storage or process loss/);
+});

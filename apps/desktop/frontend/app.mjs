@@ -154,6 +154,7 @@ export function mount(root, browserWindow) {
     reportSummary,
     reportRefreshButton,
     reportCompactExportButton, reportFullExportButton, reportControllerHandling,
+    reportOperationalHandling, copySupportSummary,
     reportFeedback,
     reportFeedbackMessage,
     reportFeedbackDetail,
@@ -218,6 +219,7 @@ export function mount(root, browserWindow) {
     isVisible: () => rootDocument.visibilityState !== "hidden",
     prompt: (message, initial) => browserWindow.prompt(message, initial),
     confirm: (message) => browserWindow.confirm(message),
+    copyText: (value) => browserWindow.navigator.clipboard.writeText(value),
     getCountdownAnchor: () => countdownAnchor,
     renderCountdown(seconds) {
       conductorCountdown.textContent = seconds === null ? "" : formatCountdown(seconds);
@@ -587,7 +589,14 @@ export function mount(root, browserWindow) {
     await controller.exportReport("compact_summary_html");
   });
   reportFullExportButton.addEventListener("click", async () => {
-    await controller.exportReport("full_evidence_html", reportControllerHandling.value);
+    await controller.exportReport(
+      "full_evidence_html",
+      reportControllerHandling.value,
+      reportOperationalHandling.value,
+    );
+  });
+  copySupportSummary.addEventListener("click", async () => {
+    await controller.copySupportSummary();
   });
 
   syncSignalPlanFields(setupForm);

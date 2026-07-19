@@ -14,9 +14,19 @@ useful report can be as small as:
 - what you expected and what happened; and
 - reproduction steps you are comfortable sharing.
 
+When a reopened schema-v6 bundle has a **Build and operational history** panel,
+**Copy support summary** produces bounded deterministic JSON intended for this
+list. Review it before posting. It is redacted by default and says what was
+omitted; do not substitute the lossless bundle unless you have reviewed and
+intend to share all of its evidence and operational records.
+
 Callsigns, grids, exact locations, station details, schedules, screenshots,
 logs, session bundles, HTML reports, and contact details are optional. They are
 never required to report a problem.
+
+Compact/public report output omits operational diagnostics. Full evidence HTML
+does too unless the exporter separately chooses **Include redacted support
+history**; hosted sharing must not silently broaden that disclosure policy.
 
 If privacy is a concern, contact the maintainer directly using the contact
 information on the maintainer's GitHub profile or QRZ listing. Security-sensitive

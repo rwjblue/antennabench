@@ -104,15 +104,32 @@ switch the radio or antenna for this manual run.
     the normal response. See [How AntennaBench Works](product.md) for the deeper
     experiment and evidence model.
 
+    **Build and operational history** is a separate local support view above the
+    scientific report. It identifies creator and later runtimes and retained
+    material failures, partial outcomes, and recoveries. A reopened interrupted
+    run also surfaces its latest relevant historical failure on **Active run**.
+    Legacy, unavailable, capped, and failed-write states are labeled explicitly;
+    an empty complete stream does not promise that every possible failure was
+    recordable.
+
 12. **Save the output you need.** The three portable choices serve different
     purposes:
 
     - **Export full evidence HTML** saves a standalone report with the result,
-      supporting detail, and audit material.
+      supporting detail, and audit material. Operational support history is
+      omitted by default; explicitly include only its redacted bounded view when
+      the recipient needs it.
     - **Export compact summary HTML** saves a shorter standalone overview for a
       quick review or share.
     - Under **Import / export**, **Export the complete session bundle** saves the
       lossless durable record from which reports can be regenerated.
+
+For a support request, prefer **Copy support summary** in **Build and operational
+history**. Review the deterministic JSON before pasting it into an issue. It
+omits station identity/grid, bundle names and paths, target identifiers,
+controller output, attachments, and evidence rows by default. A complete bundle
+is lossless—not sanitized—and should be shared only after reviewing all evidence
+and operational records.
 
 **Saved sessions** lists experiments created in AntennaBench's managed sessions
 folder. Use **Start session**, **Continue session**, or **Resume session** for

@@ -90,7 +90,7 @@ pub(crate) fn activate_created_bundle(
     let summary = session.summary.clone();
     check_ipc_payload(
         &OpenSessionOutcome::Opened {
-            session: summary.clone(),
+            session: Box::new(summary.clone()),
         },
         SESSION_SUMMARY_IPC_BYTES,
         "session_summary",

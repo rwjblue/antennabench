@@ -282,6 +282,15 @@ keep catalog truth visible without converting catalog metadata into authority.
 Successful creation also identifies the managed location on Run and offers a
 Finder reveal action.
 
+Local report presentation keeps durable operational history above, but outside,
+the scientific report iframe. It shows bounded creator/subsequent runtime cards
+and chronological failed, partial, and recovery outcomes with explicit legacy,
+unavailable, retention-capped, and persistence-gap states. Reopened running or
+interrupted sessions surface the latest relevant failure on Active run. One
+clipboard action copies deterministic redacted JSON; compact/public output omits
+the history, and full evidence export requires a separate explicit inclusion
+choice.
+
 The routine presentation shows one prominent next action. It says whether to
 keep or switch the named antenna and, independently, whether to turn WSJT-X
 Enable Tx on or off before pressing ready. While a WSPR period is active, the

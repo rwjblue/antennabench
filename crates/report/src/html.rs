@@ -67,6 +67,25 @@ pub fn render_standalone_html_with_options(
     )
 }
 
+/// Renders the full evidence report with a separately authorized, redacted
+/// operational-history appendix. Callers own the allowlist and disclosure UI;
+/// the renderer escapes the complete bounded summary as inert text.
+pub fn render_standalone_html_with_operational_history(
+    report: &SessionReport,
+    controller_evidence: ControllerEvidenceHandling,
+    redacted_support_summary: &str,
+) -> Result<String, ReportError> {
+    render_standalone_html_document(
+        report,
+        StandaloneHtmlOptions {
+            controller_evidence,
+        },
+        REPORT_RESOURCE_LIMITS,
+        &ReportCancellationToken::default(),
+        Some(redacted_support_summary),
+    )
+}
+
 pub fn render_standalone_html_with_resources(
     report: &SessionReport,
     limits: ReportResourceLimits,
@@ -85,6 +104,16 @@ pub fn render_standalone_html_with_options_and_resources(
     options: StandaloneHtmlOptions,
     limits: ReportResourceLimits,
     cancellation: &ReportCancellationToken,
+) -> Result<String, ReportError> {
+    render_standalone_html_document(report, options, limits, cancellation, None)
+}
+
+fn render_standalone_html_document(
+    report: &SessionReport,
+    options: StandaloneHtmlOptions,
+    limits: ReportResourceLimits,
+    cancellation: &ReportCancellationToken,
+    operational_history: Option<&str>,
 ) -> Result<String, ReportError> {
     check_cancelled(cancellation, ReportResourceStage::Render, "standalone_html")?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
@@ -112,6 +141,14 @@ pub fn render_standalone_html_with_options_and_resources(
     render_distance_section(&mut out, report);
     render_run_quality_section(&mut out, report);
     render_audit_appendix(&mut out, report, options.controller_evidence);
+
+    if let Some(summary) = operational_history {
+        write_html!(
+            out,
+            "<section class=\"panel\" aria-labelledby=\"operational-history-title\"><h2 id=\"operational-history-title\">Operational support history</h2><p class=\"notice\"><strong>Explicitly included at export:</strong> This bounded, redacted support view is operational metadata, not experiment evidence or a scientific conclusion. The lossless bundle may contain additional approved operational records.</p><pre>{}</pre></section>",
+            escape_html(summary)
+        );
+    }
 
     out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
     out.finish().map_err(ReportError::from)

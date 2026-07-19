@@ -13,14 +13,14 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report, render_compact_summary_html, render_standalone_html,
-    render_standalone_html_with_options, ControllerEvidenceHandling,
-    ReportAcquisitionWorkflowStatus, ReportAdapterEvidence, ReportAntennaControlAttempt,
-    ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection, ReportEventCorrectionAction,
-    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
-    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLimitation,
-    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportProviderCompleteness,
-    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
-    SessionReport, StandaloneHtmlOptions,
+    render_standalone_html_with_operational_history, render_standalone_html_with_options,
+    ControllerEvidenceHandling, ReportAcquisitionWorkflowStatus, ReportAdapterEvidence,
+    ReportAntennaControlAttempt, ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection,
+    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
+    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
+    ReportProviderCompleteness, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
+    ReportWsprReadinessBasis, SessionReport, StandaloneHtmlOptions,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -93,6 +93,30 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     assert!(first.contains("<details class=\"audit-disclosure\">"));
     assert!(first.contains("details:not([open])>:not(summary){display:none!important}"));
     assert!(first.contains("break-after:page"));
+}
+
+#[test]
+fn operational_history_requires_explicit_full_report_inclusion_and_is_escaped() {
+    let report = canonical_report();
+    let support = r#"{"schema":"antennabench_support_summary.v1","code":"resource.jsonl_line_bytes","unsafe":"</pre><script>alert(1)</script>"}"#;
+    let default_full = render_standalone_html(&report).unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+    let included = render_standalone_html_with_operational_history(
+        &report,
+        ControllerEvidenceHandling::Complete,
+        support,
+    )
+    .unwrap();
+
+    for private_default in [default_full, compact] {
+        assert!(!private_default.contains("Operational support history"));
+        assert!(!private_default.contains("resource.jsonl_line_bytes"));
+    }
+    assert!(included.contains("Operational support history"));
+    assert!(included.contains("Explicitly included at export"));
+    assert!(included.contains("resource.jsonl_line_bytes"));
+    assert!(included.contains("&lt;/pre&gt;&lt;script&gt;alert(1)&lt;/script&gt;"));
+    assert!(!included.contains("<script>alert(1)</script>"));
 }
 
 #[test]

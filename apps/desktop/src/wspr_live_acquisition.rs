@@ -1526,6 +1526,16 @@ mod tests {
             diagnostic.retry.disposition,
             RetryDispositionV6::RequiresStateChange
         );
+        let reopened_state = ActiveSessionState::default();
+        let reopened = crate::open_session::open_session_at_path(&reopened_state, path.clone())
+            .expect("reopen partial finalization bundle");
+        let crate::open_session::OpenSessionOutcome::Opened { session } = reopened else {
+            panic!("reopen must select the bundle")
+        };
+        let presented = session.operational_history.diagnostics.last().unwrap();
+        assert_eq!(presented.outcome, "partial");
+        assert_eq!(presented.evidence_effect, "primary_evidence_committed");
+        assert_eq!(presented.phase, "finalize");
     }
 
     #[test]
@@ -1575,7 +1585,7 @@ mod tests {
 
         let copy = temp.path().join("support-copy.session.antennabundle");
         store.copy_losslessly_to(&copy).unwrap();
-        let copied = BundleStore::new(copy).read_v3_checkpointed().unwrap();
+        let copied = BundleStore::new(&copy).read_v3_checkpointed().unwrap();
         assert_eq!(copied.adapter_records, before.adapter_records);
         assert_eq!(copied.observations, before.observations);
         let diagnostic = copied.diagnostics.last().unwrap();
@@ -1606,6 +1616,46 @@ mod tests {
             .runtime_contexts
             .iter()
             .any(|context| { context.context_id == diagnostic.runtime_context_id }));
+        let reopened_state = ActiveSessionState::default();
+        let reopened = crate::open_session::open_session_at_path(&reopened_state, copy.clone())
+            .expect("reopen copied regression bundle");
+        let crate::open_session::OpenSessionOutcome::Opened { session } = reopened else {
+            panic!("reopen must select the copied bundle")
+        };
+        let history = &session.operational_history;
+        let presented = history.diagnostics.last().unwrap();
+        assert_eq!(presented.code, "resource.jsonl_line_bytes");
+        assert_eq!(presented.operation, "wspr_live_acquisition");
+        assert_eq!(presented.phase, "preflight");
+        assert_eq!(presented.evidence_effect, "none_committed");
+        assert!(presented
+            .causes
+            .iter()
+            .any(|cause| cause.contains("observed_bytes=301337")
+                && cause.contains("limit_bytes=262144")));
+        assert!(history.contexts.iter().any(|context| {
+            context.context_id == presented.runtime_context_id
+                && context.app_version.is_some()
+                && context.os_family.is_some()
+        }));
+        assert!(history
+            .support_summary
+            .contains("resource.jsonl_line_bytes"));
+        assert!(history.support_summary.contains("observed_bytes=301337"));
+        assert!(history.support_summary.contains("limit_bytes=262144"));
+        assert!(!history.support_summary.contains(&config.session_callsign));
+        assert!(!history.support_summary.contains("FN42"));
+        assert!(history.support_summary.len() <= history.support_summary_max_bytes);
+        let second_state = ActiveSessionState::default();
+        let second = crate::open_session::open_session_at_path(&second_state, copy)
+            .expect("reopen copied regression bundle a second time");
+        let crate::open_session::OpenSessionOutcome::Opened { session: second } = second else {
+            panic!("second reopen must select the copied bundle")
+        };
+        assert_eq!(
+            history.support_summary,
+            second.operational_history.support_summary
+        );
         drop(active);
     }
 

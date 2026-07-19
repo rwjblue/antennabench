@@ -25,12 +25,13 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report_with_snapshot, render_compact_summary_html, render_standalone_html,
-    render_standalone_html_with_options, ControllerEvidenceHandling,
-    ReportAcquisitionWorkflowStatus, ReportAdapterEvidence, ReportAntennaControlAttempt,
-    ReportCompleteness, ReportError, ReportEventCorrection, ReportEventCorrectionAction,
-    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportOperatorEvent,
-    ReportOperatorEventKind, ReportProviderCompleteness, ReportSnapshotContext,
-    ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis, StandaloneHtmlOptions,
+    render_standalone_html_with_operational_history, render_standalone_html_with_options,
+    ControllerEvidenceHandling, ReportAcquisitionWorkflowStatus, ReportAdapterEvidence,
+    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportEventCorrection,
+    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind,
+    ReportProviderCompleteness, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
+    ReportWsprReadinessBasis, StandaloneHtmlOptions,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,7 @@ const SESSION_SUMMARY_IPC_BYTES: u64 = 64 * 1024;
 const REPORT_DOCUMENT_IPC_BYTES: u64 = 16 * 1024 * 1024;
 
 mod commands;
+mod diagnostics;
 mod errors;
 mod projection;
 mod state;
@@ -65,9 +67,12 @@ pub(crate) use state::{
 };
 
 use commands::bundle_suffix;
+use diagnostics::{
+    legacy_diagnostics_presentation, present_bundle_diagnostics, BundleDiagnosticsPresentation,
+};
 use errors::{
     report_error_payload, ExportReportOutcome, ExportSessionError, ExportSessionOutcome,
-    OpenSessionError, ReportExportFormat, ReportPresentation,
+    OpenSessionError, OperationalHistoryHandling, ReportExportFormat, ReportPresentation,
 };
 use projection::{load_snapshot, open_bundle, prepare_presentation};
 use state::{assign_presentation_id, ActiveSession};
@@ -75,8 +80,9 @@ use state::{assign_presentation_id, ActiveSession};
 #[cfg(test)]
 use commands::{
     active_session_report_for, export_active_report_with_selection,
-    export_active_session_with_selection, export_bundle, open_session_with_selection,
-    refresh_active_session_report_for, suggested_compact_summary_name, suggested_report_name,
+    export_active_report_with_selection_and_disclosure, export_active_session_with_selection,
+    export_bundle, open_session_with_selection, refresh_active_session_report_for,
+    suggested_compact_summary_name, suggested_report_name,
 };
 #[cfg(test)]
 use errors::copy_error_payload;
@@ -200,11 +206,12 @@ mod tests {
 
     use super::{
         active_session_report_for, check_ipc_payload, copy_error_payload,
-        export_active_report_with_selection, export_active_session_with_selection, export_bundle,
-        open_bundle, open_session_with_selection, refresh_active_session_report_for,
-        report_error_payload, suggested_compact_summary_name, suggested_report_name, ActiveSession,
-        ActiveSessionState, ControllerEvidenceHandling, ExportReportOutcome, ExportSessionOutcome,
-        OpenSessionOutcome, OpenedSession, ReportCompleteness, ReportExportFormat,
+        export_active_report_with_selection, export_active_report_with_selection_and_disclosure,
+        export_active_session_with_selection, export_bundle, open_bundle,
+        open_session_with_selection, refresh_active_session_report_for, report_error_payload,
+        suggested_compact_summary_name, suggested_report_name, ActiveSession, ActiveSessionState,
+        ControllerEvidenceHandling, ExportReportOutcome, ExportSessionOutcome, OpenSessionOutcome,
+        OpenedSession, OperationalHistoryHandling, ReportCompleteness, ReportExportFormat,
         ReportPresentation, SessionErrorKind, SessionErrorPayload, SessionLifecycleV2,
         REPORT_DOCUMENT_IPC_BYTES, SCHEMA_VERSION_V5,
     };
@@ -282,7 +289,7 @@ mod tests {
             .report_html
             .starts_with("<!doctype html>"));
         let payload = serde_json::to_value(super::OpenSessionOutcome::Opened {
-            session: opened.summary.clone(),
+            session: Box::new(opened.summary.clone()),
         })
         .unwrap();
         assert!(payload["session"].get("reportHtml").is_none());
@@ -701,10 +708,15 @@ mod tests {
             lifecycle: Some(SessionLifecycleV2::Ended),
             completeness: ReportCompleteness::FullDetail,
             has_controller_evidence: true,
+            operational_history: super::legacy_diagnostics_presentation(SCHEMA_VERSION_V5),
             report_html: "<p>complete sensitive controller details</p>".into(),
             compact_summary_html: "<p>compact</p>".into(),
             controller_omitted_report_html: Some(
                 "<p>Omitted at export — retained in the session bundle</p>".into(),
+            ),
+            operational_history_report_html: "<p>redacted operational history</p>".into(),
+            operational_history_controller_omitted_report_html: Some(
+                "<p>both redacted and omitted</p>".into(),
             ),
         };
         let summary = OpenedSession {
@@ -719,6 +731,7 @@ mod tests {
             revision: presentation.revision,
             lifecycle: presentation.lifecycle,
             report_available: true,
+            operational_history: presentation.operational_history.clone(),
         };
         state.0.lock().unwrap().active = Some(ActiveSession {
             source,
@@ -750,6 +763,20 @@ mod tests {
         assert_eq!(
             fs::read_to_string(&complete_path).unwrap(),
             "<p>complete sensitive controller details</p>"
+        );
+
+        let included_path = temp.path().join("included-redacted-history.html");
+        export_active_report_with_selection_and_disclosure(
+            &state,
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::OmittedAtExport,
+            OperationalHistoryHandling::IncludedRedacted,
+            |_| Ok(Some(included_path.clone())),
+        )
+        .expect("explicitly export the redacted operational history");
+        assert_eq!(
+            fs::read_to_string(&included_path).unwrap(),
+            "<p>both redacted and omitted</p>"
         );
 
         let mut desktop = state.0.lock().unwrap();

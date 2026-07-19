@@ -121,7 +121,7 @@ where
     let summary = session.summary.clone();
     check_ipc_payload(
         &OpenSessionOutcome::Opened {
-            session: summary.clone(),
+            session: Box::new(summary.clone()),
         },
         SESSION_SUMMARY_IPC_BYTES,
         "session_summary",
@@ -135,7 +135,9 @@ where
     active.active = Some(session);
     active.export_source = Some(path);
 
-    Ok(OpenSessionOutcome::Opened { session: summary })
+    Ok(OpenSessionOutcome::Opened {
+        session: Box::new(summary),
+    })
 }
 
 #[cfg(test)]
@@ -195,10 +197,30 @@ where
     })
 }
 
+#[cfg(test)]
 pub(super) fn export_active_report_with_selection<F>(
     state: &ActiveSessionState,
     format: ReportExportFormat,
     controller_evidence: ControllerEvidenceHandling,
+    select: F,
+) -> Result<ExportReportOutcome, SessionErrorPayload>
+where
+    F: FnOnce(&Path) -> Result<Option<PathBuf>, SessionErrorPayload>,
+{
+    export_active_report_with_selection_and_disclosure(
+        state,
+        format,
+        controller_evidence,
+        OperationalHistoryHandling::Omitted,
+        select,
+    )
+}
+
+pub(super) fn export_active_report_with_selection_and_disclosure<F>(
+    state: &ActiveSessionState,
+    format: ReportExportFormat,
+    controller_evidence: ControllerEvidenceHandling,
+    operational_history: OperationalHistoryHandling,
     select: F,
 ) -> Result<ExportReportOutcome, SessionErrorPayload>
 where
@@ -238,21 +260,47 @@ where
         } else {
             ControllerEvidenceHandling::Complete
         };
-    let html = match (format, controller_evidence) {
-        (ReportExportFormat::CompactSummaryHtml, _) => &presentation.compact_summary_html,
-        (ReportExportFormat::FullEvidenceHtml, ControllerEvidenceHandling::Complete) => {
-            &presentation.report_html
-        }
-        (ReportExportFormat::FullEvidenceHtml, ControllerEvidenceHandling::OmittedAtExport) => {
-            presentation
-                .controller_omitted_report_html
-                .as_ref()
-                .ok_or_else(|| {
-                    SessionErrorPayload::report_pipeline(
-                        "controller omission export is unavailable for this report snapshot",
-                    )
-                })?
-        }
+    let operational_history = if format == ReportExportFormat::FullEvidenceHtml {
+        operational_history
+    } else {
+        OperationalHistoryHandling::Omitted
+    };
+    let html = match (format, controller_evidence, operational_history) {
+        (ReportExportFormat::CompactSummaryHtml, _, _) => &presentation.compact_summary_html,
+        (
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::Complete,
+            OperationalHistoryHandling::Omitted,
+        ) => &presentation.report_html,
+        (
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::OmittedAtExport,
+            OperationalHistoryHandling::Omitted,
+        ) => presentation
+            .controller_omitted_report_html
+            .as_ref()
+            .ok_or_else(|| {
+                SessionErrorPayload::report_pipeline(
+                    "controller omission export is unavailable for this report snapshot",
+                )
+            })?,
+        (
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::Complete,
+            OperationalHistoryHandling::IncludedRedacted,
+        ) => &presentation.operational_history_report_html,
+        (
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::OmittedAtExport,
+            OperationalHistoryHandling::IncludedRedacted,
+        ) => presentation
+            .operational_history_controller_omitted_report_html
+            .as_ref()
+            .ok_or_else(|| {
+                SessionErrorPayload::report_pipeline(
+                    "combined controller omission and operational-history export is unavailable",
+                )
+            })?,
     };
     let mut file = OpenOptions::new()
         .write(true)
@@ -388,6 +436,7 @@ pub(super) fn refresh_active_session_report_for(
             revision: snapshot.revision,
             lifecycle: snapshot.lifecycle,
             report_available: true,
+            operational_history: snapshot.operational_history.clone(),
         };
         let mut active = state.0.lock().map_err(|_| {
             SessionErrorPayload::report_pipeline("active session state is unavailable")
@@ -519,12 +568,14 @@ pub(crate) async fn export_active_session_report(
     state: State<'_, ActiveSessionState>,
     format: Option<ReportExportFormat>,
     controller_evidence: Option<ControllerEvidenceHandling>,
+    operational_history: Option<OperationalHistoryHandling>,
 ) -> Result<ExportReportOutcome, SessionErrorPayload> {
     let format = format.unwrap_or_default();
-    let result = export_active_report_with_selection(
+    let result = export_active_report_with_selection_and_disclosure(
         state.inner(),
         format,
         controller_evidence.unwrap_or_default(),
+        operational_history.unwrap_or_default(),
         |source| {
             let mut dialog = app
                 .dialog()

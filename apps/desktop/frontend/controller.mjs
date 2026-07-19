@@ -43,6 +43,7 @@ import {
   beginOpenSession,
   beginReportExport,
   beginReportRefresh,
+  beginSupportSummaryCopy,
   beginRbnImport,
   beginSetupCreation,
   beginSetupReview,
@@ -79,6 +80,8 @@ import {
   setupCreationSucceeded,
   setupReviewFailed,
   setupReviewSucceeded,
+  supportSummaryCopyFailed,
+  supportSummaryCopySucceeded,
   wsjtxActionFailed,
   wsjtxActionSucceeded,
   wsprLiveAcquisitionFailed,
@@ -105,6 +108,7 @@ export function createDesktopController(options = {}) {
     isVisible: options.isVisible ?? (() => true),
     prompt: options.prompt ?? (() => null),
     confirm: options.confirm ?? (() => false),
+    copyText: options.copyText ?? (() => Promise.reject(new Error("Clipboard access is unavailable."))),
     getCountdownAnchor: options.getCountdownAnchor ?? (() => null),
     renderCountdown: options.renderCountdown ?? (() => {}),
     onDispose: options.onDispose ?? (() => {}),
@@ -472,16 +476,35 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
-    async exportReport(format = "full_evidence_html", controllerEvidence = "complete") {
+    async exportReport(
+      format = "full_evidence_html",
+      controllerEvidence = "complete",
+      operationalHistory = "omitted",
+    ) {
       if (!state.session?.reportHtml || state.reportExportStatus === "loading") return state;
       commit(beginReportExport(state));
       try {
-        const outcome = await invokeExportActiveSessionReport(invoke(), format, controllerEvidence);
+        const outcome = await invokeExportActiveSessionReport(
+          invoke(), format, controllerEvidence, operationalHistory,
+        );
         commit(outcome.status === "cancelled"
           ? reportExportCancelled(state)
           : reportExportSucceeded(state, outcome));
       } catch (error) {
         commit(reportExportFailed(state, error));
+      }
+      return state;
+    },
+
+    async copySupportSummary() {
+      const summary = state.session?.operationalHistory?.supportSummary;
+      if (typeof summary !== "string" || state.supportCopyStatus === "copying") return state;
+      commit(beginSupportSummaryCopy(state));
+      try {
+        await effects.copyText(summary);
+        commit(supportSummaryCopySucceeded(state));
+      } catch (error) {
+        commit(supportSummaryCopyFailed(state, error));
       }
       return state;
     },
