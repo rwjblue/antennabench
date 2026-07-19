@@ -751,12 +751,23 @@ test("operational history renders every honest accessible state and reopened-ses
 
   renderReport(e, state, reportDocuments);
   assert.equal(e.operationalHistory.getAttribute("aria-labelledby"), "operational-history-title");
+  assert.equal(e.operationalHistory.open, false, "support history is collapsed by default");
+  assert.equal(e.operationalHistoryAlert.hidden, false, "material diagnostics stay visible");
+  assert.match(e.operationalHistoryAlertTitle.textContent, /partial result/i);
+  assert.match(e.operationalHistoryAlertMessage.textContent, /supporting detail/i);
   assert.equal(e.operationalHistoryContexts.children.length, 2);
   assert.equal(e.operationalHistoryDiagnostics.children.length, 2);
   assert.match(e.operationalHistoryDiagnostics.textContent, /observed_bytes=301337/);
   assert.match(e.operationalHistoryDiagnostics.textContent, /Primary evidence committed/i);
   assert.equal(e.reportOperationalHandling.value, "omitted", "full export is private by default");
   assert.match(e.operationalHistoryBounds.textContent, /2048 records/);
+  e.operationalHistory.querySelector("summary").click();
+  assert.equal(e.operationalHistory.open, true, "native summary expands the support detail");
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.operationalHistory.open, true, "rerender preserves the operator's disclosure state");
+  state.reportPresentationId = 10;
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.operationalHistory.open, false, "a new report presentation starts collapsed");
 
   const bothDiagnostics = state.session.operationalHistory.diagnostics;
   state.session.operationalHistory.diagnostics = bothDiagnostics.slice(0, 1);
@@ -770,6 +781,7 @@ test("operational history renders every honest accessible state and reopened-ses
   assert.match(e.runHistoricalMeta.textContent, /primary evidence committed/i);
 
   const messages = new Map();
+  const alerts = new Map();
   for (const historyState of [
     "complete", "legacy_unknown", "retention_capped", "persistence_gap", "unavailable",
   ]) {
@@ -781,11 +793,24 @@ test("operational history renders every honest accessible state and reopened-ses
     };
     renderReport(e, state, reportDocuments);
     messages.set(historyState, e.operationalHistoryMessage.textContent);
+    alerts.set(historyState, e.operationalHistoryAlert.hidden);
   }
   assert.equal(new Set(messages.values()).size, 5);
   assert.match(messages.get("legacy_unknown"), /unknown, not clean/);
-  assert.match(messages.get("retention_capped"), /Later outcomes may be absent/);
-  assert.match(messages.get("persistence_gap"), /known gap/);
+  assert.match(messages.get("retention_capped"), /later outcomes may be absent/i);
+  assert.match(messages.get("persistence_gap"), /known persistence gap/i);
   assert.match(messages.get("unavailable"), /cannot infer/);
   assert.match(messages.get("complete"), /storage or process loss/);
+  assert.equal(alerts.get("complete"), true, "clean complete history has no alert");
+  assert.equal(alerts.get("persistence_gap"), false, "a persistence gap has a compact alert");
+
+  state.session.operationalHistory.historyState = "persistence_gap";
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.operationalHistory.open, false);
+  assert.equal(e.operationalHistoryAlert.hidden, false);
+  assert.match(e.operationalHistoryAlertTitle.textContent, /known persistence gap/i);
+  e.operationalHistory.querySelector("summary").click();
+  assert.equal(e.operationalHistory.open, true);
+  assert.equal(e.copySupportSummary.disabled, false);
+  assert.match(e.copySupportSummary.parentElement.nextElementSibling.textContent, /redacted by default/i);
 });

@@ -874,18 +874,41 @@ function renderReopenedHistoricalDiagnostic(elements, state) {
 
 function renderOperationalHistory(elements, state) {
   const {
+    operationalHistoryAlert, operationalHistoryAlertTitle, operationalHistoryAlertMessage,
     operationalHistory, operationalHistoryStatus, operationalHistoryMessage,
     operationalHistoryContexts, operationalHistoryDiagnostics, operationalHistoryBounds,
     copySupportSummary, copySupportStatus,
   } = elements;
   const history = state.session?.operationalHistory;
   operationalHistory.hidden = state.session === null;
+  operationalHistoryAlert.hidden = true;
   if (!state.session) return;
+  const presentationId = String(state.reportPresentationId);
+  if (operationalHistory.dataset.presentationId !== presentationId) {
+    operationalHistory.open = false;
+    operationalHistory.dataset.presentationId = presentationId;
+  }
   const historyState = history?.historyState ?? "unavailable";
   operationalHistory.dataset.state = historyState;
   operationalHistoryStatus.textContent = humanizeIdentifier(historyState);
   operationalHistoryStatus.classList.toggle("muted", historyState !== "complete");
   operationalHistoryMessage.textContent = operationalHistoryMessageFor(historyState, history);
+  const materialDiagnostic = [...(history?.diagnostics ?? [])].reverse().find((diagnostic) => (
+    ["failed", "partial"].includes(diagnostic.outcome)
+    || diagnostic.severity === "error"
+  ));
+  const persistenceGap = historyState === "persistence_gap";
+  operationalHistoryAlert.hidden = !persistenceGap && !materialDiagnostic;
+  if (!operationalHistoryAlert.hidden) {
+    operationalHistoryAlertTitle.textContent = persistenceGap
+      ? "Operational history has a known persistence gap"
+      : materialDiagnostic.outcome === "partial"
+        ? "A recorded operation retained only a partial result"
+        : "A recorded operation failed";
+    operationalHistoryAlertMessage.textContent = materialDiagnostic?.summary
+      ? `${materialDiagnostic.summary} Open Build and operational history for supporting detail.`
+      : "Open Build and operational history for the recorded gap and retention detail.";
+  }
 
   const document = operationalHistory.ownerDocument;
   operationalHistoryContexts.replaceChildren(...(history?.contexts ?? []).map((context) => {
@@ -964,14 +987,18 @@ function renderOperationalHistory(elements, state) {
 }
 
 function operationalHistoryMessageFor(state, history) {
+  const count = history?.diagnostics?.length ?? 0;
+  const diagnosticSummary = count === 0
+    ? "No material diagnostics are available in this view."
+    : `${count} material diagnostic${count === 1 ? " is" : "s are"} available in this view.`;
   switch (state) {
     case "complete": return history?.diagnostics?.length
-      ? "Chronological material failures, partial outcomes, and recoveries retained in this bundle are shown below."
-      : "This schema-v6 checkpoint has no recorded material diagnostics within the format's guarantees; storage or process loss can still prevent a diagnostic write.";
-    case "legacy_unknown": return "This legacy bundle predates durable runtime and diagnostic streams. Earlier operational history is unknown, not clean.";
-    case "retention_capped": return "The append-only diagnostic stream reached its retention bound. Later outcomes may be absent.";
-    case "persistence_gap": return `A diagnostic write could not be durably recorded. History has a known gap${history?.reasonCode ? ` (${history.reasonCode})` : ""}.`;
-    default: return "Operational history is unavailable. AntennaBench cannot infer whether material failures occurred.";
+      ? `${diagnosticSummary} Chronological failures, partial outcomes, and recoveries are retained below.`
+      : "Complete checkpoint · no recorded material diagnostics within the format's guarantees; storage or process loss can still prevent a diagnostic write.";
+    case "legacy_unknown": return `Legacy history unknown · ${diagnosticSummary} This bundle predates durable runtime and diagnostic streams; earlier history is unknown, not clean.`;
+    case "retention_capped": return `Retention capped · ${diagnosticSummary} The append-only stream reached its bound, so later outcomes may be absent.`;
+    case "persistence_gap": return `Known persistence gap${history?.reasonCode ? ` (${history.reasonCode})` : ""} · ${diagnosticSummary} A diagnostic write could not be durably recorded.`;
+    default: return `History unavailable · ${diagnosticSummary} AntennaBench cannot infer whether material failures occurred.`;
   }
 }
 

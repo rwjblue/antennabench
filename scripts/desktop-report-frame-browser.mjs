@@ -316,6 +316,95 @@ try {
   assert.equal(desktopShell.contentOverflow, "auto");
   assert.ok(desktopShell.topbar.top >= 0 && desktopShell.topbar.bottom <= 760);
   assert.ok(desktopShell.sidebar.top >= 0 && desktopShell.sidebar.bottom <= 760);
+
+  const reportHierarchy = (await browser(["eval", `(() => {
+    const content = document.querySelector(".content");
+    for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== "report";
+    const viewer = document.querySelector("[data-report-viewer]");
+    document.querySelector("[data-report-placeholder]").hidden = true;
+    viewer.hidden = false;
+    const history = document.querySelector("[data-operational-history]");
+    const alert = document.querySelector("[data-operational-history-alert]");
+    const frame = document.querySelector("[data-report-frame]");
+    history.hidden = false;
+    history.open = false;
+    alert.hidden = true;
+    frame.hidden = false;
+    content.scrollTop = 0;
+    const contentRect = content.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+    return {
+      nativeDetails: history.tagName,
+      open: history.open,
+      alertVisible: alert.getClientRects().length > 0,
+      detailVisible: history.querySelector(".operational-history-detail").getClientRects().length > 0,
+      frameBeginsInReadingPath: frameRect.top >= contentRect.top && frameRect.top < contentRect.bottom,
+      frameTop: frameRect.top,
+      contentBottom: contentRect.bottom,
+    };
+  })()`], { json: true })).result;
+  assert.equal(reportHierarchy.nativeDetails, "DETAILS");
+  assert.equal(reportHierarchy.open, false);
+  assert.equal(reportHierarchy.alertVisible, false);
+  assert.equal(reportHierarchy.detailVisible, false);
+  assert.equal(reportHierarchy.frameBeginsInReadingPath, true,
+    `report frame began at ${reportHierarchy.frameTop}px after the ${reportHierarchy.contentBottom}px reading path`);
+  await browser(["eval", `document.querySelector("[data-operational-history] > summary").focus()`], { json: true });
+  await browser(["press", "Enter"]);
+  const expandedHistory = (await browser(["eval", `(() => {
+    const history = document.querySelector("[data-operational-history]");
+    return {
+      open: history.open,
+      detailVisible: history.querySelector(".operational-history-detail").getClientRects().length > 0,
+      focused: document.activeElement === history.querySelector("summary"),
+      outline: getComputedStyle(history.querySelector("summary")).outlineStyle,
+    };
+  })()`], { json: true })).result;
+  assert.deepEqual(expandedHistory, { open: true, detailVisible: true, focused: true, outline: "solid" });
+  const materialWarning = (await browser(["eval", `(() => {
+    const history = document.querySelector("[data-operational-history]");
+    const alert = document.querySelector("[data-operational-history-alert]");
+    history.open = false;
+    history.dataset.state = "persistence_gap";
+    alert.hidden = false;
+    alert.querySelector("strong").textContent = "Operational history has a known persistence gap";
+    alert.querySelector("span").textContent = "Open Build and operational history for detail.";
+    return {
+      historyOpen: history.open,
+      alertVisible: alert.getClientRects().length > 0,
+      alertRole: alert.getAttribute("role"),
+      alertText: alert.textContent.trim(),
+      nestedOverflow: getComputedStyle(history).overflowY,
+    };
+  })()`], { json: true })).result;
+  assert.equal(materialWarning.historyOpen, false);
+  assert.equal(materialWarning.alertVisible, true);
+  assert.equal(materialWarning.alertRole, "alert");
+  assert.match(materialWarning.alertText, /known persistence gap/);
+  assert.notEqual(materialWarning.nestedOverflow, "scroll");
+  await browser(["set", "viewport", "500", "760"]);
+  const narrowHistory = (await browser(["eval", `(() => {
+    const history = document.querySelector("[data-operational-history]");
+    history.open = true;
+    const rect = history.getBoundingClientRect();
+    return {
+      overflowX: getComputedStyle(history).overflowX,
+      overflowY: getComputedStyle(history).overflowY,
+      withinDocumentWidth: rect.right <= document.documentElement.scrollWidth,
+      detailVisible: history.querySelector(".operational-history-detail").getClientRects().length > 0,
+    };
+  })()`], { json: true })).result;
+  assert.notEqual(narrowHistory.overflowX, "scroll");
+  assert.notEqual(narrowHistory.overflowY, "scroll");
+  assert.equal(narrowHistory.withinDocumentWidth, true);
+  assert.equal(narrowHistory.detailVisible, true);
+  await browser(["set", "viewport", "1120", "760"]);
+  await browser(["eval", `(() => {
+    for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== "setup";
+    const content = document.querySelector(".content");
+    content.scrollTop = 0;
+    content.focus();
+  })()`], { json: true });
   await browser(["press", "PageDown"]);
   await browser(["wait", "200"]);
   const pagedShell = (await browser(["eval", `(() => {
