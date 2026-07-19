@@ -1,4 +1,5 @@
 use super::*;
+use crate::ReportAcquisitionWorkflowStatus;
 
 pub(in super::super) fn render_question_navigation(out: &mut CheckedHtmlWriter<'_>) {
     out.push_str(
@@ -347,7 +348,9 @@ pub(in super::super) fn render_visible_acquisition_limitations(
     audit_reference: &str,
 ) {
     let evidence = &report.snapshot.adapter_evidence;
-    if !evidence.evidence_complete {
+    if evidence.gap_count > 0
+        || evidence.workflow_status == ReportAcquisitionWorkflowStatus::Incomplete
+    {
         let message = if evidence.gap_count == 1 {
             format!("1 recorded acquisition gap; inspect {audit_reference} for its durable recorded context")
         } else if evidence.gap_count > 1 {

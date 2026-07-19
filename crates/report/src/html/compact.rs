@@ -1,8 +1,9 @@
 use std::fmt::Write as _;
 
 use crate::{
-    check_cancelled, ReportCancellationToken, ReportCompleteness, ReportError,
-    ReportResourceLimits, ReportResourceStage, SessionReport, REPORT_RESOURCE_LIMITS,
+    check_cancelled, ReportAcquisitionWorkflowStatus, ReportCancellationToken, ReportCompleteness,
+    ReportError, ReportProviderCompleteness, ReportResourceLimits, ReportResourceStage,
+    SessionReport, REPORT_RESOURCE_LIMITS,
 };
 
 use super::{
@@ -91,15 +92,29 @@ pub(super) fn render_compact_run_quality(out: &mut CheckedHtmlWriter<'_>, report
     let overall = &report.evidence.overall;
     let availability = comparison_availability_label(report.overview.comparison_availability);
     let lifecycle = overview_lifecycle_label(report.overview.lifecycle.state);
-    let acquisition = if report.snapshot.adapter_evidence.evidence_complete {
-        "Complete recorded acquisition".to_string()
-    } else if report.snapshot.adapter_evidence.gap_count > 0 {
-        format!(
-            "{} recorded acquisition gap(s)",
-            report.snapshot.adapter_evidence.gap_count
-        )
+    let evidence = &report.snapshot.adapter_evidence;
+    let acquisition = if evidence.gap_count > 0 {
+        format!("{} recorded acquisition gap(s)", evidence.gap_count)
     } else {
-        "Recorded acquisition incomplete".to_string()
+        match (evidence.workflow_status, evidence.provider_completeness) {
+            (ReportAcquisitionWorkflowStatus::Incomplete, _) => {
+                "Recorded acquisition incomplete".to_string()
+            }
+            (ReportAcquisitionWorkflowStatus::NotConfigured, _) => {
+                "No configured acquisition".to_string()
+            }
+            (ReportAcquisitionWorkflowStatus::Completed, ReportProviderCompleteness::Known) => {
+                "Collection completed; provider completeness is recorded as known".to_string()
+            }
+            (ReportAcquisitionWorkflowStatus::Completed, ReportProviderCompleteness::Unknown) => {
+                "Collection completed; upstream completeness is not independently guaranteed"
+                    .to_string()
+            }
+            (
+                ReportAcquisitionWorkflowStatus::Completed,
+                ReportProviderCompleteness::Unsupported,
+            ) => "Collection completed; provider completeness is unsupported".to_string(),
+        }
     };
     out.push_str("<section id=\"run-quality\" class=\"panel question-section\" aria-labelledby=\"run-quality-title\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">These are typed availability and count facts.</p><div class=\"run-summary\">");
     write_html!(out, "<div><span>Comparison state</span><strong>{availability}</strong></div><div><span>Session state</span><strong>{lifecycle}</strong></div><div><span>Usable / excluded</span><strong>{} / {}</strong></div><div><span>Acquisition</span><strong>{}</strong></div>", overall.observation_counts.usable, overall.observation_counts.excluded, escape_html(&acquisition));

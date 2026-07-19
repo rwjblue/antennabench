@@ -1106,7 +1106,8 @@ fn reports_the_minimal_whole_station_fixture() {
           "duplicate_count": 0,
           "partially_normalized_count": 0,
           "gap_count": 0,
-          "evidence_complete": true
+          "workflow_status": "not_configured",
+          "provider_completeness": "unsupported"
         }
       },
       "exclusion_records": [
@@ -2143,7 +2144,8 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
           "duplicate_count": 0,
           "partially_normalized_count": 0,
           "gap_count": 0,
-          "evidence_complete": true
+          "workflow_status": "not_configured",
+          "provider_completeness": "unsupported"
         }
       },
       "exclusion_records": [
@@ -4634,7 +4636,8 @@ fn reports_the_analysis_rich_whole_station_fixture() {
           "duplicate_count": 0,
           "partially_normalized_count": 0,
           "gap_count": 0,
-          "evidence_complete": true
+          "workflow_status": "not_configured",
+          "provider_completeness": "unsupported"
         }
       },
       "exclusion_records": [

@@ -13,11 +13,12 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report, render_compact_summary_html, render_standalone_html,
-    render_standalone_html_with_options, ControllerEvidenceHandling, ReportAdapterEvidence,
-    ReportAntennaControlAttempt, ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection,
-    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
-    ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
-    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
+    render_standalone_html_with_options, ControllerEvidenceHandling,
+    ReportAcquisitionWorkflowStatus, ReportAdapterEvidence, ReportAntennaControlAttempt,
+    ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection, ReportEventCorrectionAction,
+    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
+    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLimitation,
+    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportProviderCompleteness,
     ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
     SessionReport, StandaloneHtmlOptions,
 };
@@ -254,7 +255,8 @@ fn renders_revision_lifecycle_and_recorded_adapter_gap_disclosures() {
             conflict_count: 1,
             partially_normalized_count: 1,
             gap_count: 1,
-            evidence_complete: false,
+            workflow_status: ReportAcquisitionWorkflowStatus::Incomplete,
+            provider_completeness: ReportProviderCompleteness::Unknown,
             imports: vec![ReportImportedEvidence {
                 provider_id: "wspr-live".into(),
                 source_id: "wsprnet-spots-mirror".into(),
@@ -270,7 +272,7 @@ fn renders_revision_lifecycle_and_recorded_adapter_gap_disclosures() {
                 duplicate_count: 1,
                 conflict_count: 1,
                 observations_created: 2,
-                completeness_known: false,
+                provider_completeness: ReportProviderCompleteness::Unknown,
             }],
         },
     };
@@ -312,7 +314,8 @@ fn renders_successful_public_collection_without_turning_a_source_boundary_into_a
             conflict_count: 0,
             partially_normalized_count: 0,
             gap_count: 0,
-            evidence_complete: true,
+            workflow_status: ReportAcquisitionWorkflowStatus::Completed,
+            provider_completeness: ReportProviderCompleteness::Unknown,
             imports: vec![
                 ReportImportedEvidence {
                     provider_id: "wspr-live".into(),
@@ -329,7 +332,7 @@ fn renders_successful_public_collection_without_turning_a_source_boundary_into_a
                     duplicate_count: 0,
                     conflict_count: 0,
                     observations_created: 4,
-                    completeness_known: false,
+                    provider_completeness: ReportProviderCompleteness::Unknown,
                 },
                 ReportImportedEvidence {
                     provider_id: "wsjtx-udp".into(),
@@ -346,14 +349,14 @@ fn renders_successful_public_collection_without_turning_a_source_boundary_into_a
                     duplicate_count: 0,
                     conflict_count: 0,
                     observations_created: 1,
-                    completeness_known: true,
+                    provider_completeness: ReportProviderCompleteness::Known,
                 },
             ],
         },
     };
 
     let html = render_standalone_html(&report).unwrap();
-    assert!(html.contains("No recorded acquisition gaps"));
+    assert!(html.contains("Collection completed; no recorded acquisition gaps"));
     assert!(
         html.contains("Best-effort public collection completed for 1 recorded requested window(s)")
     );
@@ -361,6 +364,71 @@ fn renders_successful_public_collection_without_turning_a_source_boundary_into_a
     assert!(html.contains("wsjtx-udp / direct-local"));
     assert!(html.contains("upstream completeness guarantee recorded"));
     assert!(!html.contains("Complete within recorded adapter scope"));
+}
+
+#[test]
+fn acquisition_workflow_gap_and_provider_completeness_render_as_independent_facts() {
+    let workflow_statuses = [
+        ReportAcquisitionWorkflowStatus::NotConfigured,
+        ReportAcquisitionWorkflowStatus::Completed,
+        ReportAcquisitionWorkflowStatus::Incomplete,
+    ];
+    let provider_completeness = [
+        ReportProviderCompleteness::Known,
+        ReportProviderCompleteness::Unknown,
+        ReportProviderCompleteness::Unsupported,
+    ];
+
+    for workflow_status in workflow_statuses {
+        for gap_count in [0, 2] {
+            for provider_completeness in provider_completeness {
+                let mut report = canonical_report();
+                report.snapshot.adapter_evidence.record_count =
+                    usize::from(workflow_status != ReportAcquisitionWorkflowStatus::NotConfigured);
+                report.snapshot.adapter_evidence.gap_count = gap_count;
+                report.snapshot.adapter_evidence.workflow_status = workflow_status;
+                report.snapshot.adapter_evidence.provider_completeness = provider_completeness;
+
+                let full = render_standalone_html(&report).unwrap();
+                let compact = render_compact_summary_html(&report).unwrap();
+                if gap_count > 0 {
+                    assert!(full.contains("2 recorded acquisition gaps"));
+                    assert!(compact.contains("2 recorded acquisition gap(s)"));
+                    continue;
+                }
+
+                match workflow_status {
+                    ReportAcquisitionWorkflowStatus::NotConfigured => {
+                        assert!(full.contains("No acquisition workflow was configured"));
+                        assert!(compact.contains("No configured acquisition"));
+                    }
+                    ReportAcquisitionWorkflowStatus::Incomplete => {
+                        assert!(full.contains("Recorded acquisition is incomplete"));
+                        assert!(compact.contains("Recorded acquisition incomplete"));
+                    }
+                    ReportAcquisitionWorkflowStatus::Completed => {
+                        assert!(full.contains("Collection completed"));
+                        assert!(compact.contains("Collection completed"));
+                        assert!(!full.contains("Recorded acquisition is incomplete"));
+                        assert!(!compact.contains("Recorded acquisition incomplete"));
+                        let provider_text = match provider_completeness {
+                            ReportProviderCompleteness::Known => {
+                                "provider completeness is recorded as known"
+                            }
+                            ReportProviderCompleteness::Unknown => {
+                                "upstream completeness is not independently guaranteed"
+                            }
+                            ReportProviderCompleteness::Unsupported => {
+                                "provider completeness is unsupported"
+                            }
+                        };
+                        assert!(full.to_ascii_lowercase().contains(provider_text));
+                        assert!(compact.contains(provider_text));
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -881,7 +949,7 @@ fn renders_answer_first_order_unavailable_states_and_visible_limitations() {
     report.overview.scope.delta_orientation = None;
     report.overview.strata.clear();
     report.overview.limitations = vec![ReportOverviewLimitation::ComparisonNotApplicable];
-    report.snapshot.adapter_evidence.evidence_complete = false;
+    report.snapshot.adapter_evidence.workflow_status = ReportAcquisitionWorkflowStatus::Incomplete;
     report.snapshot.adapter_evidence.gap_count = 2;
     report.notices.push(ReportNotice::DetailOmitted {
         family: antennabench_report::ReportDetailFamily::PairedObservations,
@@ -1243,7 +1311,7 @@ fn run_quality_state_matrix_has_exact_accessible_audit_equivalents() {
             detail: Some("Run abandoned after recurrence".into()),
         },
     ]);
-    report.snapshot.adapter_evidence.evidence_complete = false;
+    report.snapshot.adapter_evidence.workflow_status = ReportAcquisitionWorkflowStatus::Incomplete;
     report.snapshot.adapter_evidence.gap_count = 1;
     report.snapshot.adapter_evidence.malformed_count = 2;
     report.snapshot.adapter_evidence.duplicate_count = 3;

@@ -24,10 +24,11 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report_with_snapshot, render_compact_summary_html, render_standalone_html,
-    render_standalone_html_with_options, ControllerEvidenceHandling, ReportAdapterEvidence,
-    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportEventCorrection,
-    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
-    ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind, ReportSnapshotContext,
+    render_standalone_html_with_options, ControllerEvidenceHandling,
+    ReportAcquisitionWorkflowStatus, ReportAdapterEvidence, ReportAntennaControlAttempt,
+    ReportCompleteness, ReportError, ReportEventCorrection, ReportEventCorrectionAction,
+    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportOperatorEvent,
+    ReportOperatorEventKind, ReportProviderCompleteness, ReportSnapshotContext,
     ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis, StandaloneHtmlOptions,
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};

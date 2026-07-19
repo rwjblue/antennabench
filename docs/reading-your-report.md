@@ -187,10 +187,13 @@ Use this timeline to spot missed cycles, late switches, unknown occupancy, or
 an order pattern that may be confused with changing propagation. Corrections
 remain visible with the original history.
 
-**Acquisition status** distinguishes recorded completion, explicit gaps,
-incomplete collection, and the absence of a collection record. Best-effort
-public collection can retain everything returned for its requested windows
-without proving that an upstream mirror was complete.
+**Acquisition status** keeps three facts separate: whether the configured
+workflow completed, how many explicit acquisition gaps were recorded, and
+whether provider completeness is known, unknown, or unsupported. A completed
+best-effort public collection retained everything returned for its requested
+windows; it does not by itself prove that an upstream mirror was complete.
+Interrupted, failed, skipped, or partially committed collection remains an
+incomplete workflow even when no durable gap count is available.
 
 The **Exclusion summary** groups observations by the reason they were left out
 of a calculation. An exclusion does not erase the record: exact excluded

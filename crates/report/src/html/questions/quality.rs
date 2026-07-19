@@ -1,4 +1,5 @@
 use super::*;
+use crate::ReportAcquisitionWorkflowStatus;
 
 pub(in super::super) fn render_run_quality_section(
     out: &mut CheckedHtmlWriter<'_>,
@@ -256,21 +257,26 @@ pub(in super::super) fn render_acquisition_summary(
 ) {
     let evidence = &report.snapshot.adapter_evidence;
     out.push_str("<section class=\"panel\" aria-labelledby=\"acquisition-quality-title\"><h2 id=\"acquisition-quality-title\">Acquisition status</h2>");
-    if evidence
-        .imports
-        .iter()
-        .any(|import| import.provider_id == "wspr-live")
-        && evidence.evidence_complete
-    {
-        out.push_str("<p><strong>Best-effort public collection completed for the requested windows.</strong> AntennaBench retained the spots returned by the configured WSPR.live queries. The upstream mirror does not provide an independent completeness guarantee.</p>");
-    } else if evidence.gap_count > 0 {
+    if evidence.gap_count > 0 {
         write_html!(out, "<p class=\"notice critical\"><strong>Explicit acquisition gap:</strong> {} recorded gap{}; retained unrelated valid evidence remains usable. Inspect provider windows and durable adapter records in the audit appendix.</p>", evidence.gap_count, plural_suffix(evidence.gap_count));
-    } else if !evidence.evidence_complete {
+    } else if evidence.workflow_status == ReportAcquisitionWorkflowStatus::Incomplete {
         out.push_str("<p class=\"notice critical\"><strong>Recorded acquisition is incomplete.</strong> No durable gap count is available; inspect provider windows and lifecycle records for the recorded reason.</p>");
-    } else if evidence.record_count > 0 {
-        out.push_str("<p>No explicit acquisition gap is recorded. Adapter row dispositions remain available in the audit appendix.</p>");
+    } else if evidence.workflow_status == ReportAcquisitionWorkflowStatus::Completed {
+        if evidence
+            .imports
+            .iter()
+            .any(|import| import.provider_id == "wspr-live")
+        {
+            out.push_str("<p><strong>Collection completed.</strong> AntennaBench retained the spots returned for the configured WSPR.live request windows; upstream completeness is not independently guaranteed.</p>");
+        } else {
+            write_html!(
+                out,
+                "<p><strong>Collection completed.</strong> {} No explicit acquisition gap is recorded; adapter row dispositions remain available in the audit appendix.</p>",
+                provider_completeness_sentence(evidence.provider_completeness)
+            );
+        }
     } else {
-        out.push_str("<p class=\"empty\">No adapter or import acquisition record is available; no completeness claim is inferred.</p>");
+        out.push_str("<p class=\"empty\">No acquisition workflow was configured. No workflow-completion or provider-completeness claim is inferred.</p>");
     }
     out.push_str("</section>");
 }

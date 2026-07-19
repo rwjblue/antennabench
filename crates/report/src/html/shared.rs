@@ -2,7 +2,8 @@ use std::fmt::{self, Write};
 
 use crate::{
     report_resource_error, ReportCancellationToken, ReportDetailFamily, ReportImportedEvidence,
-    ReportNotice, ReportOperatorEventKind, ReportOverviewStratum, ReportResourceStage,
+    ReportNotice, ReportOperatorEventKind, ReportOverviewStratum, ReportProviderCompleteness,
+    ReportResourceStage,
 };
 use antennabench_analysis::{
     ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder, EvidenceQuality,
@@ -361,10 +362,30 @@ pub(super) fn correction_action(value: crate::ReportEventCorrectionAction) -> &'
 pub(super) fn import_source_boundary(import: &ReportImportedEvidence) -> &'static str {
     if import.provider_id == "wspr-live" {
         "best-effort WSPR.live request-window collection; upstream mirror has no independent completeness guarantee"
-    } else if import.completeness_known {
-        "upstream completeness guarantee recorded"
     } else {
-        "upstream completeness guarantee not independently recorded"
+        match import.provider_completeness {
+            ReportProviderCompleteness::Known => "upstream completeness guarantee recorded",
+            ReportProviderCompleteness::Unknown => {
+                "upstream completeness guarantee not independently recorded"
+            }
+            ReportProviderCompleteness::Unsupported => {
+                "provider completeness assertion unsupported"
+            }
+        }
+    }
+}
+
+pub(super) fn provider_completeness_sentence(
+    completeness: ReportProviderCompleteness,
+) -> &'static str {
+    match completeness {
+        ReportProviderCompleteness::Known => "Provider completeness is recorded as known.",
+        ReportProviderCompleteness::Unknown => {
+            "Upstream completeness is not independently guaranteed."
+        }
+        ReportProviderCompleteness::Unsupported => {
+            "Provider completeness is unsupported for this acquisition type."
+        }
     }
 }
 

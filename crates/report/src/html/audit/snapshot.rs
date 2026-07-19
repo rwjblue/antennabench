@@ -1,4 +1,5 @@
 use super::*;
+use crate::ReportAcquisitionWorkflowStatus;
 
 pub(in super::super) fn render_snapshot(
     out: &mut CheckedHtmlWriter<'_>,
@@ -49,17 +50,23 @@ pub(in super::super) fn render_snapshot(
     fact(
         out,
         "Recorded acquisition",
-        &if snapshot.adapter_evidence.evidence_complete {
-            "No recorded acquisition gaps".into()
-        } else if snapshot.adapter_evidence.gap_count == 1 {
+        &if snapshot.adapter_evidence.gap_count == 1 {
             "1 recorded acquisition gap; inspect the durable adapter evidence and lifecycle history for its recorded reason".into()
         } else if snapshot.adapter_evidence.gap_count > 1 {
             format!(
                 "{} recorded acquisition gaps; inspect the durable adapter evidence and lifecycle history for their recorded reasons",
                 snapshot.adapter_evidence.gap_count,
             )
-        } else {
+        } else if snapshot.adapter_evidence.workflow_status
+            == ReportAcquisitionWorkflowStatus::Incomplete
+        {
             "Recorded acquisition is incomplete; inspect the durable adapter evidence and lifecycle history for the recorded reason".into()
+        } else if snapshot.adapter_evidence.workflow_status
+            == ReportAcquisitionWorkflowStatus::Completed
+        {
+            "Collection completed; no recorded acquisition gaps".into()
+        } else {
+            "No acquisition workflow configured".into()
         },
     );
     let wspr_live_imports = snapshot
@@ -72,14 +79,22 @@ pub(in super::super) fn render_snapshot(
         fact(
             out,
             "Public collection",
-            &if snapshot.adapter_evidence.evidence_complete {
+            &if snapshot.adapter_evidence.gap_count == 0
+                && snapshot.adapter_evidence.workflow_status
+                    == ReportAcquisitionWorkflowStatus::Completed
+            {
                 format!(
                     "Best-effort public collection completed for {} recorded requested window(s)",
                     wspr_live_imports,
                 )
-            } else {
+            } else if snapshot.adapter_evidence.gap_count > 0 {
                 format!(
                     "Best-effort public collection retained rows for {} recorded requested window(s); recorded acquisition gaps remain",
+                    wspr_live_imports,
+                )
+            } else {
+                format!(
+                    "Best-effort public collection retained rows for {} recorded requested window(s); the configured workflow did not complete",
                     wspr_live_imports,
                 )
             },
@@ -259,7 +274,8 @@ pub(in super::super) fn snapshot_has_detail(report: &SessionReport) -> bool {
         || !snapshot.antenna_control_attempts.is_empty()
         || snapshot.adapter_evidence.record_count > 0
         || snapshot.adapter_evidence.gap_count > 0
-        || !snapshot.adapter_evidence.evidence_complete
+        || snapshot.adapter_evidence.workflow_status
+            != ReportAcquisitionWorkflowStatus::NotConfigured
         || !snapshot.adapter_evidence.imports.is_empty()
 }
 pub(in super::super) fn lifecycle(value: SessionLifecycleV2) -> &'static str {

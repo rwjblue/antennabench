@@ -114,7 +114,11 @@ pub(super) fn load_snapshot(
 pub(super) fn report_snapshot(
     bundle: &antennabench_core::v2::BundleV2Contents,
 ) -> ReportSnapshotContext {
-    let adapter = report_adapter_evidence(&bundle.adapter_records);
+    let adapter = report_adapter_evidence(
+        &bundle.adapter_records,
+        bundle.session_state.wspr_live_acquisition_enabled,
+        bundle.session_state.lifecycle,
+    );
     let lifecycle_events = bundle
         .events
         .iter()
@@ -160,7 +164,11 @@ pub(super) fn report_snapshot(
 }
 
 pub(super) fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotContext {
-    let adapter = report_adapter_evidence(&bundle.adapter_records);
+    let adapter = report_adapter_evidence(
+        &bundle.adapter_records,
+        bundle.session_state.wspr_live_acquisition_enabled,
+        bundle.session_state.lifecycle,
+    );
     let lifecycle_events = bundle
         .events
         .iter()
@@ -605,7 +613,11 @@ pub(super) fn correctable_detail_v3(payload: &CorrectableOperatorEventPayloadV3)
     }
 }
 
-pub(super) fn report_adapter_evidence(records: &[AdapterRecordV2]) -> ReportAdapterEvidence {
+pub(super) fn report_adapter_evidence(
+    records: &[AdapterRecordV2],
+    wspr_live_configured: bool,
+    lifecycle: SessionLifecycleV2,
+) -> ReportAdapterEvidence {
     let mut adapter = ReportAdapterEvidence {
         record_count: records.len(),
         ..ReportAdapterEvidence::default()
@@ -631,11 +643,36 @@ pub(super) fn report_adapter_evidence(records: &[AdapterRecordV2]) -> ReportAdap
             }
         }
     }
-    adapter.evidence_complete = adapter.gap_count == 0
-        && adapter
-            .imports
-            .iter()
-            .all(|import| import.completeness_known);
+    adapter.provider_completeness = if adapter.imports.is_empty() {
+        ReportProviderCompleteness::Unsupported
+    } else if adapter
+        .imports
+        .iter()
+        .all(|import| import.provider_completeness == ReportProviderCompleteness::Known)
+    {
+        ReportProviderCompleteness::Known
+    } else if adapter
+        .imports
+        .iter()
+        .all(|import| import.provider_completeness == ReportProviderCompleteness::Unsupported)
+    {
+        ReportProviderCompleteness::Unsupported
+    } else {
+        ReportProviderCompleteness::Unknown
+    };
+    adapter.workflow_status = if adapter.gap_count > 0 {
+        ReportAcquisitionWorkflowStatus::Incomplete
+    } else if wspr_live_configured {
+        if lifecycle == SessionLifecycleV2::Ended && !adapter.imports.is_empty() {
+            ReportAcquisitionWorkflowStatus::Completed
+        } else {
+            ReportAcquisitionWorkflowStatus::Incomplete
+        }
+    } else if adapter.imports.is_empty() {
+        ReportAcquisitionWorkflowStatus::NotConfigured
+    } else {
+        ReportAcquisitionWorkflowStatus::Completed
+    };
     adapter
 }
 
@@ -680,7 +717,11 @@ impl WsprLiveReportImport {
             duplicate_count: self.counts.duplicate,
             conflict_count: self.counts.conflict,
             observations_created: self.counts.observations_created,
-            completeness_known: self.completeness == "known",
+            provider_completeness: match self.completeness.as_str() {
+                "known" => ReportProviderCompleteness::Known,
+                "unknown" => ReportProviderCompleteness::Unknown,
+                _ => ReportProviderCompleteness::Unsupported,
+            },
         }
     }
 }
@@ -742,4 +783,129 @@ pub(super) fn prepare_presentation(
         compact_summary_html,
         controller_omitted_report_html,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use antennabench_core::v2::{AdapterReasonId, MutationMember, Provenance, RecordMetaV2};
+    use antennabench_core::RecordSource;
+
+    #[test]
+    fn acquisition_projection_keeps_workflow_gaps_and_provider_completeness_separate() {
+        let summary_unknown = adapter_record(
+            "wspr_live_import_summary",
+            AdapterDisposition::Accepted,
+            r#"{
+                "provider_id":"wspr-live",
+                "source_id":"wsprnet-spots-mirror",
+                "captured_at":"2026-07-18T12:10:00Z",
+                "window_start":"2026-07-18T12:00:00Z",
+                "window_end":"2026-07-18T12:02:00Z",
+                "selected_bands":["20m"],
+                "completeness":"unknown",
+                "counts":{"total":1,"accepted":1,"malformed":0,"filtered":0,
+                    "unsupported":0,"duplicate":0,"conflict":0,"observations_created":1}
+            }"#,
+        );
+        let completed = report_adapter_evidence(
+            std::slice::from_ref(&summary_unknown),
+            true,
+            SessionLifecycleV2::Ended,
+        );
+        assert_eq!(
+            completed.workflow_status,
+            ReportAcquisitionWorkflowStatus::Completed
+        );
+        assert_eq!(
+            completed.provider_completeness,
+            ReportProviderCompleteness::Unknown
+        );
+        assert_eq!(completed.gap_count, 0);
+
+        let unfinished = report_adapter_evidence(
+            std::slice::from_ref(&summary_unknown),
+            true,
+            SessionLifecycleV2::Running,
+        );
+        assert_eq!(
+            unfinished.workflow_status,
+            ReportAcquisitionWorkflowStatus::Incomplete
+        );
+
+        let partial = report_adapter_evidence(
+            &[adapter_record(
+                "wspr_live_import_capture",
+                AdapterDisposition::Accepted,
+                "{}",
+            )],
+            true,
+            SessionLifecycleV2::Ended,
+        );
+        assert_eq!(
+            partial.workflow_status,
+            ReportAcquisitionWorkflowStatus::Incomplete
+        );
+
+        let with_gap = report_adapter_evidence(
+            &[
+                summary_unknown,
+                adapter_record(
+                    "acquisition_gap",
+                    AdapterDisposition::PartiallyNormalized,
+                    "{}",
+                ),
+            ],
+            true,
+            SessionLifecycleV2::Ended,
+        );
+        assert_eq!(
+            with_gap.workflow_status,
+            ReportAcquisitionWorkflowStatus::Incomplete
+        );
+        assert_eq!(with_gap.gap_count, 1);
+
+        let absent = report_adapter_evidence(&[], false, SessionLifecycleV2::Ended);
+        assert_eq!(
+            absent.workflow_status,
+            ReportAcquisitionWorkflowStatus::NotConfigured
+        );
+        assert_eq!(
+            absent.provider_completeness,
+            ReportProviderCompleteness::Unsupported
+        );
+    }
+
+    fn adapter_record(
+        record_type: &str,
+        disposition: AdapterDisposition,
+        data: &str,
+    ) -> AdapterRecordV2 {
+        let recorded_at = "2026-07-18T12:10:00Z".parse().unwrap();
+        AdapterRecordV2 {
+            meta: RecordMetaV2 {
+                schema_version: SCHEMA_VERSION_V2,
+                session_id: "session-acquisition-status".into(),
+                recorded_at,
+                provenance: Provenance::from_legacy(RecordSource::WsprLive, "test"),
+                mutation: MutationMember {
+                    mutation_id: format!("mutation-{record_type}"),
+                    member_index: 0,
+                    member_count: 1,
+                },
+            },
+            record_id: format!("record-{record_type}"),
+            source_time: Some(recorded_at),
+            record_type: record_type.into(),
+            disposition,
+            reason: AdapterReasonId::new("wspr-live.test").unwrap(),
+            normalized_records: Vec::new(),
+            input: AdapterInput::Inline {
+                data: data.into(),
+                media_type: "application/json".into(),
+                encoding: None,
+                source_locator: None,
+            },
+        }
+    }
 }

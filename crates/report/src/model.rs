@@ -465,7 +465,10 @@ pub struct ReportAdapterEvidence {
     pub conflict_count: usize,
     pub partially_normalized_count: usize,
     pub gap_count: usize,
-    pub evidence_complete: bool,
+    #[serde(default)]
+    pub workflow_status: ReportAcquisitionWorkflowStatus,
+    #[serde(default)]
+    pub provider_completeness: ReportProviderCompleteness,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub imports: Vec<ReportImportedEvidence>,
 }
@@ -486,7 +489,26 @@ pub struct ReportImportedEvidence {
     pub duplicate_count: usize,
     pub conflict_count: usize,
     pub observations_created: usize,
-    pub completeness_known: bool,
+    #[serde(default)]
+    pub provider_completeness: ReportProviderCompleteness,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportAcquisitionWorkflowStatus {
+    #[default]
+    NotConfigured,
+    Completed,
+    Incomplete,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportProviderCompleteness {
+    Known,
+    Unknown,
+    #[default]
+    Unsupported,
 }
 
 impl Default for ReportAdapterEvidence {
@@ -501,7 +523,8 @@ impl Default for ReportAdapterEvidence {
             conflict_count: 0,
             partially_normalized_count: 0,
             gap_count: 0,
-            evidence_complete: true,
+            workflow_status: ReportAcquisitionWorkflowStatus::NotConfigured,
+            provider_completeness: ReportProviderCompleteness::Unsupported,
             imports: Vec::new(),
         }
     }
