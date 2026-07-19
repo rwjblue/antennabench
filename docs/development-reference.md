@@ -511,10 +511,14 @@ mise run desktop:release-bundle -- aarch64-apple-darwin
 mise run desktop:release-bundle -- x86_64-apple-darwin
 ```
 
-The optional `--tag vMAJOR.MINOR.PATCH` argument fails unless it exactly matches
-the Cargo workspace version. CI also passes `--runner-label macos-15` or
+When `--tag` is omitted, the non-publishable probe derives the deterministic
+`v<workspace-version>` tag needed to exercise the fail-closed official build
+identity checks. An explicit `--tag vMAJOR.MINOR.PATCH` fails unless it exactly
+matches the Cargo workspace version, and the real tag workflow supplies and
+checks `github.ref_name`. CI also passes `--runner-label macos-15` or
 `--runner-label macos-15-intel`; a mismatched native machine, runner, target,
-version, or tag fails before staging.
+version, or tag fails before staging. Probe output remains unsigned and
+non-publishable even though it exercises the same official build identity.
 
 The command first runs the single-toolchain check and the fresh non-secret
 `release-preflight`. It installs the explicit Rust target, then invokes Tauri

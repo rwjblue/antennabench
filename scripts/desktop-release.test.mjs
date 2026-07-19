@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   archiveName,
@@ -12,6 +13,7 @@ import {
   canonicalJson,
   checksumLines,
   readCompleteArtifactSet,
+  resolveReleaseIdentityTag,
   targetContract,
   validateStagedEntries,
   withAtomicDirectory,
@@ -24,6 +26,34 @@ test("accepts stable versions and exact v-prefixed tags", () => {
     assert.throws(() => assertStableVersion(version), /stable MAJOR\.MINOR\.PATCH/);
   }
   assert.throws(() => assertVersionTag("1.2.3", "v1.2.4"), /does not match/);
+});
+
+test("omitted probe tags resolve to exact official release identity", () => {
+  assert.equal(resolveReleaseIdentityTag("0.1.0"), "v0.1.0");
+  assert.equal(resolveReleaseIdentityTag("12.34.56", "v12.34.56"), "v12.34.56");
+  assert.throws(
+    () => resolveReleaseIdentityTag("1.2.3", "v1.2.4"),
+    /does not match/,
+  );
+});
+
+test("probe and tagged workflows preserve their distinct tag inputs", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const probe = fs.readFileSync(
+    path.join(root, ".github", "workflows", "desktop-release-artifacts.yml"),
+    "utf8",
+  );
+  const release = fs.readFileSync(
+    path.join(root, ".github", "workflows", "desktop-release.yml"),
+    "utf8",
+  );
+  const probeCommand = probe.match(/run: mise run desktop:release-bundle[^\n]+/)?.[0] ?? "";
+  assert.match(probeCommand, /--runner-label/);
+  assert.doesNotMatch(probeCommand, /--tag/);
+  assert.match(
+    release,
+    /mise run desktop:release-bundle --[\s\S]*?--tag "\$\{\{ github\.ref_name \}\}"/,
+  );
 });
 
 test("target contracts make arm64 and Intel artifact names truthful", () => {

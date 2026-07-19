@@ -40,6 +40,13 @@ export function assertVersionTag(version, tag) {
   }
 }
 
+export function resolveReleaseIdentityTag(version, tag) {
+  assertStableVersion(version);
+  const resolved = tag ?? `v${version}`;
+  assertVersionTag(version, resolved);
+  return resolved;
+}
+
 export function archiveName(version, target) {
   assertStableVersion(version);
   targetContract(target);
@@ -462,11 +469,11 @@ async function buildTarget({ root, target, tag, runnerLabel }) {
   validateHost(target, runnerLabel);
   validateTauriContract(root);
   const version = workspaceVersion(root);
-  assertVersionTag(version, tag);
+  const releaseIdentityTag = resolveReleaseIdentityTag(version, tag);
   if (process.env.GITHUB_REF_TYPE === "tag") {
     assertVersionTag(version, process.env.GITHUB_REF_NAME);
-    if (tag && tag !== process.env.GITHUB_REF_NAME) {
-      throw new Error(`requested tag ${tag} does not match GITHUB_REF_NAME ${process.env.GITHUB_REF_NAME}`);
+    if (releaseIdentityTag !== process.env.GITHUB_REF_NAME) {
+      throw new Error(`requested tag ${releaseIdentityTag} does not match GITHUB_REF_NAME ${process.env.GITHUB_REF_NAME}`);
     }
   }
 
@@ -517,7 +524,7 @@ async function buildTarget({ root, target, tag, runnerLabel }) {
         ANTENNABENCH_BUILD_CHANNEL: "official_release",
         ANTENNABENCH_SOURCE_COMMIT: source.commit,
         ANTENNABENCH_SOURCE_STATE: "clean",
-        ANTENNABENCH_RELEASE_TAG: tag,
+        ANTENNABENCH_RELEASE_TAG: releaseIdentityTag,
         ANTENNABENCH_TARGET_TRIPLE: target,
         ANTENNABENCH_BUILD_ARCHITECTURE: target.split("-", 1)[0],
       },
@@ -526,7 +533,15 @@ async function buildTarget({ root, target, tag, runnerLabel }) {
     },
   );
   if (!fs.existsSync(app)) throw new Error(`Tauri did not produce ${app}`);
-  return stageApp({ root, app, target, tag, runnerLabel, trustMode: "local", inputs });
+  return stageApp({
+    root,
+    app,
+    target,
+    tag: releaseIdentityTag,
+    runnerLabel,
+    trustMode: "local",
+    inputs,
+  });
 }
 
 export function readTargetManifest(directory) {
