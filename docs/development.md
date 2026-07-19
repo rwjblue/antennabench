@@ -39,6 +39,7 @@ Windows, but macOS is the supported environment for interactive desktop work.
 ```bash
 mise run desktop:test        # focused desktop and frontend tests
 mise run desktop:e2e         # unattended setup-to-export workflow
+mise run desktop:report-browser # real-browser embedded report style/CSP check
 mise run desktop:build       # debug app build without packaging
 mise run hosted:test         # public site plus optional hosted foundation
 mise run desktop:frontend-coverage
@@ -50,7 +51,8 @@ mise run ci                  # complete routine repository checks
 
 `mise run ci` checks tool pins and supply-chain policy, the Rust module-size
 ratchet, formatting, Clippy, the Rust workspace, frontend behavior, hosted code,
-and the unattended desktop workflow. Tests use synthetic or reduced fixtures and do not require radio
+the real-browser report-frame style boundary, and the unattended desktop
+workflow. Tests use synthetic or reduced fixtures and do not require radio
 hardware, WSJT-X, NOAA, Cloudflare, or another live service.
 
 ## Rust Module-Size Budget

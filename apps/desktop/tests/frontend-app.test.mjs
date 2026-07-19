@@ -50,6 +50,19 @@ function conductorView(overrides = {}) {
 
 test("the headless desktop completes location, review, and creation through mounted DOM events", async () => {
   const elements = loadDesktopDocument();
+  const reportDocumentUrls = [];
+  Object.defineProperty(window.URL, "createObjectURL", {
+    configurable: true,
+    value: () => {
+      const url = `blob:headless-report-${reportDocumentUrls.length + 1}`;
+      reportDocumentUrls.push(url);
+      return url;
+    },
+  });
+  Object.defineProperty(window.URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
   vi.useFakeTimers();
   const calls = [];
   const review = {
@@ -91,7 +104,7 @@ test("the headless desktop completes location, review, and creation through moun
     bundleName: "headless.session.antennabundle",
     lifecycle: "running",
     schemaVersion: 4,
-    reportHtml: "<p>headless report</p>",
+    reportHtml: "<!doctype html><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>body{color:#172033}</style><p>headless report</p>",
     revision: 1,
   };
   const responses = {
@@ -236,6 +249,8 @@ test("the headless desktop completes location, review, and creation through moun
       assert.match(elements.setupStatus.textContent, /Session ready/);
     });
     assert.ok(calls.some(([command]) => command === "create_session_from_review"));
+    assert.deepEqual(reportDocumentUrls, ["blob:headless-report-1"]);
+    assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-1");
 
     const start = elements.lifecycleButtons.find(
       (button) => button.dataset.conductorAction === "start",
@@ -254,6 +269,8 @@ test("the headless desktop completes location, review, and creation through moun
     assert.deepEqual(uncaught, []);
   } finally {
     delete window.__TAURI__;
+    delete window.URL.createObjectURL;
+    delete window.URL.revokeObjectURL;
     window.removeEventListener("error", recordError);
     window.removeEventListener("unhandledrejection", recordError);
     vi.clearAllTimers();

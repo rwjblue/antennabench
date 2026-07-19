@@ -13,11 +13,13 @@ import {
   syncWsprLiveForSignalPlan,
 } from "./forms.mjs";
 import {
+  createReportDocumentUrls,
   focusSetupOutcome,
   installContextualHelp,
   locationLookupMessage,
   maidenheadGrid,
   recommendedNoteTarget,
+  releaseReportFrame,
   wsjtxReadinessModel,
   workflowFromHash,
 } from "./models.mjs";
@@ -39,6 +41,7 @@ export function mount(root, browserWindow) {
   let noteShortcutInitialized = false;
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const elements = collectDesktopElements(root);
+  const reportDocuments = createReportDocumentUrls(browserWindow);
   const {
     mainContent,
     setupForm,
@@ -162,7 +165,7 @@ export function mount(root, browserWindow) {
     countdownAnchor = countdown.anchor;
     countdownAnchorKey = countdown.key;
     renderTransfer(elements, state);
-    renderReport(elements, state);
+    renderReport(elements, state, reportDocuments);
   };
 
 
@@ -198,6 +201,9 @@ export function mount(root, browserWindow) {
     getCountdownAnchor: () => countdownAnchor,
     renderCountdown(seconds) {
       conductorCountdown.textContent = seconds === null ? "" : formatCountdown(seconds);
+    },
+    onDispose() {
+      releaseReportFrame(reportFrame, reportDocuments);
     },
   });
 

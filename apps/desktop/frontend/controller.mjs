@@ -97,6 +97,7 @@ export function createDesktopController(options = {}) {
     confirm: options.confirm ?? (() => false),
     getCountdownAnchor: options.getCountdownAnchor ?? (() => null),
     renderCountdown: options.renderCountdown ?? (() => {}),
+    onDispose: options.onDispose ?? (() => {}),
   };
   let state = options.state ?? initialState(options.initialWorkflow);
   let transitionRefreshKey = null;
@@ -546,6 +547,7 @@ export function createDesktopController(options = {}) {
       if (disposed) return;
       disposed = true;
       while (cleanups.length > 0) cleanups.pop()?.();
+      effects.onDispose();
     },
   };
 

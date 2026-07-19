@@ -536,7 +536,7 @@ export function renderTransfer(elements, state) {
   renderFeedback(importFeedback, importFeedbackMessage, importFeedbackDetail, importFeedbackModel(state));
 }
 
-export function renderReport(elements, state) {
+export function renderReport(elements, state, reportDocuments) {
   const {
     reportStatus, reportPlaceholder, reportViewer, reportFrame, reportRefreshButton,
     reportCompactExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
@@ -575,7 +575,7 @@ export function renderReport(elements, state) {
   reportBundleName.textContent = state.session.bundleName;
   reportRevision.textContent = `Revision ${state.session.revision ?? "legacy"} · ${humanizeIdentifier(state.session.lifecycle ?? "static")}`;
   reportSummary.textContent = `${state.session.callsign} · ${state.session.grid} · ${state.session.antennaCount} antennas · ${state.session.slotCount} slots · ${state.session.observationCount} observations`;
-  if (hasReport) updateReportFrame(reportFrame, state);
+  if (hasReport) updateReportFrame(reportFrame, state, reportDocuments);
 }
 
 function renderFeedback(container, message, detail, model) {

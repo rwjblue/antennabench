@@ -367,14 +367,58 @@ export function viewModel(state) {
   }));
 }
 
-export function updateReportFrame(reportFrame, state) {
+export function createReportDocumentUrls(browserWindow = globalThis) {
+  return {
+    create(reportHtml) {
+      const compact = reportHtml.includes('<main class="compact-summary');
+      const stylesheetUrl = new browserWindow.URL(
+        compact ? "report-compact.css" : "report.css",
+        browserWindow.location.href,
+      ).href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+      const styleStart = reportHtml.indexOf("<style>");
+      const styleEnd = reportHtml.indexOf("</style>", styleStart);
+      if (styleStart === -1 || styleEnd === -1) {
+        throw new Error("The report document is missing its standalone stylesheet.");
+      }
+      const embeddedHtml = `${reportHtml.slice(0, styleStart)}<link rel="stylesheet" href="${stylesheetUrl}">${reportHtml.slice(styleEnd + 8)}`
+        .replace("style-src 'unsafe-inline'", "style-src 'self'");
+      const document = new browserWindow.Blob([embeddedHtml], {
+        type: "text/html;charset=utf-8",
+      });
+      return browserWindow.URL.createObjectURL(document);
+    },
+    revoke(url) {
+      browserWindow.URL.revokeObjectURL(url);
+    },
+  };
+}
+
+export function releaseReportFrame(reportFrame, reportDocuments) {
+  const currentUrl = reportFrame.dataset.reportDocumentUrl;
+  if (currentUrl) reportDocuments.revoke(currentUrl);
+  delete reportFrame.dataset.reportDocumentUrl;
+  delete reportFrame.dataset.presentationId;
+  reportFrame.removeAttribute?.("src");
+}
+
+export function updateReportFrame(reportFrame, state, reportDocuments) {
   if (state.session === null || typeof state.session.reportHtml !== "string") return false;
 
   const presentationId = String(state.reportPresentationId);
   if (reportFrame.dataset.presentationId === presentationId) return false;
 
-  reportFrame.srcdoc = state.session.reportHtml;
+  const previousUrl = reportFrame.dataset.reportDocumentUrl;
+  const nextUrl = reportDocuments.create(state.session.reportHtml);
+  try {
+    reportFrame.removeAttribute?.("srcdoc");
+    reportFrame.src = nextUrl;
+  } catch (error) {
+    reportDocuments.revoke(nextUrl);
+    throw error;
+  }
+  reportFrame.dataset.reportDocumentUrl = nextUrl;
   reportFrame.dataset.presentationId = presentationId;
+  if (previousUrl) reportDocuments.revoke(previousUrl);
   return true;
 }
 

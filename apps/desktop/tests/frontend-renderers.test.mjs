@@ -32,6 +32,17 @@ function loadDesktopDocument() {
   return collectDesktopElements(document);
 }
 
+function reportDocumentHarness() {
+  let sequence = 0;
+  return {
+    create() {
+      sequence += 1;
+      return `blob:report-${sequence}`;
+    },
+    revoke() {},
+  };
+}
+
 test("the checked-in HTML satisfies the fail-fast renderer element inventory", () => {
   const elements = loadDesktopDocument();
   assert.ok(elements.mainContent instanceof HTMLElement);
@@ -477,7 +488,8 @@ test("transfer renderer covers lifecycle/schema eligibility and feedback outcome
 test("report renderer covers unavailable, refreshing, ready, exporting, error, and frame identity", () => {
   const e = loadDesktopDocument();
   const state = initialState("report");
-  renderReport(e, state);
+  const reportDocuments = reportDocumentHarness();
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportStatus.textContent, "Unavailable");
   assert.equal(e.reportViewer.hidden, true);
 
@@ -488,40 +500,40 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   };
   state.reportStatus = "ready";
   state.reportPresentationId = 3;
-  renderReport(e, state);
-  assert.equal(e.reportFrame.srcdoc, "<p>three</p>");
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportFrame.getAttribute("src"), "blob:report-1");
   assert.equal(e.reportControllerOptions.hidden, true);
   assert.equal(e.reportControllerHandling.value, "complete");
 
   state.session.hasControllerEvidence = true;
-  renderReport(e, state);
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportControllerOptions.hidden, false);
   assert.equal(e.reportControllerHandling.value, "complete", "controller details are included by default");
   e.reportControllerHandling.value = "omitted_at_export";
-  renderReport(e, state);
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportControllerHandling.value, "omitted_at_export", "choice persists for one presentation");
   state.reportPresentationId = 4;
-  renderReport(e, state);
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportControllerHandling.value, "complete", "a new snapshot defaults to include");
   state.session.hasControllerEvidence = false;
-  renderReport(e, state);
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportControllerOptions.hidden, true);
-  e.reportFrame.srcdoc = "sentinel";
-  renderReport(e, state);
-  assert.equal(e.reportFrame.srcdoc, "sentinel", "same presentation does not replace srcdoc");
+  e.reportFrame.src = "sentinel";
+  renderReport(e, state, reportDocuments);
+  assert.match(e.reportFrame.src, /sentinel$/, "same presentation does not replace the blob document");
 
   state.reportStatus = "refreshing";
-  renderReport(e, state);
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportStatus.textContent, "Refreshing");
   assert.equal(e.reportRefreshButton.disabled, true);
   state.reportStatus = "ready";
   state.reportExportStatus = "loading";
-  renderReport(e, state);
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportCompactExportButton.textContent, "Exporting…");
   assert.equal(e.reportFullExportButton.textContent, "Exporting…");
   state.reportExportStatus = "error";
   state.reportExportError = { message: "cannot export", detail: "destination exists" };
-  renderReport(e, state);
+  renderReport(e, state, reportDocuments);
   assert.equal(e.reportFeedback.dataset.kind, "error");
   assert.equal(e.reportFeedbackDetail.textContent, "destination exists");
 });

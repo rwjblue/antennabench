@@ -20,7 +20,7 @@
     ],
     "security": {
       "capabilities": ["main-shell"],
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'self'; base-uri 'none'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'self' blob:; base-uri 'none'; form-action 'none'"
     }
   },
   "bundle": {

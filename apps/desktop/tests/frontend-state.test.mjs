@@ -50,6 +50,7 @@ import {
   maidenheadGrid,
   projectCountdown,
   recommendedNoteTarget,
+  releaseReportFrame,
   setupPlanEstimate,
   updateReportFrame,
   viewModel,
@@ -104,6 +105,22 @@ import {
   wsprLiveImportSucceeded,
 } from "../frontend/state.mjs";
 
+function reportDocumentHarness() {
+  const created = [];
+  const revoked = [];
+  return {
+    created,
+    revoked,
+    create(html) {
+      created.push(html);
+      return `blob:report-${created.length}`;
+    },
+    revoke(url) {
+      revoked.push(url);
+    },
+  };
+}
+
 test("the desktop serves checked-in native modules without frontend tooling", () => {
   const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
   const tauri = JSON.parse(readFileSync(
@@ -122,6 +139,11 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
   assert.equal(tauri.build.frontendDist, "frontend");
   assert.equal(tauri.build.beforeDevCommand, undefined);
   assert.equal(tauri.build.beforeBuildCommand, undefined);
+  assert.match(tauri.app.security.csp, /style-src 'self'/);
+  assert.doesNotMatch(tauri.app.security.csp, /style-src[^;]*'unsafe-inline'/);
+  assert.match(tauri.app.security.csp, /frame-src 'self' blob:/);
+  assert.match(html, /<iframe\s+data-report-frame[\s\S]*?sandbox=""[\s\S]*?><\/iframe>/);
+  assert.doesNotMatch(html, /data-report-frame[\s\S]*?allow-scripts/);
   assert.equal(packageManifest.private, true);
   assert.equal(packageManifest.dependencies, undefined);
   assert.deepEqual(Object.keys(packageManifest.scripts).sort(), ["coverage", "test"]);
@@ -138,6 +160,8 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     "mark.svg",
     "models.mjs",
     "renderers.mjs",
+    "report-compact.css",
+    "report.css",
     "state.mjs",
     "styles.css",
   ]);
@@ -1106,21 +1130,23 @@ test("opening a session transitions through loading and ready", () => {
 });
 
 test("same-ID successful opens refresh only the new report presentation", () => {
-  const reportFrame = { dataset: {}, srcdoc: "" };
+  const reportFrame = { dataset: {}, src: "", removeAttribute() {} };
+  const reportDocuments = reportDocumentHarness();
   const first = openSessionSucceeded(initialState("transfer"), {
     sessionId: "session-1",
     reportHtml: "<!doctype html><title>first</title>",
   });
 
-  assert.equal(updateReportFrame(reportFrame, first), true);
-  assert.equal(reportFrame.srcdoc, "<!doctype html><title>first</title>");
+  assert.equal(updateReportFrame(reportFrame, first, reportDocuments), true);
+  assert.equal(reportFrame.src, "blob:report-1");
+  assert.deepEqual(reportDocuments.created, ["<!doctype html><title>first</title>"]);
 
   const navigated = selectWorkflow(first, "transfer");
   const exporting = beginExportSession(navigated);
   const exported = exportSessionSucceeded(exporting, "session-1-copy.session.wsprabundle");
-  assert.equal(updateReportFrame(reportFrame, navigated), false);
-  assert.equal(updateReportFrame(reportFrame, exporting), false);
-  assert.equal(updateReportFrame(reportFrame, exported), false);
+  assert.equal(updateReportFrame(reportFrame, navigated, reportDocuments), false);
+  assert.equal(updateReportFrame(reportFrame, exporting, reportDocuments), false);
+  assert.equal(updateReportFrame(reportFrame, exported, reportDocuments), false);
 
   const cancelled = openSessionCancelled(beginOpenSession(first));
   const failed = openSessionFailed(beginOpenSession(first), {
@@ -1128,9 +1154,9 @@ test("same-ID successful opens refresh only the new report presentation", () => 
     message: "The replacement bundle did not pass validation.",
     detail: "invalid station data",
   });
-  assert.equal(updateReportFrame(reportFrame, cancelled), false);
-  assert.equal(updateReportFrame(reportFrame, failed), false);
-  assert.equal(reportFrame.srcdoc, "<!doctype html><title>first</title>");
+  assert.equal(updateReportFrame(reportFrame, cancelled, reportDocuments), false);
+  assert.equal(updateReportFrame(reportFrame, failed, reportDocuments), false);
+  assert.equal(reportFrame.src, "blob:report-1");
 
   const second = openSessionSucceeded(beginOpenSession(first), {
     sessionId: "session-1",
@@ -1138,12 +1164,17 @@ test("same-ID successful opens refresh only the new report presentation", () => 
   });
   assert.equal(second.session.sessionId, first.session.sessionId);
   assert.notEqual(second.reportPresentationId, first.reportPresentationId);
-  assert.equal(updateReportFrame(reportFrame, second), true);
-  assert.equal(reportFrame.srcdoc, "<!doctype html><title>second</title>");
+  assert.equal(updateReportFrame(reportFrame, second, reportDocuments), true);
+  assert.equal(reportFrame.src, "blob:report-2");
+  assert.deepEqual(reportDocuments.revoked, ["blob:report-1"]);
+  releaseReportFrame(reportFrame, reportDocuments);
+  assert.deepEqual(reportDocuments.revoked, ["blob:report-1", "blob:report-2"]);
+  assert.equal(reportFrame.dataset.reportDocumentUrl, undefined);
 });
 
 test("revision-keyed report refresh retains coherent prior output on failure and export state", () => {
-  const frame = { dataset: {}, srcdoc: "" };
+  const frame = { dataset: {}, src: "", removeAttribute() {} };
+  const reportDocuments = reportDocumentHarness();
   const opened = openSessionSucceeded(initialState("report"), {
     sessionId: "session-1",
     bundleName: "session.antennabundle",
@@ -1157,7 +1188,7 @@ test("revision-keyed report refresh retains coherent prior output on failure and
     reportHtml: "<!doctype html><title>revision 4</title>",
   });
   assert.equal(first.session.hasControllerEvidence, true);
-  assert.equal(updateReportFrame(frame, first), true);
+  assert.equal(updateReportFrame(frame, first, reportDocuments), true);
 
   const exporting = beginReportExport(first);
   const cancelled = reportExportCancelled(exporting);
@@ -1167,16 +1198,16 @@ test("revision-keyed report refresh retains coherent prior output on failure and
     format: "compact_summary_html",
   });
   assert.match(exported.reportExportNotice, /compact summary/);
-  assert.equal(updateReportFrame(frame, exporting), false);
-  assert.equal(updateReportFrame(frame, cancelled), false);
-  assert.equal(updateReportFrame(frame, exported), false);
+  assert.equal(updateReportFrame(frame, exporting, reportDocuments), false);
+  assert.equal(updateReportFrame(frame, cancelled, reportDocuments), false);
+  assert.equal(updateReportFrame(frame, exported, reportDocuments), false);
 
   const failed = reportRefreshFailed(beginReportRefresh(first), {
     kind: "stale_revision",
     message: "The session kept changing.",
     detail: "retry",
   });
-  assert.equal(updateReportFrame(frame, failed), false);
+  assert.equal(updateReportFrame(frame, failed, reportDocuments), false);
   assert.equal(failed.session.reportHtml, first.session.reportHtml);
 
   const second = reportRefreshSucceeded(beginReportRefresh(failed), {
@@ -1188,8 +1219,9 @@ test("revision-keyed report refresh retains coherent prior output on failure and
     reportHtml: "<!doctype html><title>revision 5</title>",
   });
   assert.equal(second.session.hasControllerEvidence, false);
-  assert.equal(updateReportFrame(frame, second), true);
-  assert.equal(frame.srcdoc, "<!doctype html><title>revision 5</title>");
+  assert.equal(updateReportFrame(frame, second, reportDocuments), true);
+  assert.equal(frame.src, "blob:report-2");
+  assert.deepEqual(reportDocuments.revoked, ["blob:report-1"]);
 });
 
 test("cancelling the native picker is a normal non-error transition", () => {

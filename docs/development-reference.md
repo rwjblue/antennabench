@@ -460,7 +460,7 @@ presentation separate ownership and consumes only explicit element/root/time
 capabilities. The jsdom Vitest project loads the real checked-in HTML and
 element registry, then verifies real selectors, attributes, events, focus,
 class lists, dynamic children, feedback, countdown, accessibility, and
-revision-keyed `srcdoc` behavior.
+revision-keyed blob-document behavior and URL cleanup.
 
 `desktop:frontend-test` runs the Node and jsdom projects;
 `desktop:frontend-coverage` adds Vitest V8 line, branch, and function reports.
@@ -472,7 +472,14 @@ Tauri's actual injected global. Add a window-level smoke suite only after a
 reproducible defect crosses one of those real-webview boundaries and cannot be
 represented through the current element or platform ports; one such defect is
 evidence for a focused decision, not automatic permission to add WebDriver or
-a desktop production dependency.
+a desktop production dependency. The blocked embedded-report stylesheet was
+such a boundary defect, so `desktop:report-browser` now renders generated full
+and compact reports in a real browser under the exact desktop CSP. It verifies
+the sandboxed blob frame has no scripts, byte-checks the same-origin stylesheet
+assets against renderer output, and asserts meaningful typography, panel,
+table, and narrow-layout computed styles. `mise run ci` runs this focused smoke
+through the exactly pinned browser-automation tool; it adds no desktop runtime
+dependency or webview capability.
 
 ## Desktop Release Artifact Construction
 
@@ -590,8 +597,9 @@ commands. Native selection and all filesystem/domain work remain in Rust; the
 report commands return only a bounded revision-keyed presentation. No dialog-plugin or
 filesystem-plugin permission is granted to JavaScript; this is intentional
 even though the native dialog plugin is registered. The local report is loaded
-into a sandboxed frame and neither the shell nor report is given network
-authority.
+into a sandboxed blob frame. Its embedded copy uses only the checked-in
+same-origin report stylesheet, while exported HTML remains self-contained;
+neither the shell nor report is given network authority.
 
 The transfer screen's RBN action is available only for schema-v3 sessions that
 have started. Rust derives the exact callsign, half-open schedule window, and

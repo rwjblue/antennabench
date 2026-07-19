@@ -324,6 +324,7 @@ test("focus, visibility, periodic, countdown, and disposal use injected lifecycl
   const cleared = [];
   const listeners = {};
   const countdowns = [];
+  let disposalCount = 0;
   let now = 2000;
   let visible = true;
   const state = openSessionSucceeded(initialState("run"), session());
@@ -350,6 +351,7 @@ test("focus, visibility, periodic, countdown, and disposal use injected lifecycl
       monotonicNow: () => now,
       getCountdownAnchor: () => ({ key: "cycle-1", seconds: 1, sampledAtMilliseconds: 1000 }),
       renderCountdown: (seconds) => countdowns.push(seconds),
+      onDispose: () => { disposalCount += 1; },
     },
   });
 
@@ -376,8 +378,10 @@ test("focus, visibility, periodic, countdown, and disposal use injected lifecycl
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(run.calls.some(([command]) => command === "active_session_conductor"));
   run.controller.dispose();
+  run.controller.dispose();
   assert.equal(cleared.length, 2);
   assert.equal(listeners.focus, null);
   assert.equal(listeners.visibility, null);
   assert.equal(listeners.hash, null);
+  assert.equal(disposalCount, 1);
 });

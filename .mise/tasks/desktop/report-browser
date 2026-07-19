@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Verify embedded full and compact report styles in a real browser CSP boundary"
+
+set -euo pipefail
+
+report_dir="target/desktop-report-browser"
+mkdir -p "$report_dir"
+
+cargo run -q -p antennabench-report --example render_canonical_sample -- \
+  "$report_dir/full.html"
+cargo run -q -p antennabench-report --example render_canonical_sample -- \
+  "$report_dir/compact.html" --compact-summary
+node scripts/desktop-report-frame-browser.mjs \
+  "$report_dir/full.html" "$report_dir/compact.html"
