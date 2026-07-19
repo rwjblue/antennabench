@@ -19,6 +19,7 @@ use antennabench_core::{
         CorrectableOperatorEventPayloadV3, EventCorrectionActionV3, OperatorEventPayloadV3,
     },
     v5::WsprReadinessBasisV5,
+    v6::{DiagnosticOperationV6, DiagnosticPhaseV6, EvidenceEffectV6},
     Band, BundleContents, BundleValidationError, BundleValidationReport, SCHEMA_VERSION_V2,
     SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };

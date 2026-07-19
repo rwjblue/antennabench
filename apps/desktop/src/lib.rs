@@ -7,6 +7,7 @@ mod conductor;
 mod location;
 mod managed_sessions;
 mod open_session;
+mod operation_diagnostics;
 mod rbn_import;
 mod setup;
 mod wsjtx_session;

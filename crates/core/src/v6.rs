@@ -7,6 +7,9 @@ use sha2::{Digest, Sha256};
 use crate::v2::MutationMember;
 use crate::{v3::BundleV3Contents, SCHEMA_VERSION_V6};
 
+mod diagnostic;
+pub use diagnostic::*;
+
 pub const RUNTIME_CONTEXT_SCHEMA_V1: &str = "runtime_context.v1";
 pub const RUNTIME_CONTEXT_RECORD_MAX_BYTES: usize = 4 * 1024;
 pub const RUNTIME_CONTEXT_MAX_RECORDS: usize = 256;
@@ -185,6 +188,20 @@ pub fn legacy_creator_context_v6(
     )
 }
 
+fn upgrade_identity(kind: &str, session_id: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"antennabench.schema-v6-upgrade\0");
+    digest.update(kind.as_bytes());
+    digest.update(b"\0");
+    digest.update(session_id.as_bytes());
+    let mut identity = format!("upgrade-{kind}-");
+    for byte in digest.finalize() {
+        use std::fmt::Write as _;
+        write!(&mut identity, "{byte:02x}").expect("writing to a string cannot fail");
+    }
+    identity
+}
+
 /// Upgrades legacy modeled contents without inventing historical machine facts.
 ///
 /// Existing records are attributed to a synthetic creator context containing
@@ -194,6 +211,8 @@ pub fn upgrade_v5_bundle_model_to_v6(
     mut bundle: BundleV3Contents,
     mut upgrader: RuntimeContextV6,
 ) -> BundleV3Contents {
+    let source_revision = bundle.session_state.revision;
+    let diagnostic_revision = source_revision.saturating_add(1);
     let legacy = legacy_creator_context_v6(
         Some(bundle.manifest.app_version.clone()),
         bundle.manifest.created_at,
@@ -207,7 +226,7 @@ pub fn upgrade_v5_bundle_model_to_v6(
     upgrader.mutation = MutationMember {
         mutation_id: "upgrade-runtime-context".into(),
         member_index: 0,
-        member_count: 1,
+        member_count: 2,
     };
     let active_id = upgrader.context_id.clone();
     bundle.manifest.schema_version = SCHEMA_VERSION_V6;
@@ -216,6 +235,9 @@ pub fn upgrade_v5_bundle_model_to_v6(
     bundle.manifest.creator_runtime_context_id = Some(legacy_id.clone());
     bundle.session_state.schema_version = SCHEMA_VERSION_V6;
     bundle.session_state.active_runtime_context_id = Some(active_id.clone());
+    bundle.session_state.diagnostics_status = Some(DiagnosticsStatusV6::complete());
+    bundle.session_state.revision = diagnostic_revision;
+    bundle.session_state.last_committed_mutation_id = Some("upgrade-runtime-context".into());
     bundle.station.schema_version = SCHEMA_VERSION_V6;
     bundle.antennas.schema_version = SCHEMA_VERSION_V6;
     bundle.schedule.schema_version = SCHEMA_VERSION_V6;
@@ -249,6 +271,52 @@ pub fn upgrade_v5_bundle_model_to_v6(
     } else {
         vec![legacy, upgrader]
     };
+    bundle.diagnostics = vec![OperationalDiagnosticV6 {
+        schema: OPERATIONAL_DIAGNOSTIC_SCHEMA_V1.into(),
+        diagnostic_id: upgrade_identity("diagnostic", &bundle.manifest.session_id),
+        correlation_id: upgrade_identity("correlation", &bundle.manifest.session_id),
+        attempt_id: upgrade_identity("attempt", &bundle.manifest.session_id),
+        mutation: MutationMember {
+            mutation_id: "upgrade-runtime-context".into(),
+            member_index: 1,
+            member_count: 2,
+        },
+        runtime_context_id: active_id,
+        occurred_at: bundle
+            .runtime_contexts
+            .last()
+            .expect("upgrader context")
+            .first_recorded_at,
+        operation: DiagnosticOperationV6::CheckpointRecovery,
+        phase: DiagnosticPhaseV6::Recover,
+        code: "bundle.legacy_history_unavailable".into(),
+        summary: "Earlier operational history is unavailable for this upgraded bundle.".into(),
+        outcome: DiagnosticOutcomeV6::Recovered,
+        severity: DiagnosticSeverityV6::Warning,
+        revision_before: Some(source_revision),
+        revision_after: Some(source_revision),
+        diagnostic_revision,
+        evidence_effect: EvidenceEffectV6::EarlierEvidenceRetained,
+        retry: DiagnosticRetryV6 {
+            disposition: RetryDispositionV6::NotRetryable,
+            guidance_code: "legacy_history_unavailable".into(),
+        },
+        targets: vec![DiagnosticTargetV6::Source {
+            id: "schema-v5".into(),
+        }],
+        causes: vec![DiagnosticCauseV6 {
+            code: "bundle.legacy_history_unavailable".into(),
+            phase: DiagnosticPhaseV6::Recover,
+            facts: vec![DiagnosticFactV6 {
+                name: "source_schema".into(),
+                value: DiagnosticFactValueV6::U64(u64::from(SCHEMA_VERSION_V6 - 1)),
+            }],
+        }],
+        detail_status: DiagnosticDetailStatusV6 {
+            state: DiagnosticDetailStateV6::Complete,
+            omitted_fact_count: 0,
+        },
+    }];
     bundle
 }
 

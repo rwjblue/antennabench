@@ -3,6 +3,7 @@ use std::sync::Arc;
 use antennabench_core::{
     v2::SessionLifecycleV2,
     v3::{SignalModeV3, SignalStateConfirmationV3, WsprCycleDirection},
+    v6::{DiagnosticOperationV6, DiagnosticPhaseV6, EvidenceEffectV6},
     SCHEMA_VERSION_V4,
 };
 use antennabench_storage::{BundleStore, SystemLivePersistenceHooks};
@@ -203,6 +204,9 @@ pub(crate) fn mutate_active_session_conductor(
     wsjtx_state: State<'_, WsjtxSessionState>,
     controller_state: State<'_, AntennaControllerState>,
 ) -> Result<ConductorView, SessionErrorPayload> {
+    let diagnostic_source = active_session_source(active_state.inner())
+        .ok()
+        .map(|(source, _)| source);
     if matches!(&request.action, ConductorAction::Start { .. }) {
         let (source, _) = active_session_source(active_state.inner())?;
         let store = BundleStore::new(&source);
@@ -220,12 +224,30 @@ pub(crate) fn mutate_active_session_conductor(
             }
         }
     }
-    let view = mutate_conductor_with_hooks(
+    let mutation = mutate_conductor_with_hooks(
         active_state.inner(),
         conductor_state.inner(),
         request,
         Arc::new(SystemLivePersistenceHooks),
-    )?;
+    );
+    let view = match mutation {
+        Ok(view) => view,
+        Err(payload) => {
+            return Err(diagnostic_source
+                .as_deref()
+                .map_or(payload.clone(), |source| {
+                    crate::operation_diagnostics::persist_failure(
+                        source,
+                        DiagnosticOperationV6::SessionMutation,
+                        DiagnosticPhaseV6::Checkpoint,
+                        "session.mutation_failed",
+                        EvidenceEffectV6::NoneCommitted,
+                        Vec::new(),
+                        payload,
+                    )
+                }));
+        }
+    };
     if view.lifecycle != SessionLifecycleV2::Running {
         controller_state.revoke();
         let (source, _) = active_session_source(active_state.inner())?;
@@ -1183,7 +1205,7 @@ mod tests {
         assert_eq!(crash_recovery.disposition, RecoveryDispositionV2::Clean);
         assert_eq!(crash_recovery.starting_revision, intake.revision);
         assert_eq!(crash_recovery.recovered_revision, intake.revision);
-        assert_eq!(crash_recovery.final_revision, intake.revision + 1);
+        assert_eq!(crash_recovery.final_revision, intake.revision + 2);
         assert!(crash_recovery.interruption.is_some());
 
         let reopened_active = ActiveSessionState::default();
@@ -1198,8 +1220,8 @@ mod tests {
             .as_ref()
             .expect("process recovery details");
         assert_eq!(recovery.disposition, "clean");
-        assert_eq!(recovery.starting_revision, intake.revision + 1);
-        assert_eq!(recovery.final_revision, intake.revision + 1);
+        assert_eq!(recovery.starting_revision, intake.revision + 2);
+        assert_eq!(recovery.final_revision, intake.revision + 2);
         assert!(!recovery.interruption_recorded);
         let resumed = mutate_conductor_with_hooks(
             &reopened_active,

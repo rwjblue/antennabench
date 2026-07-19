@@ -227,6 +227,16 @@ batches, lost responses and idempotent retry, complete/torn/incomplete and
 duplicate tails, current/previous checkpoint selection, committed corruption,
 recovery attachments, interruption detection, and checkpointed export.
 
+`crates/storage/tests/v3_live_persistence.rs` also pins schema-v6 operational
+diagnostic append, exact-attempt idempotence, conflicting reuse, rollback after
+an injected diagnostic-stream failure, runtime-context attribution, and
+checkpoint recovery attribution. Storage unit tests pin diagnostic count and
+byte saturation at N-1/N/N+1. Desktop WSPR.live tests inject the historical
+oversized-line failure, losslessly copy the bundle, and verify its stable code,
+observed/limit bytes, acquisition window, unchanged evidence, runtime context,
+and retry guidance; a separate test verifies retained evidence after failed
+automatic finalization.
+
 `crates/wsjtx/tests/all_wspr_import.rs`, `crates/wsjtx/tests/live_udp.rs`,
 `crates/wsjtx/tests/wspr_live_import.rs`, and
 `crates/propagation/tests/acquisition.rs` pin the adapter portion of that same

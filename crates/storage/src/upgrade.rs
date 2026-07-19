@@ -823,6 +823,7 @@ fn migrate_bundle(
             streams,
             last_committed_mutation_id,
             active_runtime_context_id: None,
+            diagnostics_status: None,
         },
         station,
         antennas,

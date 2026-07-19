@@ -1,11 +1,19 @@
 use std::{fs, path::Path};
 
 use antennabench_core::{
-    v2::SessionLifecycleV2, v3::project_wspr_run_v3, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
+    v2::{MutationMember, SessionLifecycleV2},
+    v3::project_wspr_run_v3,
+    v6::{
+        DiagnosticCauseV6, DiagnosticDetailStateV6, DiagnosticDetailStatusV6, DiagnosticFactV6,
+        DiagnosticFactValueV6, DiagnosticOperationV6, DiagnosticOutcomeV6, DiagnosticPhaseV6,
+        DiagnosticRetryV6, DiagnosticSeverityV6, DiagnosticTargetV6, EvidenceEffectV6,
+        OperationalDiagnosticV6, RetryDispositionV6, OPERATIONAL_DIAGNOSTIC_SCHEMA_V1,
+    },
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{
-    BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
+    BundleStore, LiveDiagnosticMutationV6, LiveEvidenceMutationV3, LiveMutationMemberV2,
+    LiveMutationV2, LivePersistenceError, LiveSessionV3,
 };
 use antennabench_wsjtx::{
     derive_wspr_live_query_scope, parse_wspr_live_json, prepare_wspr_live_acquisition,
@@ -71,7 +79,23 @@ pub(crate) async fn import_active_session_wspr_live(
             error.to_string(),
         )
     })?;
-    with_foreground_operation(state.inner(), || import_file(state.inner(), &path))
+    let result = with_foreground_operation(state.inner(), || import_file(state.inner(), &path));
+    result.map_err(|payload| {
+        let Ok((source, _)) = active_session_source(state.inner()) else {
+            return payload;
+        };
+        crate::operation_diagnostics::persist_failure(
+            &source,
+            DiagnosticOperationV6::WsprLiveAcquisition,
+            DiagnosticPhaseV6::Parse,
+            "wspr_live.import_failed",
+            EvidenceEffectV6::NoneCommitted,
+            vec![DiagnosticTargetV6::Source {
+                id: "wspr-live".into(),
+            }],
+            payload,
+        )
+    })
 }
 
 fn import_file(
@@ -354,39 +378,138 @@ fn commit_v3_wspr_live_response(
     let expected_revision = writer.checkpoint().revision;
     let source_locator = config.source_locator.clone();
     let mut summary = None::<WsprLiveImportSummary>;
-    let (_, receipt) = writer
-        .append_evidence_with_attachment(
-            bytes,
-            "application/json",
-            None,
-            Some("clickhouse-format-json".into()),
-            source_locator,
-            |attachment| {
-                let prepared = prepare_wspr_live_acquisition(
-                    parsed,
-                    config,
-                    &current.manifest.session_id,
-                    &import_id,
-                    attachment,
-                    &current.adapter_records,
-                    channel,
-                );
-                summary = Some(prepared.summary);
-                LiveEvidenceMutationV3 {
-                    expected_revision,
-                    mutation_id: prepared.mutation_id,
-                    adapter_records: prepared.adapter_records,
-                    observations: prepared.observations,
-                }
-            },
-        )
-        .map_err(crate::conductor::live_error_payload)?;
+    let commit = writer.append_evidence_with_attachment(
+        bytes,
+        "application/json",
+        None,
+        Some("clickhouse-format-json".into()),
+        source_locator,
+        |attachment| {
+            let prepared = prepare_wspr_live_acquisition(
+                parsed,
+                config,
+                &current.manifest.session_id,
+                &import_id,
+                attachment,
+                &current.adapter_records,
+                channel,
+            );
+            summary = Some(prepared.summary);
+            LiveEvidenceMutationV3 {
+                expected_revision,
+                mutation_id: prepared.mutation_id,
+                adapter_records: prepared.adapter_records,
+                observations: prepared.observations,
+            }
+        },
+    );
+    let (_, receipt) = match commit {
+        Ok(committed) => committed,
+        Err(error) => {
+            let payload = crate::conductor::live_error_payload(error);
+            return Err(persist_wspr_live_commit_failure(
+                &mut writer,
+                config,
+                &import_id,
+                payload,
+            ));
+        }
+    };
     drop(writer);
     Ok(CommittedWsprLiveResponse {
         session: reload_active_session(state, bundle_path)?,
         revision: receipt.revision,
         summary: summary.expect("attachment mutation builder runs before append"),
     })
+}
+
+pub(crate) fn persist_wspr_live_commit_failure(
+    writer: &mut LiveSessionV3,
+    config: &WsprLiveImportConfig,
+    import_id: &str,
+    payload: SessionErrorPayload,
+) -> SessionErrorPayload {
+    if writer.snapshot().manifest.schema_version != SCHEMA_VERSION_V6 {
+        return payload;
+    }
+    let Some(operation) = payload.operation.as_ref() else {
+        return payload.with_diagnostic_not_persisted("diagnostic.unsupported_error_shape");
+    };
+    let Some(limit) = operation.limit else {
+        return payload.with_diagnostic_not_persisted("diagnostic.missing_limit");
+    };
+    let revision = writer.checkpoint().revision;
+    let diagnostic_id = writer.allocate_id("diagnostic");
+    let diagnostic = OperationalDiagnosticV6 {
+        schema: OPERATIONAL_DIAGNOSTIC_SCHEMA_V1.into(),
+        diagnostic_id: diagnostic_id.clone(),
+        correlation_id: import_id.into(),
+        attempt_id: import_id.into(),
+        mutation: MutationMember {
+            mutation_id: "pending-diagnostic".into(),
+            member_index: 0,
+            member_count: 1,
+        },
+        runtime_context_id: String::new(),
+        occurred_at: config.captured_at,
+        operation: DiagnosticOperationV6::WsprLiveAcquisition,
+        phase: DiagnosticPhaseV6::Preflight,
+        code: operation.code.clone(),
+        summary: "WSPR.live evidence was rejected before its mutation committed.".into(),
+        outcome: DiagnosticOutcomeV6::Failed,
+        severity: DiagnosticSeverityV6::Error,
+        revision_before: Some(revision),
+        revision_after: Some(revision),
+        diagnostic_revision: revision,
+        evidence_effect: EvidenceEffectV6::NoneCommitted,
+        retry: DiagnosticRetryV6 {
+            disposition: RetryDispositionV6::RequiresInputChange,
+            guidance_code: "reduce_batch_or_update_profile_or_code".into(),
+        },
+        targets: vec![
+            DiagnosticTargetV6::Source {
+                id: "wspr-live".into(),
+            },
+            DiagnosticTargetV6::Mutation {
+                id: import_id.into(),
+            },
+            DiagnosticTargetV6::AcquisitionWindow {
+                start: config.window_start,
+                end: config.window_end,
+            },
+        ],
+        causes: vec![DiagnosticCauseV6 {
+            code: operation.code.clone(),
+            phase: DiagnosticPhaseV6::Serialize,
+            facts: vec![
+                DiagnosticFactV6 {
+                    name: "stream".into(),
+                    value: DiagnosticFactValueV6::Enum(operation.stage.clone()),
+                },
+                DiagnosticFactV6 {
+                    name: "observed_bytes".into(),
+                    value: DiagnosticFactValueV6::U64(operation.observed.unwrap_or(0)),
+                },
+                DiagnosticFactV6 {
+                    name: "limit_bytes".into(),
+                    value: DiagnosticFactValueV6::U64(limit),
+                },
+            ],
+        }],
+        detail_status: DiagnosticDetailStatusV6 {
+            state: DiagnosticDetailStateV6::Complete,
+            omitted_fact_count: 0,
+        },
+    };
+    let mutation = LiveDiagnosticMutationV6 {
+        expected_revision: revision,
+        mutation_id: writer.allocate_id("diagnostic-mutation"),
+        diagnostic,
+    };
+    match writer.append_diagnostic(mutation) {
+        Ok(receipt) => payload.with_diagnostic_persisted(receipt.diagnostic_id),
+        Err(_) => payload.with_diagnostic_not_persisted("diagnostic.persistence_failed"),
+    }
 }
 
 fn file_error(path: &Path, error: std::io::Error) -> SessionErrorPayload {

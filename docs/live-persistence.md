@@ -118,13 +118,21 @@ Schema v3 provides corresponding `read_v3_checkpointed()` and
 `export_v3_checkpointed_to()` boundaries. Its writer appends correctable
 operator events and attachment-backed adapter evidence plus observations while
 preserving the same expected-revision, digest, lock, and checkpoint rules.
-The same versioned writer carries schema v4 and v5. Schema v5 adds
+The same versioned writer carries schema v4 through v6. Schema v5 adds
 `append_antenna_control`: a failed attempt commits one or two rig records with
 no event; successful command-authorized readiness commits switch, verification,
 and armed event as one ordered mutation. Injected failure before checkpoint
 promotion exposes the prior revision, while failure after promotion exposes
 the complete next revision. Exact retry returns the committed receipt and a
 conflicting mutation-ID reuse fails.
+
+Schema v6 adds checkpointed `runtime-contexts.jsonl` and `diagnostics.jsonl`.
+`append_diagnostic` commits the active/new runtime context before its first
+reference and then one typed diagnostic under the same checkpoint. Exact
+attempt retries reuse the existing diagnostic; conflicting reuse fails. The
+stream stops at 2,048 records, 16 MiB, or 8 KiB per record and records a
+checkpoint-level saturated status instead of rewriting history. Diagnostic
+persistence is attempted once and never logs its own failure recursively.
 
 ## Recovery
 
@@ -148,7 +156,18 @@ Bytes beyond committed heads are handled as one declared mutation:
 
 If the selected/recovered lifecycle is `running`, recovery appends one
 idempotent recovery-system `interruption_detected` event and checkpoints the
-session as `interrupted` before returning.
+session as `interrupted` before returning. Schema-v6 recovery then attempts one
+typed recovery diagnostic that references the recovery runtime context and
+states whether earlier evidence was retained. The recovery report independently
+returns `persisted`, `not persisted`, or `not applicable` for that companion
+record, so diagnostic failure does not undo or disguise completed recovery.
+
+Recovery scans and truncates uncommitted tails in the runtime-context and
+diagnostic streams as well as scientific/evidence streams. There is no durable
+diagnostic guarantee when storage is full or inaccessible, the writer cannot
+establish a verified safe head, another process modified the bundle, or the
+process dies before checkpoint promotion. Those cases remain explicit
+non-guarantees; no alternate log or telemetry channel is created.
 
 ## Platform And Filesystem Boundary
 

@@ -11,7 +11,12 @@ use antennabench_core::{
     },
     v5::validate_antenna_control_v5,
     v6::{
-        BuildChannelV6, SourceStateV6, RUNTIME_CONTEXT_MAX_RECORDS,
+        BuildChannelV6, DiagnosticDetailStateV6, DiagnosticFactValueV6, DiagnosticTargetV6,
+        DiagnosticsStateV6, SourceStateV6, DIAGNOSTIC_CAUSE_MAX_DEPTH, DIAGNOSTIC_FACT_MAX_COUNT,
+        DIAGNOSTIC_IDENTIFIER_MAX_BYTES, DIAGNOSTIC_MACHINE_VALUE_MAX_BYTES,
+        DIAGNOSTIC_MAX_RECORDS, DIAGNOSTIC_RECORD_MAX_BYTES, DIAGNOSTIC_STREAM_MAX_BYTES,
+        DIAGNOSTIC_SUMMARY_MAX_BYTES, DIAGNOSTIC_TARGET_MAX_COUNT,
+        OPERATIONAL_DIAGNOSTIC_SCHEMA_V1, RUNTIME_CONTEXT_MAX_RECORDS,
         RUNTIME_CONTEXT_RECORD_MAX_BYTES, RUNTIME_CONTEXT_STREAM_MAX_BYTES,
     },
     validate_bundle_report, BundleValidationProfile, BundleValidationReport, ExperimentMode,
@@ -144,6 +149,12 @@ impl BundleStore {
             &bundle.runtime_contexts,
             &mut budget,
         )?;
+        let diagnostics = serialize_jsonl_bounded(
+            &store,
+            Path::new("diagnostics.jsonl"),
+            &bundle.diagnostics,
+            &mut budget,
+        )?;
         let mut streams = vec![
             (
                 "events".to_string(),
@@ -209,7 +220,14 @@ impl BundleStore {
             ));
             streams.push((
                 "diagnostics".to_string(),
-                checkpoint_for_bytes(&[], 0, None),
+                checkpoint_for_bytes(
+                    &diagnostics,
+                    bundle.diagnostics.len(),
+                    bundle
+                        .diagnostics
+                        .last()
+                        .map(|diagnostic| diagnostic.diagnostic_id.clone()),
+                ),
             ));
         }
         bundle.session_state.streams = streams.into_iter().collect();
@@ -240,20 +258,10 @@ impl BundleStore {
             Some(path) => self.read_jsonl_bounded(path, &mut budget)?,
             None => Vec::new(),
         };
-        if let Some(path) = paths.diagnostics.as_deref() {
-            let bytes = read_bounded(
-                self,
-                path,
-                self.profile().jsonl_stream_bytes,
-                "resource.jsonl.stream_bytes",
-                ResourceOperation::Read,
-            )?;
-            if !bytes.is_empty() {
-                return Err(invalid_v3(
-                    "schema-v6 diagnostics must remain empty until the diagnostic contract is implemented",
-                ));
-            }
-        }
+        let diagnostics = match paths.diagnostics.as_deref() {
+            Some(path) => self.read_jsonl_bounded(path, &mut budget)?,
+            None => Vec::new(),
+        };
         let bundle = BundleV3Contents {
             manifest,
             session_state,
@@ -267,6 +275,7 @@ impl BundleStore {
             propagation: self.read_jsonl_bounded(&paths.propagation, &mut budget)?,
             analysis: self.read_json_bounded(&paths.analysis, &mut budget)?,
             runtime_contexts,
+            diagnostics,
         };
         validate_v3_model(&bundle)?;
         validate_v3_checkpoint(self, &bundle, &paths)?;
@@ -349,6 +358,15 @@ impl BundleStore {
             )?),
             None => None,
         };
+        let diagnostics = match paths.diagnostics.as_deref() {
+            Some(path) => Some(serialize_jsonl_bounded(
+                self,
+                path,
+                &bundle.diagnostics,
+                &mut budget,
+            )?),
+            None => None,
+        };
 
         create_directory(self.root())?;
         let result = (|| {
@@ -379,8 +397,10 @@ impl BundleStore {
                     source,
                 })?;
             }
-            if let Some(path) = paths.diagnostics.as_deref() {
-                fs::write(path, []).map_err(|source| BundleStoreError::Write {
+            if let (Some(path), Some(bytes)) =
+                (paths.diagnostics.as_deref(), diagnostics.as_deref())
+            {
+                fs::write(path, bytes).map_err(|source| BundleStoreError::Write {
                     path: path.to_path_buf(),
                     source,
                 })?;
@@ -672,8 +692,10 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
 fn validate_runtime_contexts_v6(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
     if bundle.manifest.schema_version != SCHEMA_VERSION_V6 {
         if !bundle.runtime_contexts.is_empty()
+            || !bundle.diagnostics.is_empty()
             || bundle.manifest.creator_runtime_context_id.is_some()
             || bundle.session_state.active_runtime_context_id.is_some()
+            || bundle.session_state.diagnostics_status.is_some()
             || bundle.manifest.files.runtime_contexts.is_some()
             || bundle.manifest.files.diagnostics.is_some()
         {
@@ -766,6 +788,12 @@ fn validate_runtime_contexts_v6(bundle: &BundleV3Contents) -> Result<(), BundleS
                 .iter()
                 .map(|record| record.meta.runtime_context_id.as_deref()),
         )
+        .chain(
+            bundle
+                .diagnostics
+                .iter()
+                .map(|record| Some(record.runtime_context_id.as_str())),
+        )
     {
         if !context_id.is_some_and(|id| ids.contains(id)) {
             return Err(invalid_v3(
@@ -773,7 +801,175 @@ fn validate_runtime_contexts_v6(bundle: &BundleV3Contents) -> Result<(), BundleS
             ));
         }
     }
+    validate_diagnostics_v6(bundle)?;
     Ok(())
+}
+
+fn validate_diagnostics_v6(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
+    let status = bundle
+        .session_state
+        .diagnostics_status
+        .as_ref()
+        .ok_or_else(|| invalid_v3("schema-v6 checkpoint is missing diagnostics status"))?;
+    match status.state {
+        DiagnosticsStateV6::Complete => {
+            if status.omitted_count != 0
+                || status.first_omitted_at.is_some()
+                || status.reason_code.is_some()
+            {
+                return Err(invalid_v3(
+                    "complete diagnostics status cannot claim omitted records",
+                ));
+            }
+        }
+        DiagnosticsStateV6::Saturated | DiagnosticsStateV6::Gap => {
+            if status.omitted_count == 0
+                || status.first_omitted_at.is_none()
+                || !status
+                    .reason_code
+                    .as_deref()
+                    .is_some_and(valid_diagnostic_machine_value)
+            {
+                return Err(invalid_v3(
+                    "incomplete diagnostics status requires an omitted record, time, and reason",
+                ));
+            }
+        }
+    }
+    if bundle.diagnostics.len() > DIAGNOSTIC_MAX_RECORDS {
+        return Err(invalid_v3("diagnostic stream exceeds the record bound"));
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    let mut attempts = std::collections::BTreeSet::new();
+    let mut stream_bytes = 0usize;
+    for diagnostic in &bundle.diagnostics {
+        if diagnostic.schema != OPERATIONAL_DIAGNOSTIC_SCHEMA_V1
+            || !valid_diagnostic_identifier(&diagnostic.diagnostic_id)
+            || !valid_diagnostic_identifier(&diagnostic.correlation_id)
+            || !valid_diagnostic_identifier(&diagnostic.attempt_id)
+            || !ids.insert(diagnostic.diagnostic_id.as_str())
+            || !attempts.insert(diagnostic.attempt_id.as_str())
+        {
+            return Err(invalid_v3(
+                "diagnostics require unique bounded identities and attempt IDs",
+            ));
+        }
+        if !valid_diagnostic_machine_value(&diagnostic.code)
+            || !valid_diagnostic_machine_value(&diagnostic.retry.guidance_code)
+            || diagnostic.summary.is_empty()
+            || diagnostic.summary.len() > DIAGNOSTIC_SUMMARY_MAX_BYTES
+            || diagnostic.summary.chars().any(char::is_control)
+        {
+            return Err(invalid_v3(
+                "diagnostic code, guidance, or summary is outside its bound",
+            ));
+        }
+        if diagnostic.mutation.member_count == 0
+            || diagnostic.mutation.member_index >= diagnostic.mutation.member_count
+            || diagnostic.diagnostic_revision > bundle.session_state.revision
+            || diagnostic
+                .revision_before
+                .zip(diagnostic.revision_after)
+                .is_some_and(|(before, after)| {
+                    before > after || after >= diagnostic.diagnostic_revision
+                })
+        {
+            return Err(invalid_v3(
+                "diagnostic revision or mutation membership is inconsistent",
+            ));
+        }
+        if diagnostic.targets.len() > DIAGNOSTIC_TARGET_MAX_COUNT
+            || diagnostic.causes.len() > DIAGNOSTIC_CAUSE_MAX_DEPTH
+        {
+            return Err(invalid_v3("diagnostic target or cause bound exceeded"));
+        }
+        for target in &diagnostic.targets {
+            match target {
+                DiagnosticTargetV6::Adapter { id }
+                | DiagnosticTargetV6::Source { id }
+                | DiagnosticTargetV6::Mutation { id }
+                | DiagnosticTargetV6::Record { id }
+                | DiagnosticTargetV6::Slot { id }
+                | DiagnosticTargetV6::Intent { id } => {
+                    if !valid_diagnostic_identifier(id) {
+                        return Err(invalid_v3("diagnostic target identity is invalid"));
+                    }
+                }
+                DiagnosticTargetV6::AcquisitionWindow { start, end } if start >= end => {
+                    return Err(invalid_v3("diagnostic acquisition window is empty"));
+                }
+                DiagnosticTargetV6::AcquisitionWindow { .. } => {}
+            }
+        }
+        let fact_count = diagnostic
+            .causes
+            .iter()
+            .map(|cause| cause.facts.len())
+            .sum::<usize>();
+        if fact_count > DIAGNOSTIC_FACT_MAX_COUNT {
+            return Err(invalid_v3("diagnostic fact bound exceeded"));
+        }
+        for cause in &diagnostic.causes {
+            if !valid_diagnostic_machine_value(&cause.code) {
+                return Err(invalid_v3("diagnostic cause code is invalid"));
+            }
+            for fact in &cause.facts {
+                if !valid_diagnostic_machine_value(&fact.name)
+                    || matches!(
+                        &fact.value,
+                        DiagnosticFactValueV6::Enum(value)
+                            if !valid_diagnostic_machine_value(value)
+                    )
+                    || matches!(
+                        &fact.value,
+                        DiagnosticFactValueV6::Identifier(value)
+                            if !valid_diagnostic_identifier(value)
+                    )
+                {
+                    return Err(invalid_v3("diagnostic fact is invalid"));
+                }
+            }
+        }
+        let detail_valid = matches!(
+            (
+                diagnostic.detail_status.state,
+                diagnostic.detail_status.omitted_fact_count
+            ),
+            (DiagnosticDetailStateV6::Complete, 0)
+        ) || matches!(
+            diagnostic.detail_status.state,
+            DiagnosticDetailStateV6::Truncated
+        ) && diagnostic.detail_status.omitted_fact_count > 0;
+        if !detail_valid {
+            return Err(invalid_v3("diagnostic detail status is inconsistent"));
+        }
+        let line_bytes = serde_json::to_vec(diagnostic)
+            .map_err(|error| invalid_v3(format!("diagnostic cannot serialize: {error}")))?
+            .len()
+            .saturating_add(1);
+        if line_bytes > DIAGNOSTIC_RECORD_MAX_BYTES {
+            return Err(invalid_v3("diagnostic exceeds the 8 KiB record bound"));
+        }
+        stream_bytes = stream_bytes.saturating_add(line_bytes);
+    }
+    if stream_bytes > DIAGNOSTIC_STREAM_MAX_BYTES {
+        return Err(invalid_v3("diagnostic stream exceeds the 16 MiB bound"));
+    }
+    Ok(())
+}
+
+fn valid_diagnostic_machine_value(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= DIAGNOSTIC_MACHINE_VALUE_MAX_BYTES
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
+}
+
+fn valid_diagnostic_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= DIAGNOSTIC_IDENTIFIER_MAX_BYTES
+        && !value.chars().any(char::is_control)
 }
 
 fn validate_build_identity_v6(
@@ -945,7 +1141,15 @@ fn validate_v3_checkpoint(
             .diagnostics
             .as_deref()
             .ok_or_else(|| invalid_v3("schema-v6 diagnostics path is missing"))?;
-        streams.push(("diagnostics", diagnostics_path, 0, None));
+        streams.push((
+            "diagnostics",
+            diagnostics_path,
+            bundle.diagnostics.len(),
+            bundle
+                .diagnostics
+                .last()
+                .map(|diagnostic| diagnostic.diagnostic_id.clone()),
+        ));
     }
     for (name, path, count, last_id) in streams {
         let expected = bundle

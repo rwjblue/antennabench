@@ -14,11 +14,18 @@ use antennabench_core::{
         project_wspr_run_v3, BundleV3Contents, OperatorEventPayloadV3, OperatorEventV3,
         RecordMetaV3,
     },
+    v6::{
+        DiagnosticCauseV6, DiagnosticDetailStateV6, DiagnosticDetailStatusV6,
+        DiagnosticOperationV6, DiagnosticOutcomeV6, DiagnosticPhaseV6, DiagnosticRetryV6,
+        DiagnosticSeverityV6, DiagnosticTargetV6, EvidenceEffectV6, OperationalDiagnosticV6,
+        RetryDispositionV6, OPERATIONAL_DIAGNOSTIC_SCHEMA_V1,
+    },
     PlannedSlot, RecordSource, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
     SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{
-    BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
+    BundleStore, LiveDiagnosticMutationV6, LiveEventMutationV3, LiveMutationMemberV2,
+    LiveMutationV2, LivePersistenceError,
 };
 use antennabench_wsjtx::{
     latest_due_wspr_live_acquisition, plan_wspr_live_acquisitions_for_confirmed_slots,
@@ -569,10 +576,13 @@ fn finish_final_capture(
             })
         }
         Err(error) => {
-            let payload = SessionErrorPayload::new(
-                error.kind,
-                "Public spots were saved, but the session could not end automatically.",
-                error.detail,
+            let payload = persist_finalization_failure(
+                source,
+                plan,
+                captured_through,
+                error.with_message(
+                    "Public spots were saved, but the session could not end automatically.",
+                ),
             );
             acquisition_state
                 .0
@@ -585,6 +595,96 @@ fn finish_final_capture(
                 .remember_failure(plan, &payload);
             Ok(failed_outcome(plan, payload))
         }
+    }
+}
+
+fn persist_finalization_failure(
+    source: &Path,
+    plan: &WsprLiveAcquisitionPlan,
+    captured_through: DateTime<Utc>,
+    payload: SessionErrorPayload,
+) -> SessionErrorPayload {
+    let store = BundleStore::new(source);
+    let Ok(mut writer) = crate::build_context::open_v3_writer(&store) else {
+        return payload.with_diagnostic_not_persisted("diagnostic.writer_unavailable");
+    };
+    if writer.snapshot().manifest.schema_version != SCHEMA_VERSION_V6 {
+        return payload;
+    }
+    let attempt_id = format!(
+        "wspr-finalize-{}-{}",
+        plan.completed_slot_id,
+        captured_through.timestamp()
+    );
+    if let Some(existing) = writer
+        .snapshot()
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.attempt_id == attempt_id)
+    {
+        return payload.with_diagnostic_persisted(Some(existing.diagnostic_id.clone()));
+    }
+    let revision = writer.checkpoint().revision;
+    let diagnostic = OperationalDiagnosticV6 {
+        schema: OPERATIONAL_DIAGNOSTIC_SCHEMA_V1.into(),
+        diagnostic_id: writer.allocate_id("diagnostic"),
+        correlation_id: format!("wspr-window-{}", plan.query.window_end.timestamp()),
+        attempt_id,
+        mutation: MutationMember {
+            mutation_id: "pending-diagnostic".into(),
+            member_index: 0,
+            member_count: 1,
+        },
+        runtime_context_id: String::new(),
+        occurred_at: captured_through,
+        operation: DiagnosticOperationV6::WsprLiveAcquisition,
+        phase: DiagnosticPhaseV6::Finalize,
+        code: "session.finalization_rejected".into(),
+        summary: "WSPR.live evidence committed, but automatic session end failed.".into(),
+        outcome: DiagnosticOutcomeV6::Partial,
+        severity: DiagnosticSeverityV6::Error,
+        revision_before: Some(revision),
+        revision_after: Some(revision),
+        diagnostic_revision: revision,
+        evidence_effect: EvidenceEffectV6::PrimaryEvidenceCommitted,
+        retry: DiagnosticRetryV6 {
+            disposition: RetryDispositionV6::RequiresStateChange,
+            guidance_code: "refresh_state_then_finalize".into(),
+        },
+        targets: vec![
+            DiagnosticTargetV6::Source {
+                id: "wspr-live".into(),
+            },
+            DiagnosticTargetV6::Slot {
+                id: plan.completed_slot_id.clone(),
+            },
+            DiagnosticTargetV6::AcquisitionWindow {
+                start: plan.query.window_start,
+                end: plan.query.window_end,
+            },
+        ],
+        causes: vec![DiagnosticCauseV6 {
+            code: payload.operation.as_ref().map_or_else(
+                || "session.finalization_rejected".into(),
+                |detail| detail.code.clone(),
+            ),
+            phase: DiagnosticPhaseV6::Finalize,
+            facts: Vec::new(),
+        }],
+        detail_status: DiagnosticDetailStatusV6 {
+            state: DiagnosticDetailStateV6::Complete,
+            omitted_fact_count: 0,
+        },
+    };
+    let mutation_id = writer.allocate_id("diagnostic-mutation");
+    let result = writer.append_diagnostic(LiveDiagnosticMutationV6 {
+        expected_revision: revision,
+        mutation_id,
+        diagnostic,
+    });
+    match result {
+        Ok(receipt) => payload.with_diagnostic_persisted(receipt.diagnostic_id),
+        Err(_) => payload.with_diagnostic_not_persisted("diagnostic.persistence_failed"),
     }
 }
 
@@ -857,6 +957,10 @@ mod tests {
     use antennabench_core::{
         v2::{EventTimeBasisV2, MutationMember, Provenance, SessionLifecycleV2},
         v3::{OperatorEventPayloadV3, OperatorEventV3, RecordMetaV3, WsprCycleDirection},
+        v6::{
+            DiagnosticFactValueV6, DiagnosticOperationV6, DiagnosticOutcomeV6, DiagnosticPhaseV6,
+            DiagnosticTargetV6, EvidenceEffectV6, RetryDispositionV6,
+        },
         RecordSource,
     };
     use antennabench_storage::{BundleStore, LiveEventMutationV3};
@@ -873,7 +977,11 @@ mod tests {
         AcquisitionSnapshot, WsprLiveAcquisitionOutcome, WsprLiveAcquisitionRequest,
         WsprLiveAcquisitionState,
     };
-    use crate::{open_session::ActiveSessionState, setup::create_e2e_session};
+    use crate::{
+        open_session::{ActiveSessionState, SessionErrorKind, SessionErrorPayload},
+        setup::create_e2e_session,
+        wspr_live_import::persist_wspr_live_commit_failure,
+    };
 
     struct FakeTransport {
         calls: Cell<usize>,
@@ -1403,6 +1511,102 @@ mod tests {
         let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
         assert_eq!(after.adapter_records, committed.adapter_records);
         assert_eq!(after.observations, committed.observations);
+        let diagnostic = after.diagnostics.last().unwrap();
+        assert_eq!(
+            diagnostic.operation,
+            DiagnosticOperationV6::WsprLiveAcquisition
+        );
+        assert_eq!(diagnostic.phase, DiagnosticPhaseV6::Finalize);
+        assert_eq!(diagnostic.outcome, DiagnosticOutcomeV6::Partial);
+        assert_eq!(
+            diagnostic.evidence_effect,
+            EvidenceEffectV6::PrimaryEvidenceCommitted
+        );
+        assert_eq!(
+            diagnostic.retry.disposition,
+            RetryDispositionV6::RequiresStateChange
+        );
+    }
+
+    #[test]
+    fn rejected_wspr_live_batch_is_diagnosable_from_a_lossless_copy() {
+        let temp = TempDir::new().unwrap();
+        let (active, path, now) = running_confirmed_session(temp.path(), true);
+        let store = BundleStore::new(&path);
+        let before = store.read_v3_checkpointed().unwrap();
+        let snapshot = AcquisitionSnapshot::V3(before.clone());
+        let plan = authorized_plans(&snapshot).unwrap().remove(0);
+        let config = WsprLiveImportConfig {
+            session_callsign: plan.query.session_callsign.clone(),
+            window_start: plan.query.window_start,
+            window_end: plan.query.window_end,
+            selected_bands: snapshot
+                .projected_slots()
+                .into_iter()
+                .map(|slot| slot.band)
+                .collect(),
+            captured_at: now,
+            source_locator: Some("https://wspr.live".into()),
+            confirmed_cycles: snapshot.confirmed_cycles(),
+        };
+        let mut writer = crate::build_context::open_v3_writer(&store).unwrap();
+        let payload = SessionErrorPayload::resource(
+            SessionErrorKind::Resource,
+            "resource.jsonl_line_bytes",
+            "adapter_records",
+            262_144,
+            Some(301_337),
+            "bytes",
+        );
+        let payload = persist_wspr_live_commit_failure(
+            &mut writer,
+            &config,
+            "wspr-live-rejected-import",
+            payload,
+        );
+        assert_eq!(
+            payload
+                .diagnostic_persistence
+                .as_ref()
+                .map(|status| status.status),
+            Some("persisted")
+        );
+        drop(writer);
+
+        let copy = temp.path().join("support-copy.session.antennabundle");
+        store.copy_losslessly_to(&copy).unwrap();
+        let copied = BundleStore::new(copy).read_v3_checkpointed().unwrap();
+        assert_eq!(copied.adapter_records, before.adapter_records);
+        assert_eq!(copied.observations, before.observations);
+        let diagnostic = copied.diagnostics.last().unwrap();
+        assert_eq!(
+            diagnostic.operation,
+            DiagnosticOperationV6::WsprLiveAcquisition
+        );
+        assert_eq!(diagnostic.phase, DiagnosticPhaseV6::Preflight);
+        assert_eq!(diagnostic.code, "resource.jsonl_line_bytes");
+        assert_eq!(diagnostic.revision_before, diagnostic.revision_after);
+        assert_eq!(diagnostic.evidence_effect, EvidenceEffectV6::NoneCommitted);
+        assert_eq!(
+            diagnostic.retry.disposition,
+            RetryDispositionV6::RequiresInputChange
+        );
+        assert!(diagnostic.targets.iter().any(|target| matches!(
+            target,
+            DiagnosticTargetV6::AcquisitionWindow { start, end }
+                if *start == config.window_start && *end == config.window_end
+        )));
+        assert!(diagnostic.causes[0].facts.iter().any(|fact| {
+            fact.name == "observed_bytes" && fact.value == DiagnosticFactValueV6::U64(301_337)
+        }));
+        assert!(diagnostic.causes[0].facts.iter().any(|fact| {
+            fact.name == "limit_bytes" && fact.value == DiagnosticFactValueV6::U64(262_144)
+        }));
+        assert!(copied
+            .runtime_contexts
+            .iter()
+            .any(|context| { context.context_id == diagnostic.runtime_context_id }));
+        drop(active);
     }
 
     #[test]

@@ -113,48 +113,70 @@ pub(crate) fn live_error_payload(error: LivePersistenceError) -> SessionErrorPay
             SessionErrorKind::Busy,
             "Another local operation is updating this session.",
             "session writer lock is busy",
-        ),
+        )
+        .with_operation("session.writer_busy", "admission"),
         LivePersistenceError::StaleRevision { expected, actual } => SessionErrorPayload::new(
             SessionErrorKind::StaleRevision,
             "The session changed. Refresh the conductor before retrying.",
             format!("expected checkpoint revision {expected}, actual revision {actual}"),
-        ),
+        )
+        .with_operation("session.stale_revision", "admission"),
         LivePersistenceError::MutationConflict { mutation_id } => SessionErrorPayload::new(
             SessionErrorKind::Conflict,
             "That action token was already used for different evidence.",
             format!("conflicting mutation ID {mutation_id}"),
-        ),
+        )
+        .with_operation("session.mutation_conflict", "admission"),
         LivePersistenceError::Capability { message } => SessionErrorPayload::new(
             SessionErrorKind::Unsupported,
             "This filesystem cannot safely conduct a live session.",
             message,
-        ),
+        )
+        .with_operation("session.capability_unavailable", "admission"),
         error @ LivePersistenceError::RecoveryRequired { .. } => SessionErrorPayload::new(
             SessionErrorKind::Verification,
             "The session must be recovered before it can be changed.",
             error.to_string(),
-        ),
+        )
+        .with_operation("session.recovery_required", "recover"),
         error @ (LivePersistenceError::InvalidMutation { .. }
         | LivePersistenceError::PlanFrozen { .. }) => SessionErrorPayload::new(
             SessionErrorKind::Validation,
             "The requested conductor action is not valid for this session.",
             error.to_string(),
+        )
+        .with_operation("session.invalid_mutation", "preflight"),
+        LivePersistenceError::ResourceLimit {
+            code,
+            stream,
+            observed,
+            limit,
+        } => SessionErrorPayload::resource(
+            SessionErrorKind::Resource,
+            code,
+            stream,
+            limit,
+            Some(observed),
+            "bounded_units",
         ),
         error @ LivePersistenceError::ExternalModification { .. } => SessionErrorPayload::new(
             SessionErrorKind::Verification,
             "The session changed outside AntennaBench and live mutation was stopped.",
             error.to_string(),
-        ),
+        )
+        .with_operation("session.external_modification", "checkpoint"),
         error @ LivePersistenceError::Io { .. } => SessionErrorPayload::new(
             SessionErrorKind::Filesystem,
             "The conductor could not durably update the session.",
             error.to_string(),
-        ),
+        )
+        .with_operation("session.persistence_io", "checkpoint"),
         error @ LivePersistenceError::CheckpointVerification { .. } => SessionErrorPayload::new(
             SessionErrorKind::Verification,
             "The conductor could not verify a coherent checkpoint.",
             error.to_string(),
-        ),
+        )
+        .with_operation("session.checkpoint_verification", "checkpoint"),
     }
 }
 

@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io,
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
@@ -23,7 +23,6 @@ use antennabench_core::{
     SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use chrono::{DateTime, Utc};
-use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
@@ -33,10 +32,17 @@ use crate::{
 
 mod attachments;
 mod checkpoint;
+mod diagnostic;
 mod durability;
+mod error;
 mod mutation;
 mod recovery;
 mod runtime_context;
+
+pub use diagnostic::{
+    DiagnosticCommitDispositionV6, DiagnosticCommitReceiptV6, LiveDiagnosticMutationV6,
+};
+pub use error::{DiagnosticPersistenceStatusV6, LivePersistenceError};
 
 use attachments::{copy_checkpointed_attachments, durable_attachment};
 use checkpoint::{
@@ -71,6 +77,7 @@ pub enum LiveStreamV2 {
     Rig,
     Propagation,
     RuntimeContexts,
+    Diagnostics,
 }
 
 impl LiveStreamV2 {
@@ -82,6 +89,7 @@ impl LiveStreamV2 {
             Self::Rig => "rig",
             Self::Propagation => "propagation",
             Self::RuntimeContexts => "runtimeContexts",
+            Self::Diagnostics => "diagnostics",
         }
     }
 }
@@ -196,37 +204,7 @@ pub struct RecoveryReportV2 {
     pub disposition: RecoveryDispositionV2,
     pub artifacts: Vec<RecoveryArtifactV2>,
     pub interruption: Option<CommitReceiptV2>,
-}
-
-#[derive(Debug, Error)]
-pub enum LivePersistenceError {
-    #[error(transparent)]
-    Store(#[from] BundleStoreError),
-    #[error("another writer owns the schema-v2 session lock")]
-    WriterBusy,
-    #[error("live mutation capability is unavailable: {message}")]
-    Capability { message: String },
-    #[error("expected checkpoint revision {expected}, but current revision is {actual}")]
-    StaleRevision { expected: u64, actual: u64 },
-    #[error("live session requires recovery before mutation: {message}")]
-    RecoveryRequired { message: String },
-    #[error("external modification froze live mutation: {message}")]
-    ExternalModification { message: String },
-    #[error("invalid live mutation: {message}")]
-    InvalidMutation { message: String },
-    #[error("mutation ID {mutation_id} is already committed with different content")]
-    MutationConflict { mutation_id: String },
-    #[error("the active plan is frozen in lifecycle {lifecycle:?}")]
-    PlanFrozen { lifecycle: SessionLifecycleV2 },
-    #[error("live persistence {operation} failed for {path}")]
-    Io {
-        operation: &'static str,
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error("new checkpoint could not be verified: {message}")]
-    CheckpointVerification { message: String },
+    pub diagnostic_persistence: DiagnosticPersistenceStatusV6,
 }
 
 pub struct LiveSessionV2 {
@@ -776,6 +754,25 @@ impl BundleStore {
         } else {
             None
         };
+        let diagnostic_persistence = if manifest.schema_version == SCHEMA_VERSION_V6
+            && (has_tails || !artifacts.is_empty() || interruption.is_some())
+        {
+            match session.append_recovery_diagnostic(
+                starting_revision,
+                disposition,
+                artifacts.len(),
+                interruption.is_some(),
+            ) {
+                Ok(receipt) => DiagnosticPersistenceStatusV6::Persisted {
+                    diagnostic_id: receipt.diagnostic_id,
+                },
+                Err(_) => DiagnosticPersistenceStatusV6::NotPersisted {
+                    reason_code: "diagnostic.persistence_failed",
+                },
+            }
+        } else {
+            DiagnosticPersistenceStatusV6::NotApplicable
+        };
         let final_revision = session.bundle.session_state.revision;
         Ok(RecoveryReportV2 {
             starting_revision,
@@ -784,6 +781,7 @@ impl BundleStore {
             disposition,
             artifacts,
             interruption,
+            diagnostic_persistence,
         })
     }
 
@@ -1013,6 +1011,7 @@ impl BundleStore {
             disposition,
             artifacts,
             interruption,
+            diagnostic_persistence: DiagnosticPersistenceStatusV6::NotApplicable,
         })
     }
 }

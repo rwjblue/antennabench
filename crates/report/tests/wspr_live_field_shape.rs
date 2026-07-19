@@ -129,6 +129,7 @@ fn field_shape_fixture() -> BundleV3Contents {
             streams: BTreeMap::new(),
             last_committed_mutation_id: Some("session-ended".into()),
             active_runtime_context_id: None,
+            diagnostics_status: None,
         },
         station: Station {
             schema_version: SCHEMA_VERSION_V5,
@@ -202,6 +203,7 @@ fn field_shape_fixture() -> BundleV3Contents {
             notes: Vec::new(),
         },
         runtime_contexts: Vec::new(),
+        diagnostics: Vec::new(),
     }
 }
 

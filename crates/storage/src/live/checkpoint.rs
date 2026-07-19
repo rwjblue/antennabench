@@ -641,6 +641,10 @@ pub(super) fn stream_path(paths: &ResolvedBundlePathsV2, stream: LiveStreamV2) -
             .runtime_contexts
             .as_deref()
             .expect("runtime-context stream is available only for schema-v6"),
+        LiveStreamV2::Diagnostics => paths
+            .diagnostics
+            .as_deref()
+            .expect("diagnostic stream is available only for schema-v6"),
     }
 }
 

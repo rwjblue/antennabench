@@ -4,6 +4,7 @@ use antennabench_core::{
     v2::SessionLifecycleV2,
     v3::project_wspr_run_v3,
     v5::{AntennaControlInvocationPolicyV5, AntennaControlPolicyV5, AntennaControlRoleV5},
+    v6::{DiagnosticOperationV6, DiagnosticPhaseV6, DiagnosticTargetV6, EvidenceEffectV6},
 };
 use antennabench_storage::{BundleStore, LiveAntennaControlMutationV5, SystemLivePersistenceHooks};
 use chrono::Utc;
@@ -379,6 +380,43 @@ fn persist_attempt(
             if !committed {
                 return Err(live_error_payload(error));
             }
+        }
+        let failure = if !switch_success {
+            Some((
+                DiagnosticOperationV6::AntennaControllerSwitch,
+                "controller.switch_failed",
+            ))
+        } else if verification_success == Some(false) {
+            Some((
+                DiagnosticOperationV6::AntennaControllerVerify,
+                "controller.verification_failed",
+            ))
+        } else {
+            None
+        };
+        if let Some((operation, code)) = failure {
+            let payload = SessionErrorPayload::new(
+                SessionErrorKind::Conflict,
+                "Antenna-controller evidence was retained, but readiness was not granted.",
+                "the typed controller invocation remains in the session evidence",
+            )
+            .with_operation(code, "acquire");
+            let _ = crate::operation_diagnostics::persist_failure(
+                source,
+                operation,
+                DiagnosticPhaseV6::Acquire,
+                code,
+                EvidenceEffectV6::PrimaryEvidenceCommitted,
+                vec![
+                    DiagnosticTargetV6::Intent {
+                        id: intent_id.into(),
+                    },
+                    DiagnosticTargetV6::Mutation {
+                        id: mutation_id.clone(),
+                    },
+                ],
+                payload,
+            );
         }
         Ok(())
     })

@@ -331,7 +331,7 @@ pub(super) fn read_stream_tails(
     checkpoint: &SessionStateV2,
     paths: &ResolvedBundlePathsV2,
 ) -> Result<Vec<StreamTail>, LivePersistenceError> {
-    all_streams()
+    recovery_streams(checkpoint, paths)
         .into_iter()
         .map(|stream| {
             let committed_offset = stream_checkpoint(checkpoint, stream)?.committed_bytes;
@@ -425,8 +425,8 @@ fn parse_tail_member(
         LiveStreamV2::Propagation => {
             serde_json::from_slice(line).map(LiveMutationMemberV2::Propagation)
         }
-        LiveStreamV2::RuntimeContexts => {
-            unreachable!("runtime contexts are never parsed as legacy evidence tails")
+        LiveStreamV2::RuntimeContexts | LiveStreamV2::Diagnostics => {
+            unreachable!("operational streams are never parsed as legacy evidence tails")
         }
     }
 }
@@ -530,7 +530,7 @@ pub(super) fn truncate_tails(
     checkpoint: &SessionStateV2,
     paths: &ResolvedBundlePathsV2,
 ) -> Result<(), LivePersistenceError> {
-    for stream in all_streams() {
+    for stream in recovery_streams(checkpoint, paths) {
         let committed = stream_checkpoint(checkpoint, stream)?.committed_bytes;
         let path = stream_path(paths, stream);
         let file = OpenOptions::new()
@@ -549,6 +549,20 @@ pub(super) fn truncate_tails(
             source,
         )
     })
+}
+
+fn recovery_streams(
+    checkpoint: &SessionStateV2,
+    paths: &ResolvedBundlePathsV2,
+) -> Vec<LiveStreamV2> {
+    let mut streams = all_streams().to_vec();
+    if checkpoint.streams.contains_key("runtimeContexts") && paths.runtime_contexts.is_some() {
+        streams.push(LiveStreamV2::RuntimeContexts);
+    }
+    if checkpoint.streams.contains_key("diagnostics") && paths.diagnostics.is_some() {
+        streams.push(LiveStreamV2::Diagnostics);
+    }
+    streams
 }
 
 pub(super) fn recover_checkpoint_temp(

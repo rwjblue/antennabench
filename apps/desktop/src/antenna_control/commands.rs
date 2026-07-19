@@ -157,66 +157,80 @@ pub(crate) fn attach_active_session_antenna_controller(
     request: AttachControllerRequest,
 ) -> Result<ActiveControllerView, SessionErrorPayload> {
     let (source, _) = active_session_source(active_state.inner())?;
-    let bundle = BundleStore::new(&source)
-        .read_v3_checkpointed()
-        .map_err(live_error_payload)?;
-    if bundle.manifest.schema_version < SCHEMA_VERSION_V5 {
-        return Err(SessionErrorPayload::new(
-            SessionErrorKind::Unsupported,
-            "Antenna-controller profiles require a schema-v5 session.",
-            format!("schema version {}", bundle.manifest.schema_version),
-        ));
-    }
-    if !matches!(
-        bundle.schedule.antenna_control.as_ref(),
-        Some(AntennaControlPolicyV5::CommandControlled { .. })
-    ) {
-        return Err(SessionErrorPayload::new(
-            SessionErrorKind::Conflict,
-            "This session was not planned for command-controlled antenna assistance.",
-            "the portable antenna-control policy remains manual",
-        ));
-    }
-    let catalog = read_catalog(&resolved_app_data_dir(&app)?)?;
-    let profile = catalog
-        .profiles
-        .iter()
-        .find(|profile| {
-            profile.profile_id == request.profile_id && profile.revision == request.profile_revision
-        })
-        .ok_or_else(|| {
-            SessionErrorPayload::new(
+    let result = (|| {
+        let bundle = BundleStore::new(&source)
+            .read_v3_checkpointed()
+            .map_err(live_error_payload)?;
+        if bundle.manifest.schema_version < SCHEMA_VERSION_V5 {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Unsupported,
+                "Antenna-controller profiles require a schema-v5 session.",
+                format!("schema version {}", bundle.manifest.schema_version),
+            ));
+        }
+        if !matches!(
+            bundle.schedule.antenna_control.as_ref(),
+            Some(AntennaControlPolicyV5::CommandControlled { .. })
+        ) {
+            return Err(SessionErrorPayload::new(
                 SessionErrorKind::Conflict,
-                "The selected controller profile changed. Review and attach it again.",
-                "the requested local profile revision is unavailable",
+                "This session was not planned for command-controlled antenna assistance.",
+                "the portable antenna-control policy remains manual",
+            ));
+        }
+        let catalog = read_catalog(&resolved_app_data_dir(&app)?)?;
+        let profile = catalog
+            .profiles
+            .iter()
+            .find(|profile| {
+                profile.profile_id == request.profile_id
+                    && profile.revision == request.profile_revision
+            })
+            .ok_or_else(|| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::Conflict,
+                    "The selected controller profile changed. Review and attach it again.",
+                    "the requested local profile revision is unavailable",
+                )
+            })?;
+        let targets = validate_targets(&bundle, &request.targets).map_err(|detail| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Validation,
+                "The antenna target mapping is not valid.",
+                detail,
             )
         })?;
-    let targets = validate_targets(&bundle, &request.targets).map_err(|detail| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Validation,
-            "The antenna target mapping is not valid.",
-            detail,
+        let prepared = PreparedSetupController {
+            profile: profile.clone(),
+            targets: targets.clone(),
+            arm_for_session: request.armed,
+        };
+        persist_profile_and_association(
+            &resolved_app_data_dir(&app)?,
+            &source,
+            &bundle.manifest.session_id,
+            &prepared,
+        )?;
+        controller_state.attach(
+            source.clone(),
+            bundle.manifest.session_id,
+            profile,
+            targets,
+            request.armed,
+        )?;
+        active_controller_view_for(app, active_state, controller_state)
+    })();
+    result.map_err(|payload| {
+        crate::operation_diagnostics::persist_failure(
+            &source,
+            DiagnosticOperationV6::AntennaControllerAttach,
+            DiagnosticPhaseV6::Admission,
+            "controller.attach_failed",
+            EvidenceEffectV6::NoneCommitted,
+            Vec::new(),
+            payload,
         )
-    })?;
-    let prepared = PreparedSetupController {
-        profile: profile.clone(),
-        targets: targets.clone(),
-        arm_for_session: request.armed,
-    };
-    persist_profile_and_association(
-        &resolved_app_data_dir(&app)?,
-        &source,
-        &bundle.manifest.session_id,
-        &prepared,
-    )?;
-    controller_state.attach(
-        source,
-        bundle.manifest.session_id,
-        profile,
-        targets,
-        request.armed,
-    )?;
-    active_controller_view_for(app, active_state, controller_state)
+    })
 }
 
 #[tauri::command]

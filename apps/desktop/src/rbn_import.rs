@@ -1,8 +1,10 @@
 use std::{fs, io::Cursor, path::Path};
 
 use antennabench_core::{
-    v2::SessionLifecycleV2, v3::BundleV3Contents, Band, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
-    SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
+    v2::SessionLifecycleV2,
+    v3::BundleV3Contents,
+    v6::{DiagnosticOperationV6, DiagnosticPhaseV6, DiagnosticTargetV6, EvidenceEffectV6},
+    Band, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_rbn::{
     parse_rbn_zip, prepare_rbn_import, RbnImportConfig, RbnImportPreparationConfig,
@@ -61,7 +63,23 @@ pub(crate) async fn import_active_session_rbn(
             error.to_string(),
         )
     })?;
-    with_foreground_operation(state.inner(), || import_file(state.inner(), &path))
+    let result = with_foreground_operation(state.inner(), || import_file(state.inner(), &path));
+    result.map_err(|payload| {
+        let Ok((source, _)) = active_session_source(state.inner()) else {
+            return payload;
+        };
+        crate::operation_diagnostics::persist_failure(
+            &source,
+            DiagnosticOperationV6::AdapterFileImport,
+            DiagnosticPhaseV6::Parse,
+            "adapter.file_import_failed",
+            EvidenceEffectV6::NoneCommitted,
+            vec![DiagnosticTargetV6::Adapter {
+                id: "rbn-daily-archive".into(),
+            }],
+            payload,
+        )
+    })
 }
 
 fn import_file(
@@ -147,33 +165,53 @@ fn import_file(
     let import_id = writer.allocate_id("rbn-import");
     let expected_revision = writer.checkpoint().revision;
     let mut summary = None::<RbnPreparedSummary>;
-    let (_, receipt) = writer
-        .append_evidence_with_attachment(
-            &bytes,
-            "application/zip",
-            None,
-            Some("zip-single-csv".into()),
-            source_locator,
-            |attachment| {
-                let prepared = prepare_rbn_import(
-                    &parsed,
-                    &config,
-                    &preparation,
-                    &current.manifest.session_id,
-                    &import_id,
-                    attachment,
-                    &current.adapter_records,
-                );
-                summary = Some(prepared.summary);
-                LiveEvidenceMutationV3 {
-                    expected_revision,
-                    mutation_id: prepared.mutation_id,
-                    adapter_records: prepared.adapter_records,
-                    observations: prepared.observations,
-                }
-            },
-        )
-        .map_err(crate::conductor::live_error_payload)?;
+    let commit = writer.append_evidence_with_attachment(
+        &bytes,
+        "application/zip",
+        None,
+        Some("zip-single-csv".into()),
+        source_locator,
+        |attachment| {
+            let prepared = prepare_rbn_import(
+                &parsed,
+                &config,
+                &preparation,
+                &current.manifest.session_id,
+                &import_id,
+                attachment,
+                &current.adapter_records,
+            );
+            summary = Some(prepared.summary);
+            LiveEvidenceMutationV3 {
+                expected_revision,
+                mutation_id: prepared.mutation_id,
+                adapter_records: prepared.adapter_records,
+                observations: prepared.observations,
+            }
+        },
+    );
+    let (_, receipt) = match commit {
+        Ok(committed) => committed,
+        Err(error) => {
+            let payload = crate::conductor::live_error_payload(error);
+            return Err(crate::operation_diagnostics::persist_failure_with_writer(
+                &mut writer,
+                DiagnosticOperationV6::AdapterFileImport,
+                DiagnosticPhaseV6::Checkpoint,
+                "adapter.file_import_failed",
+                EvidenceEffectV6::NoneCommitted,
+                vec![
+                    DiagnosticTargetV6::Adapter {
+                        id: "rbn-daily-archive".into(),
+                    },
+                    DiagnosticTargetV6::Mutation {
+                        id: import_id.clone(),
+                    },
+                ],
+                payload,
+            ));
+        }
+    };
     drop(writer);
     let summary = summary.expect("attachment mutation builder runs before append");
     Ok(RbnImportOutcome::Imported {

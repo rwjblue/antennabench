@@ -96,6 +96,30 @@ pub(crate) struct SessionErrorPayload {
     pub(crate) kind: SessionErrorKind,
     pub(crate) message: String,
     pub(crate) detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) operation: Option<Box<OperationErrorDetail>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) diagnostic_persistence: Option<Box<DiagnosticPersistenceDetail>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OperationErrorDetail {
+    pub(crate) code: String,
+    pub(crate) stage: String,
+    pub(crate) observed: Option<u64>,
+    pub(crate) limit: Option<u64>,
+    pub(crate) unit: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DiagnosticPersistenceDetail {
+    pub(crate) status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) diagnostic_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) reason_code: Option<String>,
 }
 
 impl SessionErrorPayload {
@@ -108,6 +132,8 @@ impl SessionErrorPayload {
             kind,
             message: message.into(),
             detail: detail.into(),
+            operation: None,
+            diagnostic_persistence: None,
         }
     }
 
@@ -127,14 +153,56 @@ impl SessionErrorPayload {
         observed: Option<u64>,
         unit: &str,
     ) -> Self {
-        Self::new(
+        let mut payload = Self::new(
             kind,
             "The local operation was stopped by its resource policy.",
             format!(
                 "code={code} stage={stage} limit={limit} observed={} unit={unit} complete=false",
                 observed.map_or_else(|| "unknown".to_string(), |value| value.to_string())
             ),
-        )
+        );
+        payload.operation = Some(Box::new(OperationErrorDetail {
+            code: code.into(),
+            stage: stage.into(),
+            observed,
+            limit: Some(limit),
+            unit: Some(unit.into()),
+        }));
+        payload
+    }
+
+    pub(crate) fn with_diagnostic_persisted(mut self, diagnostic_id: Option<String>) -> Self {
+        self.diagnostic_persistence = Some(Box::new(DiagnosticPersistenceDetail {
+            status: "persisted",
+            diagnostic_id,
+            reason_code: None,
+        }));
+        self
+    }
+
+    pub(crate) fn with_operation(mut self, code: &str, stage: &str) -> Self {
+        self.operation = Some(Box::new(OperationErrorDetail {
+            code: code.into(),
+            stage: stage.into(),
+            observed: None,
+            limit: None,
+            unit: None,
+        }));
+        self
+    }
+
+    pub(crate) fn with_diagnostic_not_persisted(mut self, reason_code: impl Into<String>) -> Self {
+        self.diagnostic_persistence = Some(Box::new(DiagnosticPersistenceDetail {
+            status: "not_persisted",
+            diagnostic_id: None,
+            reason_code: Some(reason_code.into()),
+        }));
+        self
+    }
+
+    pub(crate) fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = message.into();
+        self
     }
 }
 

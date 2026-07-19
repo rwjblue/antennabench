@@ -578,6 +578,12 @@ pub struct SessionStateV2 {
         skip_serializing_if = "Option::is_none"
     )]
     pub active_runtime_context_id: Option<String>,
+    #[serde(
+        default,
+        rename = "diagnosticsStatus",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub diagnostics_status: Option<crate::v6::DiagnosticsStatusV6>,
 }
 
 fn is_false(value: &bool) -> bool {

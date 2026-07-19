@@ -476,7 +476,7 @@ pub(crate) async fn export_active_session(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
 ) -> Result<ExportSessionOutcome, SessionErrorPayload> {
-    export_active_session_with_selection(state.inner(), |source| {
+    let result = export_active_session_with_selection(state.inner(), |source| {
         let mut dialog = app
             .dialog()
             .file()
@@ -501,6 +501,15 @@ pub(crate) async fn export_active_session(
                 error.to_string(),
             )
         })
+    });
+    result.map_err(|payload| {
+        persist_active_operation_failure(
+            state.inner(),
+            DiagnosticOperationV6::BundleExport,
+            DiagnosticPhaseV6::WriteDestination,
+            "bundle.export_failed",
+            payload,
+        )
     })
 }
 
@@ -512,7 +521,7 @@ pub(crate) async fn export_active_session_report(
     controller_evidence: Option<ControllerEvidenceHandling>,
 ) -> Result<ExportReportOutcome, SessionErrorPayload> {
     let format = format.unwrap_or_default();
-    export_active_report_with_selection(
+    let result = export_active_report_with_selection(
         state.inner(),
         format,
         controller_evidence.unwrap_or_default(),
@@ -556,19 +565,65 @@ pub(crate) async fn export_active_session_report(
                 )
             })
         },
-    )
+    );
+    result.map_err(|payload| {
+        persist_active_operation_failure(
+            state.inner(),
+            DiagnosticOperationV6::ReportExport,
+            DiagnosticPhaseV6::WriteDestination,
+            "report.export_failed",
+            payload,
+        )
+    })
 }
 
 #[tauri::command]
 pub(crate) fn active_session_report(
     state: State<'_, ActiveSessionState>,
 ) -> Result<ReportPresentation, SessionErrorPayload> {
-    active_session_report_for(state.inner())
+    active_session_report_for(state.inner()).map_err(|payload| {
+        persist_active_operation_failure(
+            state.inner(),
+            DiagnosticOperationV6::ReportRender,
+            DiagnosticPhaseV6::Render,
+            "report.render_failed",
+            payload,
+        )
+    })
 }
 
 #[tauri::command]
 pub(crate) fn refresh_active_session_report(
     state: State<'_, ActiveSessionState>,
 ) -> Result<ReportPresentation, SessionErrorPayload> {
-    refresh_active_session_report_for(state.inner())
+    refresh_active_session_report_for(state.inner()).map_err(|payload| {
+        persist_active_operation_failure(
+            state.inner(),
+            DiagnosticOperationV6::ReportRender,
+            DiagnosticPhaseV6::Render,
+            "report.render_failed",
+            payload,
+        )
+    })
+}
+
+fn persist_active_operation_failure(
+    state: &ActiveSessionState,
+    operation: DiagnosticOperationV6,
+    phase: DiagnosticPhaseV6,
+    code: &str,
+    payload: SessionErrorPayload,
+) -> SessionErrorPayload {
+    let Ok((source, _)) = active_session_source(state) else {
+        return payload;
+    };
+    crate::operation_diagnostics::persist_failure(
+        &source,
+        operation,
+        phase,
+        code,
+        EvidenceEffectV6::NoneCommitted,
+        Vec::new(),
+        payload,
+    )
 }

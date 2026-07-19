@@ -705,6 +705,7 @@ fn build_review_with_profiles(
             streams: BTreeMap::new(),
             last_committed_mutation_id: None,
             active_runtime_context_id: None,
+            diagnostics_status: None,
         },
         station,
         antennas: antennas_file,
@@ -772,6 +773,8 @@ fn build_review_with_profiles(
     bundle.manifest.files.diagnostics = Some("diagnostics.jsonl".into());
     bundle.manifest.creator_runtime_context_id = Some(creator_context_id.clone());
     bundle.session_state.active_runtime_context_id = Some(creator_context_id);
+    bundle.session_state.diagnostics_status =
+        Some(antennabench_core::v6::DiagnosticsStatusV6::complete());
     bundle.runtime_contexts = vec![creator_context];
     let (prepared_controller, controller_review) = match draft
         .antenna_controller

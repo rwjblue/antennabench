@@ -42,6 +42,11 @@ use crate::{
     wsjtx_session_record::record_meta,
 };
 
+mod commands;
+pub(crate) use commands::{
+    active_session_wsjtx_status, start_active_session_wsjtx, stop_active_session_wsjtx,
+};
+
 const RECEIVER_READ_TIMEOUT: StdDuration = StdDuration::from_millis(250);
 const HEARTBEAT_STALE_AFTER_SECONDS: i64 = 45;
 const WSJTX_STATUS_IPC_BYTES: u64 = 64 * 1024;
@@ -904,6 +909,13 @@ impl WsjtxOrchestrator {
             status,
             Some((diagnostic.code, message.clone(), true)),
         );
+        if matches!(decision, IntakeDecision::Continue) {
+            crate::operation_diagnostics::persist_wsjtx_gap(
+                self.store.root(),
+                diagnostic.code,
+                false,
+            );
+        }
         set_failed(status, diagnostic.code, message, true);
         if matches!(decision, IntakeDecision::Continue) {
             IntakeDecision::Stop
@@ -1130,6 +1142,7 @@ impl WsjtxOrchestrator {
                     self.commit_or_stop(mutation, status, None),
                     IntakeDecision::Continue
                 ) {
+                    crate::operation_diagnostics::persist_wsjtx_gap(self.store.root(), code, true);
                     set_failed(status, code, message, true);
                     return;
                 }
@@ -1294,52 +1307,6 @@ fn check_status_ipc(status: &WsjtxReceiverStatus) -> Result<(), SessionErrorPayl
         ));
     }
     Ok(())
-}
-
-#[tauri::command]
-pub(crate) fn active_session_wsjtx_status(
-    active_state: State<'_, ActiveSessionState>,
-    wsjtx_state: State<'_, WsjtxSessionState>,
-) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
-    let (source, _) = active_session_source(active_state.inner())?;
-    let now = Utc::now();
-    let mut status = wsjtx_state.status_for_source(&source, now);
-    if let Ok(snapshot) = read_wsjtx_snapshot(&BundleStore::new(source)) {
-        project_setup_warnings(&snapshot, &mut status, now);
-    }
-    check_status_ipc(&status)?;
-    Ok(status)
-}
-
-#[tauri::command]
-pub(crate) fn start_active_session_wsjtx(
-    request: StartWsjtxRequest,
-    active_state: State<'_, ActiveSessionState>,
-    wsjtx_state: State<'_, WsjtxSessionState>,
-) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
-    with_foreground_operation(active_state.inner(), || {
-        let (source, _) = active_session_source(active_state.inner())?;
-        let status = start_receiver(
-            wsjtx_state.inner(),
-            source,
-            request,
-            Arc::new(SystemLivePersistenceHooks),
-        )?;
-        check_status_ipc(&status)?;
-        Ok(status)
-    })
-}
-
-#[tauri::command]
-pub(crate) fn stop_active_session_wsjtx(
-    active_state: State<'_, ActiveSessionState>,
-    wsjtx_state: State<'_, WsjtxSessionState>,
-) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
-    let (source, _) = active_session_source(active_state.inner())?;
-    wsjtx_state.stop_for_source(&source, "The operator stopped WSJT-X reception.");
-    let status = wsjtx_state.status_for_source(&source, Utc::now());
-    check_status_ipc(&status)?;
-    Ok(status)
 }
 
 #[cfg(test)]

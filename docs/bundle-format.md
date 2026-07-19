@@ -58,7 +58,7 @@ my-test.session.antennabundle/
   observations.jsonl     decodes and public reports
   adapter-records.jsonl  attributed import and collection records
   runtime-contexts.jsonl build and runtime actors for durable mutations
-  diagnostics.jsonl      reserved checkpointed operational outcomes
+  diagnostics.jsonl      bounded typed material-operation outcomes
   session-state.json     the latest durable checkpoint
   attachments/           larger original inputs, stored by content hash
 ```
@@ -68,10 +68,12 @@ appended so the history remains inspectable.
 
 Schema v6 adds a bounded, checkpointed runtime-context stream that identifies
 the app build and runtime platform that created or materially acted on a
-session. The diagnostics stream and its empty checkpoint head are reserved for
-the durable operational outcomes implemented in the next rollout slice. Both
-remain separate from experiment evidence. Older bundles say that this history
-is unavailable rather than implying that no failures occurred. See
+session. The diagnostics stream retains typed failures, partial successes, and
+recovery outcomes when the active bundle remains safely writable. It records
+stable codes, retry guidance, evidence effect, revision/window targets, and the
+responsible runtime context without storing arbitrary logs. Both streams remain
+separate from experiment evidence. Older bundles say that this history is
+unavailable rather than implying that no failures occurred. See
 [Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
 for the complete contract.
 

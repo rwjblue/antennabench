@@ -28,16 +28,19 @@ use antennabench_core::{
         AntennaControlRoleV5, WsprReadinessBasisV5, COMMAND_OUTPUT_MAX_BYTES,
     },
     v6::{
-        upgrade_v5_bundle_model_to_v6, BuildChannelV6, BuildIdentityV6, RuntimeContextV6,
-        RuntimePlatformV6, SourceStateV6,
+        upgrade_v5_bundle_model_to_v6, BuildChannelV6, BuildIdentityV6, DiagnosticCauseV6,
+        DiagnosticDetailStateV6, DiagnosticDetailStatusV6, DiagnosticOperationV6,
+        DiagnosticOutcomeV6, DiagnosticPhaseV6, DiagnosticRetryV6, DiagnosticSeverityV6,
+        DiagnosticTargetV6, EvidenceEffectV6, OperationalDiagnosticV6, RetryDispositionV6,
+        RuntimeContextV6, RuntimePlatformV6, SourceStateV6, OPERATIONAL_DIAGNOSTIC_SCHEMA_V1,
     },
     AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, ExperimentMode, ObservationKind,
     SessionGoal, Station, SCHEMA_VERSION_V3, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{
-    BundleStore, LiveAntennaControlMutationV5, LiveEventMutationV3, LiveEvidenceMutationV3,
-    LivePersistenceError, LivePersistenceHooks, LivePersistencePoint, LiveStreamV2,
-    RecoveryDispositionV2,
+    BundleStore, DiagnosticPersistenceStatusV6, LiveAntennaControlMutationV5,
+    LiveDiagnosticMutationV6, LiveEventMutationV3, LiveEvidenceMutationV3, LivePersistenceError,
+    LivePersistenceHooks, LivePersistencePoint, LiveStreamV2, RecoveryDispositionV2,
 };
 use chrono::{DateTime, TimeZone, Utc};
 
@@ -66,6 +69,48 @@ fn runtime_context(now: DateTime<Utc>, os_version: &str) -> RuntimeContextV6 {
             application_id: Some("com.rwjblue.antennabench".into()),
         },
     )
+}
+
+fn diagnostic(attempt_id: &str, revision: u64, now: DateTime<Utc>) -> OperationalDiagnosticV6 {
+    OperationalDiagnosticV6 {
+        schema: OPERATIONAL_DIAGNOSTIC_SCHEMA_V1.into(),
+        diagnostic_id: format!("diagnostic-{attempt_id}"),
+        correlation_id: "test-operation".into(),
+        attempt_id: attempt_id.into(),
+        mutation: MutationMember {
+            mutation_id: "pending".into(),
+            member_index: 0,
+            member_count: 1,
+        },
+        runtime_context_id: String::new(),
+        occurred_at: now,
+        operation: DiagnosticOperationV6::SessionMutation,
+        phase: DiagnosticPhaseV6::Checkpoint,
+        code: "session.persistence_io".into(),
+        summary: "The test mutation did not commit.".into(),
+        outcome: DiagnosticOutcomeV6::Failed,
+        severity: DiagnosticSeverityV6::Error,
+        revision_before: Some(revision),
+        revision_after: Some(revision),
+        diagnostic_revision: revision,
+        evidence_effect: EvidenceEffectV6::NoneCommitted,
+        retry: DiagnosticRetryV6 {
+            disposition: RetryDispositionV6::Retryable,
+            guidance_code: "retry_when_storage_is_available".into(),
+        },
+        targets: vec![DiagnosticTargetV6::Mutation {
+            id: "test-primary-mutation".into(),
+        }],
+        causes: vec![DiagnosticCauseV6 {
+            code: "session.persistence_io".into(),
+            phase: DiagnosticPhaseV6::Checkpoint,
+            facts: Vec::new(),
+        }],
+        detail_status: DiagnosticDetailStatusV6 {
+            state: DiagnosticDetailStateV6::Complete,
+            omitted_fact_count: 0,
+        },
+    }
 }
 
 #[derive(Debug)]
@@ -227,6 +272,7 @@ fn bundle() -> BundleV3Contents {
             streams: BTreeMap::new(),
             last_committed_mutation_id: None,
             active_runtime_context_id: None,
+            diagnostics_status: None,
         },
         station: Station {
             schema_version: SCHEMA_VERSION_V3,
@@ -303,6 +349,7 @@ fn bundle() -> BundleV3Contents {
             notes: Vec::new(),
         },
         runtime_contexts: Vec::new(),
+        diagnostics: Vec::new(),
     }
 }
 
@@ -1199,7 +1246,7 @@ fn v6_first_mutation_by_a_new_context_commits_context_before_evidence() {
         .unwrap();
     writer
         .append_event(mutation(
-            0,
+            1,
             "v6-start-mutation",
             event(
                 now,
@@ -1252,7 +1299,7 @@ fn v6_recovery_by_a_new_context_commits_context_before_interruption() {
     let mut writer = store.open_v3_writer_with_hooks(hooks.clone()).unwrap();
     writer
         .append_event(mutation(
-            0,
+            1,
             "v6-start-before-recovery",
             event(
                 now,
@@ -1270,6 +1317,10 @@ fn v6_recovery_by_a_new_context_commits_context_before_interruption() {
         .recover_v3_with_hooks_in_context(hooks, recovery_context)
         .unwrap();
     assert!(report.interruption.is_some());
+    assert!(matches!(
+        report.diagnostic_persistence,
+        DiagnosticPersistenceStatusV6::Persisted { .. }
+    ));
 
     let reopened = store.read_v3_checkpointed().unwrap();
     let context = reopened.runtime_contexts.last().unwrap();
@@ -1287,4 +1338,104 @@ fn v6_recovery_by_a_new_context_commits_context_before_interruption() {
     assert_eq!(interruption.meta.mutation.member_index, 1);
     assert_eq!(context.mutation.member_count, 2);
     assert_eq!(interruption.meta.mutation.member_count, 2);
+    let diagnostic = reopened.diagnostics.last().unwrap();
+    assert_eq!(
+        diagnostic.operation,
+        DiagnosticOperationV6::CheckpointRecovery
+    );
+    assert_eq!(diagnostic.outcome, DiagnosticOutcomeV6::Recovered);
+}
+
+#[test]
+fn v6_diagnostic_append_is_atomic_idempotent_and_conflict_detecting() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join(format!("v6-diagnostic{V2_BUNDLE_SUFFIX}"));
+    let store = BundleStore::new(&path);
+    let now = Utc.with_ymd_and_hms(2026, 7, 19, 12, 0, 0).unwrap();
+    let mut initial = upgrade_v5_bundle_model_to_v6(
+        upgrade_v3_bundle_model_to_v5(bundle()),
+        runtime_context(now, "1"),
+    );
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+    let revision = initial.session_state.revision;
+    let proposed = diagnostic("attempt-1", revision, now);
+    let mutation = LiveDiagnosticMutationV6 {
+        expected_revision: revision,
+        mutation_id: "diagnostic-mutation-1".into(),
+        diagnostic: proposed.clone(),
+    };
+    let mut writer = store.open_v3_writer().unwrap();
+    let first = writer.append_diagnostic(mutation.clone()).unwrap();
+    assert!(!first.idempotent);
+    assert_eq!(first.revision, revision + 1);
+    let repeated = writer.append_diagnostic(mutation).unwrap();
+    assert!(repeated.idempotent);
+    assert_eq!(repeated.diagnostic_id, first.diagnostic_id);
+    let mut conflict = proposed;
+    conflict.code = "session.stale_revision".into();
+    assert!(matches!(
+        writer.append_diagnostic(LiveDiagnosticMutationV6 {
+            expected_revision: revision,
+            mutation_id: "diagnostic-mutation-1".into(),
+            diagnostic: conflict,
+        }),
+        Err(LivePersistenceError::MutationConflict { .. })
+    ));
+    drop(writer);
+
+    let reopened = store.read_v3_checkpointed().unwrap();
+    assert_eq!(reopened.diagnostics.len(), initial.diagnostics.len() + 1);
+    assert_eq!(
+        reopened.session_state.streams["diagnostics"].record_count,
+        u64::try_from(reopened.diagnostics.len()).unwrap()
+    );
+}
+
+#[test]
+fn v6_diagnostic_persistence_failure_rolls_back_without_recursing() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp
+        .path()
+        .join(format!("v6-diagnostic-failure{V2_BUNDLE_SUFFIX}"));
+    let store = BundleStore::new(&path);
+    let now = Utc.with_ymd_and_hms(2026, 7, 19, 12, 0, 0).unwrap();
+    let mut initial = upgrade_v5_bundle_model_to_v6(
+        upgrade_v3_bundle_model_to_v5(bundle()),
+        runtime_context(now, "1"),
+    );
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+    let revision = initial.session_state.revision;
+    let hooks = Arc::new(Hooks {
+        now,
+        fail_at: Some(LivePersistencePoint::BeforeStreamWrite(
+            LiveStreamV2::Diagnostics,
+        )),
+    });
+    let mut writer = store.open_v3_writer_with_hooks(hooks).unwrap();
+    assert!(matches!(
+        writer.append_diagnostic(LiveDiagnosticMutationV6 {
+            expected_revision: revision,
+            mutation_id: "diagnostic-mutation-failed".into(),
+            diagnostic: diagnostic("attempt-failed", revision, now),
+        }),
+        Err(LivePersistenceError::Io { .. })
+    ));
+    drop(writer);
+    assert_eq!(store.read_v3_checkpointed().unwrap(), initial);
+
+    let mut retry = store.open_v3_writer().unwrap();
+    retry
+        .append_diagnostic(LiveDiagnosticMutationV6 {
+            expected_revision: revision,
+            mutation_id: "diagnostic-mutation-failed".into(),
+            diagnostic: diagnostic("attempt-failed", revision, now),
+        })
+        .unwrap();
+    drop(retry);
+    assert_eq!(
+        store.read_v3_checkpointed().unwrap().diagnostics.len(),
+        initial.diagnostics.len() + 1
+    );
 }

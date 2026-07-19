@@ -70,6 +70,7 @@ fn bundle() -> BundleV3Contents {
             streams: BTreeMap::new(),
             last_committed_mutation_id: Some("mutation-1".into()),
             active_runtime_context_id: None,
+            diagnostics_status: None,
         },
         station: Station {
             schema_version: SCHEMA_VERSION_V3,
@@ -219,6 +220,7 @@ fn bundle() -> BundleV3Contents {
             notes: Vec::new(),
         },
         runtime_contexts: Vec::new(),
+        diagnostics: Vec::new(),
     }
 }
 

@@ -27,6 +27,7 @@ use antennabench_core::{
         COMMAND_ARGUMENT_MAX_BYTES, COMMAND_INVOCATION_MAX_BYTES, COMMAND_OUTPUT_MAX_BYTES,
         COMMAND_PROGRAM_MAX_BYTES, COMMAND_TEMPLATE_MAX_BYTES,
     },
+    v6::{DiagnosticOperationV6, DiagnosticPhaseV6, EvidenceEffectV6},
     ExperimentMode, RecordSource, SCHEMA_VERSION_V5,
 };
 use antennabench_storage::{BundleStore, LiveAntennaControlMutationV5, SystemLivePersistenceHooks};

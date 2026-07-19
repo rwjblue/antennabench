@@ -389,6 +389,7 @@ pub struct BundleV3Contents {
     pub propagation: Vec<PropagationRecordV3>,
     pub analysis: AnalysisFile,
     pub runtime_contexts: Vec<crate::v6::RuntimeContextV6>,
+    pub diagnostics: Vec<crate::v6::OperationalDiagnosticV6>,
 }
 
 impl BundleV3Contents {
@@ -704,6 +705,7 @@ pub fn upgrade_v2_bundle_model(mut bundle: BundleV2Contents) -> BundleV3Contents
         propagation,
         analysis: bundle.analysis,
         runtime_contexts: Vec::new(),
+        diagnostics: Vec::new(),
     }
 }
 

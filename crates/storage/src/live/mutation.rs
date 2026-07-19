@@ -868,28 +868,46 @@ pub(super) fn preflight_live_budget(
             }
         })?;
     }
-    if let Some(bytes) = added_bytes.get(&LiveStreamV2::RuntimeContexts).copied() {
-        let records = added_records
-            .get(&LiveStreamV2::RuntimeContexts)
-            .copied()
-            .unwrap_or_default();
-        let current = checkpoint
-            .streams
-            .get(LiveStreamV2::RuntimeContexts.checkpoint_name())
-            .ok_or_else(|| LivePersistenceError::CheckpointVerification {
-                message: "checkpoint is missing runtimeContexts".into(),
-            })?;
-        if current.committed_bytes.saturating_add(bytes)
-            > antennabench_core::v6::RUNTIME_CONTEXT_STREAM_MAX_BYTES as u64
-            || current.record_count.saturating_add(records)
-                > antennabench_core::v6::RUNTIME_CONTEXT_MAX_RECORDS as u64
-        {
-            return Err(LivePersistenceError::InvalidMutation {
-                message: "runtime context mutation exceeds the schema-v6 retention bound".into(),
+    for (stream, byte_limit, record_limit) in [
+        (
+            LiveStreamV2::RuntimeContexts,
+            antennabench_core::v6::RUNTIME_CONTEXT_STREAM_MAX_BYTES as u64,
+            antennabench_core::v6::RUNTIME_CONTEXT_MAX_RECORDS as u64,
+        ),
+        (
+            LiveStreamV2::Diagnostics,
+            antennabench_core::v6::DIAGNOSTIC_STREAM_MAX_BYTES as u64,
+            antennabench_core::v6::DIAGNOSTIC_MAX_RECORDS as u64,
+        ),
+    ] {
+        let Some(current) = checkpoint.streams.get(stream.checkpoint_name()) else {
+            if added_bytes.contains_key(&stream) {
+                return Err(LivePersistenceError::CheckpointVerification {
+                    message: format!("checkpoint is missing {}", stream.checkpoint_name()),
+                });
+            }
+            continue;
+        };
+        let next_bytes = current
+            .committed_bytes
+            .saturating_add(added_bytes.get(&stream).copied().unwrap_or_default());
+        let next_records = current
+            .record_count
+            .saturating_add(added_records.get(&stream).copied().unwrap_or_default());
+        if next_bytes > byte_limit || next_records > record_limit {
+            return Err(LivePersistenceError::ResourceLimit {
+                code: "resource.diagnostic_retention",
+                stream: stream.checkpoint_name(),
+                observed: next_bytes.max(next_records),
+                limit: if next_bytes > byte_limit {
+                    byte_limit
+                } else {
+                    record_limit
+                },
             });
         }
-        total_bytes = total_bytes.saturating_add(current.committed_bytes.saturating_add(bytes));
-        total_records = total_records.saturating_add(current.record_count.saturating_add(records));
+        total_bytes = total_bytes.saturating_add(next_bytes);
+        total_records = total_records.saturating_add(next_records);
     }
     if total_bytes > profile.modeled_total_bytes || total_records > profile.modeled_total_records {
         return Err(LivePersistenceError::InvalidMutation {
@@ -909,12 +927,11 @@ fn serialized_jsonl_usage(
     for line in bytes.split_inclusive(|byte| *byte == b'\n') {
         let line_bytes = u64::try_from(line.len()).expect("usize fits u64");
         if line_bytes > line_limit {
-            return Err(LivePersistenceError::InvalidMutation {
-                message: format!(
-                    "{} member exceeds the {} byte JSONL line limit",
-                    stream.checkpoint_name(),
-                    line_limit
-                ),
+            return Err(LivePersistenceError::ResourceLimit {
+                code: "resource.jsonl_line_bytes",
+                stream: stream.checkpoint_name(),
+                observed: line_bytes,
+                limit: line_limit,
             });
         }
         records = records
@@ -958,8 +975,12 @@ mod tests {
             serialized_jsonl_usage(LiveStreamV2::AdapterRecords, b"[123]\n{}\n", 5).unwrap_err();
         assert!(matches!(
             error,
-            LivePersistenceError::InvalidMutation { message }
-                if message == "adapter_records member exceeds the 5 byte JSONL line limit"
+            LivePersistenceError::ResourceLimit {
+                code: "resource.jsonl_line_bytes",
+                stream: "adapter_records",
+                observed: 6,
+                limit: 5,
+            }
         ));
     }
 }

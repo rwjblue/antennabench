@@ -306,10 +306,11 @@ chunk.
 
 [Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
 defines checkpointed `runtime-contexts.jsonl` and `diagnostics.jsonl` streams.
-The runtime-context stream is implemented: it records the content-deduplicated
+The runtime-context stream records the content-deduplicated
 app build and bounded runtime platform that created or materially acted on the
-session. The diagnostics path and empty checkpoint head are present so schema
-v6 topology is stable; typed diagnostic records land in #181. Both remain distinct from operator,
+session. The diagnostics stream records bounded typed material-operation
+outcomes and participates in checkpoint verification, recovery, upgrade,
+resource accounting, and lossless copy. Both remain distinct from operator,
 adapter-source, radio, and normalized scientific evidence.
 
 The immutable manifest references the creator runtime context. Every v6
@@ -327,6 +328,15 @@ truncated. Optional details declare deterministic truncation, and checkpoint
 status exposes saturation or a safely recorded persistence gap. The writer
 makes only one diagnostic-persistence attempt and promises nothing when disk,
 process, writer, or verified-checkpoint safety prevents that commit.
+
+The initial operation taxonomy covers session mutation and recovery,
+WSPR.live/file acquisition, WSJT-X intake, controller attach/switch/verify,
+report rendering/export, and bundle export. Routine polling and routine
+successes are omitted. A rejected WSPR.live JSONL member records
+`resource.jsonl_line_bytes`, stream, observed and limit bytes, final acquisition
+window, unchanged primary revision, `none_committed`, and input/profile/code
+change guidance. A capture followed by failed automatic finalization records a
+separate `partial` outcome with `primary_evidence_committed`.
 
 Schema-v1 through schema-v5 absence means legacy/unknown, not “no failures.”
 They remain unchanged and losslessly copyable; live v6 mutation requires an

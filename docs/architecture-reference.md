@@ -362,8 +362,9 @@ checkpoint remain explicit non-guarantees rather than triggers for a second
 logging path.
 
 Runtime contexts, build injection, creator attribution, live actor switching,
-and v5-to-v6 upgrade are implemented in #180. Diagnostic records and their
-presentation remain the sequenced #181 and #179 work. The streams are modeled portable metadata for validation, recovery,
+and v5-to-v6 upgrade are implemented. Durable diagnostic records now cover the
+material storage and desktop operation seams; historical presentation remains
+the sequenced #179 work. The streams are modeled portable metadata for validation, recovery,
 resource accounting, and lossless copy, but are invisible to observation
 alignment and scientific conclusions. Full report disclosure is explicit and
 off by default; compact/public/hosted output excludes the streams. Older bundles

@@ -22,10 +22,12 @@ mod v3;
 
 pub use inspection::BundleInspection;
 pub use live::{
-    CommitReceiptV2, LiveAntennaControlMutationV5, LiveEventMutationV3, LiveEvidenceMutationV3,
-    LiveMutationMemberV2, LiveMutationV2, LivePersistenceError, LivePersistenceHooks,
-    LivePersistencePoint, LivePlanFile, LiveSessionV2, LiveSessionV3, LiveStreamV2, PlanCommitV2,
-    RecoveryArtifactV2, RecoveryDispositionV2, RecoveryReportV2, SystemLivePersistenceHooks,
+    CommitReceiptV2, DiagnosticCommitDispositionV6, DiagnosticCommitReceiptV6,
+    DiagnosticPersistenceStatusV6, LiveAntennaControlMutationV5, LiveDiagnosticMutationV6,
+    LiveEventMutationV3, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
+    LivePersistenceError, LivePersistenceHooks, LivePersistencePoint, LivePlanFile, LiveSessionV2,
+    LiveSessionV3, LiveStreamV2, PlanCommitV2, RecoveryArtifactV2, RecoveryDispositionV2,
+    RecoveryReportV2, SystemLivePersistenceHooks,
 };
 pub use lossless_copy::BundleCopyError;
 pub use resource::{
