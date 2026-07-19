@@ -453,6 +453,8 @@ fn filters_ambiguous_roles_and_rows_outside_the_confirmed_cycle_direction() {
     receive["tx_sign"] = json!("K1ABC");
     let mut configured = config();
     configured.confirmed_cycles = Some(vec![WsprLiveConfirmedCycle {
+        slot_id: "receive-cycle".into(),
+        antenna_label: "Receive antenna".into(),
         starts_at: Utc.with_ymd_and_hms(2026, 7, 15, 20, 12, 0).unwrap(),
         transmission_ends_at: Utc.with_ymd_and_hms(2026, 7, 15, 20, 13, 51).unwrap(),
         band: Band::M20,
@@ -498,6 +500,8 @@ fn confirmed_operator_paced_cycles_admit_only_the_matching_wspr_slot() {
     configured.window_start = Utc.with_ymd_and_hms(2026, 7, 15, 20, 10, 0).unwrap();
     configured.window_end = Utc.with_ymd_and_hms(2026, 7, 15, 20, 15, 0).unwrap();
     configured.confirmed_cycles = Some(vec![WsprLiveConfirmedCycle {
+        slot_id: "cycle-a".into(),
+        antenna_label: "A".into(),
         starts_at: cycle_starts_at,
         transmission_ends_at,
         band: Band::M20,
@@ -555,6 +559,19 @@ fn confirmed_operator_paced_cycles_admit_only_the_matching_wspr_slot() {
         &[],
     );
     assert_eq!(prepared.observations.len(), 1);
+    let observation = &prepared.observations[0];
+    assert_eq!(observation.meta.recorded_at, configured.captured_at);
+    assert_eq!(observation.slot_id.as_deref(), Some("cycle-a"));
+    assert_eq!(observation.slot_label.as_deref(), Some("A"));
+    assert_eq!(observation.slot_confidence, Some(0.95));
+    assert_eq!(
+        observation.raw["source_observed_at"],
+        json!(cycle_starts_at - chrono::Duration::seconds(1))
+    );
+    assert_eq!(
+        observation.raw["captured_at"],
+        json!(configured.captured_at)
+    );
     assert_eq!(
         matching_only.rows[0].spot.as_ref().unwrap().observed_at,
         cycle_starts_at - chrono::Duration::seconds(1)
@@ -590,6 +607,8 @@ fn confirmed_operator_paced_cycles_admit_only_the_matching_wspr_slot() {
     );
 
     configured.confirmed_cycles = Some(vec![WsprLiveConfirmedCycle {
+        slot_id: "unknown-direction".into(),
+        antenna_label: "A".into(),
         starts_at: cycle_starts_at,
         transmission_ends_at,
         band: Band::M20,
@@ -795,6 +814,10 @@ fn prepares_provenance_linked_imported_spot_evidence() {
     );
     let adapter = &prepared.adapter_records[2];
     let observation = &prepared.observations[0];
+    assert_eq!(observation.meta.recorded_at, config().captured_at);
+    assert_eq!(observation.slot_id, None);
+    assert_eq!(observation.slot_label, None);
+    assert_eq!(observation.slot_confidence, None);
     assert_eq!(adapter.disposition, AdapterDisposition::Accepted);
     assert_eq!(observation.observation_kind, ObservationKind::ImportedSpot);
     assert_eq!(observation.reporter_call.as_deref(), Some("K1ABC"));

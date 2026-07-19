@@ -10,6 +10,7 @@ pub mod v3;
 pub mod v5;
 mod validation;
 mod wspr;
+mod wspr_live_projection;
 
 pub use alignment::{
     align_schedule_slots, apply_slot_assignments, AlignedSlot, AlignedSlotStatus,

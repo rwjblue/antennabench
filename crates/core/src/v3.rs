@@ -404,6 +404,13 @@ impl BundleV3Contents {
     /// Signal-specific planned and actual facts have no representation in that
     /// model and are intentionally omitted. Their provenance remains visible.
     pub fn into_current(mut self) -> CurrentBundleContents {
+        crate::wspr_live_projection::repair_confirmed_wspr_live_observations(
+            self.manifest.schema_version,
+            &self.schedule,
+            &self.events,
+            &mut self.observations,
+            &self.adapter_records,
+        );
         let all_event_provenance = self
             .events
             .iter()

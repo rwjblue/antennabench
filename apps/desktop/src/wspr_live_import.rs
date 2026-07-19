@@ -165,6 +165,8 @@ fn import_config(
                         .into_iter()
                         .filter(|cycle| cycle.occupancy_fully_covers_transmission)
                         .map(|cycle| WsprLiveConfirmedCycle {
+                            slot_id: cycle.intent_id.clone(),
+                            antenna_label: cycle.antenna_label,
                             starts_at: cycle.window.starts_at,
                             transmission_ends_at: cycle.window.transmission_ends_at,
                             band: cycle.band,

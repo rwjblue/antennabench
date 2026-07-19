@@ -539,6 +539,13 @@ The durable boundaries are:
   receiver as reporter and provider transmit azimuth; RX rows use the local
   station as reporter and provider receiver-side incoming azimuth. Ambiguous,
   unrelated, and direction-mismatched rows remain filtered adapter evidence.
+  Accepted schema-v4+ rows persist the exact confirmed cycle and actual antenna
+  on the normalized observation. Their trusted local capture time remains
+  `meta.recorded_at`, their exact provider time remains adapter `source_time`,
+  and the analysis projection accounts for the provider's even-minute timestamp
+  versus AntennaBench's one-second cycle start. The same evidence-bounded
+  projection repairs older affected bundles without attributing historical or
+  unconfirmed imports.
   Manual file import is the offline/recovery path; the default HTTPS client
   reuses the same parser for cumulative acquisition across confirmed receive
   and transmit cycles. Neither path makes public reports a session prerequisite; see
