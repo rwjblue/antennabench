@@ -2,6 +2,7 @@ export const REQUIRED_ELEMENT_SELECTORS = Object.freeze({
   mainContent: "main",
   setupForm: "[data-setup-form]",
   setupStatus: "[data-setup-status]",
+  setupPlanSummary: "[data-setup-plan-summary]",
   setupReviewButton: "[data-review-setup]",
   setupCreateButton: "[data-create-session]",
   setupAddAntennaButton: "[data-add-antenna]",

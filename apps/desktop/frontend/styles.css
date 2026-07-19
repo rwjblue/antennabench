@@ -183,6 +183,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .setup-diagnostics span { color: #775a52; font-size: 0.72rem; line-height: 1.5; }
 .setup-review { margin-top: 18px; padding: 22px; border: 1px solid #bcd6cc; border-radius: 18px; background: #f2f8f4; }
 .setup-review h2 { margin-bottom: 18px; color: #1c403d; font-family: Georgia, "Times New Roman", serif; font-size: 1.45rem; font-weight: 500; }
+.setup-review > .setup-actions { margin-bottom: 20px; }
 .setup-review dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin: 0 0 20px; }
 .setup-review dl > div { min-width: 0; padding: 13px; border-radius: 10px; background: #fff; }
 .setup-review dt { margin-bottom: 5px; color: #77857f; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }

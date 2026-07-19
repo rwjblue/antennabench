@@ -148,6 +148,26 @@ test("the headless desktop completes location, review, and creation through moun
     assert.equal(callsign.value, "N1RWJ");
     assert.equal(grid.value, "FN42ab");
 
+    const mode = elements.setupForm.querySelector('[data-setup-field="mode"]');
+    assert.match(elements.setupPlanSummary.textContent, /16 planned WSPR cycles · about 32 minutes/);
+    mode.value = "tx_focused";
+    mode.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    assert.match(elements.setupPlanSummary.textContent, /8 planned WSPR cycles · about 16 minutes/);
+    mode.value = "whole_station_ab";
+    mode.dispatchEvent(new InputEvent("input", { bubbles: true }));
+
+    const rounds = elements.setupForm.querySelector('[data-setup-field="rounds"]');
+    rounds.value = "3";
+    rounds.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    assert.match(elements.setupPlanSummary.textContent, /12 planned WSPR cycles · about 24 minutes/);
+    rounds.value = "4";
+    rounds.dispatchEvent(new InputEvent("input", { bubbles: true }));
+
+    elements.setupAddAntennaButton.click();
+    assert.match(elements.setupPlanSummary.textContent, /24 planned WSPR cycles · about 48 minutes/);
+    elements.setupForm.querySelectorAll("[data-remove-antenna]")[2].click();
+    assert.match(elements.setupPlanSummary.textContent, /16 planned WSPR cycles · about 32 minutes/);
+
     const controllerEnabled = elements.setupForm.querySelector(
       '[data-setup-field="antennaControllerEnabled"]',
     );

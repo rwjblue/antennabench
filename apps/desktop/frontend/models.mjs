@@ -218,6 +218,35 @@ export function focusSetupOutcome(state, reviewPanel, diagnostics, form = null) 
   return null;
 }
 
+export function setupPlanEstimate({
+  mode,
+  rounds,
+  antennaCount,
+  signalPlanEnabled = false,
+  frequenciesHz = "",
+}) {
+  const parsedRounds = Number(rounds);
+  if (!Number.isSafeInteger(parsedRounds) || parsedRounds < 1 || antennaCount < 1) {
+    return "Enter the round count and antennas to see the planned run size.";
+  }
+  const scheduledAntennaCount = mode === "single_antenna_profiling" ? 1 : antennaCount;
+  const roundsLabel = `${parsedRounds} ${parsedRounds === 1 ? "round" : "rounds"}`;
+  if (signalPlanEnabled) {
+    const frequencies = frequenciesHz.split(",").map((value) => value.trim());
+    const validFrequencies = frequencies.length > 0 && frequencies.every((value) => /^\d+$/.test(value) && Number(value) > 0);
+    if (!validFrequencies) {
+      return `${roundsLabel} · enter the exact frequencies to see the controlled-signal slot count.`;
+    }
+    const frequencyCount = new Set(frequencies.map((value) => BigInt(value).toString())).size;
+    const slotCount = parsedRounds * scheduledAntennaCount * frequencyCount;
+    return `${roundsLabel} · ${slotCount} controlled-signal ${slotCount === 1 ? "slot" : "slots"}. Timing follows the configured operator cadence.`;
+  }
+  const directionCount = ["whole_station_ab", "single_antenna_profiling"].includes(mode) ? 2 : 1;
+  const cycleCount = parsedRounds * scheduledAntennaCount * directionCount;
+  const idealMinutes = cycleCount * 2;
+  return `${roundsLabel} · ${cycleCount} planned WSPR ${cycleCount === 1 ? "cycle" : "cycles"} · about ${idealMinutes} minutes at the ideal two-minute minimum.`;
+}
+
 export function conductorActionAvailable(view, action) {
   if (action === "arm_wspr_cycle") {
     return view.lifecycle === "running"

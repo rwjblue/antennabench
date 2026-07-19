@@ -116,6 +116,7 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   const state = initialState();
   renderSetup(e, state, document);
   assert.equal(e.setupStatus.textContent, "Draft");
+  assert.match(e.setupPlanSummary.textContent, /16 planned WSPR cycles · about 32 minutes/);
   assert.equal(e.setupCreateButton.disabled, true);
   assert.equal(e.setupForm.getAttribute("aria-busy"), "false");
 

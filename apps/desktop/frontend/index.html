@@ -148,11 +148,11 @@
                   <div class="field-control">
                     <span class="field-label">Complete rounds <button class="context-help" type="button" data-help-trigger="rounds">?</button></span>
                     <input data-setup-field="rounds" inputmode="numeric" value="4" />
-                    <small>One repetition tests every antenna in each direction selected by the mode.</small>
+                    <small>One round tests every scheduled antenna in each direction selected by the mode.</small>
                   </div>
                 </div>
-                <p class="run-plan-summary">Review the normalized plan to see the Rust-calculated directed sequence, exact cycle count, and ideal minimum time.</p>
-                <p class="field-help">Actual WSPR timing remains operator-paced and excludes switching time and waits for eligible cycle boundaries.</p>
+                <p class="run-plan-summary" data-setup-plan-summary role="status" aria-live="polite" aria-atomic="true">4 rounds · 16 planned WSPR cycles · about 32 minutes at the ideal two-minute minimum.</p>
+                <p class="field-help">This is an ideal minimum. Antenna switching and waits for eligible WSPR cycle boundaries add time.</p>
               </fieldset>
 
               <fieldset class="setup-section" data-controller-section>
@@ -205,7 +205,7 @@
               <details class="setup-section advanced-section">
                 <summary>Advanced: controlled CW or RTTY signal <button class="context-help" type="button" data-help-trigger="controlled_signal">?</button></summary>
                 <label class="authority-confirmation"><input type="checkbox" data-setup-field="signalPlanEnabled"> Add a manually conducted CW or RTTY signal plan</label>
-                <p class="field-help">AntennaBench will guide antenna and frequency changes, but will not key the transmitter or infer that planned settings were used. Enter every exact frequency in hertz; Rust expands them into complete, order-balanced antenna × frequency blocks.</p>
+                <p class="field-help">AntennaBench will guide antenna and frequency changes, but will not key the transmitter or infer that planned settings were used. Enter every exact frequency in hertz; AntennaBench expands them into complete, order-balanced antenna × frequency blocks.</p>
                 <div class="field-grid" data-signal-plan-fields hidden>
                   <label>Mode<select data-setup-field="signalMode"><option value="cw">CW</option><option value="rtty">RTTY</option></select></label>
                   <label>Evidence profile<select data-setup-field="signalCollectionProfile"><option value="manual_observation">Manual observation</option><option value="rbn_cw_v1">Reverse Beacon Network CW</option></select></label>
@@ -222,8 +222,7 @@
               </details>
 
               <div class="setup-actions">
-                <button class="primary-action" type="submit" data-review-setup>Review normalized plan</button>
-                <button class="secondary-action" type="button" data-create-session disabled>Create session</button>
+                <button class="primary-action" type="submit" data-review-setup>Review plan</button>
               </div>
             </form>
 
@@ -234,7 +233,8 @@
             <ul class="setup-diagnostics" data-setup-diagnostics tabindex="-1" hidden></ul>
 
             <section class="setup-review" data-setup-review tabindex="-1" hidden aria-labelledby="review-title">
-              <div><p class="eyebrow">Run guidance</p><h2 id="review-title">Normalized plan review</h2></div>
+              <div><p class="eyebrow">Run guidance</p><h2 id="review-title">Run plan</h2></div>
+              <div class="setup-actions"><button class="primary-action" type="button" data-create-session disabled>Create session</button></div>
               <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment and goal</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div><div><dt>Exact plan length</dt><dd data-review-schedule></dd></div></dl>
               <section class="review-sequence" aria-labelledby="review-sequence-title">
                 <h3 id="review-sequence-title">Directed counterbalanced sequence</h3>

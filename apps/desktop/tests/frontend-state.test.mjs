@@ -50,6 +50,7 @@ import {
   maidenheadGrid,
   projectCountdown,
   recommendedNoteTarget,
+  setupPlanEstimate,
   updateReportFrame,
   viewModel,
   workflowFromHash,
@@ -226,8 +227,9 @@ test("setup serializes the default-on WSPR.live choice and explicit opt-out", ()
   assert.match(setupPanel, /Optional antenna details/);
   assert.match(setupPanel, /Advanced: controlled CW or RTTY signal/);
   assert.ok(setupPanel.indexOf("WSPR Spots") < setupPanel.indexOf("Advanced: controlled CW or RTTY signal"));
-  assert.match(setupPanel, /One repetition tests every antenna in each direction selected by the mode/);
-  assert.match(setupPanel, /Rust-calculated directed sequence, exact cycle count, and ideal minimum time/);
+  assert.match(setupPanel, /One round tests every scheduled antenna in each direction selected by the mode/);
+  assert.match(setupPanel, /data-setup-plan-summary/);
+  assert.doesNotMatch(setupPanel, /Review normalized|Normalized plan review|Rust-calculated|Rust expands/);
   assert.match(setupPanel, /This plan can describe/);
   assert.match(setupPanel, /This plan cannot establish/);
   assert.doesNotMatch(setupPanel, /SWR|return loss|impedance|resonance|cable health|tuner health|analy[sz]er/i);
@@ -344,6 +346,31 @@ test("setup review focus follows successful and invalid keyboard submissions", (
   assert.equal(focusSetupOutcome({ setupStatus: "error" }, review, diagnostics), null);
 });
 
+test("live setup estimates match every schedule mode and controlled-signal semantics", () => {
+  const estimate = (overrides = {}) => setupPlanEstimate({
+    mode: "whole_station_ab",
+    rounds: "4",
+    antennaCount: 2,
+    ...overrides,
+  });
+  assert.match(estimate({ mode: "tx_focused" }), /8 planned WSPR cycles · about 16 minutes/);
+  assert.match(estimate({ mode: "rx_focused" }), /8 planned WSPR cycles · about 16 minutes/);
+  assert.match(estimate(), /16 planned WSPR cycles · about 32 minutes/);
+  assert.match(
+    estimate({ mode: "single_antenna_profiling", antennaCount: 3 }),
+    /8 planned WSPR cycles · about 16 minutes/,
+  );
+  assert.match(
+    estimate({ signalPlanEnabled: true, frequenciesHz: "14097000, 14097100, 14097000" }),
+    /16 controlled-signal slots\. Timing follows the configured operator cadence/,
+  );
+  assert.match(
+    estimate({ signalPlanEnabled: true, frequenciesHz: "" }),
+    /enter the exact frequencies/,
+  );
+  assert.match(estimate({ rounds: "" }), /Enter the round count and antennas/);
+});
+
 test("question cards preserve native keyboard controls and collapse on narrow screens", () => {
   const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
@@ -354,6 +381,11 @@ test("question cards preserve native keyboard controls and collapse on narrow sc
   assert.match(html, /data-setup-diagnostics tabindex="-1"/);
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.question-choices[\s\S]*grid-template-columns: 1fr/);
   assert.match(css, /question-choices label:has\(input:focus-visible\)/);
+  assert.ok(
+    html.indexOf("data-review-setup") < html.indexOf("data-setup-review")
+      && html.indexOf("data-setup-review") < html.indexOf("data-create-session"),
+    "Create session follows the reviewed plan instead of competing with Review plan",
+  );
 });
 
 test("Active Run help stays grouped with its subject across responsive layouts", () => {

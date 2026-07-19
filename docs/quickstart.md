@@ -58,7 +58,7 @@ switch the radio or antenna for this manual run.
    [public reports](glossary.md#public-report) after their WSPR windows; there
    is no separate fetch step.
 
-7. **Review before creating anything.** Select **Review normalized plan**.
+7. **Review before creating anything.** Select **Review plan**.
    Check your station, antenna order, the 12-cycle sequence, and the statements
    under **This plan can describe** and **This plan cannot establish**. Fix any
    highlighted field and review again if needed. When the review is correct,

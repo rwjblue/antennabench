@@ -3,6 +3,7 @@ import {
   createCountdownAnchor,
   formatActiveRunTime,
   projectCountdown,
+  setupPlanEstimate,
   updateReportFrame,
   viewModel,
   wsprLiveAcquisitionModel,
@@ -29,6 +30,7 @@ export function renderSetup(elements, state, root) {
     setupReviewStation, setupReviewAntennas, setupReviewShape, setupReviewSlots,
     setupReviewSchedule, setupReviewCounterbalance, setupReviewTransitions,
     setupReviewSequence, setupReviewCanDescribe, setupReviewCannotEstablish,
+    setupPlanSummary,
     controllerOneLine, controllerStructured, controllerProfileSelect,
     controllerProfileSave, controllerProfileDelete, controllerProfileStatus,
   } = elements;
@@ -37,11 +39,18 @@ export function renderSetup(elements, state, root) {
   setupReviewButton.disabled = setupBusy;
   setupReviewButton.textContent = state.setupStatus === "reviewing"
     ? "Validating…"
-    : "Review normalized plan";
+    : "Review plan";
   setupCreateButton.disabled = state.setupStatus !== "reviewed";
   setupCreateButton.textContent = state.setupStatus === "creating" ? "Creating…" : "Create session";
   setupStatus.textContent = setupStatusText(state);
   setupStatus.classList.toggle("muted", ["editing", "invalid", "error"].includes(state.setupStatus));
+  setupPlanSummary.textContent = setupPlanEstimate({
+    mode: setupForm.querySelector('[data-setup-field="mode"]').value,
+    rounds: setupForm.querySelector('[data-setup-field="rounds"]').value,
+    antennaCount: setupForm.querySelectorAll("[data-antenna-row]").length,
+    signalPlanEnabled: setupForm.querySelector('[data-setup-field="signalPlanEnabled"]').checked,
+    frequenciesHz: setupForm.querySelector('[data-setup-field="signalFrequenciesHz"]').value,
+  });
   const catalog = state.antennaControllerCatalog;
   if (catalog) {
     const selected = state.antennaControllerProfileNotice?.profileId
@@ -707,13 +716,13 @@ function setupStatusText(state) {
 }
 
 function setupFeedbackModel(state) {
-  if (state.setupStatus === "reviewing") return { kind: "loading", message: "Normalizing and validating the plan…", detail: "No destination is created during review." };
+  if (state.setupStatus === "reviewing") return { kind: "loading", message: "Checking the plan…", detail: "No destination is created during review." };
   if (state.setupStatus === "creating") return { kind: "loading", message: "Creating and reopening the checkpointed session…", detail: "The destination is published only after complete verification." };
   if (state.setupError) return { kind: "error", ...state.setupError };
   if (state.setupStatus === "invalid") return { kind: "error", message: "The plan needs changes before it can be created.", detail: "Correct the highlighted fields, then review again." };
   if (state.setupNotice === "cancelled") return { kind: "cancelled", message: "Creation cancelled.", detail: "The reviewed plan remains ready and no destination was changed." };
   if (state.setupNotice === "created" && state.session) return { kind: "ready", message: `${state.session.bundleName} is the active session.`, detail: `Checkpoint revision 0 is ready with ${state.session.slotCount} planned slots.` };
-  if (state.setupStatus === "reviewed") return { kind: "ready", message: "The normalized plan passed strict creation validation.", detail: "Review the exact UTC-backed schedule, then create the session." };
+  if (state.setupStatus === "reviewed") return { kind: "ready", message: "The plan passed strict creation validation.", detail: "Review the exact UTC-backed schedule, then create the session." };
   return null;
 }
 
