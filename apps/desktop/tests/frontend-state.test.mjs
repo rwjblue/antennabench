@@ -411,11 +411,14 @@ test("Active Run help stays grouped with its subject across responsive layouts",
 test("setup serializes explicit local controller policy, profile, and target mappings", () => {
   const setupHtml = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
   assert.match(setupHtml, /Antenna switching assistant/);
-  assert.match(setupHtml, /Automatically after Start or Resume/);
+  assert.match(setupHtml, /Automatically when the next cycle is ready to prepare/);
   assert.match(setupHtml, /wait for me to confirm the antenna is ready/);
+  assert.match(setupHtml, /Run a command to switch antennas/);
+  assert.doesNotMatch(setupHtml, /controllerArmForSession/);
+  assert.match(setupHtml, /data-controller-targets/);
   assert.match(setupHtml, /Save profile/);
-  assert.match(setupHtml, /Delete selected profile/);
-  assert.match(setupHtml, /may disclose paths, addresses, usernames, or credentials/);
+  assert.match(setupHtml, /Delete profile/);
+  assert.match(setupHtml, /They may contain local paths, usernames, network addresses, or credentials/);
   assert.match(setupHtml, /Switch arguments, one per line/);
 
   const values = new Map([
@@ -429,26 +432,27 @@ test("setup serializes explicit local controller policy, profile, and target map
     ["controllerSwitchProgram", ""], ["controllerSwitchArguments", ""],
     ["controllerVerificationProgram", ""], ["controllerVerificationArguments", ""],
   ]);
-  const antennaRows = [
-    { label: "A", controllerTarget: "relay A" },
-    { label: "B", controllerTarget: "relay B" },
-  ].map((fields) => ({
+  const antennaRows = ["A", "B"].map((label) => ({
     querySelector(selector) {
       const field = selector.match(/data-antenna-field="([^"]+)"/)?.[1];
-      return field ? { value: fields[field] ?? "" } : null;
+      return field ? { value: field === "label" ? label : "" } : null;
     },
   }));
+  const controllerTargets = [{ value: "relay A" }, { value: "relay B" }];
   const form = {
     querySelector(selector) {
       if (selector.includes("signalPlanEnabled")) return { checked: false };
       if (selector.includes("wsprLiveAcquisitionEnabled")) return { checked: false };
       if (selector.includes("antennaControllerEnabled")) return { checked: true };
-      if (selector.includes("controllerArmForSession")) return { checked: true };
       if (selector.includes("controllerManualReviewRequired")) return { checked: false };
       const field = selector.match(/data-setup-field="([^"]+)"/)?.[1];
       return { value: values.get(field) ?? "" };
     },
-    querySelectorAll(selector) { return selector === "[data-antenna-row]" ? antennaRows : []; },
+    querySelectorAll(selector) {
+      if (selector === "[data-antenna-row]") return antennaRows;
+      if (selector === "[data-controller-target]") return controllerTargets;
+      return [];
+    },
   };
 
   const draft = readSetupDraft(form);

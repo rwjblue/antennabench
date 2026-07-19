@@ -22,16 +22,18 @@ command, and timeout. Each session maps its
 [antenna labels](glossary.md#antenna-label) to opaque controller
 targets such as `1`, `2`, `north`, or `loop`.
 
-The setup screen can save a new profile or update the selected one before a
-session is created. Deleting a profile removes it and its remembered session
-associations from this computer. Any affected session falls back to manual
-switching until another local profile is selected and allowed to run.
+The setup screen keeps profile selection, commands, behavior, and per-antenna
+target values together. It can save a new profile or update the selected one
+before a session is created. Deleting a profile removes it and its remembered
+session associations from this computer. Any affected session falls back to
+manual switching until another local profile is selected and allowed to run.
 
 Portable session bundles never contain an executable profile, target mapping, or
-timeout. Opening or recovering a bundle cannot run a command or restore process
-authority. You must explicitly select a local profile and allow AntennaBench to
-run it for the active session again. Internally this temporary process authority
-is called “armed”; the setup UI describes the permission directly.
+timeout. Enabling **Run a command to switch antennas** and reviewing a local
+profile explicitly gives the new session temporary process authority. Opening
+or recovering a bundle cannot restore that authority: you must explicitly
+select a local profile and attach it to the active session again. Internally
+this temporary process authority is called “armed.”
 
 A bundle can retain the resolved program, ordered arguments, standard output,
 standard error, timing, and result from commands that actually ran. That evidence
@@ -49,19 +51,22 @@ in the full report or bundle.
 
 ## Creating A Profile
 
-A profile has:
+A reusable profile has:
 
 - one switch command;
 - an optional, independent verification command;
-- a timeout from 1 through 60 seconds; and
-- one target mapping for every antenna in the session.
+- a timeout from 1 through 60 seconds.
+
+The session’s local controller association also has one target mapping for every
+antenna in the session.
 
 Disabling manual review requires an independent verification command.
 
 Use **Save profile** to keep the entered commands for this and future sessions.
 Creating the session also saves the reviewed profile. Select an existing profile
-to reuse or update it; use **Delete selected profile** to remove it from local
-application data.
+to reuse or **Update profile**; use **Delete profile** to remove it from local
+application data. Target values belong to the session association rather than
+the reusable profile.
 
 On macOS and Linux, the app accepts a command line and applies a small,
 predictable tokenizer for whitespace, quotes, and backslash escapes. On Windows,

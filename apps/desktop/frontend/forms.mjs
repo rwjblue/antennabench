@@ -168,13 +168,13 @@ export function readSetupDraft(form) {
     } : null,
     antennaController: controllerEnabled ? {
       enabled: true,
-      armForSession: form.querySelector('[data-setup-field="controllerArmForSession"]').checked,
+      armForSession: true,
       invocation: value("controllerInvocation"),
       manualReviewRequired: form.querySelector('[data-setup-field="controllerManualReviewRequired"]').checked,
       profile: readControllerProfileDraft(form),
-      targets: [...form.querySelectorAll("[data-antenna-row]")].map((row) => ({
+      targets: [...form.querySelectorAll("[data-antenna-row]")].map((row, index) => ({
         antennaLabel: optionalField(row, "label"),
-        target: optionalField(row, "controllerTarget"),
+        target: form.querySelectorAll("[data-controller-target]")[index]?.value ?? "",
       })),
     } : null,
   };

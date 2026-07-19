@@ -75,11 +75,13 @@ export function renderSetup(elements, state, root) {
   controllerProfileSave.disabled = profileBusy;
   controllerProfileSave.textContent = state.antennaControllerStatus === "saving"
     ? "Saving…"
-    : "Save profile";
+    : controllerProfileSelect.value === ""
+      ? "Save profile"
+      : "Update profile";
   controllerProfileDelete.disabled = profileBusy || controllerProfileSelect.value === "";
   controllerProfileDelete.textContent = state.antennaControllerStatus === "deleting"
     ? "Deleting…"
-    : "Delete selected profile";
+    : "Delete profile";
   const profileNotice = state.antennaControllerProfileNotice;
   controllerProfileStatus.dataset.kind = state.antennaControllerProfileError ? "error" : "ready";
   controllerProfileStatus.textContent = state.antennaControllerProfileError
@@ -271,7 +273,12 @@ function controllerControlForMessage(form, message = "") {
     return visibleControllerControl(form, "controllerVerificationCommand", "controllerVerificationProgram");
   }
   if (normalized.includes("target") || normalized.includes("antenna")) {
-    return form.querySelector('[data-antenna-row] [data-antenna-field="controllerTarget"]');
+    const quotedAntenna = message.match(/antenna ["“]([^"”]+)["”]/u)?.[1];
+    const targets = [...form.querySelectorAll("[data-controller-target]")];
+    return targets.find((target) => target.dataset.antennaLabel === quotedAntenna)
+      ?? targets.find((target) => target.value.trim() === "")
+      ?? targets[0]
+      ?? null;
   }
   if (normalized.includes("saved") || normalized.includes("profile")) {
     return form.querySelector('[data-setup-field="controllerProfileId"]');

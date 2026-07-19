@@ -120,6 +120,16 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   assert.equal(e.setupCreateButton.disabled, true);
   assert.equal(e.setupForm.getAttribute("aria-busy"), "false");
 
+  state.antennaControllerCatalog = {
+    inputStyle: "one_line",
+    profiles: [{ profileId: "profile-1", revision: "revision-1", name: "Bench switch" }],
+  };
+  state.antennaControllerProfileNotice = { kind: "saved", profileId: "profile-1" };
+  renderSetup(e, state, document);
+  assert.equal(e.controllerProfileSave.textContent, "Update profile");
+  assert.equal(e.controllerProfileDelete.textContent, "Delete profile");
+  state.antennaControllerProfileNotice = null;
+
   state.setupStatus = "reviewing";
   renderSetup(e, state, document);
   assert.equal(e.setupReviewButton.textContent, "Validating…");
@@ -147,6 +157,25 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   const profileName = e.setupForm.querySelector('[data-setup-field="controllerProfileName"]');
   assert.equal(profileName.getAttribute("aria-invalid"), "true");
   assert.match(profileName.closest("label").querySelector(".field-error").textContent, /profile name/);
+
+  const targetList = e.setupForm.querySelector("[data-controller-targets]");
+  const targetInputs = ["Vertical", "Dipole"].map((antennaLabel) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.dataset.controllerTarget = "";
+    input.dataset.antennaLabel = antennaLabel;
+    label.append(input);
+    targetList.append(label);
+    return input;
+  });
+  state.setupReview.diagnostics = [{
+    field: "antennaController",
+    message: 'antenna "Dipole" requires a bounded nonempty target',
+    code: "setup.antenna_controller.invalid",
+  }];
+  renderSetup(e, state, document);
+  assert.equal(targetInputs[0].hasAttribute("aria-invalid"), false);
+  assert.equal(targetInputs[1].getAttribute("aria-invalid"), "true");
 
   state.setupStatus = "reviewed";
   state.setupReview = {

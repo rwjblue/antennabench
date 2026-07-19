@@ -143,7 +143,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .field-grid [aria-invalid="true"] { border-color: #b6543f; background: #fff9f7; }
 .field-grid [aria-invalid="true"]:focus { border-color: #a04734; outline-color: rgba(182, 84, 63, 0.17); }
 .field-error { display: block; margin-top: 1px; color: #a04734 !important; font-size: 0.68rem; font-weight: 700 !important; line-height: 1.4; }
-.controller-profile-block { margin-bottom: 18px; padding: 16px; border: 1px solid #d7ddd5; border-radius: 13px; background: #f7f9f5; }
+.controller-profile-block { margin-top: 14px; padding: 16px; border: 1px solid #d7ddd5; border-radius: 13px; background: #f7f9f5; }
 .controller-profile-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
 .controller-profile-actions button { border-radius: 8px; padding: 8px 11px; font: inherit; font-size: 0.7rem; font-weight: 800; cursor: pointer; }
 .controller-profile-actions .secondary-action { border: 1px solid #245451; color: #245451; background: #fff; }
@@ -153,12 +153,19 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .controller-profile-actions button:disabled { color: #97a29d; border-color: #c7d1ca; background: #eff1ed; cursor: not-allowed; text-decoration: none; }
 .controller-profile-status { flex: 1 1 180px; color: #62736f; font-size: 0.68rem; line-height: 1.4; }
 .controller-profile-status[data-kind="error"] { color: #a04734; font-weight: 700; }
-.controller-command-fields { grid-template-columns: 1fr; margin-top: 0; }
+.controller-command-fields { grid-template-columns: 1fr; margin-top: 18px; padding-top: 18px; border-top: 1px solid #e1e5df; }
 .controller-command-fields + .controller-command-fields { margin-top: 14px; }
 .controller-command-fields code { padding: 1px 4px; border-radius: 4px; color: #315d57; background: #e8efea; font-size: 0.95em; }
 .optional-label { color: #7b8883; font-size: 0.66rem; font-weight: 600; }
-.controller-behavior { margin-top: 18px; padding-top: 2px; border-top: 1px solid #e1e5df; }
-.controller-behavior .field-help { margin: 3px 0 8px 28px; font-size: 0.7rem; }
+.controller-targets, .controller-behavior { margin-top: 18px; padding-top: 18px; border-top: 1px solid #e1e5df; }
+.controller-targets h3 { margin: 0 0 5px; color: #315d57; font: 500 1rem Georgia, "Times New Roman", serif; }
+.controller-targets .field-help { margin-bottom: 12px; }
+.controller-targets code { padding: 1px 4px; border-radius: 4px; color: #315d57; background: #e8efea; font-size: 0.95em; }
+.controller-target-field { padding: 11px; border: 1px solid #dde3dd; border-radius: 10px; background: #fff; }
+.controller-target-field > strong { color: #315d57; font-size: 0.78rem; }
+.controller-target-field > label { margin-top: 7px; }
+.controller-behavior .authority-confirmation { margin-top: 0; }
+.controller-save-help { margin: 10px 0 0; font-size: 0.7rem; }
 .run-plan-summary { margin: 16px 0 6px; color: #1d6d62; font-size: 0.9rem; font-weight: 800; }
 .run-plan-summary + .field-help { margin-bottom: 0; }
 .grid-location-field { display: flex; gap: 8px; }

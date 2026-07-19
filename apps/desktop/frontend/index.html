@@ -105,7 +105,6 @@
                   <div class="field-grid">
                     <label>Antenna label<input data-antenna-field="label" /></label>
                     <label>Description<input data-antenna-field="facets" /></label>
-                    <label data-controller-target-field hidden>Controller target<input data-antenna-field="controllerTarget" /></label>
                   </div>
                   <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
                     <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
@@ -116,7 +115,6 @@
                   <div class="field-grid">
                     <label>Antenna label<input data-antenna-field="label" /></label>
                     <label>Description<input data-antenna-field="facets" /></label>
-                    <label data-controller-target-field hidden>Controller target<input data-antenna-field="controllerTarget" /></label>
                   </div>
                   <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
                     <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
@@ -129,7 +127,6 @@
                     <div class="field-grid">
                       <label>Antenna label<input data-antenna-field="label" /></label>
                       <label>Description<input data-antenna-field="facets" /></label>
-                      <label data-controller-target-field hidden>Controller target<input data-antenna-field="controllerTarget" /></label>
                     </div>
                     <details class="advanced-fields"><summary>Optional antenna details</summary><div class="field-grid">
                       <label>Height (m)<input data-antenna-field="heightM" inputmode="decimal" /></label><label>Orientation (°)<input data-antenna-field="orientationDegrees" inputmode="decimal" /></label><label>Radial count<input data-antenna-field="radialCount" inputmode="numeric" /></label><label>Radial length (m)<input data-antenna-field="radialLengthM" inputmode="decimal" /></label><label>Tuner<input data-antenna-field="tuner" /></label><label>Feedline<input data-antenna-field="feedline" /></label><label class="field-wide">Installation notes<textarea data-antenna-field="notes" rows="2"></textarea></label>
@@ -157,39 +154,45 @@
 
               <fieldset class="setup-section" data-controller-section>
                 <legend><span>05</span> Antenna switching assistant <button class="context-help" type="button" data-help-trigger="antenna_controller">?</button></legend>
-                <label class="authority-confirmation"><input type="checkbox" data-setup-field="antennaControllerEnabled"> Let AntennaBench run a local program to switch antennas</label>
-                <p class="field-help">Manual switching remains the default. Turn this on only if you already have a controller program that AntennaBench can run before each planned cycle.</p>
+                <label class="authority-confirmation"><input type="checkbox" data-setup-field="antennaControllerEnabled"> Run a command to switch antennas</label>
+                <p class="field-help">Manual switching remains the default. Turn this on to let AntennaBench run a controller program on this computer before a planned cycle. Enabling it gives the new session temporary permission to use the reviewed profile.</p>
                 <div data-controller-setup-fields hidden>
                   <div class="controller-profile-block">
                     <div class="field-grid">
                       <label>Controller profile<select data-setup-field="controllerProfileId"><option value="">Create a new profile</option></select><small>Profiles keep reusable command settings on this computer; they are never included in imported session bundles.</small></label>
                       <label>Profile name<input data-setup-field="controllerProfileName" maxlength="256"><small>Choose a name that identifies the switch or controller.</small></label>
                       <label>Stop waiting after<input type="number" min="1" max="60" value="10" data-setup-field="controllerTimeoutSeconds"><small>Seconds before a controller command is treated as timed out.</small></label>
-                      <label>Run the controller<select data-setup-field="controllerInvocation"><option value="operator_triggered" selected>Only when I click Switch antenna</option><option value="automatic">Automatically after Start or Resume</option></select></label>
                     </div>
+                    <div class="field-grid controller-command-fields" data-controller-one-line>
+                      <label class="field-wide">Command to switch antennas<input data-setup-field="controllerSwitchCommand" autocomplete="off" spellcheck="false"><small>Runs for the upcoming antenna. You can use placeholders such as <code>{target}</code>, <code>{antenna}</code>, and <code>{band}</code>.</small></label>
+                      <label class="field-wide">Command to verify the switch <span class="optional-label">Optional</span><input data-setup-field="controllerVerificationCommand" autocomplete="off" spellcheck="false"><small>Runs only after the switch command succeeds. Required if AntennaBench will continue without your confirmation.</small></label>
+                    </div>
+                    <div class="field-grid controller-command-fields" data-controller-structured hidden>
+                      <label class="field-wide">Switch program<input data-setup-field="controllerSwitchProgram" autocomplete="off" spellcheck="false"></label>
+                      <label class="field-wide">Switch arguments, one per line<textarea rows="5" data-setup-field="controllerSwitchArguments" spellcheck="false"></textarea></label>
+                      <label class="field-wide">Verification program (optional)<input data-setup-field="controllerVerificationProgram" autocomplete="off" spellcheck="false"></label>
+                      <label class="field-wide">Verification arguments, one per line<textarea rows="5" data-setup-field="controllerVerificationArguments" spellcheck="false"></textarea></label>
+                    </div>
+                    <section class="controller-targets" aria-labelledby="controller-targets-heading">
+                      <h3 id="controller-targets-heading">Antenna targets</h3>
+                      <p class="field-help">Enter the controller value substituted for <code>{target}</code>, such as a relay number, port name, or switch position.</p>
+                      <div class="field-grid" data-controller-targets></div>
+                    </section>
+                    <div class="controller-behavior field-grid">
+                      <label>Run the controller<select data-setup-field="controllerInvocation"><option value="operator_triggered" selected>When I click Switch antenna</option><option value="automatic">Automatically when the next cycle is ready to prepare</option></select><small>Choose whether each switch starts from your click or when a running session reaches the next preparation step.</small></label>
+                      <div class="field-control field-wide">
+                        <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerManualReviewRequired" checked> After each switch, wait for me to confirm the antenna is ready</label>
+                        <small>Keep this checked for manual review. If turned off, both the switch and verification commands must succeed before AntennaBench schedules the next eligible WSPR cycle.</small>
+                      </div>
+                    </div>
+                    <p class="privacy-note">Before sharing a session bundle, review controller command details and output. They may contain local paths, usernames, network addresses, or credentials.</p>
                     <div class="controller-profile-actions">
                       <button type="button" class="secondary-action" data-controller-profile-save>Save profile</button>
-                      <button type="button" class="danger-text-action" data-controller-profile-delete disabled>Delete selected profile</button>
+                      <button type="button" class="danger-text-action" data-controller-profile-delete disabled>Delete profile</button>
                       <span class="controller-profile-status" data-controller-profile-status role="status" aria-live="polite"></span>
                     </div>
+                    <p class="field-help controller-save-help">Creating the session also saves the reviewed profile on this computer. This temporary controller permission is revoked when the app closes or the run is paused.</p>
                   </div>
-                  <div class="field-grid controller-command-fields" data-controller-one-line>
-                    <label class="field-wide">Command to switch antennas<input data-setup-field="controllerSwitchCommand" autocomplete="off" spellcheck="false"><small>Runs for the upcoming antenna. You can use placeholders such as <code>{target}</code>, <code>{antenna}</code>, and <code>{band}</code>.</small></label>
-                    <label class="field-wide">Command to verify the switch <span class="optional-label">Optional</span><input data-setup-field="controllerVerificationCommand" autocomplete="off" spellcheck="false"><small>Runs only after the switch command succeeds. Required if AntennaBench will continue without your confirmation.</small></label>
-                  </div>
-                  <div class="field-grid controller-command-fields" data-controller-structured hidden>
-                    <label class="field-wide">Switch program<input data-setup-field="controllerSwitchProgram" autocomplete="off" spellcheck="false"></label>
-                    <label class="field-wide">Switch arguments, one per line<textarea rows="5" data-setup-field="controllerSwitchArguments" spellcheck="false"></textarea></label>
-                    <label class="field-wide">Verification program (optional)<input data-setup-field="controllerVerificationProgram" autocomplete="off" spellcheck="false"></label>
-                    <label class="field-wide">Verification arguments, one per line<textarea rows="5" data-setup-field="controllerVerificationArguments" spellcheck="false"></textarea></label>
-                  </div>
-                  <div class="controller-behavior">
-                    <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerArmForSession"> Allow AntennaBench to run this controller in the new session</label>
-                    <p class="field-help">This permission is temporary and is revoked when the app closes or the run is paused. Otherwise the profile is saved for later, but the session starts with manual switching.</p>
-                    <label class="authority-confirmation"><input type="checkbox" data-setup-field="controllerManualReviewRequired" checked> After each switch, wait for me to confirm the antenna is ready</label>
-                    <p class="field-help">If turned off, both the switch and verification commands must succeed before AntennaBench schedules the next eligible WSPR cycle.</p>
-                  </div>
-                  <p class="privacy-note">Resolved programs, indexed arguments, stdout, and stderr become portable session evidence and may disclose paths, addresses, usernames, or credentials.</p>
                 </div>
               </fieldset>
 

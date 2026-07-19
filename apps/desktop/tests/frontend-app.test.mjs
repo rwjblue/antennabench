@@ -185,18 +185,25 @@ test("the headless desktop completes location, review, and creation through moun
     controllerEnabled.checked = true;
     controllerEnabled.dispatchEvent(new InputEvent("input", { bubbles: true }));
     assert.equal(elements.controllerSetupFields.hidden, false);
-    assert.equal(
-      elements.setupForm.querySelector("[data-controller-target-field]").hidden,
-      false,
-    );
+    assert.equal(elements.setupForm.querySelectorAll("[data-controller-target]").length, 2);
     elements.setupForm.querySelector('[data-setup-field="controllerProfileName"]').value = "Elecraft";
     elements.setupForm.querySelector('[data-setup-field="controllerSwitchCommand"]').value = "switch {target}";
     elements.setupForm.querySelector('[data-setup-field="controllerVerificationCommand"]').value = "true";
     const antennaRows = [...elements.setupForm.querySelectorAll("[data-antenna-row]")];
     antennaRows[0].querySelector('[data-antenna-field="label"]').value = "DXC";
-    antennaRows[0].querySelector('[data-antenna-field="controllerTarget"]').value = "2";
+    antennaRows[0].querySelector('[data-antenna-field="label"]').dispatchEvent(new InputEvent("input", { bubbles: true }));
     antennaRows[1].querySelector('[data-antenna-field="label"]').value = "Attic EFHW";
-    antennaRows[1].querySelector('[data-antenna-field="controllerTarget"]').value = "1";
+    antennaRows[1].querySelector('[data-antenna-field="label"]').dispatchEvent(new InputEvent("input", { bubbles: true }));
+    const controllerTargets = [...elements.setupForm.querySelectorAll("[data-controller-target]")];
+    controllerTargets[0].value = "2";
+    controllerTargets[1].value = "1";
+    assert.equal(controllerTargets[0].closest("label").textContent, "Controller value");
+    elements.setupAddAntennaButton.click();
+    assert.deepEqual(
+      [...elements.setupForm.querySelectorAll("[data-controller-target]")].slice(0, 2).map((input) => input.value),
+      ["2", "1"],
+    );
+    elements.setupForm.querySelectorAll("[data-remove-antenna]")[2].click();
 
     elements.useCurrentLocationButton.click();
     await vi.waitFor(() => {

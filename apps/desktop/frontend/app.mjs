@@ -368,6 +368,7 @@ export function mount(root, browserWindow) {
     );
     applyControllerProfile(setupForm, profile ?? null);
     controller.editSetup();
+    render();
   });
 
   controllerProfileSave.addEventListener("click", async () => {
@@ -443,6 +444,9 @@ export function mount(root, browserWindow) {
     }
     syncSignalPlanFields(setupForm);
     syncControllerSetupFields(setupForm, controllerSetupFields);
+    if (event.target.matches?.('[data-antenna-field="label"]')) {
+      syncControllerTargets(setupForm);
+    }
     if (!setupBusyState(state)) {
       controller.editSetup();
     }
@@ -483,6 +487,7 @@ export function mount(root, browserWindow) {
     const fragment = setupAntennaTemplate.content.cloneNode(true);
     setupAddAntennaButton.before(fragment);
     refreshAntennaRows(setupForm);
+    syncControllerTargets(setupForm);
     controller.editSetup();
   });
 
@@ -493,6 +498,7 @@ export function mount(root, browserWindow) {
     if (rows.length <= 1) return;
     removeButton.closest("[data-antenna-row]").remove();
     refreshAntennaRows(setupForm);
+    syncControllerTargets(setupForm);
     controller.editSetup();
   });
 
@@ -520,6 +526,8 @@ export function mount(root, browserWindow) {
   });
 
   syncSignalPlanFields(setupForm);
+  refreshAntennaRows(setupForm);
+  syncControllerTargets(setupForm);
   syncControllerSetupFields(setupForm, controllerSetupFields);
   syncSetupQuestionToMode(setupForm);
   render();
@@ -560,10 +568,41 @@ function syncControllerSetupFields(form, fields) {
   for (const control of fields.querySelectorAll("input, select, textarea")) {
     control.disabled = !enabled;
   }
-  for (const target of form.querySelectorAll("[data-controller-target-field]")) {
-    target.hidden = !enabled;
-    target.querySelector("input").disabled = !enabled;
-  }
+}
+
+let controllerTargetKey = 0;
+
+function syncControllerTargets(form) {
+  const targetList = form.querySelector("[data-controller-targets]");
+  if (!targetList) return;
+  const values = new Map(
+    [...targetList.querySelectorAll("[data-controller-target]")]
+      .map((input) => [input.dataset.controllerTargetKey, input.value]),
+  );
+  const enabled = form.querySelector('[data-setup-field="antennaControllerEnabled"]').checked;
+  const document = form.ownerDocument;
+  const fields = [...form.querySelectorAll("[data-antenna-row]")].map((row, index) => {
+    row.dataset.controllerTargetKey ||= `controller-target-${controllerTargetKey++}`;
+    const antennaLabel = row.querySelector('[data-antenna-field="label"]').value.trim();
+    const heading = antennaLabel || `Antenna ${String.fromCharCode(65 + index)}`;
+    const field = document.createElement("div");
+    field.className = "controller-target-field field-control";
+    field.dataset.controllerTargetRow = "";
+    const name = document.createElement("strong");
+    name.textContent = heading;
+    const label = document.createElement("label");
+    label.textContent = "Controller value";
+    const input = document.createElement("input");
+    input.dataset.controllerTarget = "";
+    input.dataset.controllerTargetKey = row.dataset.controllerTargetKey;
+    input.dataset.antennaLabel = antennaLabel;
+    input.value = values.get(row.dataset.controllerTargetKey) ?? "";
+    input.disabled = !enabled;
+    label.append(input);
+    field.append(name, label);
+    return field;
+  });
+  targetList.replaceChildren(...fields);
 }
 
 function setupBusyState(state) {
