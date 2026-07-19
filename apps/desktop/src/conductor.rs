@@ -51,6 +51,7 @@ pub(crate) struct ConductorView {
     phase: ConductorPhase,
     guidance: String,
     wsjtx_required: bool,
+    wsjtx_readiness: Option<WsjtxReadinessView>,
     seconds_to_transition: Option<i64>,
     antennas: Vec<String>,
     current_slot: Option<ConductorSlotView>,
@@ -61,6 +62,16 @@ pub(crate) struct ConductorView {
     effective_events: Vec<ConductorEventView>,
     diagnostics: Vec<ConductorDiagnostic>,
     recovery: Option<ConductorRecoveryView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WsjtxReadinessView {
+    band: String,
+    power_watts: Option<f32>,
+    wspr_live_acquisition_enabled: bool,
+    has_receive_periods: bool,
+    next_direction: WsprCycleDirection,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -311,11 +322,40 @@ mod tests {
         wspr_bundle.session_state.wspr_live_acquisition_enabled = false;
         assert!(!requires_wsjtx_receiver(&wspr_bundle));
 
+        let readiness = read_conductor_with_hooks(
+            &active,
+            &ConductorSessionState::default(),
+            Arc::new(TestHooks::new(
+                Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 20).unwrap(),
+            )),
+        )
+        .unwrap()
+        .wsjtx_readiness
+        .unwrap();
+        assert_eq!(readiness.band, "20m");
+        assert_eq!(readiness.power_watts, Some(5.0));
+        assert!(!readiness.wspr_live_acquisition_enabled);
+        assert!(readiness.has_receive_periods);
+        assert_eq!(
+            readiness.next_direction,
+            antennabench_core::v3::WsprCycleDirection::Receive
+        );
+
         let signal = create_e2e_signal_session(temp.path(), &active);
         let signal_bundle = BundleStore::new(signal.path)
             .read_v3_checkpointed()
             .unwrap();
         assert!(!requires_wsjtx_receiver(&signal_bundle));
+        assert!(read_conductor_with_hooks(
+            &active,
+            &ConductorSessionState::default(),
+            Arc::new(TestHooks::new(
+                Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 20).unwrap(),
+            )),
+        )
+        .unwrap()
+        .wsjtx_readiness
+        .is_none());
     }
 
     impl LivePersistenceHooks for TestHooks {

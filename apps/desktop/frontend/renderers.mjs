@@ -7,6 +7,7 @@ import {
   updateReportFrame,
   viewModel,
   wsprLiveAcquisitionModel,
+  wsjtxReadinessModel,
 } from "./models.mjs";
 
 export function renderNavigation(elements, state) {
@@ -291,6 +292,7 @@ export function renderRun(elements, state, root, options = {}) {
     evidenceForm, conductorFeedback, conductorFeedbackMessage, conductorFeedbackDetail,
     conductorLifecycle, conductorAntennaInUse, conductorPhase, conductorGuidance,
     conductorCountdown, skipCycleControl, currentSlot, nextSlot, evidenceSlot, evidenceAntenna,
+    wsjtxReadiness, wsjtxReadinessItems, wsjtxReadinessAcknowledge,
     lifecycleButtons, conductorDiagnostics, conductorEvents, wsjtxForm, wsjtxStart,
     wsjtxStop, wsjtxRequirement, wsjtxPhase, wsjtxCounts, wsjtxSetupWarnings, wsjtxDiagnostic,
     wsprLivePhase, wsprLiveCompact, wsprLiveDetail, wsprLiveDiagnostic, wsprLiveRetry,
@@ -317,6 +319,7 @@ export function renderRun(elements, state, root, options = {}) {
   );
 
   if (!hasConductor) {
+    wsjtxReadiness.hidden = true;
     lifecycleButtons.forEach((button) => { button.disabled = true; });
     conductorDiagnostics.replaceChildren();
     conductorEvents.replaceChildren();
@@ -330,6 +333,15 @@ export function renderRun(elements, state, root, options = {}) {
   }
 
   const view = state.conductor;
+  const readiness = wsjtxReadinessModel(state);
+  wsjtxReadiness.hidden = !readiness.visible;
+  wsjtxReadinessItems.replaceChildren(...readiness.items.map((text) => {
+    const item = root.createElement("li");
+    item.textContent = text;
+    return item;
+  }));
+  wsjtxReadinessAcknowledge.checked = readiness.acknowledged;
+  wsjtxReadinessAcknowledge.disabled = conductorBusy;
   const controller = state.antennaController;
   const controllerBusy = ["loading", "attaching", "saving", "running"].includes(state.antennaControllerStatus);
   antennaControllerStatus.textContent = controller?.armed
@@ -423,6 +435,7 @@ export function renderRun(elements, state, root, options = {}) {
     const available = conductorActionAvailable(view, action);
     button.hidden = !available;
     button.disabled = conductorBusy || !available
+      || (["start", "resume"].includes(action) && readiness.visible && !readiness.acknowledged)
       || (action === "start" && view.wsjtxRequired && !wsjtxRunning);
   });
   skipCycleControl.hidden = !lifecycleButtons.some((button) =>

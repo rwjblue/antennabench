@@ -1,4 +1,4 @@
-import { WORKFLOWS } from "./models.mjs";
+import { WORKFLOWS, wsjtxReadinessModel } from "./models.mjs";
 
 export function initialState(workflow = "setup") {
   return selectWorkflow(
@@ -32,6 +32,7 @@ export function initialState(workflow = "setup") {
       wsjtxStatus: "idle",
       wsjtx: null,
       wsjtxError: null,
+      wsjtxReadinessAcknowledgement: null,
       wsprLiveAcquisitionStatus: "idle",
       wsprLiveAcquisition: null,
       wsprLiveAcquisitionError: null,
@@ -162,6 +163,7 @@ export function setupCreationSucceeded(state, session) {
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
+    wsjtxReadinessAcknowledgement: null,
     wsprLiveAcquisitionStatus: "idle",
     wsprLiveAcquisition: null,
     wsprLiveAcquisitionError: null,
@@ -206,6 +208,7 @@ export function openSessionSucceeded(state, session) {
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
+    wsjtxReadinessAcknowledgement: null,
     wsprLiveAcquisitionStatus: "idle",
     wsprLiveAcquisition: null,
     wsprLiveAcquisitionError: null,
@@ -378,6 +381,14 @@ export function conductorPollSucceeded(state, conductor) {
   return {
     ...state,
     conductor,
+  };
+}
+
+export function setWsjtxReadinessAcknowledged(state, acknowledged) {
+  const readiness = wsjtxReadinessModel(state);
+  return {
+    ...state,
+    wsjtxReadinessAcknowledgement: acknowledged && readiness.visible ? readiness.key : null,
   };
 }
 

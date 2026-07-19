@@ -262,6 +262,38 @@ export function conductorActionAvailable(view, action) {
     && !(view.phase === "finalizing" && action === "end");
 }
 
+function wsjtxReadinessKey(view) {
+  if (!view?.wsjtxReadiness || !["ready", "interrupted"].includes(view.lifecycle)) return null;
+  return `${view.sessionId}:${view.revision}:${view.lifecycle}`;
+}
+
+export function wsjtxReadinessModel(state) {
+  const readiness = state.conductor?.wsjtxReadiness ?? null;
+  const key = wsjtxReadinessKey(state.conductor);
+  if (!readiness || !key) return { visible: false, acknowledged: false, key: null, items: [] };
+  const band = readiness.band.replace(/^(\d+)m$/, "$1 m");
+  const direction = readiness.nextDirection === "transmit" ? "transmit" : "receive";
+  const items = [
+    `Band: ${band}.`,
+    "Mode: WSPR.",
+    readiness.powerWatts === null
+      ? "Transmit power: power was not recorded."
+      : `Transmit power: ${readiness.powerWatts} W.`,
+    "Tx Pct: 100%.",
+  ];
+  if (readiness.hasReceivePeriods) items.push("Monitor: On for receive periods.");
+  items.push(`Enable Tx: ${direction === "transmit" ? "On" : "Off"} for the next ${direction} period.`);
+  if (readiness.wsprLiveAcquisitionEnabled) {
+    items.push("Upload spots: On, with WSJT-X online for automatic WSPR.live collection.");
+  }
+  return {
+    visible: true,
+    acknowledged: state.wsjtxReadinessAcknowledgement === key,
+    key,
+    items,
+  };
+}
+
 export function createCountdownAnchor(view, sampledAtMilliseconds) {
   if (view?.secondsToTransition === null || view?.secondsToTransition === undefined) return null;
   const seconds = Math.max(0, Math.floor(Number(view.secondsToTransition)));

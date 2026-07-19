@@ -271,6 +271,14 @@
             </div>
 
             <div class="conductor" data-conductor hidden>
+              <section class="wsjtx-readiness" data-wsjtx-readiness aria-labelledby="wsjtx-readiness-title" hidden>
+                <p class="eyebrow">Before you start</p>
+                <h2 id="wsjtx-readiness-title">Configure WSJT-X for this run</h2>
+                <ul data-wsjtx-readiness-items></ul>
+                <p>AntennaBench guides and observes this run; it does not change these WSJT-X settings.</p>
+                <label class="authority-confirmation"><input type="checkbox" data-wsjtx-readiness-acknowledge> I configured WSJT-X for this run</label>
+              </section>
+
               <section class="conductor-prompt" aria-live="polite">
                 <div class="conductor-guidance"><p class="eyebrow" data-conductor-phase></p><h2 data-conductor-guidance></h2><p class="run-source-status" data-wspr-live-compact data-kind="waiting">WSPR.live · Waiting for the first completed cycle</p></div>
                 <span class="countdown-help"><button class="context-help" type="button" data-help-trigger="countdown">?</button><strong class="countdown" data-conductor-countdown></strong></span>

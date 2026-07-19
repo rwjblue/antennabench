@@ -44,6 +44,12 @@ reception is required.
 
 ## During The Run
 
+Before **Start session** or **Resume session**, Active Run shows the committed
+band, power context, next WSPR direction, and the WSJT-X settings the operator
+must configure. The operator must acknowledge that local checklist each time a
+session is created or reopened. The acknowledgement enables the action but is
+not durable evidence or proof of the companion application or radio state.
+
 AntennaBench presents one current instruction at a time:
 
 1. Switch to the named antenna.

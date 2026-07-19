@@ -10,6 +10,7 @@ use antennabench_core::{
     v3::{
         project_wspr_run_v3, reduce_operator_events_v3, validate_signal_state_confirmation_v3,
         BundleV3Contents, CorrectableOperatorEventPayloadV3, OperatorEventPayloadV3,
+        WsprCycleDirection,
     },
     SCHEMA_VERSION_V4,
 };
@@ -130,6 +131,7 @@ pub(super) fn build_view(
         phase,
         guidance,
         wsjtx_required: false,
+        wsjtx_readiness: None,
         seconds_to_transition,
         antennas: bundle
             .antennas
@@ -422,6 +424,30 @@ pub(super) fn build_view_v3(
         .rev()
         .find(|interval| interval.ends_at.is_none())
         .map(|interval| interval.antenna_label.clone());
+    let wsjtx_readiness = if bundle.schedule.signal_plans.is_empty() {
+        next_intent
+            .and_then(|intent| {
+                intent
+                    .direction
+                    .map(|next_direction| (intent, next_direction))
+            })
+            .map(|(intent, next_direction)| super::WsjtxReadinessView {
+                band: serde_json::to_value(intent.band)
+                    .ok()
+                    .and_then(|value| value.as_str().map(str::to_string))
+                    .unwrap_or_else(|| format!("{:?}", intent.band)),
+                power_watts: bundle.station.power_watts,
+                wspr_live_acquisition_enabled: bundle.session_state.wspr_live_acquisition_enabled,
+                has_receive_periods: bundle
+                    .schedule
+                    .wspr_cycle_intents
+                    .iter()
+                    .any(|intent| intent.direction == Some(WsprCycleDirection::Receive)),
+                next_direction,
+            })
+    } else {
+        None
+    };
     ConductorView {
         bundle_name,
         session_id: bundle.manifest.session_id.clone(),
@@ -432,6 +458,7 @@ pub(super) fn build_view_v3(
         phase,
         guidance,
         wsjtx_required: requires_wsjtx_receiver(bundle),
+        wsjtx_readiness,
         seconds_to_transition,
         antennas: bundle
             .antennas

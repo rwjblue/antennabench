@@ -55,6 +55,7 @@ import {
   viewModel,
   workflowFromHash,
   wsprLiveAcquisitionModel,
+  wsjtxReadinessModel,
 } from "../frontend/models.mjs";
 import {
   beginConductorLoad,
@@ -88,6 +89,7 @@ import {
   rbnImportFailed,
   rbnImportSucceeded,
   selectWorkflow,
+  setWsjtxReadinessAcknowledged,
   setupCreationCancelled,
   setupCreationFailed,
   setupCreationSucceeded,
@@ -172,6 +174,7 @@ test("the shell starts in session setup", () => {
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
+    wsjtxReadinessAcknowledgement: null,
     wsprLiveAcquisitionStatus: "idle",
     wsprLiveAcquisition: null,
     wsprLiveAcquisitionError: null,
@@ -655,6 +658,62 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
   assert.equal(failed.conductorStatus, "error");
   assert.equal(failed.conductor, saved.conductor);
   assert.equal(failed.conductorError.kind, "stale_revision");
+});
+
+test("WSJT-X readiness acknowledgement is local, session-specific, and revision-scoped", () => {
+  const conductor = {
+    sessionId: "session-1",
+    revision: 4,
+    lifecycle: "ready",
+    wsjtxReadiness: {
+      band: "20m",
+      powerWatts: 5,
+      wsprLiveAcquisitionEnabled: true,
+      hasReceivePeriods: true,
+      nextDirection: "receive",
+    },
+  };
+  let state = conductorLoadSucceeded(initialState("run"), conductor);
+  let model = wsjtxReadinessModel(state);
+  assert.equal(model.visible, true);
+  assert.equal(model.acknowledged, false);
+  assert.deepEqual(model.items, [
+    "Band: 20 m.",
+    "Mode: WSPR.",
+    "Transmit power: 5 W.",
+    "Tx Pct: 100%.",
+    "Monitor: On for receive periods.",
+    "Enable Tx: Off for the next receive period.",
+    "Upload spots: On, with WSJT-X online for automatic WSPR.live collection.",
+  ]);
+
+  state = setWsjtxReadinessAcknowledged(state, true);
+  assert.equal(wsjtxReadinessModel(state).acknowledged, true);
+  state = conductorPollSucceeded(state, { ...conductor });
+  assert.equal(wsjtxReadinessModel(state).acknowledged, true, "ordinary refresh keeps the local check");
+  state = conductorPollSucceeded(state, { ...conductor, revision: 5 });
+  assert.equal(wsjtxReadinessModel(state).acknowledged, false, "a later run revision requires a new check");
+  state = openSessionSucceeded(state, { sessionId: "session-1" });
+  assert.equal(state.wsjtxReadinessAcknowledgement, null, "opening resets even the same session");
+});
+
+test("offline TX-only readiness omits receive and public-upload instructions", () => {
+  const state = conductorLoadSucceeded(initialState("run"), {
+    sessionId: "session-2",
+    revision: 1,
+    lifecycle: "interrupted",
+    wsjtxReadiness: {
+      band: "40m",
+      powerWatts: null,
+      wsprLiveAcquisitionEnabled: false,
+      hasReceivePeriods: false,
+      nextDirection: "transmit",
+    },
+  });
+  const model = wsjtxReadinessModel(state);
+  assert.match(model.items.join(" "), /power was not recorded/);
+  assert.match(model.items.join(" "), /Enable Tx: On for the next transmit period/);
+  assert.doesNotMatch(model.items.join(" "), /Monitor|Upload spots|WSPR\.live/);
 });
 
 test("active countdown projects from a disposable Rust anchor", () => {

@@ -300,6 +300,62 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.conductorEvents.children[0].children[1].children[0].textContent, "Replace");
 });
 
+test("ready and interrupted runs require the persistent WSJT-X acknowledgement", () => {
+  const e = loadDesktopDocument();
+  const state = initialState("run");
+  state.conductorStatus = "ready";
+  state.conductor = conductorView({
+    revision: 1,
+    lifecycle: "ready",
+    wsjtxRequired: false,
+    wsjtxReadiness: {
+      band: "20m",
+      powerWatts: 5,
+      wsprLiveAcquisitionEnabled: true,
+      hasReceivePeriods: true,
+      nextDirection: "transmit",
+    },
+  });
+  state.wsjtx = null;
+  state.antennaController = {
+    policy: "command_controlled",
+    armed: true,
+    invocation: "automatic",
+    automationStatus: "waiting",
+    profileId: "profile-1",
+  };
+
+  renderRun(e, state, document, { monotonicNow: () => 1000 });
+  assert.equal(e.wsjtxReadiness.hidden, false);
+  assert.match(e.wsjtxReadinessItems.textContent, /Band: 20 m/);
+  assert.match(e.wsjtxReadinessItems.textContent, /Enable Tx: On/);
+  assert.match(e.wsjtxReadinessItems.textContent, /Upload spots/);
+  assert.equal(e.lifecycleButtons[0].disabled, true, "automatic control cannot bypass acknowledgement");
+  assert.equal(e.wsjtxSetupWarnings.hidden, true, "missing UDP status does not hide the checklist");
+
+  state.wsjtxReadinessAcknowledgement = "session-1:1:ready";
+  renderRun(e, state, document, { monotonicNow: () => 1000 });
+  assert.equal(e.wsjtxReadinessAcknowledge.checked, true);
+  assert.equal(e.lifecycleButtons[0].disabled, false);
+
+  state.conductor = conductorView({
+    revision: 7,
+    lifecycle: "interrupted",
+    wsjtxRequired: false,
+    wsjtxReadiness: {
+      band: "20m",
+      powerWatts: 5,
+      wsprLiveAcquisitionEnabled: false,
+      hasReceivePeriods: true,
+      nextDirection: "receive",
+    },
+  });
+  renderRun(e, state, document, { monotonicNow: () => 1000 });
+  assert.equal(e.lifecycleButtons[1].disabled, true);
+  assert.match(e.wsjtxReadinessItems.textContent, /Enable Tx: Off/);
+  assert.doesNotMatch(e.wsjtxReadinessItems.textContent, /Upload spots/);
+});
+
 test("a full polling interval preserves the mounted Active Run text until atomic success", async () => {
   const e = loadDesktopDocument();
   const view = conductorView({ guidance: "Switch and confirm", secondsToTransition: 30 });

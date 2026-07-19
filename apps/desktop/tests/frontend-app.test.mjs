@@ -111,7 +111,18 @@ test("the headless desktop completes location, review, and creation through moun
       lifecycle: "running",
       completeness: "full_detail",
     },
-    active_session_conductor: conductorView(),
+    active_session_conductor: conductorView({
+      lifecycle: "ready",
+      phase: "ready",
+      wsjtxReadiness: {
+        band: "20m",
+        powerWatts: 5,
+        wsprLiveAcquisitionEnabled: true,
+        hasReceivePeriods: true,
+        nextDirection: "transmit",
+      },
+    }),
+    mutate_active_session_conductor: conductorView({ revision: 2 }),
     active_session_antenna_controller: {
       policy: "manual",
       attached: false,
@@ -218,6 +229,21 @@ test("the headless desktop completes location, review, and creation through moun
       assert.match(elements.setupStatus.textContent, /Session ready/);
     });
     assert.ok(calls.some(([command]) => command === "create_session_from_review"));
+
+    const start = elements.lifecycleButtons.find(
+      (button) => button.dataset.conductorAction === "start",
+    );
+    assert.equal(elements.wsjtxReadiness.hidden, false);
+    assert.equal(start.disabled, true);
+    start.click();
+    assert.equal(calls.some(([command]) => command === "mutate_active_session_conductor"), false);
+    elements.wsjtxReadinessAcknowledge.click();
+    assert.equal(start.disabled, false);
+    start.click();
+    await vi.waitFor(() => {
+      assert.ok(calls.some(([command]) => command === "mutate_active_session_conductor"));
+      assert.equal(elements.wsjtxReadiness.hidden, true);
+    });
     assert.deepEqual(uncaught, []);
   } finally {
     delete window.__TAURI__;

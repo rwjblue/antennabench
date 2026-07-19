@@ -189,6 +189,11 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .setup-review dt { margin-bottom: 5px; color: #77857f; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .setup-review dd { margin: 0; color: #315d57; font-size: 0.78rem; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
 .setup-review:focus { outline: 3px solid rgba(61, 152, 137, 0.2); outline-offset: 4px; }
+.wsjtx-readiness { margin-bottom: 18px; padding: 20px; border: 2px solid #d79a30; border-radius: 16px; background: #fff8e8; color: #4e3a19; }
+.wsjtx-readiness h2 { margin: 3px 0 12px; color: #4e3a19; font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; font-weight: 500; }
+.wsjtx-readiness ul { margin: 0 0 12px; padding-left: 20px; line-height: 1.65; }
+.wsjtx-readiness p { margin: 0 0 12px; line-height: 1.55; }
+.wsjtx-readiness .authority-confirmation { margin-bottom: 0; border-color: #e3c583; background: #fff; }
 .review-sequence { margin-bottom: 18px; padding: 18px; border: 1px solid #cfe0d8; border-radius: 13px; background: #fff; }
 .review-sequence h3, .capability-review h3 { margin: 0 0 8px; color: #1c403d; font-family: Georgia, "Times New Roman", serif; font-size: 1.05rem; font-weight: 500; }
 .review-sequence p { margin: 0 0 8px; color: #62736f; font-size: 0.76rem; line-height: 1.5; }

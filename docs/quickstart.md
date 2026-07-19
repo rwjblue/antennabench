@@ -66,10 +66,15 @@ switch the radio or antenna for this manual run.
    [session bundle](glossary.md#session-bundle) in the standard macOS
    application-data directory and opens **Active run**.
 
-8. **Start and follow one prompt at a time.** Select **Start session**. For
-   each planned cycle, the main prompt names the antenna and tells you whether
-   WSJT-X **Enable Tx** should be on or off. Safely switch to the named antenna,
-   make the requested WSJT-X change, and then select **Antenna ready**.
+8. **Confirm WSJT-X, then follow one prompt at a time.** In **Before you
+   start**, check the committed 20 m WSPR plan, transmit power, **Tx Pct 100%**,
+   **Upload spots**, **Monitor**, and the first **Enable Tx** instruction.
+   AntennaBench does not change these settings, and the check is not proof of
+   radio state. Select **I configured WSJT-X for this run**, then **Start
+   session**. For each planned cycle, the main prompt names the antenna and
+   tells you whether **Enable Tx** should be on or off. Safely switch to the
+   named antenna, make the requested WSJT-X change, and then select **Antenna
+   ready**.
    AntennaBench waits for the next eligible even-minute WSPR boundary. Keep that
    antenna connected until the current cycle finishes; then repeat the
    switch → WSJT-X setting → **Antenna ready** rhythm for the next prompt.

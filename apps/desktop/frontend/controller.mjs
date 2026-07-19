@@ -63,6 +63,7 @@ import {
   reportRefreshFailed,
   reportRefreshSucceeded,
   selectWorkflow,
+  setWsjtxReadinessAcknowledged,
   setupCreationCancelled,
   setupCreationFailed,
   setupCreationSucceeded,
@@ -127,6 +128,10 @@ export function createDesktopController(options = {}) {
       if (!["reviewing", "creating"].includes(state.setupStatus)) {
         commit(editSessionSetup(state));
       }
+    },
+
+    setWsjtxReadinessAcknowledged(acknowledged) {
+      commit(setWsjtxReadinessAcknowledged(state, acknowledged));
     },
 
     async reviewSetup(draft) {

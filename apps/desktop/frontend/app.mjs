@@ -18,6 +18,7 @@ import {
   locationLookupMessage,
   maidenheadGrid,
   recommendedNoteTarget,
+  wsjtxReadinessModel,
   workflowFromHash,
 } from "./models.mjs";
 import { initialState } from "./state.mjs";
@@ -146,6 +147,7 @@ export function mount(root, browserWindow) {
     panels,
     conductorRefreshButtons,
     lifecycleButtons,
+    wsjtxReadinessAcknowledge,
   } = elements;
   installContextualHelp(root);
 
@@ -223,6 +225,10 @@ export function mount(root, browserWindow) {
   lifecycleButtons.forEach((button) => {
     button.addEventListener("click", async () => {
       const kind = button.dataset.conductorAction;
+      if (["start", "resume"].includes(kind)) {
+        const readiness = wsjtxReadinessModel(state);
+        if (readiness.visible && !readiness.acknowledged) return;
+      }
       if (kind === "arm_wspr_cycle") {
         const intent = state.conductor?.nextIntent;
         if (!intent) return;
@@ -254,6 +260,10 @@ export function mount(root, browserWindow) {
       if (detail === null) return;
       await controller.submitConductorAction({ kind, reason: detail });
     });
+  });
+
+  wsjtxReadinessAcknowledge.addEventListener("change", () => {
+    controller.setWsjtxReadinessAcknowledged(wsjtxReadinessAcknowledge.checked);
   });
 
   evidenceCallsign.addEventListener("input", () => {
