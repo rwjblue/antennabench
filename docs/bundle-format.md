@@ -57,6 +57,8 @@ my-test.session.antennabundle/
   events.jsonl           operator actions and corrections
   observations.jsonl     decodes and public reports
   adapter-records.jsonl  attributed import and collection records
+  runtime-contexts.jsonl build and runtime actors for durable mutations
+  diagnostics.jsonl      reserved checkpointed operational outcomes
   session-state.json     the latest durable checkpoint
   attachments/           larger original inputs, stored by content hash
 ```
@@ -64,18 +66,18 @@ my-test.session.antennabundle/
 The `.jsonl` files store one record per line. New facts and corrections are
 appended so the history remains inspectable.
 
-The accepted next bundle version will also add bounded runtime-context and
-operational-diagnostic streams. They will identify the app build/platform that
-materially acted on a session and safely persisted operation failures, while
-remaining separate from experiment evidence. Older bundles will say that this
-history is unavailable rather than implying that no failures occurred. See
+Schema v6 adds a bounded, checkpointed runtime-context stream that identifies
+the app build and runtime platform that created or materially acted on a
+session. The diagnostics stream and its empty checkpoint head are reserved for
+the durable operational outcomes implemented in the next rollout slice. Both
+remain separate from experiment evidence. Older bundles say that this history
+is unavailable rather than implying that no failures occurred. See
 [Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
-for the implementation contract; the current app still creates schema-v5
-bundles until that rollout lands.
+for the complete contract.
 
 ## Compatibility
 
-New sessions currently use bundle schema v5. AntennaBench has explicit readers
+New sessions currently use bundle schema v6. AntennaBench has explicit readers
 and upgrade paths for earlier pre-release bundle versions; it does not silently
 rewrite an older bundle in place. Use the app’s open, upgrade, and export paths
 rather than editing bundle files by hand.

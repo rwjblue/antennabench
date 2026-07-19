@@ -10,8 +10,12 @@ use antennabench_core::{
         SessionStateV3, WsprCycleDirection,
     },
     v5::validate_antenna_control_v5,
+    v6::{
+        BuildChannelV6, SourceStateV6, RUNTIME_CONTEXT_MAX_RECORDS,
+        RUNTIME_CONTEXT_RECORD_MAX_BYTES, RUNTIME_CONTEXT_STREAM_MAX_BYTES,
+    },
     validate_bundle_report, BundleValidationProfile, BundleValidationReport, ExperimentMode,
-    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 
 use super::{
@@ -134,7 +138,13 @@ impl BundleStore {
             &bundle.propagation,
             &mut budget,
         )?;
-        bundle.session_state.streams = [
+        let runtime_contexts = serialize_jsonl_bounded(
+            &store,
+            Path::new("runtime-contexts.jsonl"),
+            &bundle.runtime_contexts,
+            &mut budget,
+        )?;
+        let mut streams = vec![
             (
                 "events".to_string(),
                 checkpoint_for_bytes(
@@ -184,9 +194,25 @@ impl BundleStore {
                         .map(|record| record.record_id.clone()),
                 ),
             ),
-        ]
-        .into_iter()
-        .collect();
+        ];
+        if bundle.manifest.schema_version == SCHEMA_VERSION_V6 {
+            streams.push((
+                "runtimeContexts".to_string(),
+                checkpoint_for_bytes(
+                    &runtime_contexts,
+                    bundle.runtime_contexts.len(),
+                    bundle
+                        .runtime_contexts
+                        .last()
+                        .map(|context| context.context_id.clone()),
+                ),
+            ));
+            streams.push((
+                "diagnostics".to_string(),
+                checkpoint_for_bytes(&[], 0, None),
+            ));
+        }
+        bundle.session_state.streams = streams.into_iter().collect();
         Ok(())
     }
 
@@ -196,7 +222,7 @@ impl BundleStore {
             self.read_json_bounded(&self.bundle_path("manifest.json")?, &mut budget)?;
         if !matches!(
             manifest.schema_version,
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6
         ) {
             return Err(BundleStoreError::UnsupportedSchemaVersion {
                 actual: manifest.schema_version,
@@ -210,6 +236,24 @@ impl BundleStore {
         self.inventory_root(ResourceOperation::Read)?;
         inventory_attachment_tree(self, &paths.attachments_dir, ResourceOperation::Read)?;
 
+        let runtime_contexts = match paths.runtime_contexts.as_deref() {
+            Some(path) => self.read_jsonl_bounded(path, &mut budget)?,
+            None => Vec::new(),
+        };
+        if let Some(path) = paths.diagnostics.as_deref() {
+            let bytes = read_bounded(
+                self,
+                path,
+                self.profile().jsonl_stream_bytes,
+                "resource.jsonl.stream_bytes",
+                ResourceOperation::Read,
+            )?;
+            if !bytes.is_empty() {
+                return Err(invalid_v3(
+                    "schema-v6 diagnostics must remain empty until the diagnostic contract is implemented",
+                ));
+            }
+        }
         let bundle = BundleV3Contents {
             manifest,
             session_state,
@@ -222,6 +266,7 @@ impl BundleStore {
             rig: self.read_jsonl_bounded(&paths.rig, &mut budget)?,
             propagation: self.read_jsonl_bounded(&paths.propagation, &mut budget)?,
             analysis: self.read_json_bounded(&paths.analysis, &mut budget)?,
+            runtime_contexts,
         };
         validate_v3_model(&bundle)?;
         validate_v3_checkpoint(self, &bundle, &paths)?;
@@ -295,6 +340,15 @@ impl BundleStore {
             serialize_jsonl_bounded(self, &paths.propagation, &bundle.propagation, &mut budget)?;
         let analysis =
             serialize_root_bounded(self, &paths.analysis, &bundle.analysis, &mut budget)?;
+        let runtime_contexts = match paths.runtime_contexts.as_deref() {
+            Some(path) => Some(serialize_jsonl_bounded(
+                self,
+                path,
+                &bundle.runtime_contexts,
+                &mut budget,
+            )?),
+            None => None,
+        };
 
         create_directory(self.root())?;
         let result = (|| {
@@ -312,6 +366,21 @@ impl BundleStore {
                 (&paths.analysis, analysis.as_slice()),
             ] {
                 fs::write(path, bytes).map_err(|source| BundleStoreError::Write {
+                    path: path.to_path_buf(),
+                    source,
+                })?;
+            }
+            if let (Some(path), Some(bytes)) = (
+                paths.runtime_contexts.as_deref(),
+                runtime_contexts.as_deref(),
+            ) {
+                fs::write(path, bytes).map_err(|source| BundleStoreError::Write {
+                    path: path.to_path_buf(),
+                    source,
+                })?;
+            }
+            if let Some(path) = paths.diagnostics.as_deref() {
+                fs::write(path, []).map_err(|source| BundleStoreError::Write {
                     path: path.to_path_buf(),
                     source,
                 })?;
@@ -337,12 +406,13 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
     let schema_version = bundle.manifest.schema_version;
     if !matches!(
         schema_version,
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6
     ) {
         return Err(BundleStoreError::UnsupportedSchemaVersion {
             actual: schema_version,
         });
     }
+    validate_runtime_contexts_v6(bundle)?;
     for (schema, actual_session, name) in [
         (
             bundle.manifest.schema_version,
@@ -599,6 +669,179 @@ pub(super) fn validate_v3_model(bundle: &BundleV3Contents) -> Result<(), BundleS
     Ok(())
 }
 
+fn validate_runtime_contexts_v6(bundle: &BundleV3Contents) -> Result<(), BundleStoreError> {
+    if bundle.manifest.schema_version != SCHEMA_VERSION_V6 {
+        if !bundle.runtime_contexts.is_empty()
+            || bundle.manifest.creator_runtime_context_id.is_some()
+            || bundle.session_state.active_runtime_context_id.is_some()
+            || bundle.manifest.files.runtime_contexts.is_some()
+            || bundle.manifest.files.diagnostics.is_some()
+        {
+            return Err(invalid_v3(
+                "schema-v3 through v5 cannot declare schema-v6 runtime context fields",
+            ));
+        }
+        return Ok(());
+    }
+    if bundle.manifest.files.runtime_contexts.as_deref() != Some("runtime-contexts.jsonl")
+        || bundle.manifest.files.diagnostics.as_deref() != Some("diagnostics.jsonl")
+    {
+        return Err(invalid_v3(
+            "schema-v6 requires the canonical runtime context and diagnostics stream paths",
+        ));
+    }
+    if bundle.runtime_contexts.is_empty()
+        || bundle.runtime_contexts.len() > RUNTIME_CONTEXT_MAX_RECORDS
+    {
+        return Err(invalid_v3(
+            "schema-v6 requires between one and 256 runtime contexts",
+        ));
+    }
+    let creator = bundle
+        .manifest
+        .creator_runtime_context_id
+        .as_deref()
+        .ok_or_else(|| invalid_v3("schema-v6 manifest is missing creator runtime context"))?;
+    let active = bundle
+        .session_state
+        .active_runtime_context_id
+        .as_deref()
+        .ok_or_else(|| invalid_v3("schema-v6 checkpoint is missing active runtime context"))?;
+    if bundle.runtime_contexts[0].context_id != creator {
+        return Err(invalid_v3(
+            "schema-v6 creator must reference the first runtime context",
+        ));
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    let mut stream_bytes = 0usize;
+    for context in &bundle.runtime_contexts {
+        if !context.has_valid_identity() || !ids.insert(context.context_id.as_str()) {
+            return Err(invalid_v3(
+                "runtime contexts require unique canonical context identities",
+            ));
+        }
+        validate_build_identity_v6(context)?;
+        let line_bytes = serde_json::to_vec(context)
+            .map_err(|error| invalid_v3(format!("runtime context cannot serialize: {error}")))?
+            .len()
+            .saturating_add(1);
+        if line_bytes > RUNTIME_CONTEXT_RECORD_MAX_BYTES {
+            return Err(invalid_v3("runtime context exceeds the 4 KiB record bound"));
+        }
+        stream_bytes = stream_bytes.saturating_add(line_bytes);
+    }
+    if stream_bytes > RUNTIME_CONTEXT_STREAM_MAX_BYTES {
+        return Err(invalid_v3("runtime context stream exceeds the 1 MiB bound"));
+    }
+    if !ids.contains(active) {
+        return Err(invalid_v3(
+            "active runtime context does not exist in the committed stream",
+        ));
+    }
+    for context_id in bundle
+        .events
+        .iter()
+        .map(|record| record.meta.runtime_context_id.as_deref())
+        .chain(
+            bundle
+                .observations
+                .iter()
+                .map(|record| record.meta.runtime_context_id.as_deref()),
+        )
+        .chain(
+            bundle
+                .adapter_records
+                .iter()
+                .map(|record| record.meta.runtime_context_id.as_deref()),
+        )
+        .chain(
+            bundle
+                .rig
+                .iter()
+                .map(|record| record.meta.runtime_context_id.as_deref()),
+        )
+        .chain(
+            bundle
+                .propagation
+                .iter()
+                .map(|record| record.meta.runtime_context_id.as_deref()),
+        )
+    {
+        if !context_id.is_some_and(|id| ids.contains(id)) {
+            return Err(invalid_v3(
+                "every schema-v6 record must reference a committed runtime context",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_build_identity_v6(
+    context: &antennabench_core::v6::RuntimeContextV6,
+) -> Result<(), BundleStoreError> {
+    let build = &context.build;
+    let bounded = [
+        build.app_version.as_deref(),
+        build.source_commit.as_deref(),
+        build.release_tag.as_deref(),
+        build.target_triple.as_deref(),
+        build.build_architecture.as_deref(),
+        context.platform.os_family.as_deref(),
+        context.platform.os_version.as_deref(),
+        context.platform.runtime_architecture.as_deref(),
+        context.platform.application_id.as_deref(),
+    ];
+    if bounded.into_iter().flatten().any(|value| {
+        value.is_empty()
+            || value.len() > 256
+            || value.chars().any(|character| character.is_control())
+    }) {
+        return Err(invalid_v3(
+            "runtime build and platform values must be bounded nonempty text",
+        ));
+    }
+    if let Some(commit) = build.source_commit.as_deref() {
+        if !matches!(commit.len(), 40 | 64)
+            || !commit
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(invalid_v3(
+                "source commit must be a full lowercase hexadecimal identity",
+            ));
+        }
+    }
+    match build.build_channel {
+        BuildChannelV6::OfficialRelease => {
+            if build.source_state != SourceStateV6::Clean
+                || build.source_commit.is_none()
+                || build.release_tag.is_none()
+                || build.target_triple.is_none()
+                || build.build_architecture.is_none()
+                || build.app_version.is_none()
+                || build.release_tag.as_deref()
+                    != build
+                        .app_version
+                        .as_deref()
+                        .map(|version| format!("v{version}"))
+                        .as_deref()
+            {
+                return Err(invalid_v3(
+                    "official release context requires agreeing version, tag, clean commit, target, and architecture",
+                ));
+            }
+        }
+        BuildChannelV6::Development | BuildChannelV6::Local | BuildChannelV6::Unknown => {
+            if build.release_tag.is_some() {
+                return Err(invalid_v3(
+                    "non-official build contexts cannot claim a release tag",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_v3_checkpoint(
     store: &BundleStore,
     bundle: &BundleV3Contents,
@@ -643,7 +886,7 @@ fn validate_v3_checkpoint(
         ));
     }
 
-    let streams = [
+    let mut streams = vec![
         (
             "events",
             paths.events.as_path(),
@@ -684,6 +927,26 @@ fn validate_v3_checkpoint(
                 .map(|record| record.record_id.clone()),
         ),
     ];
+    if bundle.manifest.schema_version == SCHEMA_VERSION_V6 {
+        let runtime_path = paths
+            .runtime_contexts
+            .as_deref()
+            .ok_or_else(|| invalid_v3("schema-v6 runtime context path is missing"))?;
+        streams.push((
+            "runtimeContexts",
+            runtime_path,
+            bundle.runtime_contexts.len(),
+            bundle
+                .runtime_contexts
+                .last()
+                .map(|context| context.context_id.clone()),
+        ));
+        let diagnostics_path = paths
+            .diagnostics
+            .as_deref()
+            .ok_or_else(|| invalid_v3("schema-v6 diagnostics path is missing"))?;
+        streams.push(("diagnostics", diagnostics_path, 0, None));
+    }
     for (name, path, count, last_id) in streams {
         let expected = bundle
             .session_state

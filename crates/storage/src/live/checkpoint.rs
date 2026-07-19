@@ -221,6 +221,7 @@ pub(super) fn verify_committed_prefixes(
             });
         }
     }
+    verify_v6_operational_streams(store, checkpoint, paths, false)?;
     for (name, path, expected) in [
         (
             "station",
@@ -521,6 +522,7 @@ pub(super) fn verify_exact_checkpoint(
             });
         }
     }
+    verify_v6_operational_streams(store, checkpoint, paths, true)?;
     for (name, path, expected) in [
         (
             "station",
@@ -554,6 +556,61 @@ pub(super) fn verify_exact_checkpoint(
     Ok(())
 }
 
+fn verify_v6_operational_streams(
+    store: &BundleStore,
+    checkpoint: &SessionStateV2,
+    paths: &ResolvedBundlePathsV2,
+    exact: bool,
+) -> Result<(), LivePersistenceError> {
+    for (name, path) in [
+        ("runtimeContexts", paths.runtime_contexts.as_deref()),
+        ("diagnostics", paths.diagnostics.as_deref()),
+    ] {
+        let Some(path) = path else {
+            if checkpoint.streams.contains_key(name) {
+                return Err(LivePersistenceError::CheckpointVerification {
+                    message: format!("checkpoint declares {name} without a manifest path"),
+                });
+            }
+            continue;
+        };
+        let expected = checkpoint.streams.get(name).ok_or_else(|| {
+            LivePersistenceError::CheckpointVerification {
+                message: format!("checkpoint is missing {name}"),
+            }
+        })?;
+        let bytes = read_bounded(
+            store,
+            path,
+            store.profile().jsonl_stream_bytes,
+            "resource.jsonl.stream_bytes",
+            ResourceOperation::Write,
+        )?;
+        let committed = usize::try_from(expected.committed_bytes).map_err(|_| {
+            LivePersistenceError::CheckpointVerification {
+                message: format!("{name} committed offset does not fit this platform"),
+            }
+        })?;
+        if bytes.len() < committed || (exact && bytes.len() != committed) {
+            return Err(if exact {
+                LivePersistenceError::RecoveryRequired {
+                    message: format!("{name} has bytes outside its committed head"),
+                }
+            } else {
+                LivePersistenceError::CheckpointVerification {
+                    message: format!("{name} is shorter than its committed prefix"),
+                }
+            });
+        }
+        if sha256_hex(&bytes[..committed]) != expected.committed_sha256 {
+            return Err(LivePersistenceError::ExternalModification {
+                message: format!("{name} has corruption inside its committed prefix"),
+            });
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn read_state(path: &Path) -> Result<SessionStateV2, LivePersistenceError> {
     let size = fs::metadata(path)
         .map_err(|source| live_io("inspect checkpoint", path, source))?
@@ -580,6 +637,10 @@ pub(super) fn stream_path(paths: &ResolvedBundlePathsV2, stream: LiveStreamV2) -
         LiveStreamV2::Events => &paths.events,
         LiveStreamV2::Rig => &paths.rig,
         LiveStreamV2::Propagation => &paths.propagation,
+        LiveStreamV2::RuntimeContexts => paths
+            .runtime_contexts
+            .as_deref()
+            .expect("runtime-context stream is available only for schema-v6"),
     }
 }
 

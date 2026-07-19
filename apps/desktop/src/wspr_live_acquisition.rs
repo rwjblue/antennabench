@@ -15,7 +15,7 @@ use antennabench_core::{
         RecordMetaV3,
     },
     PlannedSlot, RecordSource, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
-    SCHEMA_VERSION_V5,
+    SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -307,11 +307,13 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                     .read_v2_checkpointed()
                     .map_err(crate::conductor::live_error_payload)?,
             ),
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => AcquisitionSnapshot::V3(
-                store
-                    .read_v3_checkpointed()
-                    .map_err(crate::conductor::live_error_payload)?,
-            ),
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+                AcquisitionSnapshot::V3(
+                    store
+                        .read_v3_checkpointed()
+                        .map_err(crate::conductor::live_error_payload)?,
+                )
+            }
             actual => {
                 return Err(SessionErrorPayload::new(
                     SessionErrorKind::Validation,
@@ -621,7 +623,7 @@ fn end_after_final_capture(
         SCHEMA_VERSION_V2 => {
             end_v2_after_final_capture(active_state, source, occurred_at, captured_through, &store)
         }
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
             end_v3_after_final_capture(active_state, source, occurred_at, captured_through, &store)
         }
         actual => Err(SessionErrorPayload::new(
@@ -673,6 +675,7 @@ fn end_v2_after_final_capture(
                 member_index: 0,
                 member_count: 1,
             },
+            runtime_context_id: None,
         },
         event_id,
         occurred_at,
@@ -706,8 +709,7 @@ fn end_v3_after_final_capture(
     captured_through: DateTime<Utc>,
     store: &BundleStore,
 ) -> Result<(OpenedSession, u64), SessionErrorPayload> {
-    let mut writer = store
-        .open_v3_writer()
+    let mut writer = crate::build_context::open_v3_writer(store)
         .map_err(crate::conductor::live_error_payload)?;
     if writer.snapshot().session_state.lifecycle == SessionLifecycleV2::Ended {
         let revision = writer.checkpoint().revision;
@@ -739,6 +741,7 @@ fn end_v3_after_final_capture(
                 member_index: 0,
                 member_count: 1,
             },
+            runtime_context_id: None,
         },
         event_id: writer.allocate_id("event"),
         occurred_at,
@@ -1036,6 +1039,7 @@ mod tests {
                         member_index: 0,
                         member_count: 1,
                     },
+                    runtime_context_id: None,
                 },
                 event_id: format!("automatic-test-event-{index}"),
                 occurred_at,
@@ -1172,6 +1176,7 @@ mod tests {
                             member_index: 0,
                             member_count: 1,
                         },
+                        runtime_context_id: None,
                     },
                     event_id: format!("skip-final-event-{index}"),
                     occurred_at,
@@ -1355,6 +1360,7 @@ mod tests {
                     member_index: 0,
                     member_count: 1,
                 },
+                runtime_context_id: None,
             },
             event_id: writer.allocate_id("event"),
             occurred_at: now,

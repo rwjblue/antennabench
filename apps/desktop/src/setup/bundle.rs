@@ -7,7 +7,7 @@ use antennabench_core::{
         SignalCadenceV3, SignalPlanIdV3, SignalPlanV3, SignalVariantIdV3, WsprCycleDirection,
         WsprCycleIntentV3,
     },
-    Antenna, Band, ExperimentMode, SCHEMA_VERSION_V5,
+    Antenna, Band, ExperimentMode, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::LivePersistenceHooks;
 
@@ -72,13 +72,13 @@ pub(super) fn planned_wspr_cycles(
 }
 
 pub(super) fn use_latest_schema(bundle: &mut BundleV3Contents) {
-    bundle.manifest.schema_version = SCHEMA_VERSION_V5;
-    bundle.session_state.schema_version = SCHEMA_VERSION_V5;
-    bundle.station.schema_version = SCHEMA_VERSION_V5;
-    bundle.antennas.schema_version = SCHEMA_VERSION_V5;
-    bundle.schedule.schema_version = SCHEMA_VERSION_V5;
+    bundle.manifest.schema_version = SCHEMA_VERSION_V6;
+    bundle.session_state.schema_version = SCHEMA_VERSION_V6;
+    bundle.station.schema_version = SCHEMA_VERSION_V6;
+    bundle.antennas.schema_version = SCHEMA_VERSION_V6;
+    bundle.schedule.schema_version = SCHEMA_VERSION_V6;
     bundle.schedule.antenna_control = Some(antennabench_core::v5::AntennaControlPolicyV5::Manual);
-    bundle.analysis.schema_version = SCHEMA_VERSION_V5;
+    bundle.analysis.schema_version = SCHEMA_VERSION_V6;
 }
 
 #[allow(clippy::too_many_arguments)]

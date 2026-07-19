@@ -69,7 +69,7 @@ pub(super) fn export_bundle(
                 let exported = store.export_v2_checkpointed_to(destination)?;
                 Some(exported.read_v2_checkpointed()?.session_state.revision)
             }
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
                 let exported = store.export_v3_checkpointed_to(destination)?;
                 Some(exported.read_v3_checkpointed()?.session_state.revision)
             }

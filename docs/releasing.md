@@ -50,6 +50,12 @@ its native runner and transfers only the explicit non-publishable archive and
 manifest from the non-secret build. Protected jobs verify that manifest before
 importing credentials.
 
+The native build injects that same verified version, tag, clean source commit,
+target triple, and compile architecture into schema-v6 runtime identity. The
+desktop build fails if any injected release value disagrees with Cargo or the
+checked-out source. A build timestamp is recorded only when the workflow
+explicitly provides `SOURCE_DATE_EPOCH`; wall-clock compile time is never used.
+
 Each app is Developer ID signed with hardened runtime and a secure timestamp,
 submitted with `notarytool`, stapled, and checked with strict `codesign`,
 `stapler`, and Gatekeeper verification. Assembly accepts only two publishable

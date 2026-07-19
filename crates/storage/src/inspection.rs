@@ -7,7 +7,7 @@ use antennabench_core::{
     BundleValidationError, BundleValidationProfile, BundleValidationReport, ObservationRecord,
     OperatorEvent, PropagationRecord, RigRecord, Schedule, Station, WsjtXRecord,
     ALL_TYPED_OPERATIONS, SCHEMA_VERSION_V1, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, WRITE_OPERATIONS,
+    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6, WRITE_OPERATIONS,
 };
 use serde::{
     de::{DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess, Visitor},
@@ -188,7 +188,7 @@ impl BundleStore {
         }
         if matches!(
             schema_version,
-            Some(SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5)
+            Some(SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6)
         ) {
             let report = BundleValidationReport::new(
                 report
@@ -419,7 +419,7 @@ fn unsupported_schema_version_diagnostic(schema_version: u16) -> BundleDiagnosti
             ..BundleDiagnosticLocation::file(BundleFileRole::Manifest)
         },
         message: format!(
-            "schema version {schema_version} is not supported; supported versions are {SCHEMA_VERSION_V1}, {SCHEMA_VERSION_V2}, {SCHEMA_VERSION_V3}, {SCHEMA_VERSION_V4}, and {SCHEMA_VERSION_V5}"
+            "schema version {schema_version} is not supported; supported versions are {SCHEMA_VERSION_V1}, {SCHEMA_VERSION_V2}, {SCHEMA_VERSION_V3}, {SCHEMA_VERSION_V4}, {SCHEMA_VERSION_V5}, and {SCHEMA_VERSION_V6}"
         ),
         related_locations: Vec::new(),
     }

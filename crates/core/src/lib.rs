@@ -8,6 +8,7 @@ pub mod v2;
 pub mod v3;
 #[path = "v5_antenna_control.rs"]
 pub mod v5;
+pub mod v6;
 mod validation;
 mod wspr;
 mod wspr_live_projection;
@@ -56,4 +57,5 @@ pub const SCHEMA_VERSION_V2: u16 = 2;
 pub const SCHEMA_VERSION_V3: u16 = 3;
 pub const SCHEMA_VERSION_V4: u16 = 4;
 pub const SCHEMA_VERSION_V5: u16 = 5;
-pub const LATEST_SCHEMA_VERSION: u16 = SCHEMA_VERSION_V5;
+pub const SCHEMA_VERSION_V6: u16 = 6;
+pub const LATEST_SCHEMA_VERSION: u16 = SCHEMA_VERSION_V6;

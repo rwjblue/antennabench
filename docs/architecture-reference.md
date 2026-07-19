@@ -11,7 +11,7 @@ source of truth; everything else is derived from it.
 
 Current crates:
 
-- `crates/core`: versioned schema-v1 through schema-v5 wire types, a shared current
+- `crates/core`: versioned schema-v1 through schema-v6 wire types, a shared current
   projection, schedule alignment, normalization, and validation. The legacy
   signal-plan/event compatibility model remains in `v3`, while the schema-v5
   antenna-control policy, invocation evidence, readiness validation, and
@@ -341,11 +341,11 @@ refresh, exact HTML/checkpoint exports, destination collisions, and reopen. A
 fixed scenario seed plus panic-time bundle/log retention makes failures
 reproducible without adding test-only authority to the runtime command surface.
 
-## Accepted Schema-V6 Operational Metadata Boundary
+## Schema-V6 Operational Metadata Boundary
 
 [Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
-selects the next-version architecture for portable build/runtime history and
-material operational outcomes. Schema v6 will add two storage-owned append-only
+selects the architecture for portable build/runtime history and material
+operational outcomes. Schema v6 declares two storage-owned append-only
 streams under the existing single-checkpoint protocol: content-deduplicated
 runtime contexts and typed operational diagnostics. A context is committed in
 the same mutation as its first referencing evidence or diagnostic; a later
@@ -361,7 +361,9 @@ modification, process death, disk exhaustion, or failure of the diagnostic
 checkpoint remain explicit non-guarantees rather than triggers for a second
 logging path.
 
-The new streams are modeled portable metadata for validation, recovery,
+Runtime contexts, build injection, creator attribution, live actor switching,
+and v5-to-v6 upgrade are implemented in #180. Diagnostic records and their
+presentation remain the sequenced #181 and #179 work. The streams are modeled portable metadata for validation, recovery,
 resource accounting, and lossless copy, but are invisible to observation
 alignment and scientific conclusions. Full report disclosure is explicit and
 off by default; compact/public/hosted output excludes the streams. Older bundles

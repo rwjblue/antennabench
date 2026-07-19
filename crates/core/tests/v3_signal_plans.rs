@@ -184,6 +184,7 @@ fn manual_signal_confirmation_is_typed_and_reports_missing_or_changed_actual_fac
                 member_index: 0,
                 member_count: 1,
             },
+            runtime_context_id: None,
         },
         event_id: "signal-confirmation-1".into(),
         occurred_at: schedule.slots[0].starts_at,

@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use antennabench_core::{
     v2::SessionLifecycleV2, v3::project_wspr_run_v3, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
@@ -148,7 +148,7 @@ fn import_config(
                 bundle.session_state.lifecycle,
             )
         }
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
             let bundle = store
                 .read_v3_checkpointed()
                 .map_err(crate::conductor::live_error_payload)?;
@@ -243,15 +243,17 @@ pub(crate) fn commit_wspr_live_response(
             &parsed,
             &store,
         ),
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => commit_v3_wspr_live_response(
-            state,
-            bundle_path,
-            bytes,
-            &config,
-            channel,
-            &parsed,
-            &store,
-        ),
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+            commit_v3_wspr_live_response(
+                state,
+                bundle_path,
+                bytes,
+                &config,
+                channel,
+                &parsed,
+                &store,
+            )
+        }
         actual => Err(SessionErrorPayload::new(
             SessionErrorKind::Validation,
             "This session format cannot import WSPR.live evidence.",
@@ -338,8 +340,7 @@ fn commit_v3_wspr_live_response(
     parsed: &ParsedWsprLiveJson,
     store: &BundleStore,
 ) -> Result<CommittedWsprLiveResponse, SessionErrorPayload> {
-    let mut writer = store
-        .open_v3_writer()
+    let mut writer = crate::build_context::open_v3_writer(store)
         .map_err(crate::conductor::live_error_payload)?;
     let current = writer.snapshot().clone();
     if current.session_state.lifecycle != SessionLifecycleV2::Running {

@@ -1,4 +1,104 @@
+use std::process::Command;
+
+mod build_identity;
+
+fn command_output(program: &str, arguments: &[&str]) -> Option<String> {
+    let output = Command::new(program).args(arguments).output().ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 fn main() {
+    for name in [
+        "ANTENNABENCH_BUILD_CHANNEL",
+        "ANTENNABENCH_SOURCE_COMMIT",
+        "ANTENNABENCH_SOURCE_STATE",
+        "ANTENNABENCH_RELEASE_TAG",
+        "ANTENNABENCH_TARGET_TRIPLE",
+        "ANTENNABENCH_BUILD_ARCHITECTURE",
+        "SOURCE_DATE_EPOCH",
+    ] {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
+    let package_version = std::env::var("CARGO_PKG_VERSION").expect("package version");
+    let target = std::env::var("TARGET").expect("Cargo target triple");
+    let architecture = std::env::var("CARGO_CFG_TARGET_ARCH").expect("Cargo target architecture");
+    let profile = std::env::var("PROFILE").expect("Cargo build profile");
+    let git_commit = command_output("git", &["rev-parse", "HEAD"])
+        .filter(|value| matches!(value.len(), 40 | 64));
+    let git_dirty =
+        command_output("git", &["status", "--porcelain"]).map(|value| !value.is_empty());
+    let source = build_identity::resolve_source_identity(
+        &profile,
+        std::env::var("ANTENNABENCH_BUILD_CHANNEL").ok(),
+        std::env::var("ANTENNABENCH_SOURCE_COMMIT").ok(),
+        std::env::var("ANTENNABENCH_SOURCE_STATE").ok(),
+        git_commit.clone(),
+        git_dirty,
+    );
+    let channel = source.channel;
+    let source_commit = source.commit;
+    let source_state = source.state;
+    let release_tag = std::env::var("ANTENNABENCH_RELEASE_TAG").ok();
+    let asserted_target = std::env::var("ANTENNABENCH_TARGET_TRIPLE").ok();
+    let asserted_architecture = std::env::var("ANTENNABENCH_BUILD_ARCHITECTURE").ok();
+    if channel == "official_release" {
+        assert_eq!(
+            source_state, "clean",
+            "official release source must be clean"
+        );
+        assert_eq!(
+            release_tag.as_deref(),
+            Some(format!("v{package_version}").as_str())
+        );
+        assert_eq!(asserted_target.as_deref(), Some(target.as_str()));
+        assert_eq!(
+            asserted_architecture.as_deref(),
+            Some(architecture.as_str())
+        );
+        assert!(
+            source_commit.is_some(),
+            "official release source commit is required"
+        );
+        if let (Some(asserted), Some(actual)) = (source_commit.as_deref(), git_commit.as_deref()) {
+            assert_eq!(
+                asserted, actual,
+                "official release commit disagrees with checkout"
+            );
+        }
+    } else {
+        assert!(matches!(
+            channel.as_str(),
+            "development" | "local" | "unknown"
+        ));
+        assert!(
+            release_tag.is_none(),
+            "non-official builds cannot claim a release tag"
+        );
+    }
+    if let Ok(epoch) = std::env::var("SOURCE_DATE_EPOCH") {
+        epoch
+            .parse::<i64>()
+            .expect("SOURCE_DATE_EPOCH must be signed epoch seconds");
+    }
+    for (name, value) in [
+        ("ANTENNABENCH_BUILD_APP_VERSION", Some(package_version)),
+        ("ANTENNABENCH_BUILD_SOURCE_COMMIT", source_commit),
+        ("ANTENNABENCH_BUILD_SOURCE_STATE", Some(source_state)),
+        ("ANTENNABENCH_BUILD_CHANNEL_VALUE", Some(channel)),
+        ("ANTENNABENCH_BUILD_RELEASE_TAG", release_tag),
+        ("ANTENNABENCH_BUILD_TARGET_TRIPLE", Some(target)),
+        ("ANTENNABENCH_BUILD_ARCH", Some(architecture)),
+        (
+            "ANTENNABENCH_BUILD_SOURCE_DATE_EPOCH",
+            std::env::var("SOURCE_DATE_EPOCH").ok(),
+        ),
+    ] {
+        println!("cargo:rustc-env={name}={}", value.unwrap_or_default());
+    }
+
     let app_manifest = tauri_build::AppManifest::new().commands(&[
         "review_session_setup",
         "request_station_location",

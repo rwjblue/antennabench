@@ -348,6 +348,7 @@ mod tests {
                     member_index: 0,
                     member_count: 1,
                 },
+                runtime_context_id: None,
             },
             event_id: id.into(),
             occurred_at,

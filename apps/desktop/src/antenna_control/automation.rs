@@ -364,9 +364,11 @@ fn persist_attempt(
             armed_event,
         };
         let append = {
-            let mut writer = store
-                .open_v3_writer_with_hooks(std::sync::Arc::new(SystemLivePersistenceHooks))
-                .map_err(live_error_payload)?;
+            let mut writer = crate::build_context::open_v3_writer_with_hooks(
+                &store,
+                std::sync::Arc::new(SystemLivePersistenceHooks),
+            )
+            .map_err(live_error_payload)?;
             writer.append_antenna_control(mutation)
         };
         if let Err(error) = append {

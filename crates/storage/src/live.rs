@@ -17,9 +17,10 @@ use antennabench_core::{
         reduce_operator_events_v3, BundleV3Contents, OperatorEventPayloadV3, OperatorEventV3,
         RecordMetaV3, RigRecordV3,
     },
+    v6::RuntimeContextV6,
     validate_bundle_report, validate_machine_identity, AntennasFile, BundleValidationProfile,
     RecordSource, Schedule, Station, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
-    SCHEMA_VERSION_V5,
+    SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use chrono::{DateTime, Utc};
 use thiserror::Error;
@@ -35,6 +36,7 @@ mod checkpoint;
 mod durability;
 mod mutation;
 mod recovery;
+mod runtime_context;
 
 use attachments::{copy_checkpointed_attachments, durable_attachment};
 use checkpoint::{
@@ -68,6 +70,7 @@ pub enum LiveStreamV2 {
     Events,
     Rig,
     Propagation,
+    RuntimeContexts,
 }
 
 impl LiveStreamV2 {
@@ -78,6 +81,7 @@ impl LiveStreamV2 {
             Self::Events => "events",
             Self::Rig => "rig",
             Self::Propagation => "propagation",
+            Self::RuntimeContexts => "runtimeContexts",
         }
     }
 }
@@ -267,6 +271,7 @@ pub struct LiveSessionV3 {
     bundle: BundleV3Contents,
     paths: ResolvedBundlePathsV2,
     frozen: bool,
+    pending_runtime_context: Option<RuntimeContextV6>,
 }
 
 impl Drop for LiveSessionV2 {
@@ -365,7 +370,7 @@ impl BundleStore {
             .collect::<BTreeMap<_, _>>();
         let mut referenced_attachments = Vec::new();
         for reference in referenced.into_values() {
-            referenced_attachments.push(crate::v2::BundleAttachment {
+            referenced_attachments.push(crate::BundleAttachment {
                 bytes: self.read_attachment(&reference)?,
                 reference,
             });
@@ -627,59 +632,10 @@ impl BundleStore {
         Ok(bundle)
     }
 
-    pub fn open_v3_writer(&self) -> Result<LiveSessionV3, LivePersistenceError> {
-        self.open_v3_writer_with_hooks(Arc::new(SystemLivePersistenceHooks))
-    }
-
-    pub fn open_v3_writer_with_hooks(
+    pub(super) fn recover_v3_internal(
         &self,
         hooks: Arc<dyn LivePersistenceHooks>,
-    ) -> Result<LiveSessionV3, LivePersistenceError> {
-        if !self.root().is_dir() {
-            return Err(LivePersistenceError::Capability {
-                message: "bundle root is not a regular local directory".into(),
-            });
-        }
-        let lock_path = self.root().join(LOCK_FILE);
-        let lock = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(|source| live_io("open writer lock", &lock_path, source))?;
-        match lock.try_lock() {
-            Ok(()) => {}
-            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
-            Err(fs::TryLockError::Error(source)) => {
-                return Err(LivePersistenceError::Capability {
-                    message: format!("OS file locking failed: {source}"),
-                });
-            }
-        }
-        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
-            message: format!("live persistence durability probe failed: {source}"),
-        })?;
-        let bundle = self.read_v3()?;
-        let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
-        verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
-        Ok(LiveSessionV3 {
-            store: self.clone(),
-            _lock: lock,
-            hooks,
-            bundle,
-            paths,
-            frozen: false,
-        })
-    }
-
-    pub fn recover_v3(&self) -> Result<RecoveryReportV2, LivePersistenceError> {
-        self.recover_v3_with_hooks(Arc::new(SystemLivePersistenceHooks))
-    }
-
-    pub fn recover_v3_with_hooks(
-        &self,
-        hooks: Arc<dyn LivePersistenceHooks>,
+        requested_context: Option<RuntimeContextV6>,
     ) -> Result<RecoveryReportV2, LivePersistenceError> {
         if !self.root().is_dir() {
             return Err(LivePersistenceError::Capability {
@@ -712,13 +668,20 @@ impl BundleStore {
         let manifest: BundleManifestV2 = read_json_file(self, &manifest_path, "manifest")?;
         if !matches!(
             manifest.schema_version,
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6
         ) {
             return Err(LivePersistenceError::Store(
                 BundleStoreError::UnsupportedSchemaVersion {
                     actual: manifest.schema_version,
                 },
             ));
+        }
+        if let Some(context) = &requested_context {
+            if manifest.schema_version != SCHEMA_VERSION_V6 || !context.has_valid_identity() {
+                return Err(LivePersistenceError::Capability {
+                    message: "runtime-context recovery requires a valid schema-v6 bundle".into(),
+                });
+            }
         }
         let bootstrap = self.v2_paths(&manifest.files)?;
         let checkpoint: SessionStateV2 =
@@ -733,6 +696,10 @@ impl BundleStore {
         }
 
         let bundle = self.read_v3()?;
+        let pending_runtime_context = requested_context.filter(|context| {
+            bundle.session_state.active_runtime_context_id.as_deref()
+                != Some(context.context_id.as_str())
+        });
         let mut artifacts = if has_tails {
             preserve_tails_for(
                 self,
@@ -769,6 +736,7 @@ impl BundleStore {
             bundle,
             paths,
             frozen: false,
+            pending_runtime_context,
         };
         let interruption = if session.bundle.session_state.lifecycle == SessionLifecycleV2::Running
         {
@@ -793,6 +761,7 @@ impl BundleStore {
                             member_index: 0,
                             member_count: 1,
                         },
+                        runtime_context_id: None,
                     },
                     event_id,
                     occurred_at,
@@ -1021,6 +990,7 @@ impl BundleStore {
                             member_index: 0,
                             member_count: 1,
                         },
+                        runtime_context_id: None,
                     },
                     event_id,
                     occurred_at,
@@ -1522,11 +1492,23 @@ impl LiveSessionV3 {
                 actual: self.bundle.session_state.revision,
             });
         }
+        let recorded_at = self.hooks.now();
+        let primary_member_count = u32::try_from(
+            mutation.adapter_records.len() + mutation.observations.len(),
+        )
+        .map_err(|_| LivePersistenceError::InvalidMutation {
+            message: "evidence mutation has too many members".into(),
+        })?;
+        let actor =
+            self.prepare_runtime_actor(&mutation.mutation_id, primary_member_count, recorded_at)?;
         prepare_v3_evidence(
             &mut mutation,
             &self.bundle.manifest.session_id,
             self.bundle.manifest.schema_version,
-            self.hooks.now(),
+            recorded_at,
+            actor.context_id.as_deref(),
+            actor.member_offset,
+            actor.member_count,
         )?;
         validate_v3_evidence(&self.bundle, &mutation)?;
         for record in &mutation.adapter_records {
@@ -1536,6 +1518,7 @@ impl LiveSessionV3 {
         }
 
         let mut candidate = self.bundle.clone();
+        Self::apply_runtime_actor(&mut candidate, &actor);
         candidate
             .adapter_records
             .extend(mutation.adapter_records.iter().cloned());
@@ -1556,7 +1539,14 @@ impl LiveSessionV3 {
 
         let adapter_bytes = serialize_v3_lines(&mutation.adapter_records, "adapter record")?;
         let observation_bytes = serialize_v3_lines(&mutation.observations, "observation")?;
-        let serialized = [
+        let context_bytes = actor
+            .new_context
+            .as_ref()
+            .map(|context| serialize_v3_lines(std::slice::from_ref(context), "runtime context"))
+            .transpose()?
+            .unwrap_or_default();
+        let serialized = vec![
+            (LiveStreamV2::RuntimeContexts, context_bytes),
             (LiveStreamV2::AdapterRecords, adapter_bytes),
             (LiveStreamV2::Observations, observation_bytes),
         ]
@@ -1588,15 +1578,16 @@ impl LiveSessionV3 {
             if committed {
                 self.bundle = self.store.read_v3()?;
             } else {
-                rollback_v3_streams(
-                    &self.paths,
-                    &baseline,
-                    &[LiveStreamV2::AdapterRecords, LiveStreamV2::Observations],
-                )?;
+                let mut rollback = vec![LiveStreamV2::AdapterRecords, LiveStreamV2::Observations];
+                if actor.new_context.is_some() {
+                    rollback.insert(0, LiveStreamV2::RuntimeContexts);
+                }
+                rollback_v3_streams(&self.paths, &baseline, &rollback)?;
             }
             return Err(error);
         }
         self.bundle = candidate;
+        self.pending_runtime_context = None;
         self.hooks
             .check(LivePersistencePoint::BeforeAcknowledge)
             .map_err(|source| live_io("acknowledge checkpoint", self.store.root(), source))?;
@@ -1662,12 +1653,14 @@ impl LiveSessionV3 {
             });
         }
 
-        let member_count =
+        let primary_member_count =
             u32::try_from(mutation.rig_records.len() + usize::from(mutation.armed_event.is_some()))
                 .map_err(|_| LivePersistenceError::InvalidMutation {
                     message: "antenna-control mutation has too many members".into(),
                 })?;
         let recorded_at = self.hooks.now();
+        let actor =
+            self.prepare_runtime_actor(&mutation.mutation_id, primary_member_count, recorded_at)?;
         for (index, record) in mutation.rig_records.iter_mut().enumerate() {
             if validate_machine_identity(&record.record_id).is_err()
                 || record.antenna_control.is_none()
@@ -1681,9 +1674,11 @@ impl LiveSessionV3 {
             record.meta.recorded_at = recorded_at;
             record.meta.mutation = MutationMember {
                 mutation_id: mutation.mutation_id.clone(),
-                member_index: u32::try_from(index).expect("at most two rig records"),
-                member_count,
+                member_index: actor.member_offset
+                    + u32::try_from(index).expect("at most two rig records"),
+                member_count: actor.member_count,
             };
+            record.meta.runtime_context_id = actor.context_id.clone();
         }
         if let Some(event) = &mut mutation.armed_event {
             if validate_machine_identity(&event.event_id).is_err() {
@@ -1696,13 +1691,15 @@ impl LiveSessionV3 {
             event.meta.recorded_at = recorded_at;
             event.meta.mutation = MutationMember {
                 mutation_id: mutation.mutation_id.clone(),
-                member_index: u32::try_from(mutation.rig_records.len())
-                    .expect("at most two rig records"),
-                member_count,
+                member_index: actor.member_offset
+                    + u32::try_from(mutation.rig_records.len()).expect("at most two rig records"),
+                member_count: actor.member_count,
             };
+            event.meta.runtime_context_id = actor.context_id.clone();
         }
 
         let mut candidate = self.bundle.clone();
+        Self::apply_runtime_actor(&mut candidate, &actor);
         candidate.rig.extend(mutation.rig_records.iter().cloned());
         if let Some(event) = &mutation.armed_event {
             candidate.events.push(event.clone());
@@ -1733,7 +1730,14 @@ impl LiveSessionV3 {
             .map(|event| serialize_v3_lines(std::slice::from_ref(event), "armed event"))
             .transpose()?
             .unwrap_or_default();
+        let context_bytes = actor
+            .new_context
+            .as_ref()
+            .map(|context| serialize_v3_lines(std::slice::from_ref(context), "runtime context"))
+            .transpose()?
+            .unwrap_or_default();
         let serialized = [
+            (LiveStreamV2::RuntimeContexts, context_bytes),
             (LiveStreamV2::Rig, rig_bytes),
             (LiveStreamV2::Events, event_bytes),
         ]
@@ -1765,15 +1769,16 @@ impl LiveSessionV3 {
             if committed {
                 self.bundle = self.store.read_v3()?;
             } else {
-                rollback_v3_streams(
-                    &self.paths,
-                    &baseline,
-                    &[LiveStreamV2::Rig, LiveStreamV2::Events],
-                )?;
+                let mut rollback = vec![LiveStreamV2::Rig, LiveStreamV2::Events];
+                if actor.new_context.is_some() {
+                    rollback.insert(0, LiveStreamV2::RuntimeContexts);
+                }
+                rollback_v3_streams(&self.paths, &baseline, &rollback)?;
             }
             return Err(error);
         }
         self.bundle = candidate;
+        self.pending_runtime_context = None;
         self.hooks
             .check(LivePersistencePoint::BeforeAcknowledge)
             .map_err(|source| live_io("acknowledge checkpoint", self.store.root(), source))?;
@@ -1896,16 +1901,20 @@ impl LiveSessionV3 {
                 message: "event identity must be bounded nonempty ASCII".into(),
             });
         }
+        let recorded_at = self.hooks.now();
+        let actor = self.prepare_runtime_actor(&mutation.mutation_id, 1, recorded_at)?;
         mutation.event.meta.schema_version = self.bundle.manifest.schema_version;
         mutation.event.meta.session_id = self.bundle.manifest.session_id.clone();
-        mutation.event.meta.recorded_at = self.hooks.now();
+        mutation.event.meta.recorded_at = recorded_at;
         mutation.event.meta.mutation = MutationMember {
             mutation_id: mutation.mutation_id.clone(),
-            member_index: 0,
-            member_count: 1,
+            member_index: actor.member_offset,
+            member_count: actor.member_count,
         };
+        mutation.event.meta.runtime_context_id = actor.context_id.clone();
 
         let mut candidate = self.bundle.clone();
+        Self::apply_runtime_actor(&mut candidate, &actor);
         candidate.events.push(mutation.event.clone());
         let reduction = reduce_operator_events_v3(SessionLifecycleV2::Ready, &candidate.events);
         if let Some(diagnostic) = reduction.diagnostics.first() {
@@ -1932,20 +1941,31 @@ impl LiveSessionV3 {
             }
         })?;
         line.push(b'\n');
-        preflight_live_budget(
-            &self.store,
-            &self.bundle.session_state,
-            &[(LiveStreamV2::Events, line.clone())],
-        )?;
+        let context_bytes = actor
+            .new_context
+            .as_ref()
+            .map(|context| serialize_v3_lines(std::slice::from_ref(context), "runtime context"))
+            .transpose()?
+            .unwrap_or_default();
+        let serialized = vec![
+            (LiveStreamV2::RuntimeContexts, context_bytes),
+            (LiveStreamV2::Events, line.clone()),
+        ]
+        .into_iter()
+        .filter(|(_, bytes)| !bytes.is_empty())
+        .collect::<Vec<_>>();
+        preflight_live_budget(&self.store, &self.bundle.session_state, &serialized)?;
 
         let baseline = self.bundle.session_state.clone();
         let operation = (|| {
-            append_line(
-                &self.paths.events,
-                LiveStreamV2::Events,
-                &line,
-                self.hooks.as_ref(),
-            )?;
+            for (stream, bytes) in &serialized {
+                append_line(
+                    stream_path(&self.paths, *stream),
+                    *stream,
+                    bytes,
+                    self.hooks.as_ref(),
+                )?;
+            }
             commit_checkpoint(
                 self.store.root(),
                 &self.paths.session_state,
@@ -1959,39 +1979,16 @@ impl LiveSessionV3 {
             if committed {
                 self.bundle = self.store.read_v3()?;
             } else {
-                let file = OpenOptions::new()
-                    .write(true)
-                    .open(&self.paths.events)
-                    .map_err(|source| {
-                        live_io("open schema-v3 event rollback", &self.paths.events, source)
-                    })?;
-                file.set_len(
-                    baseline
-                        .streams
-                        .get(LiveStreamV2::Events.checkpoint_name())
-                        .ok_or_else(|| LivePersistenceError::CheckpointVerification {
-                            message: "baseline checkpoint is missing events".into(),
-                        })?
-                        .committed_bytes,
-                )
-                .map_err(|source| {
-                    live_io(
-                        "truncate schema-v3 event rollback",
-                        &self.paths.events,
-                        source,
-                    )
-                })?;
-                file.sync_all().map_err(|source| {
-                    live_io(
-                        "synchronize schema-v3 event rollback",
-                        &self.paths.events,
-                        source,
-                    )
-                })?;
+                let mut rollback = vec![LiveStreamV2::Events];
+                if actor.new_context.is_some() {
+                    rollback.insert(0, LiveStreamV2::RuntimeContexts);
+                }
+                rollback_v3_streams(&self.paths, &baseline, &rollback)?;
             }
             return Err(error);
         }
         self.bundle = candidate;
+        self.pending_runtime_context = None;
         self.hooks
             .check(LivePersistencePoint::BeforeAcknowledge)
             .map_err(|source| live_io("acknowledge checkpoint", self.store.root(), source))?;

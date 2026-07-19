@@ -111,6 +111,7 @@ fn field_shape_fixture() -> BundleV3Contents {
             created_at: utc(11, 59, 0),
             app_version: "synthetic-fixture".into(),
             files: BundleFilesV3::default(),
+            creator_runtime_context_id: None,
         },
         session_state: SessionStateV3 {
             schema_version: SCHEMA_VERSION_V5,
@@ -127,6 +128,7 @@ fn field_shape_fixture() -> BundleV3Contents {
             },
             streams: BTreeMap::new(),
             last_committed_mutation_id: Some("session-ended".into()),
+            active_runtime_context_id: None,
         },
         station: Station {
             schema_version: SCHEMA_VERSION_V5,
@@ -199,6 +201,7 @@ fn field_shape_fixture() -> BundleV3Contents {
             status: AnalysisStatus::NotRun,
             notes: Vec::new(),
         },
+        runtime_contexts: Vec::new(),
     }
 }
 
@@ -274,6 +277,7 @@ fn record_meta(recorded_at: DateTime<Utc>, mutation_id: &str, member_index: u32)
             member_index,
             member_count: 2,
         },
+        runtime_context_id: None,
     }
 }
 
@@ -310,6 +314,7 @@ fn event(
                 member_index: 0,
                 member_count: 1,
             },
+            runtime_context_id: None,
         },
         event_id: event_id.into(),
         occurred_at,

@@ -8,10 +8,9 @@ use crate::{
     AdapterRecordV2, AnalysisFile, AntennasFile, Band, BundleFilesV2, BundleManifestV2,
     BundleV2Contents, CorrectableOperatorEventPayloadV2, CurrentBundleContents, CurrentRecordKind,
     CurrentRecordProvenance, EventCorrectionActionV2, EventTimeBasisV2, ExperimentMode,
-    MutationMember, ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2,
-    PropagationRecordV2, Provenance, RecordMetaV2, ReplacementOperatorEventV2, RigRecordV2,
-    Schedule, SessionGoal, SessionStateV2, Station, IDENTITY_MAX_BYTES, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V3,
+    ObservationRecordV2, OperatorEventPayloadV2, OperatorEventV2, PropagationRecordV2,
+    RecordMetaV2, ReplacementOperatorEventV2, RigRecordV2, Schedule, SessionGoal, SessionStateV2,
+    Station, IDENTITY_MAX_BYTES, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
 };
 
 pub use crate::{
@@ -202,14 +201,7 @@ pub struct ScheduleV3 {
     pub slots: Vec<PlannedSlotV3>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RecordMetaV3 {
-    pub schema_version: u16,
-    pub session_id: String,
-    pub recorded_at: DateTime<Utc>,
-    pub provenance: Provenance,
-    pub mutation: MutationMember,
-}
+pub type RecordMetaV3 = RecordMetaV2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SignalStateConfirmationV3 {
@@ -396,6 +388,7 @@ pub struct BundleV3Contents {
     pub rig: Vec<RigRecordV3>,
     pub propagation: Vec<PropagationRecordV3>,
     pub analysis: AnalysisFile,
+    pub runtime_contexts: Vec<crate::v6::RuntimeContextV6>,
 }
 
 impl BundleV3Contents {
@@ -542,10 +535,7 @@ impl BundleV3Contents {
 fn project_v3_meta_to_v2(meta: RecordMetaV3) -> RecordMetaV2 {
     RecordMetaV2 {
         schema_version: SCHEMA_VERSION_V2,
-        session_id: meta.session_id,
-        recorded_at: meta.recorded_at,
-        provenance: meta.provenance,
-        mutation: meta.mutation,
+        ..meta
     }
 }
 
@@ -713,16 +703,14 @@ pub fn upgrade_v2_bundle_model(mut bundle: BundleV2Contents) -> BundleV3Contents
         rig,
         propagation,
         analysis: bundle.analysis,
+        runtime_contexts: Vec::new(),
     }
 }
 
 fn upgrade_v2_meta(meta: RecordMetaV2) -> RecordMetaV3 {
     RecordMetaV3 {
         schema_version: SCHEMA_VERSION_V3,
-        session_id: meta.session_id,
-        recorded_at: meta.recorded_at,
-        provenance: meta.provenance,
-        mutation: meta.mutation,
+        ..meta
     }
 }
 

@@ -171,7 +171,7 @@ pub(crate) trait ControllerActionPort {
 }
 
 use antennabench_core::{
-    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{
     BundleStore, LiveEventMutationV3, LiveMutationMemberV2, LiveMutationV2, LivePersistenceHooks,
@@ -226,8 +226,8 @@ pub(super) fn read_conductor_with_hooks(
         let recovery = if !initialized {
             let report = match schema_version {
                 SCHEMA_VERSION_V2 => store.recover_v2_with_hooks(hooks.clone()),
-                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
-                    store.recover_v3_with_hooks(hooks.clone())
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+                    crate::build_context::recover_v3_with_hooks(&store, hooks.clone())
                 }
                 actual => {
                     return Err(SessionErrorPayload::new(
@@ -262,7 +262,7 @@ pub(super) fn read_conductor_with_hooks(
                 )?;
                 build_view(bundle_name, &bundle, now, action_token, recovery)
             }
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
                 let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
                 register_view_action(
                     conductor_state,
@@ -300,7 +300,7 @@ pub(super) fn mutate_conductor_with_hooks(
             SCHEMA_VERSION_V2 => {
                 mutate_conductor_v2(&store, bundle_name, conductor_state, request, hooks)
             }
-            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+            SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
                 mutate_conductor_v3(&store, bundle_name, conductor_state, request, hooks)
             }
             actual => Err(SessionErrorPayload::new(
@@ -417,8 +417,7 @@ fn mutate_conductor_v3(
         event,
     };
     let append_result = {
-        let mut writer = store
-            .open_v3_writer_with_hooks(hooks.clone())
+        let mut writer = crate::build_context::open_v3_writer_with_hooks(store, hooks.clone())
             .map_err(live_error_payload)?;
         writer.append_event(mutation)
     };

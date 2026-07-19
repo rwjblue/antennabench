@@ -4,7 +4,7 @@ This technical reference defines how AntennaBench records session lifecycle,
 operator actions, corrections, and observation eligibility. For the user-facing
 workflow, start with the [Product Overview](product.md).
 
-Schema-v2 through schema-v5 operator events are append-only evidence. The schedule
+Schema-v2 through schema-v6 operator events are append-only evidence. The schedule
 says what was planned; only explicit effective operator evidence says what
 actually happened. The pure reducers are implemented independently of storage,
 Tauri, sockets, and hardware. The checkpoint writer, shipped manual conductor,

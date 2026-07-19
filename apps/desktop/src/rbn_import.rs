@@ -2,7 +2,7 @@ use std::{fs, io::Cursor, path::Path};
 
 use antennabench_core::{
     v2::SessionLifecycleV2, v3::BundleV3Contents, Band, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
-    SCHEMA_VERSION_V5,
+    SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_rbn::{
     parse_rbn_zip, prepare_rbn_import, RbnImportConfig, RbnImportPreparationConfig,
@@ -105,7 +105,7 @@ fn import_file(
         .map_err(|error| crate::conductor::live_error_payload(error.into()))?;
     if !matches!(
         schema_version,
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6
     ) {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Unsupported,
@@ -142,8 +142,7 @@ fn import_file(
         captured_at,
         source_locator: source_locator.clone(),
     };
-    let mut writer = store
-        .open_v3_writer()
+    let mut writer = crate::build_context::open_v3_writer(&store)
         .map_err(crate::conductor::live_error_payload)?;
     let import_id = writer.allocate_id("rbn-import");
     let expected_revision = writer.checkpoint().revision;

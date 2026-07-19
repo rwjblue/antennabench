@@ -425,6 +425,9 @@ fn parse_tail_member(
         LiveStreamV2::Propagation => {
             serde_json::from_slice(line).map(LiveMutationMemberV2::Propagation)
         }
+        LiveStreamV2::RuntimeContexts => {
+            unreachable!("runtime contexts are never parsed as legacy evidence tails")
+        }
     }
 }
 

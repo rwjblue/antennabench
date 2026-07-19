@@ -482,6 +482,7 @@ pub(super) fn rig_record(
                 member_index: 0,
                 member_count: 1,
             },
+            runtime_context_id: None,
         },
         record_id,
         adapter_record_ids: Vec::new(),

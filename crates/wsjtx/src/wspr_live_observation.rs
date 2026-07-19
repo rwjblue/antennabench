@@ -27,6 +27,7 @@ pub(super) fn import_meta(
             member_index,
             member_count: 0,
         },
+        runtime_context_id: None,
     }
 }
 

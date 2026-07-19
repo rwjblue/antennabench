@@ -14,12 +14,11 @@ use antennabench_core::{
     annotate_bundle_observations,
     v2::{
         AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, BundleV2Contents,
-        MutationMember, NormalizedRecordKind, NormalizedRecordLink, ObservationRecordV2,
-        Provenance, RecordMetaV2, SessionLifecycleV2,
+        NormalizedRecordKind, NormalizedRecordLink, ObservationRecordV2, SessionLifecycleV2,
     },
     v3::{project_wspr_run_v3, BundleV3Contents, WsprCycleDirection},
-    Band, BundleContents, ObservationRecord, RecordSource, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    Band, BundleContents, ObservationRecord, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
+    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
@@ -40,6 +39,7 @@ use crate::{
         active_session_source, with_foreground_operation, ActiveSessionState, SessionErrorKind,
         SessionErrorPayload,
     },
+    wsjtx_session_record::record_meta,
 };
 
 const RECEIVER_READ_TIMEOUT: StdDuration = StdDuration::from_millis(250);
@@ -261,7 +261,7 @@ struct PendingWsjtxMutation {
 fn read_wsjtx_snapshot(store: &BundleStore) -> Result<WsjtxSnapshot, LivePersistenceError> {
     match store.schema_version()? {
         SCHEMA_VERSION_V2 => store.read_v2_checkpointed().map(WsjtxSnapshot::V2),
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
             store.read_v3_checkpointed().map(WsjtxSnapshot::V3)
         }
         actual => {
@@ -1041,17 +1041,17 @@ impl WsjtxOrchestrator {
                             members,
                         })
                     }),
-                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => self
-                    .store
-                    .open_v3_writer_with_hooks(self.hooks.clone())
-                    .and_then(|mut writer| {
-                        writer.append_evidence(LiveEvidenceMutationV3 {
-                            expected_revision: mutation.expected_revision,
-                            mutation_id: mutation.mutation_id.clone(),
-                            adapter_records: mutation.adapter_records.clone(),
-                            observations: mutation.observations.clone(),
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+                    crate::build_context::open_v3_writer_with_hooks(&self.store, self.hooks.clone())
+                        .and_then(|mut writer| {
+                            writer.append_evidence(LiveEvidenceMutationV3 {
+                                expected_revision: mutation.expected_revision,
+                                mutation_id: mutation.mutation_id.clone(),
+                                adapter_records: mutation.adapter_records.clone(),
+                                observations: mutation.observations.clone(),
+                            })
                         })
-                    }),
+                }
                 actual => Err(
                     antennabench_storage::BundleStoreError::UnsupportedSchemaVersion { actual }
                         .into(),
@@ -1211,26 +1211,6 @@ fn observation_v2(
         slot_label: observation.slot_label,
         slot_confidence: observation.slot_confidence,
         raw: observation.raw,
-    }
-}
-
-fn record_meta(
-    session_id: &str,
-    mutation_id: &str,
-    member_index: u32,
-    member_count: u32,
-    recorded_at: DateTime<Utc>,
-) -> RecordMetaV2 {
-    RecordMetaV2 {
-        schema_version: SCHEMA_VERSION_V2,
-        session_id: session_id.into(),
-        recorded_at,
-        provenance: Provenance::from_legacy(RecordSource::WsjtxUdp, env!("CARGO_PKG_VERSION")),
-        mutation: MutationMember {
-            mutation_id: mutation_id.into(),
-            member_index,
-            member_count,
-        },
     }
 }
 
@@ -1568,6 +1548,7 @@ mod tests {
                     member_index: 0,
                     member_count: 1,
                 },
+                runtime_context_id: None,
             },
             event_id: event_id.into(),
             occurred_at,

@@ -14,8 +14,9 @@ use antennabench_core::{
         WsprCycleDirection, WsprCycleIntentV3,
     },
     v5::{upgrade_v3_bundle_model_to_v5, WsprReadinessBasisV5},
+    v6::{BuildChannelV6, BuildIdentityV6, RuntimeContextV6, RuntimePlatformV6, SourceStateV6},
     AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, ExperimentMode, SessionGoal,
-    Station, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    Station, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{BundleAttachment, BundleStore, BundleStoreError};
 use chrono::{TimeZone, Utc};
@@ -41,6 +42,7 @@ fn bundle() -> BundleV3Contents {
             member_index: 0,
             member_count: 1,
         },
+        runtime_context_id: None,
     };
 
     BundleV3Contents {
@@ -50,6 +52,7 @@ fn bundle() -> BundleV3Contents {
             created_at: now,
             app_version: "test".into(),
             files: BundleFilesV3::default(),
+            creator_runtime_context_id: None,
         },
         session_state: SessionStateV3 {
             schema_version: SCHEMA_VERSION_V3,
@@ -66,6 +69,7 @@ fn bundle() -> BundleV3Contents {
             },
             streams: BTreeMap::new(),
             last_committed_mutation_id: Some("mutation-1".into()),
+            active_runtime_context_id: None,
         },
         station: Station {
             schema_version: SCHEMA_VERSION_V3,
@@ -214,7 +218,35 @@ fn bundle() -> BundleV3Contents {
             status: AnalysisStatus::NotRun,
             notes: Vec::new(),
         },
+        runtime_contexts: Vec::new(),
     }
+}
+
+fn upgrader_context() -> RuntimeContextV6 {
+    RuntimeContextV6::new(
+        Utc.with_ymd_and_hms(2026, 7, 19, 12, 0, 0).unwrap(),
+        MutationMember {
+            mutation_id: "pending-upgrade".into(),
+            member_index: 0,
+            member_count: 1,
+        },
+        BuildIdentityV6 {
+            app_version: Some("0.2.0-dev".into()),
+            source_commit: Some("0123456789abcdef0123456789abcdef01234567".into()),
+            source_state: SourceStateV6::Dirty,
+            build_channel: BuildChannelV6::Development,
+            release_tag: None,
+            target_triple: Some("aarch64-apple-darwin".into()),
+            build_architecture: Some("aarch64".into()),
+            build_timestamp: None,
+        },
+        RuntimePlatformV6 {
+            os_family: Some("macos".into()),
+            os_version: Some("15.6".into()),
+            runtime_architecture: Some("aarch64".into()),
+            application_id: Some("com.rwjblue.antennabench".into()),
+        },
+    )
 }
 
 #[test]
@@ -250,6 +282,70 @@ fn v3_static_bundle_round_trips_with_signal_plan_and_confirmation() {
 }
 
 #[test]
+fn v5_upgrade_to_v6_keeps_legacy_identity_unknown_and_records_real_upgrader() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join(format!("source{V2_BUNDLE_SUFFIX}"));
+    let destination_path = temp.path().join(format!("upgraded{V2_BUNDLE_SUFFIX}"));
+    let source = BundleStore::new(&source_path);
+    let mut v5 = upgrade_v3_bundle_model_to_v5(bundle());
+    BundleStore::refresh_v3_checkpoint(&mut v5).unwrap();
+    source.write_v3(&v5).unwrap();
+
+    let upgraded_store = source
+        .upgrade_v5_to_v6(&destination_path, upgrader_context())
+        .unwrap();
+    let upgraded = upgraded_store.read_v3().unwrap();
+    assert_eq!(upgraded.manifest.schema_version, SCHEMA_VERSION_V6);
+    assert_eq!(upgraded.runtime_contexts.len(), 2);
+    let legacy = &upgraded.runtime_contexts[0];
+    assert_eq!(legacy.build.app_version.as_deref(), Some("test"));
+    assert_eq!(legacy.build.source_state, SourceStateV6::Unknown);
+    assert_eq!(legacy.build.build_channel, BuildChannelV6::Unknown);
+    assert!(legacy.build.source_commit.is_none());
+    assert!(legacy.platform.os_family.is_none());
+    assert_eq!(
+        upgraded.manifest.creator_runtime_context_id.as_deref(),
+        Some(legacy.context_id.as_str())
+    );
+    assert_eq!(
+        upgraded.session_state.active_runtime_context_id.as_deref(),
+        Some(upgraded.runtime_contexts[1].context_id.as_str())
+    );
+    assert!(upgraded.events.iter().all(|event| {
+        event.meta.runtime_context_id.as_deref() == Some(legacy.context_id.as_str())
+    }));
+    assert_eq!(source.read_v3().unwrap(), v5);
+}
+
+#[test]
+fn schema_v6_reader_rejects_n_plus_one() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join(format!("source{V2_BUNDLE_SUFFIX}"));
+    let destination_path = temp.path().join(format!("upgraded{V2_BUNDLE_SUFFIX}"));
+    let source = BundleStore::new(&source_path);
+    let mut v5 = upgrade_v3_bundle_model_to_v5(bundle());
+    BundleStore::refresh_v3_checkpoint(&mut v5).unwrap();
+    source.write_v3(&v5).unwrap();
+    let upgraded = source
+        .upgrade_v5_to_v6(&destination_path, upgrader_context())
+        .unwrap();
+    let manifest_path = destination_path.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["schema_version"] = serde_json::json!(SCHEMA_VERSION_V6 + 1);
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        upgraded.read_v3(),
+        Err(BundleStoreError::UnsupportedSchemaVersion { actual })
+            if actual == SCHEMA_VERSION_V6 + 1
+    ));
+}
+
+#[test]
 fn schema_v3_and_v4_upgrade_to_v5_without_inventing_command_evidence() {
     let now = Utc.with_ymd_and_hms(2026, 7, 15, 12, 0, 0).unwrap();
     let mut source = bundle();
@@ -281,6 +377,7 @@ fn schema_v3_and_v4_upgrade_to_v5_without_inventing_command_evidence() {
                     member_index: 0,
                     member_count: 1,
                 },
+                runtime_context_id: None,
             },
             event_id: "historical-ready-event".into(),
             occurred_at: now,

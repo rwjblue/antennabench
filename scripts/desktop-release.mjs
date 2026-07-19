@@ -487,6 +487,8 @@ async function buildTarget({ root, target, tag, runnerLabel }) {
     status: "passed",
   };
   const inputs = buildInputs(root, target, runnerLabel, policy);
+  const source = sourceEvidence(root);
+  if (source.dirty) throw new Error("official release build requires a clean source checkout");
 
   await runBounded("rustup", ["target", "add", target], {
     cwd: root,
@@ -509,7 +511,16 @@ async function buildTarget({ root, target, tag, runnerLabel }) {
     ["build", "--target", target, "--bundles", "app", "--ci", "--no-sign"],
     {
       cwd: path.join(root, "apps", "desktop"),
-      env: { ...process.env, MACOSX_DEPLOYMENT_TARGET: MINIMUM_MACOS },
+      env: {
+        ...process.env,
+        MACOSX_DEPLOYMENT_TARGET: MINIMUM_MACOS,
+        ANTENNABENCH_BUILD_CHANNEL: "official_release",
+        ANTENNABENCH_SOURCE_COMMIT: source.commit,
+        ANTENNABENCH_SOURCE_STATE: "clean",
+        ANTENNABENCH_RELEASE_TAG: tag,
+        ANTENNABENCH_TARGET_TRIPLE: target,
+        ANTENNABENCH_BUILD_ARCHITECTURE: target.split("-", 1)[0],
+      },
       timeoutMs: 1_800_000,
       label: `release build for ${target}`,
     },

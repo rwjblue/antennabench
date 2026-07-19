@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::{collections::BTreeMap, sync::Mutex};
 
 #[cfg(test)]
-use antennabench_core::{v2::V2_BUNDLE_SUFFIX, SCHEMA_VERSION_V5};
+use antennabench_core::{v2::V2_BUNDLE_SUFFIX, SCHEMA_VERSION_V6};
 use antennabench_core::{
     v2::{
-        BundleFilesV2, BundleManifestV2, BundleV2Contents, PlanGenerationV2, SessionLifecycleV2,
-        SessionStateV2,
+        BundleFilesV2, BundleManifestV2, BundleV2Contents, MutationMember, PlanGenerationV2,
+        SessionLifecycleV2, SessionStateV2,
     },
     v3::{
         upgrade_v2_bundle_model, validate_signal_plan_schedule_v3, BundleV3Contents,
@@ -687,6 +687,7 @@ fn build_review_with_profiles(
             created_at,
             app_version: env!("CARGO_PKG_VERSION").into(),
             files: BundleFilesV2::default(),
+            creator_runtime_context_id: None,
         },
         session_state: SessionStateV2 {
             schema_version: SCHEMA_VERSION_V2,
@@ -703,6 +704,7 @@ fn build_review_with_profiles(
             },
             streams: BTreeMap::new(),
             last_committed_mutation_id: None,
+            active_runtime_context_id: None,
         },
         station,
         antennas: antennas_file,
@@ -757,6 +759,20 @@ fn build_review_with_profiles(
         bundle
     };
     use_latest_schema(&mut bundle);
+    let creator_context = crate::build_context::current_runtime_context(
+        created_at,
+        MutationMember {
+            mutation_id: hooks.new_id("mutation"),
+            member_index: 0,
+            member_count: 1,
+        },
+    );
+    let creator_context_id = creator_context.context_id.clone();
+    bundle.manifest.files.runtime_contexts = Some("runtime-contexts.jsonl".into());
+    bundle.manifest.files.diagnostics = Some("diagnostics.jsonl".into());
+    bundle.manifest.creator_runtime_context_id = Some(creator_context_id.clone());
+    bundle.session_state.active_runtime_context_id = Some(creator_context_id);
+    bundle.runtime_contexts = vec![creator_context];
     let (prepared_controller, controller_review) = match draft
         .antenna_controller
         .as_ref()
@@ -789,7 +805,7 @@ fn build_review_with_profiles(
     BundleStore::refresh_v3_checkpoint(&mut bundle).map_err(|error| {
         SessionErrorPayload::new(
             SessionErrorKind::Validation,
-            "The normalized schema-v5 setup plan could not be prepared.",
+            "The normalized schema-v6 setup plan could not be prepared.",
             error.to_string(),
         )
     })?;
@@ -1237,7 +1253,7 @@ mod tests {
         assert_eq!(review.review_id.as_deref(), Some("review-0003"));
         let plan = review.plan.unwrap();
         assert_eq!(plan.session_id, "session-0001");
-        assert_eq!(plan.schema_version, SCHEMA_VERSION_V5);
+        assert_eq!(plan.schema_version, SCHEMA_VERSION_V6);
         assert_eq!(plan.station.callsign, "N1RWJ");
         assert_eq!(plan.station.grid, "FN42");
         assert!(!plan.wspr_live_acquisition_enabled);
@@ -1694,7 +1710,7 @@ mod tests {
         assert!(review.valid, "diagnostics: {:?}", review.diagnostics);
         let review_id = review.review_id.unwrap();
         let plan = review.plan.unwrap();
-        assert_eq!(plan.schema_version, SCHEMA_VERSION_V5);
+        assert_eq!(plan.schema_version, SCHEMA_VERSION_V6);
         assert!(!plan.wspr_live_acquisition_enabled);
         assert_eq!(plan.slots.len(), 8);
         assert_eq!(plan.schedule_review.period_kind, "controlled_signal_slot");
@@ -1729,7 +1745,7 @@ mod tests {
             create_with_selection(&state, &active, &review_id, |_| Ok(Some(path.clone()))).unwrap();
         assert!(matches!(outcome, CreateSessionOutcome::Created { .. }));
         let persisted = BundleStore::new(path).read_v3_checkpointed().unwrap();
-        assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V5);
+        assert_eq!(persisted.manifest.schema_version, SCHEMA_VERSION_V6);
         assert_eq!(
             persisted.schedule.antenna_control,
             Some(antennabench_core::v5::AntennaControlPolicyV5::Manual)

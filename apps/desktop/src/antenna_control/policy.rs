@@ -222,6 +222,7 @@ pub(super) fn command_verified_event(
                 member_index: 0,
                 member_count: 1,
             },
+            runtime_context_id: None,
         },
         event_id,
         occurred_at: ready_at,

@@ -20,6 +20,7 @@ use antennabench_core::{
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::v2_attachment::BundleAttachment;
 use super::{
     create_directory, ensure_bundle_root, ensure_directory,
     inspection::scan_duplicate_members,
@@ -44,50 +45,29 @@ pub(super) struct ResolvedBundlePathsV2 {
     pub(super) rig: PathBuf,
     pub(super) propagation: PathBuf,
     pub(super) analysis: PathBuf,
+    pub(super) runtime_contexts: Option<PathBuf>,
+    pub(super) diagnostics: Option<PathBuf>,
     pub(super) attachments_dir: PathBuf,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BundleAttachment {
-    pub reference: AttachmentReference,
-    pub bytes: Vec<u8>,
-}
-
-impl BundleAttachment {
-    pub fn new(
-        bytes: Vec<u8>,
-        media_type: impl Into<String>,
-        encoding: Option<String>,
-        container: Option<String>,
-        source_locator: Option<String>,
-    ) -> Self {
-        let reference = AttachmentReference {
-            sha256: sha256_hex(&bytes),
-            byte_size: u64::try_from(bytes.len()).expect("usize fits in u64"),
-            media_type: media_type.into(),
-            encoding,
-            container,
-            source_locator,
-        };
-        Self { reference, bytes }
-    }
-}
-
 impl ResolvedBundlePathsV2 {
-    pub(super) fn root_files(&self) -> [&Path; 11] {
-        [
-            &self.manifest,
-            &self.session_state,
-            &self.station,
-            &self.antennas,
-            &self.schedule,
-            &self.events,
-            &self.observations,
-            &self.adapter_records,
-            &self.rig,
-            &self.propagation,
-            &self.analysis,
-        ]
+    pub(super) fn root_files(&self) -> Vec<&Path> {
+        let mut paths: Vec<&Path> = vec![
+            self.manifest.as_path(),
+            self.session_state.as_path(),
+            self.station.as_path(),
+            self.antennas.as_path(),
+            self.schedule.as_path(),
+            self.events.as_path(),
+            self.observations.as_path(),
+            self.adapter_records.as_path(),
+            self.rig.as_path(),
+            self.propagation.as_path(),
+            self.analysis.as_path(),
+        ];
+        paths.extend(self.runtime_contexts.as_deref());
+        paths.extend(self.diagnostics.as_deref());
+        paths
     }
 
     fn ensure_unique(&self) -> Result<(), BundleStoreError> {
@@ -243,6 +223,16 @@ impl BundleStore {
             rig: self.bundle_path(&files.rig)?,
             propagation: self.bundle_path(&files.propagation)?,
             analysis: self.bundle_path(&files.analysis)?,
+            runtime_contexts: files
+                .runtime_contexts
+                .as_deref()
+                .map(|path| self.bundle_path(path))
+                .transpose()?,
+            diagnostics: files
+                .diagnostics
+                .as_deref()
+                .map(|path| self.bundle_path(path))
+                .transpose()?,
             attachments_dir: self.bundle_path(&files.attachments_dir)?,
         };
         if files.manifest != "manifest.json" {

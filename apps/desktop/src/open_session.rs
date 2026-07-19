@@ -20,7 +20,7 @@ use antennabench_core::{
     },
     v5::WsprReadinessBasisV5,
     Band, BundleContents, BundleValidationError, BundleValidationReport, SCHEMA_VERSION_V2,
-    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5,
+    SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_report::{
     build_report_with_snapshot, render_compact_summary_html, render_standalone_html,

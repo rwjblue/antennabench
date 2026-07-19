@@ -94,6 +94,9 @@ pub(super) fn prepare_v3_evidence(
     session_id: &str,
     schema_version: u16,
     recorded_at: DateTime<Utc>,
+    runtime_context_id: Option<&str>,
+    member_offset: u32,
+    member_count: u32,
 ) -> Result<(), LivePersistenceError> {
     if validate_machine_identity(&mutation.mutation_id).is_err()
         || mutation.adapter_records.is_empty()
@@ -102,10 +105,15 @@ pub(super) fn prepare_v3_evidence(
             message: "evidence mutation requires a bounded identity and adapter records".into(),
         });
     }
-    let member_count = u32::try_from(mutation.adapter_records.len() + mutation.observations.len())
+    let primary_count = u32::try_from(mutation.adapter_records.len() + mutation.observations.len())
         .map_err(|_| LivePersistenceError::InvalidMutation {
             message: "evidence mutation has too many members".into(),
         })?;
+    if member_count < primary_count || member_offset > member_count - primary_count {
+        return Err(LivePersistenceError::InvalidMutation {
+            message: "evidence mutation membership is inconsistent".into(),
+        });
+    }
     for (index, record) in mutation.adapter_records.iter_mut().enumerate() {
         prepare_v3_evidence_meta(
             &mut record.meta,
@@ -113,9 +121,10 @@ pub(super) fn prepare_v3_evidence(
             session_id,
             schema_version,
             &mutation.mutation_id,
-            u32::try_from(index).expect("member count fits u32"),
+            member_offset + u32::try_from(index).expect("member count fits u32"),
             member_count,
             recorded_at,
+            runtime_context_id,
         )?;
     }
     for (offset, record) in mutation.observations.iter_mut().enumerate() {
@@ -125,9 +134,12 @@ pub(super) fn prepare_v3_evidence(
             session_id,
             schema_version,
             &mutation.mutation_id,
-            u32::try_from(mutation.adapter_records.len() + offset).expect("member count fits u32"),
+            member_offset
+                + u32::try_from(mutation.adapter_records.len() + offset)
+                    .expect("member count fits u32"),
             member_count,
             recorded_at,
+            runtime_context_id,
         )?;
     }
     Ok(())
@@ -198,6 +210,7 @@ pub(super) fn prepare_v3_evidence_meta(
     member_index: u32,
     member_count: u32,
     recorded_at: DateTime<Utc>,
+    runtime_context_id: Option<&str>,
 ) -> Result<(), LivePersistenceError> {
     if validate_machine_identity(record_id).is_err() {
         return Err(LivePersistenceError::InvalidMutation {
@@ -212,6 +225,7 @@ pub(super) fn prepare_v3_evidence_meta(
         member_index,
         member_count,
     };
+    meta.runtime_context_id = runtime_context_id.map(str::to_string);
     Ok(())
 }
 
@@ -853,6 +867,29 @@ pub(super) fn preflight_live_budget(
                 message: "modeled record accounting overflowed".into(),
             }
         })?;
+    }
+    if let Some(bytes) = added_bytes.get(&LiveStreamV2::RuntimeContexts).copied() {
+        let records = added_records
+            .get(&LiveStreamV2::RuntimeContexts)
+            .copied()
+            .unwrap_or_default();
+        let current = checkpoint
+            .streams
+            .get(LiveStreamV2::RuntimeContexts.checkpoint_name())
+            .ok_or_else(|| LivePersistenceError::CheckpointVerification {
+                message: "checkpoint is missing runtimeContexts".into(),
+            })?;
+        if current.committed_bytes.saturating_add(bytes)
+            > antennabench_core::v6::RUNTIME_CONTEXT_STREAM_MAX_BYTES as u64
+            || current.record_count.saturating_add(records)
+                > antennabench_core::v6::RUNTIME_CONTEXT_MAX_RECORDS as u64
+        {
+            return Err(LivePersistenceError::InvalidMutation {
+                message: "runtime context mutation exceeds the schema-v6 retention bound".into(),
+            });
+        }
+        total_bytes = total_bytes.saturating_add(current.committed_bytes.saturating_add(bytes));
+        total_records = total_records.saturating_add(current.record_count.saturating_add(records));
     }
     if total_bytes > profile.modeled_total_bytes || total_records > profile.modeled_total_records {
         return Err(LivePersistenceError::InvalidMutation {

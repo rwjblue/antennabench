@@ -17,6 +17,7 @@ mod lossless_copy;
 mod resource;
 mod upgrade;
 mod v2;
+mod v2_attachment;
 mod v3;
 
 pub use inspection::BundleInspection;
@@ -33,7 +34,7 @@ pub use resource::{
     LOCAL_STANDARD_V1,
 };
 pub use upgrade::BundleUpgradeError;
-pub use v2::BundleAttachment;
+pub use v2_attachment::BundleAttachment;
 
 #[derive(Debug, Clone)]
 pub struct BundleStore {

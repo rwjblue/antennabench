@@ -293,7 +293,7 @@ whole bundle or no typed bundle. Storage-safe preservation remains separate
 from parsing and analysis, and strict writes or live checkpoints never promote
 bytes that cross the profile.
 
-Schema-v1 through schema-v5 reads, strict writes, upgrades, attachment access, and
+Schema-v1 through schema-v6 reads, strict writes, upgrades, attachment access, and
 lossless copies use this same fixed profile. Production callers cannot override
 it. Tests can inject a tiny equivalent to exercise exact boundaries and
 mid-operation failures deterministically. Resource failures expose a stable
@@ -302,19 +302,19 @@ retryability, completeness, and evidence-gap fields. Cancellation is checked
 during directory traversal, between JSONL records, and at each 64 KiB file-copy
 chunk.
 
-## Accepted Schema-V6 Runtime And Diagnostic Contract
+## Schema-V6 Runtime Context Layout
 
 [Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
-selects the implementation contract for the next bundle version. Schema v6 will
-add checkpointed `runtime-contexts.jsonl` and `diagnostics.jsonl` streams. The
-first records the content-deduplicated app build and bounded runtime platform
-that created or materially acted on the session. The second records typed,
-bounded material operational outcomes. Both remain distinct from operator,
+defines checkpointed `runtime-contexts.jsonl` and `diagnostics.jsonl` streams.
+The runtime-context stream is implemented: it records the content-deduplicated
+app build and bounded runtime platform that created or materially acted on the
+session. The diagnostics path and empty checkpoint head are present so schema
+v6 topology is stable; typed diagnostic records land in #181. Both remain distinct from operator,
 adapter-source, radio, and normalized scientific evidence.
 
-The immutable manifest will reference the creator runtime context. Every v6
-stream record will name the responsible context, and the existing checkpoint
-will commit context declarations, primary evidence, and post-effect diagnostics
+The immutable manifest references the creator runtime context. Every v6
+evidence record names the responsible context, and the existing checkpoint
+commits a new context before its first referencing primary evidence
 in coherent mutation order. A failure before evidence commits may create a
 diagnostic-only revision; the record separately states the primary
 `revision_before`, `revision_after`, and `evidence_effect` so consumers do not
@@ -334,10 +334,12 @@ explicit non-destructive upgrade. Upgrade retains only the legacy creator app
 version actually present, records all unavailable identity as unknown, and
 adds the real upgrade-process context. Analysis ignores both new streams.
 
-The ADR owns the complete field taxonomy, JSON examples, privacy matrix,
-report/support-summary disclosure policy, retry/idempotence behavior, and
-#180 → #181 → #179 rollout. Those implementation issues must update this
-reference from accepted contract to implemented layout as their slices land.
+Build identity is compiled from the package version, source commit/state,
+channel, target triple, architecture, optional release tag, and optional
+`SOURCE_DATE_EPOCH`. Official release builds require all authoritative inputs
+to agree. Runtime identity is limited to OS family/product version, process
+architecture, and the fixed application identifier; it contains no host, user,
+device, location, home-path, environment, secret, or WebView fingerprint.
 
 ## Root Files
 

@@ -54,7 +54,7 @@ pub(super) fn load_snapshot(
                         intended_cycle_count,
                     )
                 }
-                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 => {
+                SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
                     let bundle = store.read_v3_checkpointed()?;
                     let revision = bundle.session_state.revision;
                     let lifecycle = bundle.session_state.lifecycle;
@@ -893,6 +893,7 @@ mod tests {
                     member_index: 0,
                     member_count: 1,
                 },
+                runtime_context_id: None,
             },
             record_id: format!("record-{record_type}"),
             source_time: Some(recorded_at),

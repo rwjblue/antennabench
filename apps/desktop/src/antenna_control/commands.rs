@@ -160,7 +160,7 @@ pub(crate) fn attach_active_session_antenna_controller(
     let bundle = BundleStore::new(&source)
         .read_v3_checkpointed()
         .map_err(live_error_payload)?;
-    if bundle.manifest.schema_version != SCHEMA_VERSION_V5 {
+    if bundle.manifest.schema_version < SCHEMA_VERSION_V5 {
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Unsupported,
             "Antenna-controller profiles require a schema-v5 session.",
@@ -322,7 +322,7 @@ pub(crate) fn run_active_session_antenna_controller(
         let (source, _) = active_session_source(active_state.inner())?;
         let store = BundleStore::new(&source);
         let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
-        if bundle.manifest.schema_version != SCHEMA_VERSION_V5
+        if bundle.manifest.schema_version < SCHEMA_VERSION_V5
             || bundle.session_state.lifecycle != SessionLifecycleV2::Running
         {
             return Err(SessionErrorPayload::new(
@@ -508,9 +508,11 @@ pub(crate) fn run_active_session_antenna_controller(
                 None
             };
         let receipt = {
-            let mut writer = store
-                .open_v3_writer_with_hooks(Arc::new(SystemLivePersistenceHooks))
-                .map_err(live_error_payload)?;
+            let mut writer = crate::build_context::open_v3_writer_with_hooks(
+                &store,
+                Arc::new(SystemLivePersistenceHooks),
+            )
+            .map_err(live_error_payload)?;
             writer
                 .append_antenna_control(LiveAntennaControlMutationV5 {
                     expected_revision: request.expected_revision,

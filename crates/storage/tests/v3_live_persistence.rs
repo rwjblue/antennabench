@@ -27,6 +27,10 @@ use antennabench_core::{
         AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlPolicyV5,
         AntennaControlRoleV5, WsprReadinessBasisV5, COMMAND_OUTPUT_MAX_BYTES,
     },
+    v6::{
+        upgrade_v5_bundle_model_to_v6, BuildChannelV6, BuildIdentityV6, RuntimeContextV6,
+        RuntimePlatformV6, SourceStateV6,
+    },
     AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, ExperimentMode, ObservationKind,
     SessionGoal, Station, SCHEMA_VERSION_V3, SCHEMA_VERSION_V5,
 };
@@ -36,6 +40,33 @@ use antennabench_storage::{
     RecoveryDispositionV2,
 };
 use chrono::{DateTime, TimeZone, Utc};
+
+fn runtime_context(now: DateTime<Utc>, os_version: &str) -> RuntimeContextV6 {
+    RuntimeContextV6::new(
+        now,
+        MutationMember {
+            mutation_id: "pending-context".into(),
+            member_index: 0,
+            member_count: 1,
+        },
+        BuildIdentityV6 {
+            app_version: Some("0.1.0-dev".into()),
+            source_commit: Some("0123456789abcdef0123456789abcdef01234567".into()),
+            source_state: SourceStateV6::Clean,
+            build_channel: BuildChannelV6::Development,
+            release_tag: None,
+            target_triple: Some("x86_64-unknown-linux-gnu".into()),
+            build_architecture: Some("x86_64".into()),
+            build_timestamp: None,
+        },
+        RuntimePlatformV6 {
+            os_family: Some("linux".into()),
+            os_version: Some(os_version.into()),
+            runtime_architecture: Some("x86_64".into()),
+            application_id: Some("com.rwjblue.antennabench".into()),
+        },
+    )
+}
 
 #[derive(Debug)]
 struct Hooks {
@@ -78,6 +109,7 @@ fn meta(now: DateTime<Utc>, session_id: &str) -> RecordMetaV3 {
             member_index: 0,
             member_count: 1,
         },
+        runtime_context_id: None,
     }
 }
 
@@ -104,6 +136,7 @@ fn evidence(
             member_index: 0,
             member_count: 1,
         },
+        runtime_context_id: None,
     };
     let capture = AdapterRecordV3 {
         meta: record_meta.clone(),
@@ -176,6 +209,7 @@ fn bundle() -> BundleV3Contents {
             created_at: now,
             app_version: "test".into(),
             files: BundleFilesV3::default(),
+            creator_runtime_context_id: None,
         },
         session_state: SessionStateV3 {
             schema_version: SCHEMA_VERSION_V3,
@@ -192,6 +226,7 @@ fn bundle() -> BundleV3Contents {
             },
             streams: BTreeMap::new(),
             last_committed_mutation_id: None,
+            active_runtime_context_id: None,
         },
         station: Station {
             schema_version: SCHEMA_VERSION_V3,
@@ -267,6 +302,7 @@ fn bundle() -> BundleV3Contents {
             status: AnalysisStatus::NotRun,
             notes: Vec::new(),
         },
+        runtime_contexts: Vec::new(),
     }
 }
 
@@ -323,6 +359,7 @@ fn command_v5_bundle() -> BundleV3Contents {
                 member_index: 0,
                 member_count: 1,
             },
+            runtime_context_id: None,
         },
         event_id: "start-event".into(),
         occurred_at: now,
@@ -1140,4 +1177,114 @@ fn v3_evidence_failure_rolls_back_both_streams_and_new_attachment() {
         .map(|entries| entries.count())
         .unwrap_or(0);
     assert_eq!(attachment_entries, 0);
+}
+
+#[test]
+fn v6_first_mutation_by_a_new_context_commits_context_before_evidence() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join(format!("v6-context{V2_BUNDLE_SUFFIX}"));
+    let store = BundleStore::new(&path);
+    let now = Utc.with_ymd_and_hms(2026, 7, 19, 12, 0, 0).unwrap();
+    let mut initial = upgrade_v5_bundle_model_to_v6(
+        upgrade_v3_bundle_model_to_v5(bundle()),
+        runtime_context(now, "1"),
+    );
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+
+    let next_context = runtime_context(now, "2");
+    let next_context_id = next_context.context_id.clone();
+    let mut writer = store
+        .open_v3_writer_with_hooks_in_context(Arc::new(Hooks { now, fail_at: None }), next_context)
+        .unwrap();
+    writer
+        .append_event(mutation(
+            0,
+            "v6-start-mutation",
+            event(
+                now,
+                "v6-start-event",
+                None,
+                OperatorEventPayloadV3::SessionStarted { note: None },
+            ),
+        ))
+        .unwrap();
+    drop(writer);
+
+    let reopened = store.read_v3_checkpointed().unwrap();
+    assert_eq!(reopened.runtime_contexts.len(), 3);
+    let context = reopened.runtime_contexts.last().unwrap();
+    let event = reopened.events.last().unwrap();
+    assert_eq!(context.context_id, next_context_id);
+    assert_eq!(
+        event.meta.runtime_context_id.as_deref(),
+        Some(next_context_id.as_str())
+    );
+    assert_eq!(
+        context.mutation.mutation_id,
+        event.meta.mutation.mutation_id
+    );
+    assert_eq!(context.mutation.member_index, 0);
+    assert_eq!(event.meta.mutation.member_index, 1);
+    assert_eq!(context.mutation.member_count, 2);
+    assert_eq!(event.meta.mutation.member_count, 2);
+    assert_eq!(
+        reopened.session_state.streams["runtimeContexts"].record_count,
+        3
+    );
+}
+
+#[test]
+fn v6_recovery_by_a_new_context_commits_context_before_interruption() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp
+        .path()
+        .join(format!("v6-recovery-context{V2_BUNDLE_SUFFIX}"));
+    let store = BundleStore::new(&path);
+    let now = Utc.with_ymd_and_hms(2026, 7, 19, 12, 0, 0).unwrap();
+    let mut initial = upgrade_v5_bundle_model_to_v6(
+        upgrade_v3_bundle_model_to_v5(bundle()),
+        runtime_context(now, "1"),
+    );
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+    let hooks = Arc::new(Hooks { now, fail_at: None });
+    let mut writer = store.open_v3_writer_with_hooks(hooks.clone()).unwrap();
+    writer
+        .append_event(mutation(
+            0,
+            "v6-start-before-recovery",
+            event(
+                now,
+                "v6-start-event-before-recovery",
+                None,
+                OperatorEventPayloadV3::SessionStarted { note: None },
+            ),
+        ))
+        .unwrap();
+    drop(writer);
+
+    let recovery_context = runtime_context(now, "2");
+    let recovery_context_id = recovery_context.context_id.clone();
+    let report = store
+        .recover_v3_with_hooks_in_context(hooks, recovery_context)
+        .unwrap();
+    assert!(report.interruption.is_some());
+
+    let reopened = store.read_v3_checkpointed().unwrap();
+    let context = reopened.runtime_contexts.last().unwrap();
+    let interruption = reopened.events.last().unwrap();
+    assert_eq!(context.context_id, recovery_context_id);
+    assert_eq!(
+        interruption.meta.runtime_context_id.as_deref(),
+        Some(recovery_context_id.as_str())
+    );
+    assert_eq!(
+        context.mutation.mutation_id,
+        interruption.meta.mutation.mutation_id
+    );
+    assert_eq!(context.mutation.member_index, 0);
+    assert_eq!(interruption.meta.mutation.member_index, 1);
+    assert_eq!(context.mutation.member_count, 2);
+    assert_eq!(interruption.meta.mutation.member_count, 2);
 }

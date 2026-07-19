@@ -54,7 +54,7 @@ fn snapshot_files(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
     files
 }
 
-fn create_managed_v5(root: &Path) -> PathBuf {
+fn create_managed_latest(root: &Path) -> PathBuf {
     fs::create_dir_all(root).unwrap();
     let active = ActiveSessionState::default();
     create_e2e_session(root, &active).path
@@ -110,7 +110,7 @@ fn managed_root_symlink_is_rejected_without_following_it() {
 fn supported_checkpointed_bundle_projects_bounded_plan_and_lifecycle_metadata() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let path = create_managed_v5(&root);
+    let path = create_managed_latest(&root);
     let state = ManagedSessionsState::default();
 
     let catalog = list_managed_sessions_for(&state, &root).unwrap();
@@ -126,7 +126,7 @@ fn supported_checkpointed_bundle_projects_bounded_plan_and_lifecycle_metadata() 
     assert_eq!(entry.callsign.as_deref(), Some("N1RWJ"));
     assert!(entry.created_at.is_some());
     assert_eq!(entry.lifecycle, Some(SessionLifecycleV2::Ready));
-    assert_eq!(entry.schema_version, Some(5));
+    assert_eq!(entry.schema_version, Some(6));
     assert_eq!(entry.revision, Some(0));
     assert_eq!(entry.mode, Some(ExperimentMode::WholeStationAb));
     assert_eq!(entry.bands, vec![Band::M20]);
@@ -162,7 +162,7 @@ fn legacy_bundle_has_no_invented_lifecycle_or_revision() {
 fn malformed_unsupported_invalid_unsafe_and_unrelated_entries_are_fault_isolated() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let valid = create_managed_v5(&root);
+    let valid = create_managed_latest(&root);
 
     let malformed = root.join(format!("malformed{V2_BUNDLE_SUFFIX}"));
     fs::create_dir(&malformed).unwrap();
@@ -252,7 +252,7 @@ fn permission_denied_bundle_is_unreadable_and_does_not_hide_healthy_rows() {
 
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let valid = create_managed_v5(&root);
+    let valid = create_managed_latest(&root);
     let unreadable = root.join(format!("unreadable{V2_BUNDLE_SUFFIX}"));
     copy_directory(&valid, &unreadable).unwrap();
     fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).unwrap();
@@ -274,7 +274,7 @@ fn permission_denied_bundle_is_unreadable_and_does_not_hide_healthy_rows() {
 fn listing_is_observational_and_preserves_every_bundle_byte() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let bundle = create_managed_v5(&root);
+    let bundle = create_managed_latest(&root);
     let before = snapshot_files(&bundle);
 
     let catalog = list_managed_sessions_for(&ManagedSessionsState::default(), &root).unwrap();
@@ -287,7 +287,7 @@ fn listing_is_observational_and_preserves_every_bundle_byte() {
 fn same_session_id_copies_remain_distinct_and_warn_without_merging() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let first = create_managed_v5(&root);
+    let first = create_managed_latest(&root);
     let second = root.join(format!("copy{V2_BUNDLE_SUFFIX}"));
     copy_directory(&first, &second).unwrap();
 
@@ -340,7 +340,7 @@ fn healthy_rows_sort_by_authoritative_creation_time_then_name() {
 fn moving_a_listed_bundle_stales_its_locator_without_following_the_new_path() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let bundle = create_managed_v5(&root);
+    let bundle = create_managed_latest(&root);
     let state = ManagedSessionsState::default();
     let catalog = list_managed_sessions_for(&state, &root).unwrap();
     let record = listed_record(
@@ -364,7 +364,7 @@ fn moving_a_listed_bundle_stales_its_locator_without_following_the_new_path() {
 fn successful_managed_open_uses_the_shared_activation_path() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let bundle = create_managed_v5(&root);
+    let bundle = create_managed_latest(&root);
     let managed = ManagedSessionsState::default();
     let catalog = list_managed_sessions_for(&managed, &root).unwrap();
     let locator = catalog.entries[0].locator_id.as_deref().unwrap();
@@ -380,7 +380,7 @@ fn successful_managed_open_uses_the_shared_activation_path() {
 fn locators_reject_arbitrary_stale_traversal_replaced_and_modified_entries() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let bundle = create_managed_v5(&root);
+    let bundle = create_managed_latest(&root);
     let name = bundle.file_name().unwrap().to_str().unwrap().to_string();
     let state = ManagedSessionsState::default();
     let catalog = list_managed_sessions_for(&state, &root).unwrap();
@@ -434,7 +434,7 @@ fn failed_managed_revalidation_leaves_the_prior_active_session_unchanged() {
     crate::open_session::open_session_at_path(&active, active_path.clone()).unwrap();
 
     let root = temp.path().join("sessions");
-    let managed = create_managed_v5(&root);
+    let managed = create_managed_latest(&root);
     let state = ManagedSessionsState::default();
     let catalog = list_managed_sessions_for(&state, &root).unwrap();
     let record = listed_record(
@@ -452,7 +452,7 @@ fn failed_managed_revalidation_leaves_the_prior_active_session_unchanged() {
 fn creation_registration_returns_an_exact_narrow_managed_context() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let bundle = create_managed_v5(&root);
+    let bundle = create_managed_latest(&root);
     let state = ManagedSessionsState::default();
 
     let context = state.register_created(&root, &bundle).unwrap();
@@ -564,7 +564,7 @@ impl RevealPort for RecordingRevealPort {
 fn reveal_port_receives_only_the_resolved_root_or_direct_child() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("sessions");
-    let bundle = create_managed_v5(&root);
+    let bundle = create_managed_latest(&root);
     let state = ManagedSessionsState::default();
     let catalog = list_managed_sessions_for(&state, &root).unwrap();
     let record = listed_record(

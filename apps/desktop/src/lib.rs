@@ -1,4 +1,8 @@
 mod antenna_control;
+mod build_context;
+#[cfg(test)]
+#[path = "../build_identity.rs"]
+mod build_identity;
 mod conductor;
 mod location;
 mod managed_sessions;
@@ -6,6 +10,7 @@ mod open_session;
 mod rbn_import;
 mod setup;
 mod wsjtx_session;
+mod wsjtx_session_record;
 mod wspr_live_acquisition;
 mod wspr_live_import;
 

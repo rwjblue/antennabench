@@ -224,6 +224,12 @@ pub struct RecordMetaV2 {
     pub recorded_at: DateTime<Utc>,
     pub provenance: Provenance,
     pub mutation: MutationMember,
+    #[serde(
+        default,
+        rename = "runtimeContextId",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub runtime_context_id: Option<String>,
 }
 
 impl RecordMetaV2 {
@@ -481,6 +487,14 @@ pub struct BundleFilesV2 {
     pub propagation: String,
     pub analysis: String,
     pub attachments_dir: String,
+    #[serde(
+        default,
+        rename = "runtimeContexts",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub runtime_contexts: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<String>,
 }
 
 impl Default for BundleFilesV2 {
@@ -498,6 +512,8 @@ impl Default for BundleFilesV2 {
             propagation: "propagation.jsonl".into(),
             analysis: "analysis.json".into(),
             attachments_dir: "attachments".into(),
+            runtime_contexts: None,
+            diagnostics: None,
         }
     }
 }
@@ -509,6 +525,12 @@ pub struct BundleManifestV2 {
     pub created_at: DateTime<Utc>,
     pub app_version: String,
     pub files: BundleFilesV2,
+    #[serde(
+        default,
+        rename = "creatorRuntimeContextId",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub creator_runtime_context_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -550,6 +572,12 @@ pub struct SessionStateV2 {
     pub active_plan: PlanGenerationV2,
     pub streams: BTreeMap<String, StreamCheckpointV2>,
     pub last_committed_mutation_id: Option<String>,
+    #[serde(
+        default,
+        rename = "activeRuntimeContextId",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub active_runtime_context_id: Option<String>,
 }
 
 fn is_false(value: &bool) -> bool {
