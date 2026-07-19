@@ -1134,6 +1134,10 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
 #[test]
 fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     let mut report = paired_report(true);
+    report.overview.scope.delta_orientation = Some(antennabench_analysis::DeltaOrientation {
+        subtrahend_label: "Antenna <negative> with a deliberately long operator label".into(),
+        minuend_label: "Antenna & positive with another deliberately long label".into(),
+    });
     let negative_path = {
         let mut path = report.overview.strata[0].path_median_deltas[0].clone();
         path.remote_path = "K3NEGATIVE".to_string();
@@ -1146,8 +1150,9 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     let html = render_standalone_html(&report).unwrap();
 
     assert!(
-        html.contains("Positive values mean B was stronger; negative values mean A was stronger.")
+        html.contains("Positive values mean Antenna &amp; positive with another deliberately long label was stronger; negative values mean Antenna &lt;negative&gt; with a deliberately long operator label was stronger.")
     );
+    assert!(html.contains("<strong class=\"path-strip-side path-strip-side-negative\">Antenna &lt;negative&gt; with a deliberately long operator label</strong><span class=\"path-strip-axis-zero\">0 dB</span><strong class=\"path-strip-side path-strip-side-positive\">Antenna &amp; positive with another deliberately long label</strong>"));
     assert_eq!(
         html.matches("<span class=\"path-strip-dot geometry-left")
             .count(),
@@ -1167,12 +1172,19 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     assert!(!html.contains(" style=\""));
     assert!(html.contains("A 0 dB dot is retained as a true zero"));
     assert!(html.contains("<caption>One path-median signed SNR delta per remote path"));
+    assert!(html.contains("<details class=\"audit-disclosure path-detail-disclosure\"><summary>Review exact remote paths and matched-pair counts"));
+    assert!(html.contains("See which paths contributed, how many matched pairs support each path median, and the exact delta behind each dot."));
     assert!(html.contains("<td>K1PAIR</td><td>2</td>"));
     assert!(html.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
     assert!(html.contains("A-only and B-only paths remain visible"));
     assert!(html.contains("<caption>Unique remote-path reach counts"));
     assert!(html.contains(".path-strip-row{grid-template-columns:1fr}"));
     assert!(html.contains("@media print"));
+
+    let compact = render_compact_summary_html(&report).unwrap();
+    assert!(compact.contains("path-strip-side-negative"));
+    assert!(compact.contains("Review exact remote paths and matched-pair counts"));
+    assert!(compact.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
 }
 
 #[test]

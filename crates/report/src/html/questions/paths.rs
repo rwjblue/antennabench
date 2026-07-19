@@ -117,7 +117,10 @@ pub(in super::super) fn render_same_path_stratum(
         .map(|path| path.median_delta_right_minus_left_db.abs())
         .chain(std::iter::once(median.abs()))
         .fold(1.0_f64, f64::max);
-    out.push_str("<div class=\"path-strip\" aria-hidden=\"true\">");
+    let (negative_label, positive_label) = orientation
+        .map(orientation_antenna_labels)
+        .unwrap_or_else(|| ("Negative side".into(), "Positive side".into()));
+    write_html!(out, "<div class=\"path-strip\" aria-hidden=\"true\"><div class=\"path-strip-axis\"><span></span><span class=\"path-strip-axis-track\"><strong class=\"path-strip-side path-strip-side-negative\">{}</strong><span class=\"path-strip-axis-zero\">0 dB</span><strong class=\"path-strip-side path-strip-side-positive\">{}</strong></span><span></span></div>", negative_label, positive_label);
     for path in &row.path_median_deltas {
         let position = delta_position(path.median_delta_right_minus_left_db, max_abs);
         write_html!(out, "<div class=\"path-strip-row\"><span class=\"chart-label\">{}</span><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-dot geometry-left {}\"></span></span><span>{} dB</span></div>", escape_html(&path.remote_path), geometry_class(position), format_signed(path.median_delta_right_minus_left_db));
@@ -127,6 +130,7 @@ pub(in super::super) fn render_same_path_stratum(
     let orientation_text = orientation
         .map(|_| "signed".to_string())
         .unwrap_or_else(|| "right − left".to_string());
+    out.push_str("<details class=\"audit-disclosure path-detail-disclosure\"><summary>Review exact remote paths and matched-pair counts<span class=\"disclosure-purpose\">See which paths contributed, how many matched pairs support each path median, and the exact delta behind each dot.</span></summary><div class=\"disclosure-body\">");
     write_html!(out, "<div class=\"table-wrap\"><table><caption>One path-median {} SNR delta per remote path for {}; the group median is {} dB.</caption><thead><tr><th scope=\"col\">Remote path</th><th scope=\"col\">Matched pairs</th><th scope=\"col\">Median delta</th></tr></thead><tbody>", escape_html(&orientation_text), comparison_stratum(&row.stratum), format_signed(median));
     for path in &row.path_median_deltas {
         write_html!(
@@ -137,7 +141,7 @@ pub(in super::super) fn render_same_path_stratum(
             format_signed(path.median_delta_right_minus_left_db)
         );
     }
-    out.push_str("</tbody></table></div>");
+    out.push_str("</tbody></table></div></div></details>");
 }
 pub(in super::super) fn render_reach_view(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let (left_label, right_label) = report_antenna_labels(report);
