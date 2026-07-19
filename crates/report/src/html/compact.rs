@@ -7,6 +7,7 @@ use crate::{
 };
 
 use super::{
+    geometry::render_geometry_styles,
     questions::{
         overview_lifecycle_label, render_answer_first_overview_with_reference, render_how_to_read,
         render_reach_bar, render_same_path_stratum,
@@ -45,6 +46,7 @@ pub fn render_compact_summary_html_with_resources(
 <title>AntennaBench compact share summary</title><style>",
     );
     out.push_str(STYLES);
+    render_geometry_styles(&mut out);
     out.push_str(COMPACT_STYLES);
     out.push_str(COMPACT_SMALL_PRINT_STYLES);
     let compact_main_class = if report.overview.strata.len() <= 2

@@ -1,3 +1,4 @@
+use super::super::geometry::geometry_class;
 use super::*;
 use std::collections::BTreeSet;
 
@@ -162,7 +163,7 @@ pub(in super::super) fn render_distance_view(
         match row_distance(row).filter(|_| location_available(row)) {
             Some(distance) => {
                 let width = distance / maximum * 100.0;
-                write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"bar-track\"><span class=\"location-fill\" style=\"width:{width:.3}%\"></span></span><span>{} km</span></div>", escape_html(&row.remote_path), format_number(distance));
+                write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"bar-track\"><span class=\"location-fill geometry-width {}\"></span></span><span>{} km</span></div>", escape_html(&row.remote_path), geometry_class(width), format_number(distance));
             }
             None => write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"empty\">Location unavailable</span><span>—</span></div>", escape_html(&row.remote_path)),
         }
@@ -184,7 +185,7 @@ pub(in super::super) fn render_azimuth_view(
         match row_azimuth(row).filter(|_| location_available(row)) {
             Some(azimuth) => {
                 let left = azimuth / 360.0 * 100.0;
-                write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"azimuth-track\"><span class=\"azimuth-marker\" style=\"left:{left:.3}%\"></span></span><span>{}°</span></div>", escape_html(&row.remote_path), format_number(azimuth));
+                write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"azimuth-track\"><span class=\"azimuth-marker geometry-left {}\"></span></span><span>{}°</span></div>", escape_html(&row.remote_path), geometry_class(left), format_number(azimuth));
             }
             None => write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{}</span><span class=\"empty\">Location unavailable</span><span>—</span></div>", escape_html(&row.remote_path)),
         }

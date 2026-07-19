@@ -15,6 +15,7 @@ macro_rules! write_html {
 mod audit;
 mod compact;
 mod evidence;
+mod geometry;
 mod questions;
 mod shared;
 mod styles;
@@ -22,6 +23,7 @@ mod styles;
 pub use compact::{render_compact_summary_html, render_compact_summary_html_with_resources};
 
 use audit::render_audit_appendix;
+use geometry::render_geometry_styles;
 use questions::{
     render_answer_first_overview, render_distance_section, render_how_to_read,
     render_question_navigation, render_reach_section, render_run_quality_section,
@@ -125,6 +127,7 @@ fn render_standalone_html_document(
 <title>AntennaBench session report</title><style>",
     );
     out.push_str(STYLES);
+    render_geometry_styles(&mut out);
     out.push_str("</style></head><body><main><a class=\"skip-link\" href=\"#what-run-show\">Skip to report findings</a>");
 
     write_html!(

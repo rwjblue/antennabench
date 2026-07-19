@@ -1,3 +1,4 @@
+use super::super::geometry::geometry_class;
 use super::*;
 
 pub(in super::super) fn render_same_path_section(
@@ -119,10 +120,10 @@ pub(in super::super) fn render_same_path_stratum(
     out.push_str("<div class=\"path-strip\" aria-hidden=\"true\">");
     for path in &row.path_median_deltas {
         let position = delta_position(path.median_delta_right_minus_left_db, max_abs);
-        write_html!(out, "<div class=\"path-strip-row\"><span class=\"chart-label\">{}</span><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-dot\" style=\"left:{position:.3}%\"></span></span><span>{} dB</span></div>", escape_html(&path.remote_path), format_signed(path.median_delta_right_minus_left_db));
+        write_html!(out, "<div class=\"path-strip-row\"><span class=\"chart-label\">{}</span><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-dot geometry-left {}\"></span></span><span>{} dB</span></div>", escape_html(&path.remote_path), geometry_class(position), format_signed(path.median_delta_right_minus_left_db));
     }
     let median_position = delta_position(median, max_abs);
-    write_html!(out, "<div class=\"path-strip-row\"><strong>Group median</strong><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-median\" style=\"left:{median_position:.3}%\"></span></span><strong>{} dB</strong></div></div>", format_signed(median));
+    write_html!(out, "<div class=\"path-strip-row\"><strong>Group median</strong><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-median geometry-left {}\"></span></span><strong>{} dB</strong></div></div>", geometry_class(median_position), format_signed(median));
     let orientation_text = orientation
         .map(|_| "signed".to_string())
         .unwrap_or_else(|| "right − left".to_string());
@@ -184,15 +185,19 @@ pub(in super::super) fn render_reach_bar(
     class: &str,
 ) {
     write_html!(out, "<span class=\"{class}\" aria-hidden=\"true\">");
-    for (count, segment) in [
+    let counts = [
         (reach.left_only_unique_path_count, "left"),
         (reach.both_unique_path_count, "both"),
         (reach.right_only_unique_path_count, "right"),
-    ] {
+    ];
+    let total = counts.iter().map(|(count, _)| count).sum::<usize>().max(1) as f64;
+    for (count, segment) in counts {
         if count > 0 {
+            let width = count as f64 / total * 100.0;
             write_html!(
                 out,
-                "<span class=\"reach-seg {segment}\" style=\"flex-grow:{count}\"></span>"
+                "<span class=\"reach-seg {segment} {}\"></span>",
+                geometry_class(width)
             );
         }
     }

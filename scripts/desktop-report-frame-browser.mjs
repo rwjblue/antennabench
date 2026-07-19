@@ -35,6 +35,23 @@ for (const mode of ["full", "compact"]) {
   );
 }
 
+const geometryFixture = `<section data-geometry-regression aria-hidden="true">
+  <div class="path-strip">
+    <span class="path-strip-track"><span class="path-strip-dot geometry-left g200" data-geometry="negative"></span></span>
+    <span class="path-strip-track"><span class="path-strip-dot geometry-left g500" data-geometry="zero"></span></span>
+    <span class="path-strip-track"><span class="path-strip-dot geometry-left g800" data-geometry="positive"></span></span>
+    <span class="path-strip-track"><span class="path-strip-median geometry-left g650" data-geometry="median"></span></span>
+  </div>
+  <div class="chart">
+    <div class="chart-row"><span>Width</span><span class="bar-track"><span class="bar usable geometry-width g250" data-geometry="proportional-width"></span></span><span>25%</span></div>
+    <div class="chart-row"><span>Position</span><span class="azimuth-track"><span class="azimuth-marker geometry-left g750" data-geometry="other-position"></span></span><span>75%</span></div>
+    <div class="chart-row"><span>Range</span><span class="snr-track"><span class="snr-range-position geometry-left g100" data-geometry="range-position"><span class="snr-range geometry-width g600" data-geometry="range-width"></span></span></span><span>10–70%</span></div>
+  </div>
+</section>`;
+for (const mode of ["full", "compact"]) {
+  reports[mode] = reports[mode].replace("</main>", `${geometryFixture}</main>`);
+}
+
 async function browser(args, { json = false } = {}) {
   const command = ["--session", session, ...(json ? ["--json"] : []), ...args];
   const child = spawn("agent-browser", command, {
@@ -398,6 +415,41 @@ try {
     assert.equal(styles.panelBorderStyle, "solid");
     assert.equal(styles.tableCollapse, "collapse");
     assert.equal(styles.heroDisplay, mode === "compact" ? "block" : "grid");
+
+    const geometry = await evaluateReportFrame(pageUrl, `(() => {
+      const ratio = (selector, dimension) => {
+        const element = document.querySelector(selector);
+        const track = element.parentElement;
+        const value = dimension === "left"
+          ? Number.parseFloat(getComputedStyle(element).left)
+          : element.getBoundingClientRect().width;
+        return value / track.getBoundingClientRect().width;
+      };
+      return {
+        inlineStyles: document.querySelectorAll("[style]").length,
+        negative: ratio('[data-geometry="negative"]', "left"),
+        zero: ratio('[data-geometry="zero"]', "left"),
+        positive: ratio('[data-geometry="positive"]', "left"),
+        median: ratio('[data-geometry="median"]', "left"),
+        proportionalWidth: ratio('[data-geometry="proportional-width"]', "width"),
+        otherPosition: ratio('[data-geometry="other-position"]', "left"),
+        rangePosition: ratio('[data-geometry="range-position"]', "left"),
+        rangeWidth: ratio('[data-geometry="range-width"]', "width"),
+      };
+    })()`);
+    assert.equal(geometry.inlineStyles, 0);
+    for (const [name, expected] of Object.entries({
+      negative: 0.2,
+      zero: 0.5,
+      positive: 0.8,
+      median: 0.65,
+      proportionalWidth: 0.25,
+      otherPosition: 0.75,
+      rangePosition: 0.1,
+      rangeWidth: 0.6,
+    })) {
+      assert.ok(Math.abs(geometry[name] - expected) < 0.01, `${mode} ${name}: ${geometry[name]}`);
+    }
 
     await evaluateReportFrame(pageUrl, `(() => {
       const disclosure = document.querySelector("details");

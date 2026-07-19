@@ -1133,14 +1133,38 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
 
 #[test]
 fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
-    let report = paired_report(true);
+    let mut report = paired_report(true);
+    let negative_path = {
+        let mut path = report.overview.strata[0].path_median_deltas[0].clone();
+        path.remote_path = "K3NEGATIVE".to_string();
+        path.median_delta_right_minus_left_db = -3.0;
+        path
+    };
+    report.overview.strata[0]
+        .path_median_deltas
+        .push(negative_path);
     let html = render_standalone_html(&report).unwrap();
 
     assert!(
         html.contains("Positive values mean B was stronger; negative values mean A was stronger.")
     );
-    assert_eq!(html.matches("<span class=\"path-strip-dot\"").count(), 2);
-    assert_eq!(html.matches("<span class=\"path-strip-median\"").count(), 1);
+    assert_eq!(
+        html.matches("<span class=\"path-strip-dot geometry-left")
+            .count(),
+        3
+    );
+    assert_eq!(
+        html.matches("<span class=\"path-strip-median geometry-left")
+            .count(),
+        1
+    );
+    for class in ["g0", "g500", "g1000"] {
+        assert!(
+            html.contains(&format!("path-strip-dot geometry-left {class}")),
+            "missing {class} negative/zero/positive geometry"
+        );
+    }
+    assert!(!html.contains(" style=\""));
     assert!(html.contains("A 0 dB dot is retained as a true zero"));
     assert!(html.contains("<caption>One path-median signed SNR delta per remote path"));
     assert!(html.contains("<td>K1PAIR</td><td>2</td>"));

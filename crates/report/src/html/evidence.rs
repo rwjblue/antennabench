@@ -6,7 +6,7 @@ use crate::{
 };
 use antennabench_analysis::{ObservationCounts, SnrStatistics};
 
-use super::shared::*;
+use super::{geometry::geometry_class, shared::*};
 
 pub(super) fn render_antenna_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     out.push_str("<section class=\"panel\" aria-labelledby=\"antenna-title\"><h2 id=\"antenna-title\">Antenna evidence</h2>");
@@ -82,7 +82,7 @@ pub(super) fn render_snr_chart(out: &mut CheckedHtmlWriter<'_>, report: &Session
                 let left = (snr.min_db - min) / range * 100.0;
                 let width = (snr.max_db - snr.min_db) / range * 100.0;
                 let median = (snr.median_db - min) / range * 100.0;
-                write_html!(out, "<span class=\"snr-track\"><span class=\"snr-range\" style=\"left:{left:.3}%;width:{width:.3}%\"></span><span class=\"snr-point\" style=\"left:{median:.3}%\"></span></span><span class=\"chart-value\">{} dB</span>", format_number(snr.median_db));
+                write_html!(out, "<span class=\"snr-track\"><span class=\"snr-range-position geometry-left {}\"><span class=\"snr-range geometry-width {}\"></span></span><span class=\"snr-point geometry-left {}\"></span></span><span class=\"chart-value\">{} dB</span>", geometry_class(left), geometry_class(width), geometry_class(median), format_number(snr.median_db));
             }
             _ => out.push_str(
                 "<span class=\"snr-track\"></span><span class=\"chart-value\">Unavailable</span>",
@@ -158,7 +158,7 @@ pub(super) fn count_chart(
         let denominator = counts.total.max(1) as f64;
         let usable = counts.usable as f64 / denominator * 100.0;
         let excluded = counts.excluded as f64 / denominator * 100.0;
-        write_html!(out, "<div class=\"chart-row\"><span class=\"chart-label\">{}</span><span class=\"bar-track\"><span class=\"bar usable\" style=\"width:{usable:.3}%\"></span><span class=\"bar excluded\" style=\"width:{excluded:.3}%\"></span></span><span class=\"chart-value\">{} / {}</span></div>", escape_html(&label), counts.usable, counts.excluded);
+        write_html!(out, "<div class=\"chart-row\"><span class=\"chart-label\">{}</span><span class=\"bar-track\"><span class=\"bar usable geometry-width {}\"></span><span class=\"bar excluded geometry-width {}\"></span></span><span class=\"chart-value\">{} / {}</span></div>", escape_html(&label), geometry_class(usable), geometry_class(excluded), counts.usable, counts.excluded);
     }
     out.push_str("</div>");
 }

@@ -1,3 +1,4 @@
+use super::super::geometry::geometry_class;
 use super::*;
 
 pub(in super::super) fn render_comparison_diagnostics(
@@ -91,7 +92,7 @@ pub(in super::super) fn render_overlap(out: &mut CheckedHtmlWriter<'_>, report: 
         let total = (row.left_finite_count + row.right_finite_count).max(1) as f64;
         let left_width = row.left_finite_count as f64 / total * 100.0;
         let right_width = row.right_finite_count as f64 / total * 100.0;
-        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"bar-track\"><span class=\"bar left\" style=\"width:{left_width:.3}%\"></span><span class=\"bar right\" style=\"width:{right_width:.3}%\"></span></span><span>{} / {}</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), row.left_finite_count, row.right_finite_count);
+        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"bar-track\"><span class=\"bar left geometry-width {}\"></span><span class=\"bar right geometry-width {}\"></span></span><span>{} / {}</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), geometry_class(left_width), geometry_class(right_width), row.left_finite_count, row.right_finite_count);
     }
     write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Path overlap and missingness data</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Remote path</th><th scope=\"col\">{} usable</th><th scope=\"col\">{} usable</th><th scope=\"col\">Matched</th><th scope=\"col\">Unmatched — {}</th><th scope=\"col\">Unmatched — {}</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody>", left_label, right_label, left_label, right_label, left_label, right_label);
     for row in &report.comparison.overlap_rows {
@@ -189,7 +190,7 @@ pub(in super::super) fn render_paired_differences(
         } else {
             50.0
         };
-        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"comparison-track\"><span class=\"comparison-zero\"></span><span class=\"comparison-delta\" style=\"left:{left:.3}%;width:{width:.3}%\"></span></span><span>{} dB</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), format_signed(row.delta_right_minus_left_db));
+        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"comparison-track\"><span class=\"comparison-zero\"></span><span class=\"comparison-delta-position geometry-left {}\"><span class=\"comparison-delta geometry-width {}\"></span></span></span><span>{} dB</span></div>", escape_html(&row.remote_path), comparison_stratum(&row.stratum), geometry_class(left), geometry_class(width), format_signed(row.delta_right_minus_left_db));
     }
     let (left_label, right_label) = report_antenna_labels(report);
     write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Matched-pair difference data</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">{} observation</th><th scope=\"col\">{} observation</th><th scope=\"col\">{} slot</th><th scope=\"col\">{} slot</th><th scope=\"col\">{} SNR</th><th scope=\"col\">{} SNR</th><th scope=\"col\">Signed delta</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>", left_label, right_label, left_label, right_label, left_label, right_label);
@@ -222,7 +223,7 @@ pub(in super::super) fn render_paired_snr_time(
     for row in rows {
         let left = (row.left_snr_db - minimum) / span * 100.0;
         let right = (row.right_snr_db - minimum) / span * 100.0;
-        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"snr-pair\"><span class=\"snr-left\" style=\"left:{left:.3}%\"></span><span class=\"snr-right\" style=\"left:{right:.3}%\"></span></span><span>{} / {} dB</span></div>", timestamp(row.left_timestamp), escape_html(&row.remote_path), format_number(row.left_snr_db), format_number(row.right_snr_db));
+        write_html!(out, "<div class=\"comparison-row\"><span class=\"chart-label\">{} · {}</span><span class=\"snr-pair\"><span class=\"snr-left geometry-left {}\"></span><span class=\"snr-right geometry-left {}\"></span></span><span>{} / {} dB</span></div>", timestamp(row.left_timestamp), escape_html(&row.remote_path), geometry_class(left), geometry_class(right), format_number(row.left_snr_db), format_number(row.right_snr_db));
     }
     write_html!(out, "</div><div class=\"table-wrap\"><table><caption>Matched SNR over time data</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Remote path</th><th scope=\"col\">Block</th><th scope=\"col\">Order</th><th scope=\"col\">{} time</th><th scope=\"col\">{} time</th><th scope=\"col\">Elapsed</th><th scope=\"col\">{} SNR</th><th scope=\"col\">{} SNR</th></tr></thead><tbody>", left_label, right_label, left_label, right_label);
     for row in rows {
