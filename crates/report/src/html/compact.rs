@@ -9,7 +9,7 @@ use crate::{
 use super::{
     questions::{
         overview_lifecycle_label, render_answer_first_overview_with_reference, render_how_to_read,
-        render_same_path_stratum,
+        render_reach_bar, render_same_path_stratum,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, STYLES},
@@ -178,7 +178,8 @@ pub(super) fn render_compact_reach_view(out: &mut CheckedHtmlWriter<'_>, report:
         return;
     }
     let (left_label, right_label) = report_antenna_labels(report);
-    write_html!(out, "<div class=\"table-wrap\"><table><caption>Unique observed-path overlap by separate comparison group</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">{} only</th><th scope=\"col\">Heard by both</th><th scope=\"col\">{} only</th></tr></thead><tbody>", left_label, right_label);
+    write_html!(out, "<p class=\"muted reach-note\" aria-hidden=\"true\">Overlap bars — <span class=\"swatch left\"></span>{} only · <span class=\"swatch both\"></span>heard by both · <span class=\"swatch right\"></span>{} only; segment widths are proportional to counts.</p>", left_label, right_label);
+    write_html!(out, "<div class=\"table-wrap\"><table><caption>Unique observed-path overlap by separate comparison group</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">{} only</th><th scope=\"col\">Heard by both</th><th scope=\"col\">{} only</th><th scope=\"col\">Overlap</th></tr></thead><tbody>", left_label, right_label);
     let unavailable = report
         .overview
         .strata
@@ -198,15 +199,17 @@ pub(super) fn render_compact_reach_view(out: &mut CheckedHtmlWriter<'_>, report:
     }) {
         write_html!(
             out,
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>",
             comparison_stratum(&row.stratum),
             row.reach.left_only_unique_path_count,
             row.reach.both_unique_path_count,
             row.reach.right_only_unique_path_count
         );
+        render_reach_bar(out, &row.reach, "reach-mini");
+        out.push_str("</td></tr>");
     }
     if !unavailable.is_empty() {
-        write_html!(out, "<tr class=\"collapsed-empty-strata\"><td colspan=\"4\">No usable reach evidence in {}: {}.</td></tr>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable));
+        write_html!(out, "<tr class=\"collapsed-empty-strata\"><td colspan=\"5\">No usable reach evidence in {}: {}.</td></tr>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable));
     }
     out.push_str("</tbody></table></div><p class=\"muted\">These are unique observed paths, not a coverage score or a claim about unobserved paths.</p>");
 }

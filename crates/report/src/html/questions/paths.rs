@@ -156,8 +156,15 @@ pub(in super::super) fn render_reach_view(out: &mut CheckedHtmlWriter<'_>, repor
         });
     for row in available {
         let reach = &row.reach;
+        let universe = reach.left_only_unique_path_count
+            + reach.both_unique_path_count
+            + reach.right_only_unique_path_count;
         write_html!(out, "<h3>{}</h3>", comparison_stratum(&row.stratum));
-        write_html!(out, "<div class=\"reach-strip\" aria-hidden=\"true\"><span><strong>{}</strong><small>{} only</small></span><span><strong>{}</strong><small>heard by both</small></span><span><strong>{}</strong><small>{} only</small></span></div><div class=\"table-wrap\"><table><caption>Unique remote-path reach counts for {}.</caption><thead><tr><th scope=\"col\">{} only</th><th scope=\"col\">Heard by both</th><th scope=\"col\">{} only</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody><tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr></tbody></table></div>", reach.left_only_unique_path_count, left_label, reach.both_unique_path_count, reach.right_only_unique_path_count, right_label, comparison_stratum(&row.stratum), left_label, right_label, left_label, right_label, reach.left_only_unique_path_count, reach.both_unique_path_count, reach.right_only_unique_path_count, row.missing_snr_left_count, row.missing_snr_right_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
+        write_html!(out, "<div class=\"reach-strip\" aria-hidden=\"true\"><div class=\"reach-cells\"><span><strong>{}</strong><small><span class=\"swatch left\"></span>{} only</small></span><span><strong>{}</strong><small><span class=\"swatch both\"></span>heard by both</small></span><span><strong>{}</strong><small><span class=\"swatch right\"></span>{} only</small></span></div>", reach.left_only_unique_path_count, left_label, reach.both_unique_path_count, reach.right_only_unique_path_count, right_label);
+        render_reach_bar(out, reach, "reach-bar");
+        out.push_str("</div>");
+        write_html!(out, "<p class=\"muted reach-note\">Segment widths are proportional to unique-path counts. {} heard {} of {} unique path{}; {} heard {}.</p>", left_label, reach.left_only_unique_path_count + reach.both_unique_path_count, universe, plural_suffix(universe), right_label, reach.right_only_unique_path_count + reach.both_unique_path_count);
+        write_html!(out, "<div class=\"table-wrap\"><table><caption>Unique remote-path reach counts for {}.</caption><thead><tr><th scope=\"col\">{} only</th><th scope=\"col\">Heard by both</th><th scope=\"col\">{} only</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody><tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr></tbody></table></div>", comparison_stratum(&row.stratum), left_label, right_label, left_label, right_label, reach.left_only_unique_path_count, reach.both_unique_path_count, reach.right_only_unique_path_count, row.missing_snr_left_count, row.missing_snr_right_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
     }
     if !unavailable.is_empty() {
         let missing_left = unavailable
@@ -170,6 +177,26 @@ pub(in super::super) fn render_reach_view(out: &mut CheckedHtmlWriter<'_>, repor
             .sum::<usize>();
         write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable path-reach signal reports in {} of {} comparison groups: {}. Missing SNR remains separate ({}: {}, {}: {}).</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable), left_label, missing_left, right_label, missing_right);
     }
+}
+pub(in super::super) fn render_reach_bar(
+    out: &mut CheckedHtmlWriter<'_>,
+    reach: &ReportOverviewReach,
+    class: &str,
+) {
+    write_html!(out, "<span class=\"{class}\" aria-hidden=\"true\">");
+    for (count, segment) in [
+        (reach.left_only_unique_path_count, "left"),
+        (reach.both_unique_path_count, "both"),
+        (reach.right_only_unique_path_count, "right"),
+    ] {
+        if count > 0 {
+            write_html!(
+                out,
+                "<span class=\"reach-seg {segment}\" style=\"flex-grow:{count}\"></span>"
+            );
+        }
+    }
+    out.push_str("</span>");
 }
 pub(in super::super) fn delta_position(value: f64, maximum_absolute: f64) -> f64 {
     (50.0 + value / maximum_absolute * 50.0).clamp(0.0, 100.0)

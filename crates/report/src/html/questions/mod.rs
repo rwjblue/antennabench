@@ -3,8 +3,9 @@ use std::fmt::Write as _;
 use crate::{
     ReportAzimuthSector, ReportDistanceBin, ReportLifecycleEventKind, ReportOperatorEvent,
     ReportOperatorEventKind, ReportOverviewLifecycleState, ReportOverviewLimitation,
-    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportOverviewStratum,
-    ReportPathLocationAvailability, ReportRunTimelineRow, ReportStratumAvailability, SessionReport,
+    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportOverviewReach,
+    ReportOverviewStratum, ReportPathLocationAvailability, ReportRunTimelineRow,
+    ReportStratumAvailability, SessionReport,
 };
 use antennabench_core::AlignedSlotStatus;
 
@@ -21,6 +22,7 @@ pub(super) use overview::{
     render_answer_first_overview_with_reference, render_how_to_read, render_question_navigation,
 };
 pub(super) use paths::{
-    plural_suffix, render_reach_section, render_same_path_section, render_same_path_stratum,
+    plural_suffix, render_reach_bar, render_reach_section, render_same_path_section,
+    render_same_path_stratum,
 };
 pub(super) use quality::render_run_quality_section;
