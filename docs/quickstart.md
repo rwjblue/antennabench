@@ -2,10 +2,12 @@
 
 This walkthrough compares a **Vertical** with an **Inverted V** on 20 m. It
 uses the ordinary manual-switching workflow, **Both (TX + RX)**, and three
-complete repetitions. Allow at least 24 minutes for the 12 planned
-[WSPR cycles](glossary.md#wspr-cycle), plus time to switch antennas and wait for
-eligible cycle boundaries. WSPR is the Weak Signal Propagation Reporter mode
-used by WSJT-X.
+complete repetitions. The 12 planned [WSPR cycles](glossary.md#wspr-cycle)
+require about 24 minutes of cycle time. With automatic WSPR.live collection
+enabled, AntennaBench then waits through one five-minute ingestion grace before
+the final request. Switching, confirmation, eligible-cycle boundary waits,
+request execution, and recovery from failure add further wall-clock time. WSPR
+is the Weak Signal Propagation Reporter mode used by WSJT-X.
 
 ## Before You Start
 
@@ -51,14 +53,16 @@ switch the radio or antenna for this manual run.
    **Complete rounds**. Here, one complete round is one repetition: every
    antenna gets one receive cycle and one transmit cycle. The resulting plan
    should contain 12 directed WSPR cycles with about 24 minutes of required
-   cycle time. Antenna switching, confirmation, and waiting for eligible cycle
-   boundaries add wall-clock time.
+   cycle time. Because automatic WSPR.live collection is enabled below, the
+   estimate also shows one five-minute ingestion grace after the final cycle.
+   This is not an exact end-to-end duration.
 
 6. **Keep automatic public collection on.** Under **WSPR Spots**, expand
    **Offline option** and leave **Gather delayed/public WSPR.live TX and RX
    spots automatically** enabled. AntennaBench will request matching
    [public reports](glossary.md#public-report) after their WSPR windows; there
-   is no separate fetch step.
+   is no separate fetch step. The final five-minute grace is best-effort timing,
+   not a guarantee that WSPR.live has received every report.
 
 7. **Review before creating anything.** Select **Review plan**.
    Check your station, antenna order, the 12-cycle sequence, and the statements

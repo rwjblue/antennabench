@@ -264,6 +264,7 @@ export function setupPlanEstimate({
   mode,
   rounds,
   antennaCount,
+  wsprLiveAcquisitionEnabled = false,
   signalPlanEnabled = false,
   frequenciesHz = "",
 }) {
@@ -286,7 +287,10 @@ export function setupPlanEstimate({
   const directionCount = ["whole_station_ab", "single_antenna_profiling"].includes(mode) ? 2 : 1;
   const cycleCount = parsedRounds * scheduledAntennaCount * directionCount;
   const requiredCycleMinutes = cycleCount * 2;
-  return `${roundsLabel} · ${cycleCount} planned WSPR ${cycleCount === 1 ? "cycle" : "cycles"} · about ${requiredCycleMinutes} minutes of required cycle time.`;
+  const cycleSummary = `${roundsLabel} · ${cycleCount} planned WSPR ${cycleCount === 1 ? "cycle" : "cycles"} · about ${requiredCycleMinutes} minutes of required cycle time`;
+  return wsprLiveAcquisitionEnabled
+    ? `${cycleSummary} · then a 5-minute WSPR.live ingestion grace.`
+    : `${cycleSummary}.`;
 }
 
 export function conductorActionAvailable(view, action) {

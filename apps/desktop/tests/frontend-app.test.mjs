@@ -294,6 +294,16 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
 
     const mode = elements.setupForm.querySelector('[data-setup-field="mode"]');
     assert.match(elements.setupPlanSummary.textContent, /16 planned WSPR cycles · about 32 minutes/);
+    assert.match(elements.setupPlanSummary.textContent, /then a 5-minute WSPR\.live ingestion grace/);
+    const wsprLive = elements.setupForm.querySelector(
+      '[data-setup-field="wsprLiveAcquisitionEnabled"]',
+    );
+    wsprLive.checked = false;
+    wsprLive.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    assert.doesNotMatch(elements.setupPlanSummary.textContent, /ingestion grace/);
+    wsprLive.checked = true;
+    wsprLive.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    assert.match(elements.setupPlanSummary.textContent, /then a 5-minute WSPR\.live ingestion grace/);
     mode.value = "tx_focused";
     mode.dispatchEvent(new InputEvent("input", { bubbles: true }));
     assert.match(elements.setupPlanSummary.textContent, /8 planned WSPR cycles · about 16 minutes/);

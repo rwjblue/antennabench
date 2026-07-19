@@ -211,6 +211,7 @@ export function renderSetup(elements, state, root) {
     mode: setupForm.querySelector('[data-setup-field="mode"]').value,
     rounds: setupForm.querySelector('[data-setup-field="rounds"]').value,
     antennaCount: setupForm.querySelectorAll("[data-antenna-row]").length,
+    wsprLiveAcquisitionEnabled: setupForm.querySelector('[data-setup-field="wsprLiveAcquisitionEnabled"]').checked,
     signalPlanEnabled: setupForm.querySelector('[data-setup-field="signalPlanEnabled"]').checked,
     frequenciesHz: setupForm.querySelector('[data-setup-field="signalFrequenciesHz"]').value,
   });

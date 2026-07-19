@@ -417,6 +417,10 @@ test("live setup estimates match every schedule mode and controlled-signal seman
     estimate({ mode: "tx_focused", rounds: "1" }),
     "1 round · 2 planned WSPR cycles · about 4 minutes of required cycle time.",
   );
+  assert.equal(
+    estimate({ mode: "tx_focused", rounds: "1", wsprLiveAcquisitionEnabled: true }),
+    "1 round · 2 planned WSPR cycles · about 4 minutes of required cycle time · then a 5-minute WSPR.live ingestion grace.",
+  );
   assert.match(estimate({ mode: "rx_focused" }), /8 planned WSPR cycles · about 16 minutes/);
   assert.equal(
     estimate({ rounds: "1" }),
@@ -427,7 +431,11 @@ test("live setup estimates match every schedule mode and controlled-signal seman
     "1 round · 2 planned WSPR cycles · about 4 minutes of required cycle time.",
   );
   assert.match(
-    estimate({ signalPlanEnabled: true, frequenciesHz: "14097000, 14097100, 14097000" }),
+    estimate({
+      signalPlanEnabled: true,
+      wsprLiveAcquisitionEnabled: true,
+      frequenciesHz: "14097000, 14097100, 14097000",
+    }),
     /16 controlled-signal slots\. Timing follows the configured operator cadence/,
   );
   assert.match(

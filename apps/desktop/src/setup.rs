@@ -193,6 +193,7 @@ struct SetupScheduleReview {
     period_count: usize,
     wspr_cycle_count: Option<usize>,
     required_cycle_minutes: Option<u64>,
+    finalization_grace_minutes: Option<u64>,
     summary: String,
     counterbalance_explanation: String,
     transition_summary: String,
@@ -1127,10 +1128,12 @@ fn create_e2e_session_with_signal(
         assert_eq!(plan.schedule_review.period_kind, "controlled_signal_slot");
         assert!(plan.schedule_review.wspr_cycle_count.is_none());
         assert!(plan.schedule_review.required_cycle_minutes.is_none());
+        assert!(plan.schedule_review.finalization_grace_minutes.is_none());
     } else {
         assert_eq!(plan.schedule_review.period_kind, "wspr_cycle");
         assert_eq!(plan.schedule_review.wspr_cycle_count, Some(8));
         assert_eq!(plan.schedule_review.required_cycle_minutes, Some(16));
+        assert!(plan.schedule_review.finalization_grace_minutes.is_none());
         assert_eq!(plan.schedule_review.transitions.len(), 7);
         assert!(plan
             .capabilities
@@ -1590,6 +1593,11 @@ mod tests {
                 plan.schedule_review.required_cycle_minutes,
                 Some(case.required_cycle_minutes)
             );
+            assert_eq!(plan.schedule_review.finalization_grace_minutes, Some(5));
+            assert!(plan
+                .schedule_review
+                .summary
+                .contains("then a 5-minute WSPR.live ingestion grace"));
             assert_eq!(
                 plan.slots
                     .iter()
@@ -1720,6 +1728,7 @@ mod tests {
         assert_eq!(plan.schedule_review.period_count, 8);
         assert!(plan.schedule_review.wspr_cycle_count.is_none());
         assert!(plan.schedule_review.required_cycle_minutes.is_none());
+        assert!(plan.schedule_review.finalization_grace_minutes.is_none());
         assert!(plan
             .capabilities
             .cannot_establish
@@ -1767,7 +1776,9 @@ mod tests {
         let review = build_review(&state, draft, &FixedHooks::new()).unwrap();
 
         assert!(review.valid);
-        assert!(review.plan.unwrap().wspr_live_acquisition_enabled);
+        let plan = review.plan.unwrap();
+        assert!(plan.wspr_live_acquisition_enabled);
+        assert_eq!(plan.schedule_review.finalization_grace_minutes, Some(5));
         assert!(
             state
                 .0

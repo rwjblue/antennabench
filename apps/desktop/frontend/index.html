@@ -183,8 +183,8 @@
                     <small>One round tests every scheduled antenna in each direction selected by the mode.</small>
                   </div>
                 </div>
-                <p class="run-plan-summary" data-setup-plan-summary role="status" aria-live="polite" aria-atomic="true">4 rounds · 16 planned WSPR cycles · about 32 minutes of required cycle time.</p>
-                <p class="field-help">Antenna switching, confirmation, and waiting for eligible WSPR cycle boundaries add wall-clock time.</p>
+                <p class="run-plan-summary" data-setup-plan-summary role="status" aria-live="polite" aria-atomic="true">4 rounds · 16 planned WSPR cycles · about 32 minutes of required cycle time · then a 5-minute WSPR.live ingestion grace.</p>
+                <p class="field-help">Antenna switching, confirmation, eligible-cycle boundary waits, the final WSPR.live request, and recovery from failure can add wall-clock time. When automatic WSPR.live collection is enabled, its five-minute grace is not a guarantee that every report has arrived.</p>
               </fieldset>
 
               <fieldset class="setup-section" data-controller-section>

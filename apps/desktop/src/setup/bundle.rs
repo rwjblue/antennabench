@@ -10,6 +10,7 @@ use antennabench_core::{
     Antenna, Band, ExperimentMode, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::LivePersistenceHooks;
+use antennabench_wsjtx::WSPR_LIVE_INGESTION_GRACE_SECONDS;
 
 use super::{
     ParsedSignalPlan, SessionErrorPayload, SetupAntennaReview, SetupCapabilityReview,
@@ -320,6 +321,7 @@ fn schedule_review(bundle: &BundleV3Contents) -> SetupScheduleReview {
             period_count: slots.len(),
             wspr_cycle_count: None,
             required_cycle_minutes: None,
+            finalization_grace_minutes: None,
             summary: format!(
                 "{} controlled signal slots; timing follows the reviewed operator cadence.",
                 slots.len()
@@ -332,15 +334,29 @@ fn schedule_review(bundle: &BundleV3Contents) -> SetupScheduleReview {
         let required_cycle_minutes = u64::try_from(slots.len())
             .expect("setup slot count is bounded")
             .saturating_mul(2);
+        let finalization_grace_minutes =
+            bundle.session_state.wspr_live_acquisition_enabled.then(|| {
+                u64::try_from(WSPR_LIVE_INGESTION_GRACE_SECONDS)
+                    .expect("WSPR.live ingestion grace is positive")
+                    / 60
+            });
+        let summary = match finalization_grace_minutes {
+            Some(minutes) => format!(
+                "{} directed WSPR cycles; about {required_cycle_minutes} minutes of required cycle time; then a {minutes}-minute WSPR.live ingestion grace.",
+                slots.len()
+            ),
+            None => format!(
+                "{} directed WSPR cycles; about {required_cycle_minutes} minutes of required cycle time.",
+                slots.len()
+            ),
+        };
         SetupScheduleReview {
             period_kind: "wspr_cycle",
             period_count: slots.len(),
             wspr_cycle_count: Some(slots.len()),
             required_cycle_minutes: Some(required_cycle_minutes),
-            summary: format!(
-                "{} directed WSPR cycles; about {required_cycle_minutes} minutes of required cycle time.",
-                slots.len()
-            ),
+            finalization_grace_minutes,
+            summary,
             counterbalance_explanation,
             transition_summary,
             transitions,
