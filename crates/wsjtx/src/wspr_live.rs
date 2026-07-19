@@ -942,7 +942,7 @@ fn classify_row(
     let reporter_call = row
         .get("rx_sign")
         .and_then(Value::as_str)
-        .and_then(normalize_wspr_callsign);
+        .and_then(crate::wspr_live_reporter::normalize_wspr_reporter_id);
     let transmitter_call = row
         .get("tx_sign")
         .and_then(Value::as_str)

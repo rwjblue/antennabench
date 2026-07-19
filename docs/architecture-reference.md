@@ -619,9 +619,12 @@ The durable boundaries are:
   response as exact attachment evidence and emits direction-aware TX and RX
   `ImportedSpot` observations only after repeating station-role, UTC-window,
   band, WSPR-mode, and confirmed-cycle-direction filters. TX rows use the remote
-  receiver as reporter and provider transmit azimuth; RX rows use the local
-  station as reporter and provider receiver-side incoming azimuth. Ambiguous,
-  unrelated, and direction-mismatched rows remain filtered adapter evidence.
+  receiver as reporter and provider transmit azimuth; their WSPRnet reporter
+  identifiers may contain ASCII letters, digits, `-`, and `/`, and need not
+  contain a digit. RX rows use the local station as reporter and provider
+  receiver-side incoming azimuth. Session and transmitter callsigns retain
+  strict WSPR callsign validation. Ambiguous, unrelated, and
+  direction-mismatched rows remain filtered adapter evidence.
   Accepted schema-v4+ rows persist the exact confirmed cycle and actual antenna
   on the normalized observation. Their trusted local capture time remains
   `meta.recorded_at`, their exact provider time remains adapter `source_time`,

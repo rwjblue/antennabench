@@ -9,6 +9,7 @@ mod wspr_live;
 mod wspr_live_alignment;
 mod wspr_live_http;
 mod wspr_live_observation;
+mod wspr_live_reporter;
 
 pub use all_wspr::*;
 pub use import::*;

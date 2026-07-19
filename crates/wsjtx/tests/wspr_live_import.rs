@@ -407,6 +407,63 @@ fn accepts_a_synthetic_tx_report_with_exact_direction_and_units() {
 }
 
 #[test]
+fn accepts_wsprnet_reporter_identifiers_and_produces_observations() {
+    let reporter_ids = [
+        "DC5AL-R",
+        "G4WNC-1",
+        "EA8/DF4UE",
+        "AC0G/ND",
+        "G0BZB-SWL",
+        "KFS",
+        "WESSEX",
+    ];
+    let rows = reporter_ids
+        .iter()
+        .enumerate()
+        .map(|(index, reporter_id)| {
+            let mut value = row(7_100 + index as u64);
+            value["rx_sign"] = json!(reporter_id);
+            value
+        })
+        .collect();
+    let parsed = parse_wspr_live_json_with_limits(
+        &document(rows),
+        &config(),
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.summary.accepted, reporter_ids.len());
+    assert_eq!(
+        parsed
+            .rows
+            .iter()
+            .map(|row| row.spot.as_ref().unwrap().reporter_call.as_str())
+            .collect::<Vec<_>>(),
+        reporter_ids
+    );
+
+    let prepared = prepare_wspr_live_import(
+        &parsed,
+        &config(),
+        "session-1",
+        "reporter-identifiers",
+        attachment(),
+        &[],
+    );
+    assert_eq!(prepared.observations.len(), reporter_ids.len());
+    assert_eq!(
+        prepared
+            .observations
+            .iter()
+            .map(|observation| observation.reporter_call.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        reporter_ids
+    );
+}
+
+#[test]
 fn accepts_receive_rows_and_normalizes_the_local_receiver_perspective() {
     let mut receive = row(7002);
     receive["rx_sign"] = json!("N1RWJ");
@@ -775,6 +832,48 @@ fn invalid_rows_remain_bounded_malformed_dispositions() {
     .unwrap();
 
     assert_eq!(parsed.summary.malformed, 2);
+    assert!(parsed.rows.iter().all(|row| {
+        row.disposition == WsprLiveRowDisposition::Malformed
+            && row.reason == WsprLiveRowReason::InvalidValue
+            && row.spot.is_none()
+    }));
+}
+
+#[test]
+fn invalid_reporter_ids_and_lenient_transmitter_ids_remain_malformed() {
+    let invalid_reporter_ids = [
+        "",
+        " ",
+        "AB",
+        "123",
+        "K1 ABC",
+        "K1.ABC",
+        "K1_ABC",
+        "ABCDEFGHIJKLM",
+        "K1ÄBC",
+    ];
+    let mut rows = invalid_reporter_ids
+        .iter()
+        .enumerate()
+        .map(|(index, reporter_id)| {
+            let mut value = row(7_200 + index as u64);
+            value["rx_sign"] = json!(reporter_id);
+            value
+        })
+        .collect::<Vec<_>>();
+    let mut compound_transmitter = row(7_300);
+    compound_transmitter["tx_sign"] = json!("EA8/DF4UE");
+    rows.push(compound_transmitter);
+
+    let parsed = parse_wspr_live_json_with_limits(
+        &document(rows),
+        &config(),
+        &AdapterCancellationToken::default(),
+        WsprLiveImportLimits::testing(1024),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.summary.malformed, invalid_reporter_ids.len() + 1);
     assert!(parsed.rows.iter().all(|row| {
         row.disposition == WsprLiveRowDisposition::Malformed
             && row.reason == WsprLiveRowReason::InvalidValue
