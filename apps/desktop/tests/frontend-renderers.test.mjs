@@ -202,8 +202,8 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
         periodKind: "wspr_cycle",
         periodCount: 2,
         wsprCycleCount: 2,
-        idealMinimumMinutes: 4,
-        summary: "2 directed WSPR cycles; ideal minimum 4 minutes.",
+        requiredCycleMinutes: 4,
+        summary: "2 directed WSPR cycles; about 4 minutes of required cycle time.",
         counterbalanceExplanation: "Successive repetitions reverse the antenna order.",
         transitionSummary: "1 transition: 1 antenna change, 1 direction change, 1 requiring both.",
         transitions: [{
@@ -228,7 +228,7 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   assert.equal(e.setupCreateButton.disabled, false);
   assert.equal(e.setupReviewPanel.hidden, false);
   assert.match(e.setupReviewShape.textContent, /Whole Station Ab/);
-  assert.match(e.setupReviewSchedule.textContent, /ideal minimum 4 minutes/);
+  assert.match(e.setupReviewSchedule.textContent, /about 4 minutes of required cycle time/);
   assert.equal(e.setupReviewSequence.children[0].children[0].textContent, "1. Transmit · Dipole");
   assert.equal(e.setupReviewSequence.children[1].children[0].textContent, "Change antenna and TX/RX direction");
   assert.equal(e.setupReviewSequence.children[1].children[1].textContent, "2. Receive · Vertical");

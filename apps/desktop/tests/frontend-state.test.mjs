@@ -361,12 +361,21 @@ test("RX-only questions retain default best-effort public collection and explici
 });
 
 test("setup review focus follows successful and invalid keyboard submissions", () => {
-  const review = { focusCount: 0, focus() { this.focusCount += 1; } };
+  const review = {
+    focusOptions: [],
+    scrollOptions: [],
+    focus(options) { this.focusOptions.push(options); },
+    scrollIntoView(options) { this.scrollOptions.push(options); },
+  };
   const diagnostics = { focusCount: 0, focus() { this.focusCount += 1; } };
   const invalidField = { focusCount: 0, focus() { this.focusCount += 1; } };
   const form = { querySelector() { return invalidField; } };
-  assert.equal(focusSetupOutcome({ setupStatus: "reviewed" }, review, diagnostics), "review");
-  assert.equal(review.focusCount, 1);
+  assert.equal(
+    focusSetupOutcome({ setupStatus: "reviewed" }, review, diagnostics, null, "smooth"),
+    "review",
+  );
+  assert.deepEqual(review.focusOptions, [{ preventScroll: true }]);
+  assert.deepEqual(review.scrollOptions, [{ behavior: "smooth", block: "start" }]);
   assert.equal(focusSetupOutcome({ setupStatus: "invalid" }, review, diagnostics, form), "field");
   assert.equal(invalidField.focusCount, 1);
   assert.equal(focusSetupOutcome({ setupStatus: "invalid" }, review, diagnostics), "diagnostics");
@@ -381,12 +390,18 @@ test("live setup estimates match every schedule mode and controlled-signal seman
     antennaCount: 2,
     ...overrides,
   });
-  assert.match(estimate({ mode: "tx_focused" }), /8 planned WSPR cycles · about 16 minutes/);
+  assert.equal(
+    estimate({ mode: "tx_focused", rounds: "1" }),
+    "1 round · 2 planned WSPR cycles · about 4 minutes of required cycle time.",
+  );
   assert.match(estimate({ mode: "rx_focused" }), /8 planned WSPR cycles · about 16 minutes/);
-  assert.match(estimate(), /16 planned WSPR cycles · about 32 minutes/);
-  assert.match(
-    estimate({ mode: "single_antenna_profiling", antennaCount: 3 }),
-    /8 planned WSPR cycles · about 16 minutes/,
+  assert.equal(
+    estimate({ rounds: "1" }),
+    "1 round · 4 planned WSPR cycles · about 8 minutes of required cycle time.",
+  );
+  assert.equal(
+    estimate({ mode: "single_antenna_profiling", antennaCount: 3, rounds: "1" }),
+    "1 round · 2 planned WSPR cycles · about 4 minutes of required cycle time.",
   );
   assert.match(
     estimate({ signalPlanEnabled: true, frequenciesHz: "14097000, 14097100, 14097000" }),
@@ -403,17 +418,19 @@ test("question cards preserve native keyboard controls and collapse on narrow sc
   const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
   assert.equal([...html.matchAll(/type="radio" name="setup-question"/g)].length, 4);
+  assert.equal([...html.matchAll(/data-create-session/g)].length, 1);
   assert.match(html, /data-setup-field="mode"/);
   assert.match(html, /data-setup-field="goal"/);
   assert.match(html, /data-setup-review tabindex="-1"/);
   assert.match(html, /data-setup-diagnostics tabindex="-1"/);
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.question-choices[\s\S]*grid-template-columns: 1fr/);
   assert.match(css, /question-choices label:has\(input:focus-visible\)/);
+  assert.ok(html.indexOf("data-review-setup") < html.indexOf("data-setup-review"));
   assert.ok(
-    html.indexOf("data-review-setup") < html.indexOf("data-setup-review")
-      && html.indexOf("data-setup-review") < html.indexOf("data-create-session"),
-    "Create session follows the reviewed plan instead of competing with Review plan",
+    html.indexOf("review-cycle-detail") < html.indexOf("data-create-session"),
+    "Create session follows every reviewed-plan section",
   );
+  assert.doesNotMatch(html, /ideal|minimum/i);
 });
 
 test("desktop shell gives long workflows one bounded scroll owner", () => {

@@ -23,7 +23,7 @@ export const CONTEXT_HELP = Object.freeze({
   },
   rounds: {
     title: "Rounds and cycles",
-    text: "One repetition tests every configured antenna in the selected direction. Both mode includes one receive and one transmit period per antenna; the estimate shows ideal WSPR time only.",
+    text: "One repetition tests every configured antenna in the selected direction. Both mode includes one receive and one transmit period per antenna; the estimate shows required WSPR cycle time only.",
   },
   antenna_controller: {
     title: "Antenna switching assistant",
@@ -214,9 +214,16 @@ export function locationLookupMessage(outcome) {
   }
 }
 
-export function focusSetupOutcome(state, reviewPanel, diagnostics, form = null) {
+export function focusSetupOutcome(
+  state,
+  reviewPanel,
+  diagnostics,
+  form = null,
+  scrollBehavior = "auto",
+) {
   if (state.setupStatus === "reviewed") {
-    reviewPanel.focus();
+    reviewPanel.focus({ preventScroll: true });
+    reviewPanel.scrollIntoView?.({ behavior: scrollBehavior, block: "start" });
     return "review";
   }
   if (state.setupStatus === "invalid") {
@@ -256,8 +263,8 @@ export function setupPlanEstimate({
   }
   const directionCount = ["whole_station_ab", "single_antenna_profiling"].includes(mode) ? 2 : 1;
   const cycleCount = parsedRounds * scheduledAntennaCount * directionCount;
-  const idealMinutes = cycleCount * 2;
-  return `${roundsLabel} · ${cycleCount} planned WSPR ${cycleCount === 1 ? "cycle" : "cycles"} · about ${idealMinutes} minutes at the ideal two-minute minimum.`;
+  const requiredCycleMinutes = cycleCount * 2;
+  return `${roundsLabel} · ${cycleCount} planned WSPR ${cycleCount === 1 ? "cycle" : "cycles"} · about ${requiredCycleMinutes} minutes of required cycle time.`;
 }
 
 export function conductorActionAvailable(view, action) {

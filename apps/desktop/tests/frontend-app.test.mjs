@@ -83,6 +83,7 @@ test("controller manual review keeps native checkbox, label, and help semantics"
 
 test("the headless desktop completes location, review, and creation through mounted DOM events", async () => {
   const elements = loadDesktopDocument();
+  elements.setupReviewPanel.scrollIntoView = vi.fn();
   const reportDocumentUrls = [];
   Object.defineProperty(window.URL, "createObjectURL", {
     configurable: true,
@@ -118,7 +119,7 @@ test("the headless desktop completes location, review, and creation through moun
         manualReviewRequired: true,
       },
       scheduleReview: {
-        summary: "2 directed WSPR cycles; ideal minimum 4 minutes.",
+        summary: "2 directed WSPR cycles; about 4 minutes of required cycle time.",
         counterbalanceExplanation: "Successive repetitions reverse the antenna order.",
         transitionSummary: "1 antenna transition.",
         transitions: [{ summary: "Change antenna" }],
@@ -264,6 +265,10 @@ test("the headless desktop completes location, review, and creation through moun
       assert.equal(elements.setupCreateButton.disabled, false);
       assert.equal(elements.setupReviewPanel.hidden, false);
     });
+    assert.deepEqual(elements.setupReviewPanel.scrollIntoView.mock.calls, [[{
+      behavior: "smooth",
+      block: "start",
+    }]]);
     assert.equal(callsign.value, "N1RWJ", "review preserves entered station values");
     const reviewCall = calls.find(([command]) => command === "review_session_setup");
     assert.equal(reviewCall[1].draft.station.callsign, "N1RWJ");

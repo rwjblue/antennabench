@@ -29,7 +29,7 @@ Then enter:
 The default **Both (TX + RX)** mode schedules one receive period and one transmit
 period for every antenna in each repetition. The normalized review shows the
 exact directed counterbalanced order, antenna-versus-direction changes, cycle
-count, and ideal minimum duration before session creation. It also states what
+count, and required WSPR cycle time before session creation. It also states what
 the plan can describe—such as same-path differences, overlap and unmatched
 paths, available band/direction/distance/azimuth context, and run-quality
 limits—and what it cannot establish. A run does not prove universal gain,

@@ -42,6 +42,9 @@ export function mount(root, browserWindow) {
   let noteShortcutInitialized = false;
   const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
+  const preferredScrollBehavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
   const elements = collectDesktopElements(root);
   const reportDocuments = createReportDocumentUrls(browserWindow);
   const {
@@ -302,10 +305,7 @@ export function mount(root, browserWindow) {
   openCorrections.addEventListener("click", () => {
     entryPanel.open = true;
     correctionsPanel.open = true;
-    const behavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-      ? "auto"
-      : "smooth";
-    correctionsPanel.scrollIntoView?.({ behavior, block: "start" });
+    correctionsPanel.scrollIntoView?.({ behavior: preferredScrollBehavior, block: "start" });
   });
 
   evidenceForm.addEventListener("submit", async (event) => {
@@ -492,7 +492,13 @@ export function mount(root, browserWindow) {
   setupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const outcome = await controller.reviewSetup(readSetupDraft(setupForm));
-    focusSetupOutcome(outcome, setupReviewPanel, setupDiagnostics, setupForm);
+    focusSetupOutcome(
+      outcome,
+      setupReviewPanel,
+      setupDiagnostics,
+      setupForm,
+      preferredScrollBehavior,
+    );
   });
 
   setupCreateButton.addEventListener("click", async () => {

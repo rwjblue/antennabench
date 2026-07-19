@@ -148,8 +148,8 @@
                     <small>One round tests every scheduled antenna in each direction selected by the mode.</small>
                   </div>
                 </div>
-                <p class="run-plan-summary" data-setup-plan-summary role="status" aria-live="polite" aria-atomic="true">4 rounds · 16 planned WSPR cycles · about 32 minutes at the ideal two-minute minimum.</p>
-                <p class="field-help">This is an ideal minimum. Antenna switching and waits for eligible WSPR cycle boundaries add time.</p>
+                <p class="run-plan-summary" data-setup-plan-summary role="status" aria-live="polite" aria-atomic="true">4 rounds · 16 planned WSPR cycles · about 32 minutes of required cycle time.</p>
+                <p class="field-help">Antenna switching, confirmation, and waiting for eligible WSPR cycle boundaries add wall-clock time.</p>
               </fieldset>
 
               <fieldset class="setup-section" data-controller-section>
@@ -237,7 +237,6 @@
 
             <section class="setup-review" data-setup-review tabindex="-1" hidden aria-labelledby="review-title">
               <div><p class="eyebrow">Run guidance</p><h2 id="review-title">Run plan</h2></div>
-              <div class="setup-actions"><button class="primary-action" type="button" data-create-session disabled>Create session</button></div>
               <dl><div><dt>Station</dt><dd data-review-station></dd></div><div><dt>Experiment and goal</dt><dd data-review-shape></dd></div><div><dt>Antennas and order</dt><dd data-review-antennas></dd></div><div><dt>Exact plan length</dt><dd data-review-schedule></dd></div></dl>
               <section class="review-sequence" aria-labelledby="review-sequence-title">
                 <h3 id="review-sequence-title">Directed counterbalanced sequence</h3>
@@ -250,6 +249,7 @@
                 <section aria-labelledby="cannot-establish-title"><h3 id="cannot-establish-title">This plan cannot establish</h3><ul data-review-cannot-establish></ul></section>
               </div>
               <details class="review-cycle-detail"><summary>Exact cycle table</summary><div class="slot-table"><table><thead><tr><th>#</th><th>Antenna</th><th>Direction</th><th>Band</th><th>Signal</th></tr></thead><tbody data-review-slots></tbody></table></div></details>
+              <div class="setup-actions"><button class="primary-action" type="button" data-create-session disabled>Create session</button></div>
             </section>
 
           </section>

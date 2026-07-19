@@ -322,20 +322,32 @@ try {
     const review = document.querySelector("[data-setup-review]");
     review.hidden = false;
     content.scrollTop = 0;
-    review.focus();
+    review.focus({ preventScroll: true });
+    review.scrollIntoView({ block: "start" });
     const contentRect = content.getBoundingClientRect();
     const reviewRect = review.getBoundingClientRect();
+    const guidanceRect = review.querySelector(".eyebrow").getBoundingClientRect();
     return {
       contentScrollTop: content.scrollTop,
       documentScrollTop: document.scrollingElement.scrollTop,
-      visibleTop: reviewRect.top >= contentRect.top,
+      contentPaddingTop: Number.parseFloat(getComputedStyle(content).paddingTop),
+      reviewOffset: reviewRect.top - contentRect.top,
+      guidanceVisible: guidanceRect.top >= contentRect.top && guidanceRect.bottom < contentRect.bottom,
       visibleBottom: reviewRect.top < contentRect.bottom,
+      createAfterCycleTable: review.querySelector(".review-cycle-detail")
+        .compareDocumentPosition(review.querySelector("[data-create-session]"))
+        & Node.DOCUMENT_POSITION_FOLLOWING,
     };
   })()`], { json: true })).result;
   assert.ok(focusedReview.contentScrollTop > 0);
   assert.equal(focusedReview.documentScrollTop, 0);
-  assert.equal(focusedReview.visibleTop, true);
+  assert.ok(
+    Math.abs(focusedReview.reviewOffset - focusedReview.contentPaddingTop) <= 2,
+    `review offset was ${focusedReview.reviewOffset}px with ${focusedReview.contentPaddingTop}px content padding`,
+  );
+  assert.equal(focusedReview.guidanceVisible, true);
   assert.equal(focusedReview.visibleBottom, true);
+  assert.ok(focusedReview.createAfterCycleTable > 0);
 
   await browser(["set", "viewport", "900", "760"]);
   const compactShell = (await browser(["eval", `(() => ({

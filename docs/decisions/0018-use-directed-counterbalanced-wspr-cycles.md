@@ -17,7 +17,7 @@ WSPR occupies a two-minute sequence and a conventional single-radio station
 cannot receive its own WSPR decode while transmitting. A BOTH repetition with
 two antennas therefore contains four directed periods: receive on each antenna
 and transmit on each antenna. Setup defaults to BOTH and four repetitions,
-which produces 16 periods and an ideal minimum of 32 minutes.
+which produces 16 periods and about 32 minutes of required cycle time.
 
 The order is counterbalanced while avoiding unnecessary physical changes. The
 first BOTH repetition is `RX A, RX B, TX B, TX A`; the next is
@@ -52,7 +52,8 @@ Schema-v3 intentions with no recorded direction retain their legacy behavior.
   two-minute period.
 - A repetition means one observation in every selected direction on every
   participating antenna, rather than one undirected visit per antenna.
-- Four default BOTH repetitions take 32 ideal minutes for two antennas, not 24.
+- Four default BOTH repetitions require about 32 minutes of WSPR cycle time for
+  two antennas, not 24, plus antenna changes and boundary waits.
 - Reduced switch count does not sacrifice order balance; consecutive periods
   on one antenna occur at counterbalanced direction boundaries.
 - Reports and setup review disclose each cycle's direction.

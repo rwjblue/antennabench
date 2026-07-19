@@ -188,7 +188,7 @@ struct SetupScheduleReview {
     period_kind: &'static str,
     period_count: usize,
     wspr_cycle_count: Option<usize>,
-    ideal_minimum_minutes: Option<u64>,
+    required_cycle_minutes: Option<u64>,
     summary: String,
     counterbalance_explanation: String,
     transition_summary: String,
@@ -1086,11 +1086,11 @@ fn create_e2e_session_with_signal(
     if with_signal {
         assert_eq!(plan.schedule_review.period_kind, "controlled_signal_slot");
         assert!(plan.schedule_review.wspr_cycle_count.is_none());
-        assert!(plan.schedule_review.ideal_minimum_minutes.is_none());
+        assert!(plan.schedule_review.required_cycle_minutes.is_none());
     } else {
         assert_eq!(plan.schedule_review.period_kind, "wspr_cycle");
         assert_eq!(plan.schedule_review.wspr_cycle_count, Some(8));
-        assert_eq!(plan.schedule_review.ideal_minimum_minutes, Some(16));
+        assert_eq!(plan.schedule_review.required_cycle_minutes, Some(16));
         assert_eq!(plan.schedule_review.transitions.len(), 7);
         assert!(plan
             .capabilities
@@ -1460,7 +1460,7 @@ mod tests {
         struct Case {
             mode: ExperimentMode,
             cycle_count: usize,
-            minimum_minutes: u64,
+            required_cycle_minutes: u64,
             order: &'static [(&'static str, WsprCycleDirection)],
             can_include: &'static str,
             cannot_include: Option<&'static str>,
@@ -1469,7 +1469,7 @@ mod tests {
             Case {
                 mode: ExperimentMode::WholeStationAb,
                 cycle_count: 8,
-                minimum_minutes: 16,
+                required_cycle_minutes: 16,
                 order: &[
                     ("Vertical", WsprCycleDirection::Receive),
                     ("Dipole", WsprCycleDirection::Receive),
@@ -1486,7 +1486,7 @@ mod tests {
             Case {
                 mode: ExperimentMode::TxFocused,
                 cycle_count: 4,
-                minimum_minutes: 8,
+                required_cycle_minutes: 8,
                 order: &[
                     ("Vertical", WsprCycleDirection::Transmit),
                     ("Dipole", WsprCycleDirection::Transmit),
@@ -1499,7 +1499,7 @@ mod tests {
             Case {
                 mode: ExperimentMode::RxFocused,
                 cycle_count: 4,
-                minimum_minutes: 8,
+                required_cycle_minutes: 8,
                 order: &[
                     ("Vertical", WsprCycleDirection::Receive),
                     ("Dipole", WsprCycleDirection::Receive),
@@ -1512,7 +1512,7 @@ mod tests {
             Case {
                 mode: ExperimentMode::SingleAntennaProfiling,
                 cycle_count: 4,
-                minimum_minutes: 8,
+                required_cycle_minutes: 8,
                 order: &[
                     ("Vertical", WsprCycleDirection::Receive),
                     ("Vertical", WsprCycleDirection::Transmit),
@@ -1547,8 +1547,8 @@ mod tests {
                 Some(case.cycle_count)
             );
             assert_eq!(
-                plan.schedule_review.ideal_minimum_minutes,
-                Some(case.minimum_minutes)
+                plan.schedule_review.required_cycle_minutes,
+                Some(case.required_cycle_minutes)
             );
             assert_eq!(
                 plan.slots
@@ -1679,7 +1679,7 @@ mod tests {
         assert_eq!(plan.schedule_review.period_kind, "controlled_signal_slot");
         assert_eq!(plan.schedule_review.period_count, 8);
         assert!(plan.schedule_review.wspr_cycle_count.is_none());
-        assert!(plan.schedule_review.ideal_minimum_minutes.is_none());
+        assert!(plan.schedule_review.required_cycle_minutes.is_none());
         assert!(plan
             .capabilities
             .cannot_establish

@@ -180,7 +180,7 @@ draft or bundle. Setup then accepts callsign, grid, transmit power, ordered
 antenna definitions, and complete repetitions. BOTH and four repetitions are
 the defaults. Each repetition visits every configured antenna once in each
 selected direction. Rust projects the exact directed order, WSPR cycle count,
-ideal minimum time, antenna-versus-direction transitions, counterbalance
+required WSPR cycle time, antenna-versus-direction transitions, counterbalance
 rationale, and mode-shaped can-describe/cannot-establish statements from the
 same normalized candidate retained for creation. The frontend renders that
 projection and does not maintain a second schedule or capability model.

@@ -319,7 +319,7 @@ fn schedule_review(bundle: &BundleV3Contents) -> SetupScheduleReview {
             period_kind: "controlled_signal_slot",
             period_count: slots.len(),
             wspr_cycle_count: None,
-            ideal_minimum_minutes: None,
+            required_cycle_minutes: None,
             summary: format!(
                 "{} controlled signal slots; timing follows the reviewed operator cadence.",
                 slots.len()
@@ -329,16 +329,16 @@ fn schedule_review(bundle: &BundleV3Contents) -> SetupScheduleReview {
             transitions,
         }
     } else {
-        let ideal_minimum_minutes = u64::try_from(slots.len())
+        let required_cycle_minutes = u64::try_from(slots.len())
             .expect("setup slot count is bounded")
             .saturating_mul(2);
         SetupScheduleReview {
             period_kind: "wspr_cycle",
             period_count: slots.len(),
             wspr_cycle_count: Some(slots.len()),
-            ideal_minimum_minutes: Some(ideal_minimum_minutes),
+            required_cycle_minutes: Some(required_cycle_minutes),
             summary: format!(
-                "{} directed WSPR cycles; ideal minimum {ideal_minimum_minutes} minutes.",
+                "{} directed WSPR cycles; about {required_cycle_minutes} minutes of required cycle time.",
                 slots.len()
             ),
             counterbalance_explanation,

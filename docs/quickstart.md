@@ -49,8 +49,9 @@ switch the radio or antenna for this manual run.
 5. **Set the run plan.** Choose **20 m** for **Band** and enter `3` for
    **Complete rounds**. Here, one complete round is one repetition: every
    antenna gets one receive cycle and one transmit cycle. The resulting plan
-   should contain 12 directed WSPR cycles with an ideal minimum time of 24
-   minutes.
+   should contain 12 directed WSPR cycles with about 24 minutes of required
+   cycle time. Antenna switching, confirmation, and waiting for eligible cycle
+   boundaries add wall-clock time.
 
 6. **Keep automatic public collection on.** Under **WSPR Spots**, expand
    **Offline option** and leave **Gather delayed/public WSPR.live TX and RX
