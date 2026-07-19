@@ -1,0 +1,247 @@
+# How To Read Your AntennaBench Report
+
+An AntennaBench report describes what one recorded antenna experiment observed.
+It keeps missing evidence, comparison limits, and run problems visible instead
+of turning them into a cleaner-looking result.
+
+Open the [canonical sample report](https://antennabench.com/sample-report/) in
+another tab if you want a concrete report to follow. The sample is intentionally
+useful as an inconclusive example: both antennas produced evidence, but it has
+no [matched pairs](glossary.md#matched-pair-internally-paired-row), so it does
+not manufacture an A/B difference.
+
+This guide follows the full evidence report from top to bottom. The shorter
+compact summary uses the same result facts but omits most audit detail.
+
+## Start With The Reading Panel And Headline
+
+The **How to read this report** panel states five rules that apply everywhere:
+
+- A missing report is missing evidence, not a zero-strength signal.
+- The report is descriptive. It does not select a winner or prove that one
+  antenna is better.
+- Each [comparison group](glossary.md#comparison-group-internally-stratum)
+  stays separate by direction, band, mode,
+  [evidence kind](glossary.md#evidence-kind), and
+  [source](glossary.md#source).
+- A [block](glossary.md#block) is a back-to-back pair of
+  [WSPR cycles](glossary.md#wspr-cycle), one per antenna.
+- Alternating antennas reduces time and propagation effects but cannot remove
+  them.
+
+Read the plain-language answer under **What did the run show?** next. It is a
+summary of the recorded [comparison availability](glossary.md#comparison-availability),
+not an extra statistical conclusion. It may also suggest an experiment-quality
+next step, such as completing more repetitions or concentrating on one band.
+
+The facts immediately below identify the [session](glossary.md#session),
+station, goal,
+[antenna labels](glossary.md#antenna-label), bands, direction, experiment mode,
+and recorded session state. Check these before interpreting any number. A
+correct calculation for the wrong setup is still the wrong answer to your
+question.
+
+### The Five Availability States
+
+The report uses one of five comparison states:
+
+- **Not applicable** means this is a single-antenna profiling session. There is
+  no A/B comparison to compute.
+- **Unsupported comparison shape** means the session did not have exactly two
+  scheduled antenna labels. AntennaBench does not invent pairwise contrasts
+  among a different number of antennas.
+- **No eligible blocks** means no back-to-back, same-band
+  [eligible block](glossary.md#eligible-block) contained one usable actual
+  cycle for each antenna. More completed repetitions may help, but the current
+  run cannot support a matched comparison.
+- **No matched paths** means eligible blocks exist, but no
+  [remote path](glossary.md#remote-path) had usable finite
+  [SNR](glossary.md#snr) [observations](glossary.md#observation) for both
+  antennas inside the same comparison group. The canonical sample has this
+  state.
+- **Descriptive pairs available** means at least one usable
+  [matched pair](glossary.md#matched-pair-internally-paired-row) exists. It
+  authorizes the descriptive tables and charts, not a claim that one antenna is
+  generally superior.
+
+“Insufficient data” is therefore a valid result, not a software failure. It can
+mean that the design did not produce eligible blocks, that observed stations did
+not overlap, or that [evidence coverage](glossary.md#evidence-coverage) was too
+limited for a display. Keeping those cases separate tells you what happened and
+what a future run could improve.
+
+## Read The Per-Group Result Table
+
+The **Descriptive result by comparison group** table is the quickest structured
+view of the comparison. Each row keeps one transmit/receive direction, band,
+mode, evidence kind, and source separate. Do not combine rows mentally into one
+whole-session difference; their path populations and collection behavior can
+be different.
+
+For a group with matched evidence, the table shows:
+
+- the observed range of per-path
+  [differences](glossary.md#difference-also-shown-as-delta) and the median
+  across paths;
+- the number of unique paths and supporting matched pairs;
+- the number of contributing blocks; and
+- coverage as an availability fact, not a confidence grade.
+
+The **Signed values** sentence defines the direction for every difference in
+the report. If it says positive values favor **Inverted V**, then `+2 dB` means
+Inverted V had the stronger observed SNR for that displayed comparison. A
+negative value favors the other named antenna.
+
+Groups without a path difference are collapsed into one clearly named row.
+They remain part of the report, but they do not repeat a full empty table and
+chart. **Not available** is not `0 dB`.
+
+The **Supported by this run** and **Not established by this run** lists are the
+boundary around the headline. Read both. Counts of unmatched paths, missing
+SNR, duplicate evidence, acquisition gaps, order imbalance, or
+[exclusions](glossary.md#exclusion) explain limits; they are not correction
+factors applied behind the scenes.
+
+## Same-Path Signal
+
+This section compares signal reports only when the same remote path appears for
+both antennas in an eligible block and comparison group. That pairing avoids
+comparing unrelated stations as though they measured the same path.
+
+When the chart is available:
+
+- each blue dot is one unique remote path’s median difference across its
+  matched pairs;
+- the purple diamond is the median across those per-path medians; and
+- the vertical zero line marks no signed difference for the displayed value.
+
+Summarizing each path before summarizing across paths prevents one frequently
+reporting station from dominating the center. The table below the visual is the
+accessible equivalent and contains the same path values and pair counts.
+
+Differences use SNR in decibels. The report shows the sign
+orientation beside the result. For scale, a 3 dB change is the same signal-power
+change as doubling transmit power. That scale helps read the number; it does not
+turn an observed difference into proof of antenna gain or superiority. WSPR SNR
+is reported in whole decibels and can vary from cycle to cycle.
+
+A dot or diamond on zero means the displayed median is zero. It does not prove
+the antennas are equivalent. An empty same-path section means no usable
+same-path value exists, not that the value was zero.
+
+Open **Review same-path signal detail** when you need the underlying block,
+order, missing-SNR, duplicate, conflict, or exclusion counts and the matched-pair
+audit tables.
+
+## Reach And Unique Paths
+
+Reach counts unique observed remote paths in three categories: the first named
+antenna only, both antennas, and the second named antenna only. It answers
+“which paths appeared in the recorded evidence?” rather than “which antenna
+covers more of the world?”
+
+A path heard on only one antenna is unmatched evidence. It is never converted
+to zero SNR or a decoder-floor value for the other antenna. Non-detection can
+also reflect interference, receiver operation, propagation timing, source lag,
+or a signal below the decode threshold.
+
+The overlap counts remain separate for every comparison group. An empty group
+is collapsed and named, just as it is in the result table.
+
+## Distance And Azimuth
+
+Distance and azimuth views group located, matched paths into fixed distance bins
+and 45-degree compass sectors. Each remote path contributes once to a bin and a
+sector; a separate count shows how many matched pairs support it. Missing or
+inconsistent location stays visible instead of being silently discarded.
+
+These are the locations of **observed matched paths only**. They are not an
+antenna radiation pattern, a propagation model, or evidence about directions
+and distances that the session did not observe. A concentration of paths in one
+sector limits how broadly the display can be read.
+
+The detailed disclosures retain exact paired-row location values and derived
+solar context. Solar elevation and light state are geometric context derived
+from recorded time and locator cells; they do not establish why an observed
+difference occurred.
+
+## Run Quality, Timeline, And Exclusions
+
+**Run quality and answerability** restates availability for each comparison
+group with matched-pair and block counts. It is not a score for the operator or
+an antenna-quality grade. Open the per-group diagnostics to inspect antenna
+order, unmatched paths, missing SNR, exclusions, duplicates, and conflicts.
+
+**Planned versus actual** shows what the schedule requested beside what the
+recorded run supports. Each cycle or older-format
+[slot](glossary.md#slot) can show:
+
+- planned and actual antenna state;
+- timing and block eligibility;
+- [readiness](glossary.md#readiness) and
+  [attribution](glossary.md#attribution);
+- usable and excluded observation counts; and
+- notes, interruptions, and corrections.
+
+Use this timeline to spot missed cycles, late switches, unknown occupancy, or
+an order pattern that may be confused with changing propagation. Corrections
+remain visible with the original history.
+
+**Acquisition status** distinguishes recorded completion, explicit gaps,
+incomplete collection, and the absence of a collection record. Best-effort
+public collection can retain everything returned for its requested windows
+without proving that an upstream mirror was complete.
+
+The **Exclusion summary** groups observations by the reason they were left out
+of a calculation. An exclusion does not erase the record: exact excluded
+observations remain available for review, and unrelated valid evidence remains
+usable.
+
+## Audit Appendix
+
+The audit appendix holds supporting detail that most readers do not need on a
+first pass:
+
+- the committed [checkpoint](glossary.md#checkpoint),
+  [lifecycle](glossary.md#lifecycle), acquisition records, and controller
+  attempts;
+- station, antenna, and planned schedule detail; and
+- comparison blocks and the detailed data-quality timeline.
+
+Disclosures are closed by default and stay closed in default print output. Open
+only the detail needed to check a result or explain a limitation. If controller
+command details were explicitly omitted during full-report export, the appendix
+says so; the lossless bundle still retains them.
+
+## Compact Summary, Full Report, Or Bundle?
+
+All three outputs serve different purposes:
+
+- The **compact summary HTML** keeps the reading panel, headline, result table,
+  same-path and reach summaries, and a short run-quality reference. It omits
+  detailed unmatched, missing-SNR, exclusion, duplicate, conflict, timeline,
+  controller-output, import, solar, and raw-observation audit rows. It does not
+  sample or recompute the retained facts.
+- The **full evidence HTML report** is the most detailed human-readable result
+  and audit presentation for one committed revision. Controller details may be
+  included or explicitly omitted at export. If a resource boundary requires a
+  bounded overview, the report names the omitted detail instead of sampling it.
+- The [session bundle](glossary.md#session-bundle) is the lossless durable
+  record. Reports are derived from it and can be regenerated. Keep or share the
+  bundle when another person needs the complete evidence rather than only a
+  standalone presentation.
+
+## What This Report Will Never Tell You Yet
+
+The current report will not name a winner, claim statistical significance or
+confidence, declare practical equivalence, say “too close to call,” or make an
+unqualified claim that one antenna is better. It also will not turn observed
+paths into a coverage map or say that time, solar state, or propagation caused a
+difference.
+
+Those are deliberately deferred decisions, not missing labels. They require a
+validated experiment design, a preselected practical-effect threshold, explicit
+handling of repeated paths and informative missingness, and simulation evidence
+for an uncertainty method. Until that work is approved, the report stays scoped
+to the station, antennas, bands, directions, sources, paths, and conditions that
+the session actually recorded.

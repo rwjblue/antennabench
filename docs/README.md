@@ -8,6 +8,8 @@ are intentionally technical.
 
 - [Your First Antenna Comparison](quickstart.md) is a start-to-finish walkthrough
   of one manual WSPR session and its three export choices.
+- [How To Read Your AntennaBench Report](reading-your-report.md) explains each
+  report section, empty state, descriptive number, and audit boundary.
 - [How AntennaBench Works](product.md) walks through planning, running, and
   reviewing an antenna experiment.
 - [Session Bundles](bundle-format.md) explains the portable experiment record and

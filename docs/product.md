@@ -84,33 +84,17 @@ a gap and does not prevent export of evidence that is already safe on disk.
 
 ## Reading The Report
 
-The report starts with the scope and
-[evidence coverage](glossary.md#evidence-coverage) of the experiment, then shows
-the available comparisons. Depending on the session, it can include:
+The report leads with a plain-language answer, then keeps same-path signal,
+reach, location context, run quality, planned-versus-actual history, exclusions,
+and audit evidence available without combining unlike
+[comparison groups](glossary.md#comparison-group-internally-stratum). A missing
+observation is not a zero-strength signal, and “insufficient data” is a useful
+outcome when the recorded session cannot support a comparison.
 
-- coverage by antenna, band, direction, and cycle;
-- a zero-centered same-path view with one median difference per unique remote
-  path and a separate median across those paths;
-- reach counts for paths observed under each named antenna only or under both
-  antennas;
-- switching-order and timing context; and
-- available path distance, direction, and solar context.
-
-Each [comparison group](glossary.md#comparison-group-internally-stratum) stays
-separate by transmit/receive direction, band, mode,
-[evidence kind](glossary.md#evidence-kind), and source. The visible same-path
-view and its accessible table use the same exact path values and matched-pair
-counts. Unmatched paths remain reach evidence, not zero-SNR measurements.
-
-A missing observation is not a zero-strength signal. A cycle switched before
-the WSPR transmission finished may have unknown
-[antenna attribution](glossary.md#attribution). Conflicting, damaged, or
-ineligible records remain visible instead of being discarded in a way that
-improves the result.
-
-AntennaBench currently provides descriptive evidence, not an automatic verdict.
-“Insufficient data” is a useful outcome when the session does not support a
-stronger claim.
+Use [How To Read Your AntennaBench Report](reading-your-report.md) for a
+section-by-section walkthrough of the full report, all five availability states,
+the compact summary, and the lossless bundle boundary. AntennaBench currently
+provides descriptive evidence, not an automatic verdict.
 
 ## Local-First By Design
 
