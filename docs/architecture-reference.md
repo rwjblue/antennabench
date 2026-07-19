@@ -602,11 +602,14 @@ interactive platform smoke; domain and workflow regression coverage runs
 without a window or foreground input.
 
 The report document is displayed through a sandboxed, revision-keyed `blob:`
-frame without script, same-origin, navigation, IPC, or network authority. For
-this embedded copy only, the frontend replaces the standalone inline style
-element with a checked-in same-origin report stylesheet; a deterministic
-browser check byte-compares that asset with the trusted renderer output. The
-shell therefore keeps `style-src 'self'` and adds `blob:` only to `frame-src`.
+frame without script, top-navigation, IPC, or network authority. The frame uses
+`allow-same-origin` only so native same-document fragment links can scroll and
+focus report targets; it has no script or top-navigation sandbox token, and the
+report-local CSP denies scripts. For this embedded copy only, the frontend
+replaces the standalone inline style element with a checked-in same-origin
+report stylesheet; a deterministic browser check byte-compares that asset with
+the trusted renderer output. The shell therefore keeps `style-src 'self'` and
+adds `blob:` only to `frame-src`.
 Exported reports retain their inline stylesheet, restrictive report-local CSP,
 and fully self-contained standalone behavior. Superseded blob URLs are revoked
 when a new presentation is installed or the desktop controller is disposed.

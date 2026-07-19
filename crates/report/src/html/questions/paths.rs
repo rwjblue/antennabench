@@ -5,7 +5,7 @@ pub(in super::super) fn render_same_path_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2>");
+    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2>");
     render_same_path_view(out, report);
     out.push_str("<details class=\"audit-disclosure\"><summary>Review same-path signal detail</summary><div class=\"disclosure-body\">");
     render_comparison_diagnostics(out, report);
@@ -18,7 +18,7 @@ pub(in super::super) fn render_reach_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
+    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
     render_reach_view(out, report);
     out.push_str("<details class=\"audit-disclosure\"><summary>Review path overlap and missingness</summary><div class=\"disclosure-body\">");
     render_overlap(out, report);

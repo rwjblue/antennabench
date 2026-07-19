@@ -161,8 +161,9 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
   assert.match(tauri.app.security.csp, /style-src 'self'/);
   assert.doesNotMatch(tauri.app.security.csp, /style-src[^;]*'unsafe-inline'/);
   assert.match(tauri.app.security.csp, /frame-src 'self' blob:/);
-  assert.match(html, /<iframe\s+data-report-frame[\s\S]*?sandbox=""[\s\S]*?><\/iframe>/);
-  assert.doesNotMatch(html, /data-report-frame[\s\S]*?allow-scripts/);
+  const reportFrame = html.match(/<iframe\s+data-report-frame[\s\S]*?>/u)?.[0];
+  assert.match(reportFrame, /sandbox="allow-same-origin"/u);
+  assert.doesNotMatch(reportFrame, /allow-scripts|allow-top-navigation|allow-popups/u);
   assert.equal(packageManifest.private, true);
   assert.equal(packageManifest.dependencies, undefined);
   assert.deepEqual(Object.keys(packageManifest.scripts).sort(), ["coverage", "test"]);

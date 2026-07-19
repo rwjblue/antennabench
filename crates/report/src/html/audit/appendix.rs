@@ -5,7 +5,7 @@ pub(in super::super) fn render_audit_appendix(
     report: &SessionReport,
     controller_evidence: ControllerEvidenceHandling,
 ) {
-    out.push_str("<section id=\"audit-appendix\" class=\"panel question-section\" aria-labelledby=\"audit-title\"><h2 id=\"audit-title\">Audit appendix</h2><p class=\"muted\">Open only the supporting detail needed for review. Closed disclosures remain closed in default print output.</p>");
+    out.push_str("<section id=\"audit-appendix\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"audit-title\"><h2 id=\"audit-title\">Audit appendix</h2><p class=\"muted\">Open only the supporting detail needed for review. Closed disclosures remain closed in default print output.</p>");
     if controller_evidence == ControllerEvidenceHandling::OmittedAtExport
         && !report.snapshot.antenna_control_attempts.is_empty()
     {

@@ -540,10 +540,11 @@
                 <span class="feedback-mark" aria-hidden="true"></span>
                 <div><strong data-report-feedback-message></strong><p data-report-feedback-detail></p></div>
               </div>
+              <!-- Same-origin identity is limited to native fragment navigation; scripts and top navigation remain sandboxed. -->
               <iframe
                 data-report-frame
                 title="AntennaBench session report"
-                sandbox=""
+                sandbox="allow-same-origin"
                 referrerpolicy="no-referrer"
               ></iframe>
             </div>
