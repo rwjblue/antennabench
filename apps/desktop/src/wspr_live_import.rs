@@ -16,9 +16,11 @@ use antennabench_storage::{
     LiveMutationV2, LivePersistenceError, LiveSessionV3,
 };
 use antennabench_wsjtx::{
-    derive_wspr_live_query_scope, parse_wspr_live_json, prepare_wspr_live_acquisition,
-    AdapterCancellationToken, ParsedWsprLiveJson, WsprLiveAcquisitionChannel,
-    WsprLiveConfirmedCycle, WsprLiveImportConfig, WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
+    derive_wspr_live_query_scope, parse_wspr_live_activity_json, parse_wspr_live_json,
+    prepare_wspr_live_acquisition, prepare_wspr_live_activity, prepare_wspr_live_activity_failure,
+    AdapterCancellationToken, ParsedWsprLiveJson, PreparedWsprLiveActivity,
+    WsprLiveAcquisitionChannel, WsprLiveConfirmedCycle, WsprLiveImportConfig,
+    WsprLiveImportSummary, WSPR_LIVE_IMPORT_LIMITS,
 };
 use chrono::Utc;
 use serde::Serialize;
@@ -55,6 +57,11 @@ pub(crate) struct CommittedWsprLiveResponse {
     pub(crate) session: OpenedSession,
     pub(crate) revision: u64,
     pub(crate) summary: WsprLiveImportSummary,
+}
+
+pub(crate) struct CommittedWsprLiveActivity {
+    pub(crate) session: OpenedSession,
+    pub(crate) revision: u64,
 }
 
 #[tauri::command]
@@ -283,6 +290,211 @@ pub(crate) fn commit_wspr_live_response(
             "This session format cannot import WSPR.live evidence.",
             format!("unsupported schema version {actual}"),
         )),
+    }
+}
+
+pub(crate) fn commit_wspr_live_activity_response(
+    state: &ActiveSessionState,
+    bundle_path: &Path,
+    bytes: &[u8],
+    config: &WsprLiveImportConfig,
+) -> Result<CommittedWsprLiveActivity, SessionErrorPayload> {
+    let parsed = parse_wspr_live_activity_json(bytes, config).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "The WSPR.live reporter activity response could not be recorded.",
+            error.to_string(),
+        )
+    })?;
+    let store = BundleStore::new(bundle_path);
+    match store
+        .schema_version()
+        .map_err(LivePersistenceError::from)
+        .map_err(crate::conductor::live_error_payload)?
+    {
+        SCHEMA_VERSION_V2 => {
+            let mut writer = store
+                .open_v2_writer()
+                .map_err(crate::conductor::live_error_payload)?;
+            ensure_running_activity_target(writer.snapshot().session_state.lifecycle)?;
+            let current = writer.snapshot().clone();
+            let capture_id = writer.allocate_id("activity");
+            let expected_revision = writer.checkpoint().revision;
+            let (_, receipt) = writer
+                .append_with_attachment(
+                    bytes,
+                    "application/json",
+                    None,
+                    Some("clickhouse-format-json".into()),
+                    config.source_locator.clone(),
+                    |attachment| {
+                        let prepared = prepare_wspr_live_activity(
+                            &parsed,
+                            config,
+                            &current.manifest.session_id,
+                            &capture_id,
+                            attachment,
+                            &current.adapter_records,
+                        );
+                        LiveMutationV2 {
+                            expected_revision,
+                            mutation_id: prepared.mutation_id,
+                            members: prepared
+                                .adapter_records
+                                .into_iter()
+                                .map(LiveMutationMemberV2::AdapterRecord)
+                                .collect(),
+                        }
+                    },
+                )
+                .map_err(crate::conductor::live_error_payload)?;
+            drop(writer);
+            Ok(CommittedWsprLiveActivity {
+                session: reload_active_session(state, bundle_path)?,
+                revision: receipt.revision,
+            })
+        }
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+            let mut writer = crate::build_context::open_v3_writer(&store)
+                .map_err(crate::conductor::live_error_payload)?;
+            ensure_running_activity_target(writer.snapshot().session_state.lifecycle)?;
+            let current = writer.snapshot().clone();
+            let capture_id = writer.allocate_id("activity");
+            let expected_revision = writer.checkpoint().revision;
+            let (_, receipt) = writer
+                .append_evidence_with_attachment(
+                    bytes,
+                    "application/json",
+                    None,
+                    Some("clickhouse-format-json".into()),
+                    config.source_locator.clone(),
+                    |attachment| {
+                        let prepared = prepare_wspr_live_activity(
+                            &parsed,
+                            config,
+                            &current.manifest.session_id,
+                            &capture_id,
+                            attachment,
+                            &current.adapter_records,
+                        );
+                        LiveEvidenceMutationV3 {
+                            expected_revision,
+                            mutation_id: prepared.mutation_id,
+                            adapter_records: prepared.adapter_records,
+                            observations: Vec::new(),
+                        }
+                    },
+                )
+                .map_err(crate::conductor::live_error_payload)?;
+            drop(writer);
+            Ok(CommittedWsprLiveActivity {
+                session: reload_active_session(state, bundle_path)?,
+                revision: receipt.revision,
+            })
+        }
+        actual => Err(SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "This session format cannot record WSPR.live reporter activity.",
+            format!("unsupported schema version {actual}"),
+        )),
+    }
+}
+
+pub(crate) fn record_wspr_live_activity_failure(
+    state: &ActiveSessionState,
+    bundle_path: &Path,
+    config: &WsprLiveImportConfig,
+    reason_code: &str,
+    detail: &str,
+) -> Result<CommittedWsprLiveActivity, SessionErrorPayload> {
+    let store = BundleStore::new(bundle_path);
+    match store
+        .schema_version()
+        .map_err(LivePersistenceError::from)
+        .map_err(crate::conductor::live_error_payload)?
+    {
+        SCHEMA_VERSION_V2 => {
+            let mut writer = store
+                .open_v2_writer()
+                .map_err(crate::conductor::live_error_payload)?;
+            ensure_running_activity_target(writer.snapshot().session_state.lifecycle)?;
+            let capture_id = writer.allocate_id("activity");
+            let prepared = prepare_wspr_live_activity_failure(
+                config,
+                &writer.snapshot().manifest.session_id,
+                &capture_id,
+                reason_code,
+                detail,
+            );
+            let receipt = writer
+                .append(activity_v2_mutation(writer.checkpoint().revision, prepared))
+                .map_err(crate::conductor::live_error_payload)?;
+            drop(writer);
+            Ok(CommittedWsprLiveActivity {
+                session: reload_active_session(state, bundle_path)?,
+                revision: receipt.revision,
+            })
+        }
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+            let mut writer = crate::build_context::open_v3_writer(&store)
+                .map_err(crate::conductor::live_error_payload)?;
+            ensure_running_activity_target(writer.snapshot().session_state.lifecycle)?;
+            let capture_id = writer.allocate_id("activity");
+            let prepared = prepare_wspr_live_activity_failure(
+                config,
+                &writer.snapshot().manifest.session_id,
+                &capture_id,
+                reason_code,
+                detail,
+            );
+            let receipt = writer
+                .append_evidence(LiveEvidenceMutationV3 {
+                    expected_revision: writer.checkpoint().revision,
+                    mutation_id: prepared.mutation_id,
+                    adapter_records: prepared.adapter_records,
+                    observations: Vec::new(),
+                })
+                .map_err(crate::conductor::live_error_payload)?;
+            drop(writer);
+            Ok(CommittedWsprLiveActivity {
+                session: reload_active_session(state, bundle_path)?,
+                revision: receipt.revision,
+            })
+        }
+        actual => Err(SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "This session format cannot record WSPR.live reporter activity.",
+            format!("unsupported schema version {actual}"),
+        )),
+    }
+}
+
+fn activity_v2_mutation(
+    expected_revision: u64,
+    prepared: PreparedWsprLiveActivity,
+) -> LiveMutationV2 {
+    LiveMutationV2 {
+        expected_revision,
+        mutation_id: prepared.mutation_id,
+        members: prepared
+            .adapter_records
+            .into_iter()
+            .map(LiveMutationMemberV2::AdapterRecord)
+            .collect(),
+    }
+}
+
+fn ensure_running_activity_target(
+    lifecycle: SessionLifecycleV2,
+) -> Result<(), SessionErrorPayload> {
+    if lifecycle == SessionLifecycleV2::Running {
+        Ok(())
+    } else {
+        Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The session stopped before reporter activity could commit.",
+            "no census attachment or adapter records were appended",
+        ))
     }
 }
 

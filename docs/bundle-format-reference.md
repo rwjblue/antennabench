@@ -197,6 +197,21 @@ provider's receiver-side incoming azimuth; both provider azimuths remain in raw
 evidence. Missing public reports remain missing evidence. See
 [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md).
 
+Each automatic HTTPS acquisition also requests a server-aggregated reporter
+activity census for the same half-open UTC window and selected bands. The
+`wspr_live_activity_census_capture` record references the exact ClickHouse JSON
+attachment; `wspr_live_activity_census_summary` records source, accepted,
+duplicate, and malformed row counts, the 10,000-row retained limit, and an
+explicit truncation marker. Accepted `wspr_live_activity_census` records contain
+one `(cycle_time, reporter)` key with optional normalized reporter grid,
+decoded-spot and distinct-station counts, and maximum and median SNR. Overlapping
+cumulative queries do not append a key already present in the bundle. Invalid
+grids are omitted without discarding otherwise valid activity. Query or response
+failure is a typed unsupported census-summary disposition and does not change
+the independently committed public-spot result. Census records are contextual
+adapter evidence: they have no slot attribution or normalized-record links and
+do not create observations or affect current analysis and reports.
+
 The RBN daily-archive boundary uses provider `reverse-beacon-network`, source
 `rbn-daily-archive`, acquisition channel `file-import`, and adapter
 `antennabench.rbn-daily-archive`. One `rbn_archive_capture` record references

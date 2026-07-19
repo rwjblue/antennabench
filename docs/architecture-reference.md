@@ -461,7 +461,11 @@ state independently of color. Observation exclusions are summarized by the
 existing reason vocabulary before a record-level audit table; an exclusion
 continues to affect only the calculation that requires the excluded fact.
 Successful best-effort WSPR.live collection remains distinct from an explicit
-uncollected window or import gap.
+uncollected window or import gap. Every successful automatic public-spot pass
+then makes a separate bounded reporter-activity query for the same window and
+bands. Public spots commit first; census success or a typed census failure
+commits independently before finalization, so the contextual query cannot turn
+a usable spot response into a failed acquisition.
 
 ## Desktop Shell Boundary
 
@@ -652,7 +656,13 @@ The durable boundaries are:
   unconfirmed imports.
   Manual file import is the offline/recovery path; the default HTTPS client
   reuses the same parser for cumulative acquisition across confirmed receive
-  and transmit cycles. Neither path makes public reports a session prerequisite; see
+  and transmit cycles. Automatic passes also preserve a separate aggregated
+  activity census, bounded to 10,000 deterministically ordered cycle/reporter
+  rows plus one query sentinel. Existing `(cycle, reporter)` keys suppress
+  cumulative-window growth, the exact response and truncation state remain
+  durable, and census records deliberately bypass observation, slot, analysis,
+  and report projections until a follow-up analysis consumes them. Neither path
+  makes public reports a session prerequisite; see
   [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
   [#84](https://github.com/rwjblue/antennabench/issues/84), and
   [#85](https://github.com/rwjblue/antennabench/issues/85).

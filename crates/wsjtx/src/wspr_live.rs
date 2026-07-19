@@ -778,7 +778,7 @@ fn validate_query_scope(scope: &WsprLiveQueryScope) -> Result<(), WsprLiveImport
     Ok(())
 }
 
-fn wspr_live_provenance(channel: WsprLiveAcquisitionChannel) -> Provenance {
+pub(crate) fn wspr_live_provenance(channel: WsprLiveAcquisitionChannel) -> Provenance {
     Provenance {
         provider_id: ProviderId::new(WSPR_LIVE_PROVIDER_ID).expect("static provider identity"),
         source_id: SourceId::new(WSPR_LIVE_SOURCE_ID).expect("static source identity"),
@@ -883,7 +883,7 @@ fn disposition_reason(
     }
 }
 
-fn adapter_reason(value: &str) -> AdapterReasonId {
+pub(crate) fn adapter_reason(value: &str) -> AdapterReasonId {
     AdapterReasonId::new(value).expect("static WSPR.live reason identity")
 }
 
@@ -1194,7 +1194,7 @@ fn band_to_wspr_live(band: Band) -> i16 {
     }
 }
 
-fn percent_encode_query(value: &str) -> String {
+pub(crate) fn percent_encode_query(value: &str) -> String {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut encoded = String::with_capacity(value.len());
     for byte in value.bytes() {

@@ -90,6 +90,26 @@ fn acquisition_uses_only_the_typed_query_url_and_existing_body_cap() {
 }
 
 #[test]
+fn activity_acquisition_uses_the_separate_aggregated_query_and_same_body_cap() {
+    let expected_body = br#"{"meta":[],"data":[],"rows":0}"#.to_vec();
+    let acquirer = WsprLiveAcquirer::new(FakeTransport::with_responses(vec![Ok(response(
+        200,
+        expected_body.clone(),
+    ))]));
+
+    let captured = acquirer
+        .acquire_activity_census(&plan(), &AdapterCancellationToken::default())
+        .unwrap();
+
+    assert_eq!(captured.body, expected_body);
+    let requests = acquirer.transport().requests.borrow();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].0.contains("uniqExact%28tx_sign%29"));
+    assert!(requests[0].0.contains("GROUP%20BY%20time%2C%20rx_sign"));
+    assert_eq!(requests[0].1, WSPR_LIVE_IMPORT_LIMITS.source_bytes);
+}
+
+#[test]
 fn status_transport_size_and_cancellation_fail_without_a_partial_success() {
     let unavailable = WsprLiveAcquirer::new(FakeTransport::with_responses(vec![Ok(response(
         503,

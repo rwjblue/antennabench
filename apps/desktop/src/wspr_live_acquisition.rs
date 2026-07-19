@@ -44,7 +44,10 @@ use crate::{
         SessionErrorKind, SessionErrorPayload,
     },
     wsjtx_session::WsjtxSessionState,
-    wspr_live_import::commit_wspr_live_response,
+    wspr_live_import::{
+        commit_wspr_live_activity_response, commit_wspr_live_response,
+        record_wspr_live_activity_failure,
+    },
 };
 
 #[derive(Default)]
@@ -429,9 +432,8 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             runtime.last_request_started_at = Some(now);
             runtime.failure = None;
         }
-        let response = match WsprLiveAcquirer::new(transport)
-            .acquire(&plan, &AdapterCancellationToken::default())
-        {
+        let acquirer = WsprLiveAcquirer::new(transport);
+        let response = match acquirer.acquire(&plan, &AdapterCancellationToken::default()) {
             Ok(response) => response,
             Err(error) => {
                 let payload = SessionErrorPayload::new(
@@ -473,11 +475,11 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             source_locator: Some(WSPR_LIVE_QUERY_ENDPOINT.into()),
             confirmed_cycles: snapshot.confirmed_cycles(),
         };
-        let committed = match commit_wspr_live_response(
+        let mut committed = match commit_wspr_live_response(
             active_state,
             &source,
             &response.body,
-            config,
+            config.clone(),
             WsprLiveAcquisitionChannel::HttpsQuery,
         ) {
             Ok(committed) => committed,
@@ -499,6 +501,48 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                 return Ok(failed_outcome(&plan, payload));
             }
         };
+        let cancellation = AdapterCancellationToken::default();
+        match acquirer.acquire_activity_census(&plan, &cancellation) {
+            Ok(activity_response) => {
+                let mut activity_config = config.clone();
+                activity_config.captured_at = activity_response.received_at;
+                match commit_wspr_live_activity_response(
+                    active_state,
+                    &source,
+                    &activity_response.body,
+                    &activity_config,
+                ) {
+                    Ok(activity) => {
+                        committed.session = activity.session;
+                        committed.revision = activity.revision;
+                    }
+                    Err(error) => {
+                        if let Ok(activity) = record_wspr_live_activity_failure(
+                            active_state,
+                            &source,
+                            &activity_config,
+                            "wspr-live.activity-census-response-rejected",
+                            &error.detail,
+                        ) {
+                            committed.session = activity.session;
+                            committed.revision = activity.revision;
+                        }
+                    }
+                }
+            }
+            Err(error) => {
+                if let Ok(activity) = record_wspr_live_activity_failure(
+                    active_state,
+                    &source,
+                    &config,
+                    "wspr-live.activity-census-query-failed",
+                    &error.to_string(),
+                ) {
+                    committed.session = activity.session;
+                    committed.revision = activity.revision;
+                }
+            }
+        }
         acquisition_state
             .0
             .lock()
@@ -966,7 +1010,8 @@ mod tests {
     use antennabench_storage::{BundleStore, LiveEventMutationV3};
     use antennabench_wsjtx::{
         AdapterCancellationToken, WsprLiveAcquisitionChannel, WsprLiveAcquisitionError,
-        WsprLiveHttpResponse, WsprLiveHttpTransport, WsprLiveImportConfig, WSPR_LIVE_COLUMNS,
+        WsprLiveHttpResponse, WsprLiveHttpTransport, WsprLiveImportConfig,
+        WSPR_LIVE_ACTIVITY_COLUMNS, WSPR_LIVE_COLUMNS,
     };
     use chrono::{DateTime, Utc};
     use serde_json::json;
@@ -988,15 +1033,43 @@ mod tests {
         response: Result<WsprLiveHttpResponse, WsprLiveAcquisitionError>,
     }
 
-    impl WsprLiveHttpTransport for &FakeTransport {
+    struct CensusFailingTransport {
+        calls: Cell<usize>,
+        received_at: DateTime<Utc>,
+    }
+
+    impl WsprLiveHttpTransport for &CensusFailingTransport {
         fn get(
             &self,
-            _url: &str,
+            url: &str,
             _body_limit: u64,
             _cancellation: &AdapterCancellationToken,
         ) -> Result<WsprLiveHttpResponse, WsprLiveAcquisitionError> {
             self.calls.set(self.calls.get() + 1);
-            self.response.clone()
+            if url.contains("uniqExact") {
+                Err(WsprLiveAcquisitionError::Transport(
+                    "activity endpoint unavailable".into(),
+                ))
+            } else {
+                Ok(empty_response(self.received_at))
+            }
+        }
+    }
+
+    impl WsprLiveHttpTransport for &FakeTransport {
+        fn get(
+            &self,
+            url: &str,
+            _body_limit: u64,
+            _cancellation: &AdapterCancellationToken,
+        ) -> Result<WsprLiveHttpResponse, WsprLiveAcquisitionError> {
+            self.calls.set(self.calls.get() + 1);
+            let response = self.response.clone();
+            if url.contains("uniqExact") {
+                response.map(|response| empty_activity_response(response.received_at))
+            } else {
+                response
+            }
         }
     }
 
@@ -1006,6 +1079,22 @@ mod tests {
             status: 200,
             body: serde_json::to_vec(&json!({
                 "meta": WSPR_LIVE_COLUMNS.map(|name| json!({
+                    "name": name,
+                    "type": "Synthetic",
+                })),
+                "data": [],
+                "rows": 0,
+            }))
+            .unwrap(),
+        }
+    }
+
+    fn empty_activity_response(received_at: DateTime<Utc>) -> WsprLiveHttpResponse {
+        WsprLiveHttpResponse {
+            received_at,
+            status: 200,
+            body: serde_json::to_vec(&json!({
+                "meta": WSPR_LIVE_ACTIVITY_COLUMNS.map(|name| json!({
                     "name": name,
                     "type": "Synthetic",
                 })),
@@ -1360,7 +1449,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(transport.calls.get(), 1);
+        assert_eq!(transport.calls.get(), 2);
         let WsprLiveAcquisitionOutcome::Captured {
             revision,
             captured_through,
@@ -1372,7 +1461,7 @@ mod tests {
         };
         assert_eq!(captured_through, now - chrono::Duration::minutes(5));
         assert_eq!(total, 0);
-        assert_eq!(revision, before.session_state.revision + 2);
+        assert_eq!(revision, before.session_state.revision + 3);
         let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
         assert_eq!(after.session_state.lifecycle, SessionLifecycleV2::Ended);
         let summary = after
@@ -1386,7 +1475,7 @@ mod tests {
         );
         assert_eq!(
             after.adapter_records.len(),
-            before.adapter_records.len() + 2
+            before.adapter_records.len() + 4
         );
 
         let repeated = advance_with_transport(
@@ -1401,10 +1490,50 @@ mod tests {
             repeated,
             WsprLiveAcquisitionOutcome::Dormant { .. }
         ));
-        assert_eq!(transport.calls.get(), 1);
+        assert_eq!(transport.calls.get(), 2);
         assert_eq!(
             BundleStore::new(&path).read_v3_checkpointed().unwrap(),
             after
+        );
+    }
+
+    #[test]
+    fn census_query_failure_is_durable_without_failing_spot_capture() {
+        let temp = TempDir::new().unwrap();
+        let (active, path, now) = running_confirmed_session(temp.path(), true);
+        let before = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        let transport = CensusFailingTransport {
+            calls: Cell::new(0),
+            received_at: now,
+        };
+
+        let outcome = advance_with_transport(
+            &active,
+            &WsprLiveAcquisitionState::default(),
+            WsprLiveAcquisitionRequest::default(),
+            now,
+            &transport,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            outcome,
+            WsprLiveAcquisitionOutcome::Captured { total: 0, .. }
+        ));
+        assert_eq!(transport.calls.get(), 2);
+        let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        assert_eq!(after.observations, before.observations);
+        let failure = after
+            .adapter_records
+            .iter()
+            .find(|record| {
+                record.record_type == "wspr_live_activity_census_summary"
+                    && record.disposition == antennabench_core::v2::AdapterDisposition::Unsupported
+            })
+            .expect("typed census failure must be durable");
+        assert_eq!(
+            failure.reason.as_str(),
+            "wspr-live.activity-census-query-failed"
         );
     }
 
@@ -1682,7 +1811,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(transport.calls.get(), 1);
+        assert_eq!(transport.calls.get(), 2);
         let WsprLiveAcquisitionOutcome::Captured {
             total,
             accepted,
@@ -1833,7 +1962,7 @@ mod tests {
             outcome,
             WsprLiveAcquisitionOutcome::Captured { .. }
         ));
-        assert_eq!(resumed.calls.get(), 1);
+        assert_eq!(resumed.calls.get(), 2);
     }
 
     #[test]

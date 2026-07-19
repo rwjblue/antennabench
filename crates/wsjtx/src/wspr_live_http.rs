@@ -157,4 +157,34 @@ impl<T: WsprLiveHttpTransport> WsprLiveAcquirer<T> {
         }
         Ok(response)
     }
+
+    pub fn acquire_activity_census(
+        &self,
+        plan: &WsprLiveAcquisitionPlan,
+        cancellation: &AdapterCancellationToken,
+    ) -> Result<WsprLiveHttpResponse, WsprLiveAcquisitionError> {
+        if cancellation.is_cancelled() {
+            return Err(WsprLiveAcquisitionError::Cancelled);
+        }
+        let response = self.transport.get(
+            &plan.query.activity_census_query_url(),
+            WSPR_LIVE_IMPORT_LIMITS.source_bytes,
+            cancellation,
+        )?;
+        if cancellation.is_cancelled() {
+            return Err(WsprLiveAcquisitionError::Cancelled);
+        }
+        if response.status != 200 {
+            return Err(WsprLiveAcquisitionError::HttpStatus {
+                status: response.status,
+            });
+        }
+        if response.body.len() as u64 > WSPR_LIVE_IMPORT_LIMITS.source_bytes {
+            return Err(WsprLiveAcquisitionError::BodyBytes {
+                limit: WSPR_LIVE_IMPORT_LIMITS.source_bytes,
+                observed: response.body.len() as u64,
+            });
+        }
+        Ok(response)
+    }
 }

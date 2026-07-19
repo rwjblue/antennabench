@@ -632,6 +632,10 @@ pub(super) fn report_adapter_evidence(
     wspr_live_configured: bool,
     lifecycle: SessionLifecycleV2,
 ) -> ReportAdapterEvidence {
+    let records = records
+        .iter()
+        .filter(|record| !record.record_type.starts_with("wspr_live_activity_census"))
+        .collect::<Vec<_>>();
     let mut adapter = ReportAdapterEvidence {
         record_count: records.len(),
         ..ReportAdapterEvidence::default()
@@ -906,6 +910,44 @@ mod tests {
             absent.provider_completeness,
             ReportProviderCompleteness::Unsupported
         );
+    }
+
+    #[test]
+    fn reporter_activity_context_is_invisible_to_current_report_projection() {
+        let spot = adapter_record(
+            "wspr_live_spot",
+            AdapterDisposition::Accepted,
+            r#"{"id":1}"#,
+        );
+        let baseline = report_adapter_evidence(
+            std::slice::from_ref(&spot),
+            false,
+            SessionLifecycleV2::Running,
+        );
+        let with_census = report_adapter_evidence(
+            &[
+                spot,
+                adapter_record(
+                    "wspr_live_activity_census_capture",
+                    AdapterDisposition::Accepted,
+                    "{}",
+                ),
+                adapter_record(
+                    "wspr_live_activity_census_summary",
+                    AdapterDisposition::PartiallyNormalized,
+                    "{}",
+                ),
+                adapter_record(
+                    "wspr_live_activity_census",
+                    AdapterDisposition::Accepted,
+                    r#"{"cycle_time":"2026-07-18T12:00:00Z","reporter":"K1ABC"}"#,
+                ),
+            ],
+            false,
+            SessionLifecycleV2::Running,
+        );
+
+        assert_eq!(with_census, baseline);
     }
 
     fn adapter_record(
