@@ -302,6 +302,43 @@ retryability, completeness, and evidence-gap fields. Cancellation is checked
 during directory traversal, between JSONL records, and at each 64 KiB file-copy
 chunk.
 
+## Accepted Schema-V6 Runtime And Diagnostic Contract
+
+[Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
+selects the implementation contract for the next bundle version. Schema v6 will
+add checkpointed `runtime-contexts.jsonl` and `diagnostics.jsonl` streams. The
+first records the content-deduplicated app build and bounded runtime platform
+that created or materially acted on the session. The second records typed,
+bounded material operational outcomes. Both remain distinct from operator,
+adapter-source, radio, and normalized scientific evidence.
+
+The immutable manifest will reference the creator runtime context. Every v6
+stream record will name the responsible context, and the existing checkpoint
+will commit context declarations, primary evidence, and post-effect diagnostics
+in coherent mutation order. A failure before evidence commits may create a
+diagnostic-only revision; the record separately states the primary
+`revision_before`, `revision_after`, and `evidence_effect` so consumers do not
+infer new scientific evidence from that revision advance.
+
+Runtime contexts are limited to 256 records and 1 MiB, with 4 KiB per line.
+Diagnostics are limited to 2,048 records and 16 MiB, with 8 KiB per line,
+four cause levels, and 24 typed facts. Required identity/effect fields are never
+truncated. Optional details declare deterministic truncation, and checkpoint
+status exposes saturation or a safely recorded persistence gap. The writer
+makes only one diagnostic-persistence attempt and promises nothing when disk,
+process, writer, or verified-checkpoint safety prevents that commit.
+
+Schema-v1 through schema-v5 absence means legacy/unknown, not “no failures.”
+They remain unchanged and losslessly copyable; live v6 mutation requires an
+explicit non-destructive upgrade. Upgrade retains only the legacy creator app
+version actually present, records all unavailable identity as unknown, and
+adds the real upgrade-process context. Analysis ignores both new streams.
+
+The ADR owns the complete field taxonomy, JSON examples, privacy matrix,
+report/support-summary disclosure policy, retry/idempotence behavior, and
+#180 → #181 → #179 rollout. Those implementation issues must update this
+reference from accepted contract to implemented layout as their slices land.
+
 ## Root Files
 
 - `manifest.json`: schema version, session id, creation time, app version, and

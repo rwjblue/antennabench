@@ -64,6 +64,15 @@ my-test.session.antennabundle/
 The `.jsonl` files store one record per line. New facts and corrections are
 appended so the history remains inspectable.
 
+The accepted next bundle version will also add bounded runtime-context and
+operational-diagnostic streams. They will identify the app build/platform that
+materially acted on a session and safely persisted operation failures, while
+remaining separate from experiment evidence. Older bundles will say that this
+history is unavailable rather than implying that no failures occurred. See
+[Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
+for the implementation contract; the current app still creates schema-v5
+bundles until that rollout lands.
+
 ## Compatibility
 
 New sessions currently use bundle schema v5. AntennaBench has explicit readers

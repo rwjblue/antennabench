@@ -47,6 +47,8 @@ historical references, not tutorials or work trackers; start with the
   Site](0023-use-static-astro-for-the-project-site.md)
 - [0024: Use Version-Owned Core Schema
   Modules](0024-use-version-owned-core-schema-modules.md)
+- [0025: Use Checkpointed Runtime Contexts And Operational
+  Diagnostics](0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions

@@ -341,6 +341,34 @@ refresh, exact HTML/checkpoint exports, destination collisions, and reopen. A
 fixed scenario seed plus panic-time bundle/log retention makes failures
 reproducible without adding test-only authority to the runtime command surface.
 
+## Accepted Schema-V6 Operational Metadata Boundary
+
+[Decision 0025](decisions/0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
+selects the next-version architecture for portable build/runtime history and
+material operational outcomes. Schema v6 will add two storage-owned append-only
+streams under the existing single-checkpoint protocol: content-deduplicated
+runtime contexts and typed operational diagnostics. A context is committed in
+the same mutation as its first referencing evidence or diagnostic; a later
+diagnostic follows any primary evidence commit and carries separate primary and
+diagnostic revisions plus an explicit evidence effect.
+
+This is not a general log. Codes, causes, retry disposition, revisions, and
+bounded facts are stable typed data. Paths, environment, secrets, device or user
+identity, stack traces, raw controller output, and arbitrary strings are outside
+the diagnostic schema. Exact retries reuse an attempt identity and append
+nothing; a changed retry receives a new attempt. Unsafe writer state, external
+modification, process death, disk exhaustion, or failure of the diagnostic
+checkpoint remain explicit non-guarantees rather than triggers for a second
+logging path.
+
+The new streams are modeled portable metadata for validation, recovery,
+resource accounting, and lossless copy, but are invisible to observation
+alignment and scientific conclusions. Full report disclosure is explicit and
+off by default; compact/public/hosted output excludes the streams. Older bundles
+surface legacy/unknown history until a non-destructive schema-v6 upgrade. The
+implementation sequence is build/runtime contexts (#180), durable outcomes
+(#181), then local presentation and a whitelisted support summary (#179).
+
 ## Setup And Conductor Delivery
 
 The local conductor follows a dependency-ordered path from storage invariants
