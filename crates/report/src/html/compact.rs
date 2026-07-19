@@ -79,9 +79,9 @@ pub fn render_compact_summary_html_with_resources(
         report,
         "the full evidence report and session bundle",
     );
-    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2>");
+    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2>");
     render_compact_same_path_view(&mut out, report);
-    out.push_str("</section><section id=\"reach-unique-paths\" class=\"panel question-section\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
+    out.push_str("</section><section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
     render_compact_reach_view(&mut out, report);
     out.push_str("</section>");
     render_compact_run_quality(&mut out, report);
@@ -118,7 +118,7 @@ pub(super) fn render_compact_run_quality(out: &mut CheckedHtmlWriter<'_>, report
             ) => "Collection completed; provider completeness is unsupported".to_string(),
         }
     };
-    out.push_str("<section id=\"run-quality\" class=\"panel question-section\" aria-labelledby=\"run-quality-title\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">These are typed availability and count facts.</p><div class=\"run-summary\">");
+    out.push_str("<section id=\"run-quality\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"run-quality-title\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">These are typed availability and count facts.</p><div class=\"run-summary\">");
     write_html!(out, "<div><span>Comparison state</span><strong>{availability}</strong></div><div><span>Session state</span><strong>{lifecycle}</strong></div><div><span>Usable / excluded</span><strong>{} / {}</strong></div><div><span>Acquisition</span><strong>{}</strong></div>", overall.observation_counts.usable, overall.observation_counts.excluded, escape_html(&acquisition));
     out.push_str("</div>");
     if report.completeness == ReportCompleteness::BoundedOverview {

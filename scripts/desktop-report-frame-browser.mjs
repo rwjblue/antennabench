@@ -202,7 +202,7 @@ const server = createServer((request, response) => {
       "content-type": "text/html; charset=utf-8",
     });
     response.end(`<!doctype html><html><head><meta charset="utf-8"><title>Report frame browser regression</title><link rel="stylesheet" href="/shell.css"></head>
-      <body><iframe id="report" title="AntennaBench session report" sandbox="" referrerpolicy="no-referrer"></iframe>
+      <body><iframe id="report" title="AntennaBench session report" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>
       <script type="module" src="/harness.mjs"></script></body></html>`);
     return;
   }
@@ -392,7 +392,7 @@ try {
         srcdoc: frame.getAttribute("srcdoc"),
       };
     })()`], { json: true })).result;
-    assert.equal(shell.sandbox, "");
+    assert.equal(shell.sandbox, "allow-same-origin");
     assert.match(shell.source, /^blob:http:\/\/127\.0\.0\.1:/);
     assert.equal(shell.srcdoc, null);
 
@@ -451,13 +451,83 @@ try {
       assert.ok(Math.abs(geometry[name] - expected) < 0.01, `${mode} ${name}: ${geometry[name]}`);
     }
 
+    const navigationTargets = mode === "full"
+      ? [
+        "what-run-show",
+        "same-path-signal",
+        "reach-unique-paths",
+        "distance-direction",
+        "run-quality",
+        "audit-appendix",
+      ]
+      : ["what-run-show"];
+    const outerScrollBefore = (await browser([
+      "eval",
+      "document.scrollingElement.scrollTop",
+    ], { json: true })).result;
+    for (const targetId of navigationTargets) {
+      const prepared = await evaluateReportFrame(pageUrl, `(() => {
+        const link = document.querySelector('a[href="#${targetId}"]');
+        const target = document.querySelector("#${targetId}");
+        link.focus();
+        return {
+          linkFound: Boolean(link),
+          targetFound: Boolean(target),
+          linkFocused: document.activeElement === link,
+          linkOutline: getComputedStyle(link).outlineStyle,
+        };
+      })()`);
+      assert.deepEqual(prepared, {
+        linkFound: true,
+        targetFound: true,
+        linkFocused: true,
+        linkOutline: "solid",
+      });
+      if (targetId === "same-path-signal" || mode === "compact") {
+        await browser(["press", "Enter"]);
+      } else {
+        await evaluateReportFrame(pageUrl, `(() => {
+          document.querySelector('a[href="#${targetId}"]').click();
+        })()`);
+      }
+      await browser(["wait", "500"]);
+      const navigated = await evaluateReportFrame(pageUrl, `(() => {
+        const target = document.querySelector("#${targetId}");
+        const targetRect = target.getBoundingClientRect();
+        return {
+          hash: location.hash,
+          activeId: document.activeElement.id,
+          targetTop: targetRect.top,
+          targetBottom: targetRect.bottom,
+          targetOutline: getComputedStyle(target).outlineStyle,
+          viewportHeight: innerHeight,
+        };
+      })()`);
+      assert.equal(navigated.hash, `#${targetId}`);
+      assert.equal(navigated.activeId, targetId);
+      assert.equal(navigated.targetOutline, "solid");
+      assert.ok(
+        navigated.targetTop >= 0 && navigated.targetTop < navigated.viewportHeight,
+        `${mode} ${targetId}: ${JSON.stringify(navigated)}`,
+      );
+      assert.ok(navigated.targetBottom > 0);
+    }
+    const outerScrollAfter = (await browser([
+      "eval",
+      "document.scrollingElement.scrollTop",
+    ], { json: true })).result;
+    assert.equal(outerScrollAfter, outerScrollBefore);
+
     await evaluateReportFrame(pageUrl, `(() => {
       const disclosure = document.querySelector("details");
       if (disclosure) disclosure.open = true;
       const focusTarget = document.querySelector("a,summary") ?? document.querySelector("main");
       focusTarget.tabIndex = -1;
       focusTarget.focus();
-      scrollTo(0, Math.min(400, document.documentElement.scrollHeight - innerHeight));
+      scrollTo({
+        top: Math.min(400, document.documentElement.scrollHeight - innerHeight),
+        behavior: "instant",
+      });
     })()`);
     await browser(["wait", "500"]);
     const readerBefore = await evaluateReportFrame(pageUrl, `(() => {

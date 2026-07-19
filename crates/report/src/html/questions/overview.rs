@@ -65,7 +65,7 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         .map(|row| row.paired_row_count)
         .sum::<usize>();
 
-    out.push_str("<section id=\"what-run-show\" class=\"panel overview\" aria-labelledby=\"what-run-show-title\"><p class=\"eyebrow\">Answer first</p><h2 id=\"what-run-show-title\">What did the run show?</h2>");
+    out.push_str("<section id=\"what-run-show\" class=\"panel overview\" tabindex=\"-1\" aria-labelledby=\"what-run-show-title\"><p class=\"eyebrow\">Answer first</p><h2 id=\"what-run-show-title\">What did the run show?</h2>");
     render_plain_language_answer(out, report);
     write_html!(
         out,

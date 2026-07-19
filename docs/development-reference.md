@@ -490,11 +490,12 @@ evidence for a focused decision, not automatic permission to add WebDriver or
 a desktop production dependency. The blocked embedded-report stylesheet was
 such a boundary defect, so `desktop:report-browser` now renders generated full
 and compact reports in a real browser under the exact desktop CSP. It verifies
-the sandboxed blob frame has no scripts, byte-checks the same-origin stylesheet
-assets against renderer output, and asserts meaningful typography, panel,
-table, and narrow-layout computed styles. `mise run ci` runs this focused smoke
-through the exactly pinned browser-automation tool; it adds no desktop runtime
-dependency or webview capability.
+the sandboxed blob frame has no scripts or top-navigation authority, byte-checks
+the same-origin stylesheet assets against renderer output, activates native
+fragment links and their focusable targets, and asserts meaningful typography,
+panel, table, and narrow-layout computed styles. `mise run ci` runs this focused
+smoke through the exactly pinned browser-automation tool; it adds no desktop
+runtime dependency or webview capability.
 
 ## Desktop Release Artifact Construction
 

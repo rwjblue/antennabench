@@ -5,7 +5,7 @@ pub(in super::super) fn render_run_quality_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"run-quality\" class=\"question-section\" aria-labelledby=\"run-quality-title\"><div class=\"panel\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">Availability is reported from typed evidence states and raw counts. It is not a run-quality score or a strength grade.</p>");
+    out.push_str("<section id=\"run-quality\" class=\"question-section\" tabindex=\"-1\" aria-labelledby=\"run-quality-title\"><div class=\"panel\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">Availability is reported from typed evidence states and raw counts. It is not a run-quality score or a strength grade.</p>");
     render_answerability(out, report);
     out.push_str("</div><div class=\"panel\"><h2>Planned versus actual</h2><p class=\"muted\">Symbols, words, and border styles distinguish state without relying on color. Open a row for exact times, readiness, attribution, counts, notes, and corrections.</p>");
     render_lifecycle_strip(out, report);
