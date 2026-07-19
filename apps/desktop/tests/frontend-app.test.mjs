@@ -263,6 +263,23 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       assert.match(elements.savedCatalog.textContent, /W1AW/);
       assert.match(elements.savedCatalog.textContent, /View report/);
     });
+    let deleteButton = elements.savedCatalog.querySelector('[data-saved-action="delete"]');
+    deleteButton.click();
+    await vi.waitFor(() => assert.equal(elements.savedDeleteDialog.open, true));
+    assert.equal(document.activeElement, elements.savedDeleteCancel, "Cancel receives default focus");
+    assert.match(elements.savedDeleteIdentity.textContent, /W1AW.*existing\.session\.antennabundle/);
+    elements.savedDeleteConfirm.focus();
+    elements.savedDeleteDialog.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+    }));
+    assert.equal(document.activeElement, elements.savedDeleteCancel, "Tab stays inside the modal");
+    elements.savedDeleteDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    assert.equal(elements.savedDeleteDialog.open, false);
+    assert.equal(document.activeElement.dataset.savedAction, "delete", "Escape/cancel restores row-action focus");
+    assert.equal(document.activeElement.dataset.locatorId, "locator-existing");
+    assert.equal(calls.some(([command]) => command === "delete_managed_session"), false);
+
     elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
     await vi.waitFor(() => {
       assert.equal(window.location.hash, "#report");

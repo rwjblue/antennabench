@@ -18,6 +18,10 @@ export function invokeRevealManagedSession(invoke, locatorId) {
   return invoke("reveal_managed_session", { locatorId });
 }
 
+export function invokeDeleteManagedSession(invoke, locatorId) {
+  return invoke("delete_managed_session", { locatorId });
+}
+
 export function invokeReviewSessionSetup(invoke, draft) {
   return invoke("review_session_setup", { draft });
 }

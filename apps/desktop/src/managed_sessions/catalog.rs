@@ -17,6 +17,9 @@ use super::{
     ProblemSeverity, MAX_CATALOG_CANDIDATES, MAX_ENTRY_PROBLEMS, MAX_PROBLEM_TEXT_BYTES,
 };
 
+const REMOVAL_SNAPSHOT_MAX_ENTRIES: usize = 4096;
+const REMOVAL_SNAPSHOT_MAX_DEPTH: usize = 32;
+
 #[derive(Debug)]
 pub(super) struct CatalogBuild {
     pub(super) catalog: ManagedSessionCatalog,
@@ -28,6 +31,7 @@ pub(super) struct LocatorRecord {
     pub(super) bundle_name: String,
     pub(super) identity: DirectoryIdentity,
     pub(super) fingerprint: Option<[u8; 32]>,
+    pub(super) removal_fingerprint: Option<[u8; 32]>,
     pub(super) activatable: bool,
 }
 
@@ -173,6 +177,10 @@ pub(super) fn revalidate_direct_child(
     root: &Path,
     record: &LocatorRecord,
 ) -> Result<PathBuf, SessionErrorPayload> {
+    let root_metadata = fs::symlink_metadata(root).map_err(|error| root_read_error(root, error))?;
+    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
+        return Err(stale_locator_error());
+    }
     if !is_plain_name(&record.bundle_name) || !is_supported_bundle_name(&record.bundle_name) {
         return Err(stale_locator_error());
     }
@@ -190,6 +198,34 @@ pub(super) fn revalidate_direct_child(
     let identity = directory_identity(&metadata);
     if identity != record.identity {
         return Err(stale_locator_error());
+    }
+    #[cfg(unix)]
+    if identity.device != directory_identity(&root_metadata).device {
+        return Err(stale_locator_error());
+    }
+    Ok(path)
+}
+
+pub(super) fn revalidate_for_removal(
+    root: &Path,
+    record: &LocatorRecord,
+) -> Result<PathBuf, SessionErrorPayload> {
+    let path = revalidate_direct_child(root, record)?;
+    let current_removal_fingerprint = removal_fingerprint(&path).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Verification,
+            "The saved session could not be rechecked safely before removal.",
+            error.to_string(),
+        )
+    })?;
+    if record.removal_fingerprint != Some(current_removal_fingerprint) {
+        return Err(stale_locator_error());
+    }
+    if let Some(expected) = record.fingerprint {
+        let current = inspect_directory(&record.bundle_name, &path);
+        if current.record.fingerprint != Some(expected) {
+            return Err(stale_locator_error());
+        }
     }
     Ok(path)
 }
@@ -242,6 +278,7 @@ fn project_candidate(candidate: Candidate) -> ProjectedEntry {
                     bundle_name: name.clone(),
                     identity: directory_identity(&metadata),
                     fingerprint: None,
+                    removal_fingerprint: None,
                     activatable: false,
                 });
             ProjectedEntry {
@@ -284,16 +321,19 @@ fn inspect_directory(name: &str, path: &Path) -> ProjectedEntry {
         }
     };
     let identity = directory_identity(&metadata);
+    let removal_fingerprint = removal_fingerprint(path).ok();
     let store = BundleStore::new(path);
     let schema_version = match store.schema_version() {
         Ok(version) => Some(version),
         Err(error) => {
-            return failed_inspection(name, identity, None, error);
+            return failed_inspection(name, identity, removal_fingerprint, None, error);
         }
     };
     let inspection = match store.inspect() {
         Ok(inspection) => inspection,
-        Err(error) => return failed_inspection(name, identity, schema_version, error),
+        Err(error) => {
+            return failed_inspection(name, identity, removal_fingerprint, schema_version, error)
+        }
     };
     let Some(current) = inspection.current() else {
         let mut entry = ManagedCatalogEntry::problem(
@@ -310,6 +350,7 @@ fn inspect_directory(name: &str, path: &Path) -> ProjectedEntry {
                 bundle_name: name.into(),
                 identity,
                 fingerprint: None,
+                removal_fingerprint,
                 activatable: false,
             },
         };
@@ -379,6 +420,7 @@ fn inspect_directory(name: &str, path: &Path) -> ProjectedEntry {
             bundle_name: name.into(),
             identity,
             fingerprint,
+            removal_fingerprint,
             activatable: fingerprint.is_some(),
         },
         entry,
@@ -388,6 +430,7 @@ fn inspect_directory(name: &str, path: &Path) -> ProjectedEntry {
 fn failed_inspection(
     name: &str,
     identity: DirectoryIdentity,
+    removal_fingerprint: Option<[u8; 32]>,
     schema_version: Option<u16>,
     error: BundleStoreError,
 ) -> ProjectedEntry {
@@ -422,6 +465,7 @@ fn failed_inspection(
             bundle_name: name.into(),
             identity,
             fingerprint: None,
+            removal_fingerprint,
             activatable: false,
         },
     }
@@ -462,6 +506,76 @@ fn projection_fingerprint(
         writer.0.update(format!("{diagnostic:?}").as_bytes());
     }
     Ok(writer.0.finalize().into())
+}
+
+fn removal_fingerprint(root: &Path) -> io::Result<[u8; 32]> {
+    fn visit(
+        root: &Path,
+        current: &Path,
+        depth: usize,
+        entries: &mut usize,
+        digest: &mut Sha256,
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+
+        if depth > REMOVAL_SNAPSHOT_MAX_DEPTH {
+            return Err(io::Error::other(
+                "the managed entry exceeds the removal snapshot depth",
+            ));
+        }
+        let mut children = fs::read_dir(current)?.collect::<Result<Vec<_>, _>>()?;
+        children.sort_by_key(|entry| entry.file_name());
+        for child in children {
+            *entries += 1;
+            if *entries > REMOVAL_SNAPSHOT_MAX_ENTRIES {
+                return Err(io::Error::other(
+                    "the managed entry exceeds the removal snapshot size",
+                ));
+            }
+            let path = child.path();
+            let metadata = fs::symlink_metadata(&path)?;
+            let relative = path.strip_prefix(root).map_err(io::Error::other)?;
+            digest.update(format!("{:?}", relative.as_os_str()).as_bytes());
+            digest.update(metadata.len().to_le_bytes());
+            digest.update(
+                metadata
+                    .modified()
+                    .ok()
+                    .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                    .map(|value| value.as_nanos())
+                    .unwrap_or_default()
+                    .to_le_bytes(),
+            );
+            let kind = metadata.file_type();
+            digest.update([
+                u8::from(kind.is_dir()),
+                u8::from(kind.is_file()),
+                u8::from(kind.is_symlink()),
+            ]);
+            #[cfg(unix)]
+            {
+                digest.update(metadata.dev().to_le_bytes());
+                digest.update(metadata.ino().to_le_bytes());
+            }
+            if kind.is_dir() && !kind.is_symlink() {
+                #[cfg(unix)]
+                if metadata.dev() != fs::symlink_metadata(root)?.dev() {
+                    return Err(io::Error::other(
+                        "the managed entry crosses a filesystem boundary",
+                    ));
+                }
+                visit(root, &path, depth + 1, entries, digest)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut digest = Sha256::new();
+    let mut entries = 0;
+    visit(root, root, 0, &mut entries, &mut digest)?;
+    digest.update(entries.to_le_bytes());
+    Ok(digest.finalize().into())
 }
 
 struct DigestWriter(Sha256);
@@ -659,6 +773,7 @@ impl LocatorRecord {
                 modified_nanos: None,
             },
             fingerprint: None,
+            removal_fingerprint: None,
             activatable: false,
         }
     }

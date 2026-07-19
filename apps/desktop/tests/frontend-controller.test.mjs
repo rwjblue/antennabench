@@ -220,8 +220,44 @@ test("saved-session reveal actions use opaque locators and isolate row failures"
   const failed = harness({ open_managed_session: new Error("bundle moved") }, { state });
   await failed.controller.openManagedSession("locator-1", "report");
   assert.equal(failed.controller.state.managedCatalog, state.managedCatalog);
-  assert.equal(failed.controller.state.catalogRowError.locatorId, "locator-1");
   assert.match(failed.controller.state.catalogRowError.error.detail, /bundle moved/);
+});
+
+test("saved-session deletion is row-scoped, single-submit, refreshed, and failure-safe", async () => {
+  const entry = {
+    locatorId: "locator-1",
+    callsign: "N1RWJ",
+    bundleName: "one.session.antennabundle",
+  };
+  const other = { locatorId: "locator-2", bundleName: "two.session.antennabundle" };
+  const state = initialState("saved");
+  state.catalogStatus = "ready";
+  state.managedCatalog = { status: "complete", entries: [entry, other], diagnostics: [] };
+  let finishDelete;
+  const deleting = harness({
+    delete_managed_session: () => new Promise((resolve) => { finishDelete = resolve; }),
+    list_managed_sessions: { status: "complete", entries: [other], diagnostics: [] },
+  }, { state });
+  deleting.controller.requestManagedSessionDeletion(entry);
+  const first = deleting.controller.deleteManagedSession();
+  const repeated = deleting.controller.deleteManagedSession();
+  assert.equal(deleting.controller.state.catalogDeleteStatus, "deleting");
+  assert.deepEqual(deleting.controller.state.managedCatalog.entries, [entry, other]);
+  finishDelete({ status: "trashed", bundleName: entry.bundleName });
+  await Promise.all([first, repeated]);
+  assert.deepEqual(deleting.calls, [
+    ["delete_managed_session", { locatorId: "locator-1" }],
+    ["list_managed_sessions", undefined],
+  ]);
+  assert.deepEqual(deleting.controller.state.managedCatalog.entries, [other]);
+  assert.equal(deleting.controller.state.catalogDeleteNotice, entry.bundleName);
+
+  const failed = harness({ delete_managed_session: new Error("Trash unavailable") }, { state });
+  failed.controller.requestManagedSessionDeletion(entry);
+  await failed.controller.deleteManagedSession();
+  assert.equal(failed.controller.state.catalogDeleteStatus, "failed");
+  assert.equal(failed.controller.state.managedCatalog, state.managedCatalog);
+  assert.match(failed.controller.state.catalogDeleteError.detail, /Trash unavailable/);
 });
 
 test("open cancellation, failure, and success retain focused state and refresh reports", async () => {

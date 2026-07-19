@@ -12,6 +12,10 @@ export function initialState(workflow = "saved") {
       catalogError: null,
       catalogRowOperation: null,
       catalogRowError: null,
+      catalogDeleteStatus: "idle",
+      catalogDeleteTarget: null,
+      catalogDeleteError: null,
+      catalogDeleteNotice: null,
       managedLocationNotice: null,
       activeManagedLocatorId: null,
       session: null,
@@ -323,6 +327,66 @@ export function managedRevealFailed(state, error) {
       : null,
     catalogError: state.catalogRowOperation?.locatorId ? state.catalogError : normalized,
     catalogRowOperation: null,
+  };
+}
+
+export function requestManagedDelete(state, entry) {
+  if (!entry?.locatorId || state.catalogRowOperation) return state;
+  return {
+    ...state,
+    catalogDeleteStatus: "confirming",
+    catalogDeleteTarget: {
+      locatorId: entry.locatorId,
+      callsign: entry.callsign ?? null,
+      bundleName: entry.bundleName,
+    },
+    catalogDeleteError: null,
+    catalogDeleteNotice: null,
+  };
+}
+
+export function cancelManagedDelete(state) {
+  if (state.catalogDeleteStatus === "deleting") return state;
+  return {
+    ...state,
+    catalogDeleteStatus: "cancelled",
+    catalogDeleteTarget: null,
+    catalogDeleteError: null,
+    catalogDeleteNotice: null,
+  };
+}
+
+export function beginManagedDelete(state) {
+  const locatorId = state.catalogDeleteTarget?.locatorId;
+  if (!locatorId || state.catalogDeleteStatus === "deleting") return state;
+  return {
+    ...state,
+    catalogDeleteStatus: "deleting",
+    catalogDeleteError: null,
+  };
+}
+
+export function managedDeleteSucceeded(state, outcome) {
+  const locatorId = state.catalogDeleteTarget?.locatorId;
+  return {
+    ...state,
+    catalogDeleteStatus: "succeeded",
+    catalogDeleteTarget: null,
+    catalogDeleteError: null,
+    catalogDeleteNotice: outcome.bundleName,
+    managedCatalog: state.managedCatalog ? {
+      ...state.managedCatalog,
+      entries: state.managedCatalog.entries.filter((entry) => entry.locatorId !== locatorId),
+    } : null,
+  };
+}
+
+export function managedDeleteFailed(state, error) {
+  const normalized = normalizeOpenError(error);
+  return {
+    ...state,
+    catalogDeleteStatus: "failed",
+    catalogDeleteError: normalized,
   };
 }
 

@@ -25,8 +25,8 @@ use crate::{
 mod catalog;
 
 use catalog::{
-    build_catalog, record_created, revalidate_available, revalidate_direct_child, CatalogBuild,
-    LocatorRecord,
+    build_catalog, record_created, revalidate_available, revalidate_direct_child,
+    revalidate_for_removal, CatalogBuild, LocatorRecord,
 };
 
 pub(crate) const MAX_CATALOG_CANDIDATES: usize = 256;
@@ -178,6 +178,25 @@ pub(crate) struct ManagedLocationContext {
     origin_label: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DeleteManagedSessionOutcome {
+    status: &'static str,
+    bundle_name: String,
+}
+
+trait TrashPort {
+    fn move_to_trash(&self, path: &Path) -> Result<(), String>;
+}
+
+struct SystemTrashPort;
+
+impl TrashPort for SystemTrashPort {
+    fn move_to_trash(&self, path: &Path) -> Result<(), String> {
+        trash::delete(path).map_err(|error| error.to_string())
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct ManagedSessionsState(Mutex<HashMap<String, LocatorRecord>>);
 
@@ -191,7 +210,7 @@ impl ManagedSessionsState {
     ) -> Result<ManagedSessionCatalog, SessionErrorPayload> {
         let mut locators = HashMap::new();
         for (entry, record) in catalog.entries.iter_mut().zip(records) {
-            if record.bundle_name.is_empty() {
+            if record.bundle_name.is_empty() || record.removal_fingerprint.is_none() {
                 continue;
             }
             let locator_id = Uuid::new_v4().to_string();
@@ -216,6 +235,11 @@ impl ManagedSessionsState {
                     "the managed locator is unknown or stale",
                 )
             })
+    }
+
+    fn forget(&self, locator_id: &str) -> Result<(), SessionErrorPayload> {
+        self.0.lock().map_err(|_| state_error())?.remove(locator_id);
+        Ok(())
     }
 
     pub(crate) fn register_created(
@@ -287,6 +311,23 @@ pub(crate) fn reveal_managed_session(
     reveal_with(&SystemRevealPort, RevealTarget::Entry(path))
 }
 
+#[tauri::command]
+pub(crate) fn delete_managed_session(
+    app: AppHandle,
+    managed_state: State<'_, ManagedSessionsState>,
+    active_state: State<'_, ActiveSessionState>,
+    locator_id: String,
+) -> Result<DeleteManagedSessionOutcome, SessionErrorPayload> {
+    let root = managed_sessions_dir(&resolved_app_data_dir(&app)?);
+    delete_managed_session_for(
+        managed_state.inner(),
+        active_state.inner(),
+        &root,
+        &locator_id,
+        &SystemTrashPort,
+    )
+}
+
 fn list_managed_sessions_for(
     state: &ManagedSessionsState,
     root: &Path,
@@ -315,6 +356,39 @@ fn open_managed_session_for(
         }
     })
     .map_err(|error| redact_managed_path(error, root))
+}
+
+fn delete_managed_session_for(
+    managed_state: &ManagedSessionsState,
+    active_state: &ActiveSessionState,
+    root: &Path,
+    locator_id: &str,
+    trash_port: &dyn TrashPort,
+) -> Result<DeleteManagedSessionOutcome, SessionErrorPayload> {
+    let record = managed_state.resolve(locator_id)?;
+    let path = revalidate_for_removal(root, &record)?;
+    if crate::open_session::active_session_source(active_state)
+        .ok()
+        .is_some_and(|(active_path, _)| active_path == path)
+    {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Selection,
+            "Close this saved session before removing it.",
+            "the selected managed session is currently active",
+        ));
+    }
+    trash_port.move_to_trash(&path).map_err(|detail| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "The saved session could not be moved to Trash.",
+            detail,
+        )
+    })?;
+    managed_state.forget(locator_id)?;
+    Ok(DeleteManagedSessionOutcome {
+        status: "trashed",
+        bundle_name: record.bundle_name,
+    })
 }
 
 fn redact_managed_path(mut error: SessionErrorPayload, root: &Path) -> SessionErrorPayload {

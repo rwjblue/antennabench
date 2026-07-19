@@ -586,6 +586,159 @@ impl RevealPort for RecordingRevealPort {
     }
 }
 
+struct RenameTrashPort {
+    destination: PathBuf,
+    fail: bool,
+}
+
+impl TrashPort for RenameTrashPort {
+    fn move_to_trash(&self, path: &Path) -> Result<(), String> {
+        if self.fail {
+            return Err("injected Trash failure".into());
+        }
+        fs::create_dir_all(&self.destination).map_err(|error| error.to_string())?;
+        fs::rename(path, self.destination.join(path.file_name().unwrap()))
+            .map_err(|error| error.to_string())
+    }
+}
+
+#[test]
+fn verified_direct_child_moves_to_trash_without_changing_siblings() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("sessions");
+    let bundle = create_managed_latest(&root);
+    let sibling = root.join("notes.txt");
+    fs::write(&sibling, "keep").unwrap();
+    let state = ManagedSessionsState::default();
+    let catalog = list_managed_sessions_for(&state, &root).unwrap();
+    let locator = catalog.entries[0].locator_id.as_deref().unwrap();
+    let trash = temp.path().join("Trash");
+
+    let outcome = delete_managed_session_for(
+        &state,
+        &ActiveSessionState::default(),
+        &root,
+        locator,
+        &RenameTrashPort {
+            destination: trash.clone(),
+            fail: false,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(outcome.status, "trashed");
+    assert_eq!(
+        outcome.bundle_name,
+        bundle.file_name().unwrap().to_str().unwrap()
+    );
+    assert!(!bundle.exists());
+    assert!(trash.join(bundle.file_name().unwrap()).is_dir());
+    assert_eq!(fs::read_to_string(sibling).unwrap(), "keep");
+    assert_eq!(
+        state.resolve(locator).unwrap_err().kind,
+        SessionErrorKind::Selection
+    );
+}
+
+#[test]
+fn deletion_rejects_modified_and_active_bundles_and_trash_failure_is_non_mutating() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("sessions");
+    let bundle = create_managed_latest(&root);
+    let state = ManagedSessionsState::default();
+    let catalog = list_managed_sessions_for(&state, &root).unwrap();
+    let locator = catalog.entries[0].locator_id.as_deref().unwrap();
+    fs::write(bundle.join("changed-after-listing"), "changed").unwrap();
+
+    let error = delete_managed_session_for(
+        &state,
+        &ActiveSessionState::default(),
+        &root,
+        locator,
+        &RenameTrashPort {
+            destination: temp.path().join("Trash"),
+            fail: false,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.kind, SessionErrorKind::Verification);
+    assert!(bundle.exists());
+
+    fs::remove_file(bundle.join("changed-after-listing")).unwrap();
+    let catalog = list_managed_sessions_for(&state, &root).unwrap();
+    let locator = catalog.entries[0].locator_id.as_deref().unwrap();
+    let active = ActiveSessionState::default();
+    crate::open_session::open_session_at_path(&active, bundle.clone()).unwrap();
+    let error = delete_managed_session_for(
+        &state,
+        &active,
+        &root,
+        locator,
+        &RenameTrashPort {
+            destination: temp.path().join("Trash"),
+            fail: false,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.kind, SessionErrorKind::Selection);
+    assert_eq!(active_session_source(&active).unwrap().0, bundle);
+
+    let catalog = list_managed_sessions_for(&state, &root).unwrap();
+    let locator = catalog.entries[0].locator_id.as_deref().unwrap();
+    let error = delete_managed_session_for(
+        &state,
+        &ActiveSessionState::default(),
+        &root,
+        locator,
+        &RenameTrashPort {
+            destination: temp.path().join("Trash"),
+            fail: true,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.kind, SessionErrorKind::Filesystem);
+    assert!(bundle.exists());
+}
+
+#[test]
+fn invalid_and_unsupported_direct_children_receive_safe_removal_locators() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("sessions");
+    fs::create_dir(&root).unwrap();
+    let invalid = root.join(format!("invalid{V2_BUNDLE_SUFFIX}"));
+    fs::create_dir(&invalid).unwrap();
+    fs::write(invalid.join("manifest.json"), "{").unwrap();
+    let unsupported = root.join(format!("unsupported{V2_BUNDLE_SUFFIX}"));
+    fs::create_dir(&unsupported).unwrap();
+    fs::write(
+        unsupported.join("manifest.json"),
+        r#"{"schema_version":99}"#,
+    )
+    .unwrap();
+    let state = ManagedSessionsState::default();
+    let catalog = list_managed_sessions_for(&state, &root).unwrap();
+    assert!(catalog
+        .entries
+        .iter()
+        .all(|entry| entry.locator_id.is_some()));
+
+    for entry in catalog.entries {
+        delete_managed_session_for(
+            &state,
+            &ActiveSessionState::default(),
+            &root,
+            entry.locator_id.as_deref().unwrap(),
+            &RenameTrashPort {
+                destination: temp.path().join("Trash"),
+                fail: false,
+            },
+        )
+        .unwrap();
+    }
+    assert!(!invalid.exists());
+    assert!(!unsupported.exists());
+}
+
 #[test]
 fn reveal_port_receives_only_the_resolved_root_or_direct_child() {
     let temp = TempDir::new().unwrap();

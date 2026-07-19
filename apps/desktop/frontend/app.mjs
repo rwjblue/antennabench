@@ -42,6 +42,7 @@ export function mount(root, browserWindow) {
   let countdownAnchor = null;
   let countdownAnchorKey = null;
   let noteShortcutInitialized = false;
+  let deleteTrigger = null;
   const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const preferredScrollBehavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -58,6 +59,9 @@ export function mount(root, browserWindow) {
     savedEmptyNew,
     savedEmptyOpen,
     savedCatalog,
+    savedDeleteDialog,
+    savedDeleteCancel,
+    savedDeleteConfirm,
     managedLocationReveal,
     setupForm,
     setupStatus,
@@ -265,8 +269,53 @@ export function mount(root, browserWindow) {
       await controller.revealManagedSession(button.dataset.locatorId);
       return;
     }
+    if (button.dataset.savedAction === "delete") {
+      const entry = state.managedCatalog?.entries?.find(
+        (candidate) => candidate.locatorId === button.dataset.locatorId,
+      );
+      if (!entry || state.activeManagedLocatorId === entry.locatorId) return;
+      deleteTrigger = button;
+      controller.requestManagedSessionDeletion(entry);
+      Promise.resolve().then(() => savedDeleteCancel.focus());
+      return;
+    }
     await controller.openManagedSession(button.dataset.locatorId, button.dataset.intent);
     focusActiveHeading(elements, state.activeWorkflow);
+  });
+  const cancelDelete = () => {
+    if (state.catalogDeleteStatus === "deleting") return;
+    const locatorId = deleteTrigger?.dataset.locatorId;
+    controller.cancelManagedSessionDeletion();
+    const trigger = locatorId
+      ? [...savedCatalog.querySelectorAll('[data-saved-action="delete"]')]
+        .find((button) => button.dataset.locatorId === locatorId)
+      : deleteTrigger;
+    deleteTrigger = null;
+    trigger?.focus();
+  };
+  savedDeleteCancel.addEventListener("click", cancelDelete);
+  savedDeleteDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    cancelDelete();
+  });
+  savedDeleteDialog.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [savedDeleteCancel, savedDeleteConfirm].filter((button) => !button.disabled);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && rootDocument.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && rootDocument.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  savedDeleteConfirm.addEventListener("click", async () => {
+    if (state.catalogDeleteStatus === "deleting") return;
+    await controller.deleteManagedSession();
+    if (state.catalogDeleteStatus === "succeeded") deleteTrigger = null;
   });
   managedLocationReveal.addEventListener("click", () => {
     const locatorId = state.managedLocationNotice?.locatorId;

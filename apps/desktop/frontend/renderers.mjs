@@ -28,6 +28,8 @@ export function renderSavedSessions(elements, state, root) {
   const {
     savedStatus, savedRefresh, savedRevealFolder, savedFeedback, savedFeedbackMessage,
     savedFeedbackDetail, savedEmpty, savedCatalog,
+    savedDeleteDialog, savedDeleteTitle, savedDeleteDescription, savedDeleteIdentity,
+    savedDeleteError, savedDeleteCancel, savedDeleteConfirm,
   } = elements;
   const loading = ["loading", "refreshing"].includes(state.catalogStatus);
   const entries = state.managedCatalog?.entries ?? [];
@@ -50,7 +52,7 @@ export function renderSavedSessions(elements, state, root) {
     && entries.length === 0
   );
 
-  const catalogMessage = state.catalogError
+  const catalogMessage = managedDeleteFeedbackModel(state) ?? (state.catalogError
     ? { kind: "error", ...state.catalogError }
     : state.managedCatalog?.status === "incomplete"
       ? {
@@ -59,11 +61,15 @@ export function renderSavedSessions(elements, state, root) {
         detail: state.managedCatalog.diagnostics?.map((item) => item.message).join(" ")
           || "Refresh after reducing the number or size of saved session entries.",
       }
-      : openFeedbackModel(state);
+      : openFeedbackModel(state));
   renderFeedback(savedFeedback, savedFeedbackMessage, savedFeedbackDetail, catalogMessage);
 
   savedCatalog.setAttribute("aria-busy", String(loading));
   savedCatalog.replaceChildren(...entries.map((entry) => renderSavedRow(root, state, entry)));
+  renderSavedDeleteDialog({
+    savedDeleteDialog, savedDeleteTitle, savedDeleteDescription, savedDeleteIdentity,
+    savedDeleteError, savedDeleteCancel, savedDeleteConfirm,
+  }, state);
 }
 
 function renderSavedRow(root, state, entry) {
@@ -154,21 +160,73 @@ function renderSavedRow(root, state, entry) {
   }
   if (!action) actions.append(savedActionButton(root, "View details", "details", entry.locatorId, null, true));
   if (entry.locatorId) actions.append(savedActionButton(root, "Reveal in Finder", "reveal", entry.locatorId));
+  if (entry.locatorId) {
+    const deleteButton = savedActionButton(root, "Delete…", "delete", entry.locatorId);
+    deleteButton.classList.add("danger-action");
+    if (state.activeManagedLocatorId === entry.locatorId) {
+      deleteButton.disabled = true;
+      deleteButton.title = "Close this session before removing it from Saved sessions.";
+    }
+    actions.append(deleteButton);
+  }
+  const existingRowBusy = state.catalogRowOperation && (
+    state.catalogRowOperation.locatorId === null
+    || state.catalogRowOperation.locatorId === entry.locatorId
+  );
+  const deletePending = state.catalogDeleteStatus === "deleting"
+    && state.catalogDeleteTarget?.locatorId === entry.locatorId;
+  const rowBusy = existingRowBusy || deletePending;
   for (const button of actions.querySelectorAll("button")) {
-    button.disabled = state.catalogRowOperation !== null;
+    button.disabled ||= Boolean(rowBusy);
+    if (rowBusy && button.dataset.savedAction === "delete") button.textContent = "Moving…";
   }
   if (state.activeManagedLocatorId === entry.locatorId) {
     const active = root.createElement("span"); active.className = "saved-open-now"; active.textContent = "Open now";
     actions.prepend(active);
   }
-  if (state.catalogRowError?.locatorId === entry.locatorId) {
+  const rowError = state.catalogRowError?.locatorId === entry.locatorId
+    ? state.catalogRowError.error
+    : state.catalogDeleteTarget?.locatorId === entry.locatorId
+      ? state.catalogDeleteError
+      : null;
+  if (rowError) {
     const error = root.createElement("p"); error.className = "saved-row-error";
-    error.textContent = `${state.catalogRowError.error.message} ${state.catalogRowError.error.detail}`.trim();
+    error.textContent = `${rowError.message} ${rowError.detail}`.trim();
     row.append(heading, summary, meta, duplicate, details, actions, error);
   } else {
     row.append(heading, summary, meta, duplicate, details, actions);
   }
   return row;
+}
+
+function renderSavedDeleteDialog(elements, state) {
+  const {
+    savedDeleteDialog, savedDeleteTitle, savedDeleteDescription, savedDeleteIdentity,
+    savedDeleteError, savedDeleteCancel, savedDeleteConfirm,
+  } = elements;
+  const target = state.catalogDeleteTarget;
+  if (!target) {
+    if (savedDeleteDialog.open) savedDeleteDialog.close?.();
+    savedDeleteDialog.removeAttribute("open");
+    return;
+  }
+  savedDeleteTitle.textContent = "Move this session to Trash?";
+  savedDeleteDescription.textContent = "The complete portable session record will be removed from AntennaBench’s managed library. It will not be permanently deleted.";
+  savedDeleteIdentity.textContent = target.callsign
+    ? `${target.callsign} — ${target.bundleName}`
+    : target.bundleName;
+  savedDeleteError.hidden = !state.catalogDeleteError;
+  savedDeleteError.textContent = state.catalogDeleteError
+    ? `${state.catalogDeleteError.message} ${state.catalogDeleteError.detail}`.trim()
+    : "";
+  const pending = state.catalogDeleteStatus === "deleting";
+  savedDeleteCancel.disabled = pending;
+  savedDeleteConfirm.disabled = pending;
+  savedDeleteConfirm.textContent = pending ? "Moving to Trash…" : "Move to Trash";
+  if (!savedDeleteDialog.open) {
+    if (typeof savedDeleteDialog.showModal === "function") savedDeleteDialog.showModal();
+    else savedDeleteDialog.setAttribute("open", "");
+  }
 }
 
 function savedActionButton(root, label, action, locatorId, intent = null, primary = false) {
@@ -1095,6 +1153,27 @@ function openFeedbackModel(state) {
   if (state.notice === "cancelled") return { kind: "cancelled", message: "Open cancelled.", detail: "No session was changed." };
   if (state.notice === "work_redirected" && state.session) return { kind: "ready", message: `${state.session.bundleName} opened in Reports.`, detail: "Its current lifecycle is terminal or read-only, so run services were not loaded." };
   if (state.session) return { kind: "ready", message: `${state.session.bundleName} is ready.`, detail: "Its local report was rebuilt in memory from the source bundle." };
+  return null;
+}
+
+function managedDeleteFeedbackModel(state) {
+  if (state.catalogDeleteStatus === "deleting") return {
+    kind: "loading",
+    message: "Moving the saved session to Trash…",
+    detail: "The verified managed bundle is being handed to the platform Trash.",
+  };
+  if (state.catalogDeleteStatus === "cancelled") return {
+    kind: "cancelled",
+    message: "Removal cancelled.",
+    detail: "The saved session was not changed.",
+  };
+  if (state.catalogDeleteNotice) return {
+    kind: "ready",
+    message: `${state.catalogDeleteNotice} was moved to Trash.`,
+    detail: state.catalogError
+      ? `The catalog refresh failed: ${state.catalogError.detail}`
+      : "The other saved sessions were left unchanged.",
+  };
   return null;
 }
 

@@ -122,6 +122,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .saved-header-actions { margin-bottom: 20px; }
 .saved-header-actions button, .saved-empty-actions button, .saved-row-actions button, [data-managed-location-reveal] { border: 1px solid #8ab3aa; border-radius: 9px; padding: 9px 12px; color: #245451; background: #fff; font-size: 0.73rem; font-weight: 800; cursor: pointer; }
 .saved-header-actions .primary-action, .saved-row-actions .primary-action { border-color: #245451; color: #fff; background: #245451; }
+.saved-row-actions .danger-action { border-color: #b6543f; color: #8a3525; background: #fff7f4; }
 .saved-header-actions button:disabled, .saved-row-actions button:disabled { color: #87948f; border-color: #cbd3ce; background: #eef0ed; cursor: wait; }
 .saved-empty { margin: 20px 0; padding: 28px; border: 1px dashed #bfcac3; border-radius: 18px; text-align: center; background: #f6f8f4; }
 .saved-empty .empty-icon { display: block; margin-bottom: 8px; color: #699188; font-size: 2rem; }
@@ -145,6 +146,14 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .saved-row-details dd { margin: 4px 0 0; color: #315d57; font-size: 0.74rem; overflow-wrap: anywhere; }
 .saved-technical-details { margin-top: 10px; padding: 9px; border: 1px solid #e1e5df; border-radius: 8px; }
 .saved-technical-details dl { margin-bottom: 0; }
+.saved-delete-dialog { width: min(520px, calc(100% - 32px)); padding: 0; border: 0; border-radius: 16px; color: #294440; background: #fff; box-shadow: 0 24px 70px rgba(24, 48, 44, 0.28); }
+.saved-delete-dialog::backdrop { background: rgba(20, 39, 36, 0.54); }
+.saved-delete-content { padding: 24px; }
+.saved-delete-content h2 { margin: 4px 0 10px; color: #713323; font: 500 1.55rem Georgia, "Times New Roman", serif; }
+.saved-delete-identity { padding: 10px 12px; border-radius: 8px; overflow-wrap: anywhere; color: #315d57; background: #f4f7f3; font-weight: 750; }
+.saved-delete-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; }
+.saved-delete-actions button { border: 1px solid #8ab3aa; border-radius: 9px; padding: 9px 12px; color: #245451; background: #fff; font: inherit; font-size: 0.76rem; font-weight: 800; cursor: pointer; }
+.saved-delete-actions .danger-action { border-color: #b6543f; color: #fff; background: #9b432f; }
 .saved-row-details p, .saved-row-details li { color: #697873; font-size: 0.72rem; line-height: 1.5; }
 .saved-open-now { align-self: center; color: #1d6d62; font-size: 0.7rem; font-weight: 800; }
 .saved-help { margin-top: 28px; padding: 18px; border-radius: 14px; background: #eef4ef; }

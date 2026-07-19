@@ -108,6 +108,7 @@ fn main() {
         "open_managed_session",
         "reveal_managed_sessions_directory",
         "reveal_managed_session",
+        "delete_managed_session",
         "open_session_bundle",
         "export_active_session",
         "export_active_session_report",

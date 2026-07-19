@@ -11,6 +11,7 @@ import {
   invokeAntennaControllerProfiles,
   invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
+  invokeDeleteManagedSession,
   invokeDeleteAntennaControllerProfile,
   invokeExportActiveSessionReport,
   invokeExportSession,
@@ -70,6 +71,7 @@ import {
   beginConductorMutation,
   beginExportSession,
   beginManagedCatalogLoad,
+  beginManagedDelete,
   beginManagedReveal,
   beginOpenSession,
   beginReportExport,
@@ -90,11 +92,15 @@ import {
   initialState,
   managedCatalogLoadFailed,
   managedCatalogLoadSucceeded,
+  managedDeleteFailed,
+  managedDeleteSucceeded,
   managedRevealFailed,
   managedRevealSucceeded,
+  cancelManagedDelete,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
+  requestManagedDelete,
   reportExportCancelled,
   reportExportSucceeded,
   reportRefreshFailed,
@@ -191,6 +197,10 @@ test("the shell starts in saved sessions", () => {
     catalogError: null,
     catalogRowOperation: null,
     catalogRowError: null,
+    catalogDeleteStatus: "idle",
+    catalogDeleteTarget: null,
+    catalogDeleteError: null,
+    catalogDeleteNotice: null,
     managedLocationNotice: null,
     activeManagedLocatorId: null,
     session: null,
@@ -1506,6 +1516,36 @@ test("managed catalog refresh and reveal transitions retain useful stale data", 
   assert.equal(managedRevealSucceeded(revealing).catalogRowOperation, null);
 });
 
+test("managed deletion has explicit confirmation cancellation pending success and failure states", () => {
+  const catalog = {
+    status: "complete",
+    entries: [
+      { locatorId: "locator-1", callsign: "N1RWJ", bundleName: "one.session.antennabundle" },
+      { locatorId: "locator-2", callsign: null, bundleName: "two.session.antennabundle" },
+    ],
+    diagnostics: [],
+  };
+  const ready = { ...initialState(), managedCatalog: catalog, catalogStatus: "ready" };
+  const confirming = requestManagedDelete(ready, catalog.entries[0]);
+  const pending = beginManagedDelete(confirming);
+  const failed = managedDeleteFailed(pending, new Error("Trash unavailable"));
+  const succeeded = managedDeleteSucceeded(pending, {
+    status: "trashed",
+    bundleName: "one.session.antennabundle",
+  });
+
+  assert.deepEqual(confirming.catalogDeleteTarget, catalog.entries[0]);
+  assert.equal(cancelManagedDelete(confirming).catalogDeleteStatus, "cancelled");
+  assert.equal(pending.catalogRowOperation, null);
+  assert.equal(cancelManagedDelete(pending), pending, "pending deletion cannot be cancelled locally");
+  assert.equal(failed.catalogDeleteStatus, "failed");
+  assert.match(failed.catalogDeleteError.detail, /Trash unavailable/);
+  assert.equal(failed.managedCatalog, catalog);
+  assert.equal(succeeded.catalogDeleteStatus, "succeeded");
+  assert.equal(succeeded.catalogDeleteNotice, "one.session.antennabundle");
+  assert.deepEqual(succeeded.managedCatalog.entries, [catalog.entries[1]]);
+});
+
 test("the frontend invokes only the narrow session commands", async () => {
   const calls = [];
   const invoke = async (...args) => {
@@ -1522,6 +1562,7 @@ test("the frontend invokes only the narrow session commands", async () => {
   const catalog = await invokeListManagedSessions(invoke);
   const revealedFolder = await invokeRevealManagedSessionsDirectory(invoke);
   const revealedSession = await invokeRevealManagedSession(invoke, "locator-1");
+  const deletedSession = await invokeDeleteManagedSession(invoke, "locator-1");
   const report = await invokeActiveSessionReport(invoke);
   const exported = await invokeExportSession(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
@@ -1535,6 +1576,7 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["list_managed_sessions"],
     ["reveal_managed_sessions_directory"],
     ["reveal_managed_session", { locatorId: "locator-1" }],
+    ["delete_managed_session", { locatorId: "locator-1" }],
     ["active_session_report"],
     ["export_active_session"],
     ["refresh_active_session_report"],
@@ -1551,6 +1593,7 @@ test("the frontend invokes only the narrow session commands", async () => {
   assert.equal(catalog.status, "exported");
   assert.equal(revealedFolder.status, "exported");
   assert.equal(revealedSession.status, "exported");
+  assert.equal(deletedSession.status, "exported");
   assert.equal(report, "<!doctype html>");
   assert.equal(exported.status, "exported");
   assert.equal(refreshed.status, "exported");

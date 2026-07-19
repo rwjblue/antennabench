@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-managed-session"
+description = "Enables the delete_managed_session command without any pre-configured scope."
+commands.allow = ["delete_managed_session"]
+
+[[permission]]
+identifier = "deny-delete-managed-session"
+description = "Denies the delete_managed_session command without any pre-configured scope."
+commands.deny = ["delete_managed_session"]

@@ -6,6 +6,7 @@ import {
   invokeAntennaControllerProfiles,
   invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
+  invokeDeleteManagedSession,
   invokeDeleteAntennaControllerProfile,
   invokeExportActiveSessionReport,
   invokeExportSession,
@@ -39,6 +40,7 @@ import {
   beginConductorMutation,
   beginExportSession,
   beginManagedCatalogLoad,
+  beginManagedDelete,
   beginManagedReveal,
   beginOpenSession,
   beginReportExport,
@@ -60,11 +62,15 @@ import {
   initialState,
   managedCatalogLoadFailed,
   managedCatalogLoadSucceeded,
+  managedDeleteFailed,
+  managedDeleteSucceeded,
   managedRevealFailed,
   managedRevealSucceeded,
+  cancelManagedDelete,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
+  requestManagedDelete,
   rbnImportCancelled,
   rbnImportFailed,
   rbnImportSucceeded,
@@ -378,6 +384,31 @@ export function createDesktopController(options = {}) {
         commit(managedRevealSucceeded(state));
       } catch (error) {
         commit(managedRevealFailed(state, error));
+      }
+      return state;
+    },
+
+    requestManagedSessionDeletion(entry) {
+      commit(requestManagedDelete(state, entry));
+      return state;
+    },
+
+    cancelManagedSessionDeletion() {
+      commit(cancelManagedDelete(state));
+      return state;
+    },
+
+    async deleteManagedSession() {
+      const locatorId = state.catalogDeleteTarget?.locatorId;
+      if (!locatorId || state.catalogDeleteStatus === "deleting") return state;
+      commit(beginManagedDelete(state));
+      try {
+        const outcome = await invokeDeleteManagedSession(invoke(), locatorId);
+        if (outcome.status !== "trashed" || !outcome.bundleName) throw unexpectedResponse();
+        commit(managedDeleteSucceeded(state, outcome));
+        await controller.loadManagedSessions();
+      } catch (error) {
+        commit(managedDeleteFailed(state, error));
       }
       return state;
     },

@@ -83,6 +83,19 @@
               <div class="saved-empty-actions"><button type="button" data-saved-empty-new>New session</button><button type="button" data-saved-empty-open>Open from another location…</button></div>
             </div>
             <div class="saved-catalog" data-saved-catalog aria-live="polite"></div>
+            <dialog class="saved-delete-dialog" data-saved-delete-dialog aria-labelledby="saved-delete-title" aria-describedby="saved-delete-description">
+              <div class="saved-delete-content">
+                <p class="eyebrow">Remove from Saved sessions</p>
+                <h2 id="saved-delete-title" data-saved-delete-title>Move this session to Trash?</h2>
+                <p id="saved-delete-description" data-saved-delete-description>The complete portable session record will be removed from AntennaBench’s managed library. It will not be permanently deleted.</p>
+                <p class="saved-delete-identity" data-saved-delete-identity></p>
+                <p class="saved-row-error" data-saved-delete-error role="alert" hidden></p>
+                <div class="saved-delete-actions">
+                  <button type="button" data-saved-delete-cancel>Cancel</button>
+                  <button class="danger-action" type="button" data-saved-delete-confirm>Move to Trash</button>
+                </div>
+              </div>
+            </dialog>
             <section class="saved-help" aria-labelledby="saved-help-title">
               <h2 id="saved-help-title">Working with a saved session</h2>
               <p><strong>Start, Continue, or Resume</strong> opens nonterminal work in Active run. Add notes and correct recorded actions there; those changes append evidence rather than rewriting history. Setup and defaults apply to new experiments. A started session’s station, antennas, and plan are historical, while ended and abandoned sessions remain terminal reports.</p>

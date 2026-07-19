@@ -12,6 +12,7 @@
     "allow-open-managed-session",
     "allow-reveal-managed-sessions-directory",
     "allow-reveal-managed-session",
+    "allow-delete-managed-session",
     "allow-open-session-bundle",
     "allow-export-active-session",
     "allow-export-active-session-report",

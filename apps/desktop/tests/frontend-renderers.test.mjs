@@ -207,7 +207,36 @@ test("saved sessions render lifecycle actions, problems, duplicates, and distinc
   assert.equal(rows[1].querySelector(".saved-open-now").textContent, "Open now");
   assert.equal(rows[7].querySelector(".saved-lifecycle").textContent, "Invalid session bundle");
   assert.match(rows[7].querySelector("details").textContent, /Manifest is invalid/);
+  assert.equal(rows[0].querySelector('[data-saved-action="delete"]').textContent, "Delete…");
+  assert.equal(rows[0].querySelector('[data-saved-action="delete"]').disabled, false);
+  assert.equal(rows[1].querySelector('[data-saved-action="delete"]').disabled, true);
+  assert.match(rows[1].querySelector('[data-saved-action="delete"]').title, /Close this session/);
+  assert.equal(rows[7].querySelector('[data-saved-action="delete"]'), null);
   assert.equal(e.savedEmpty.hidden, true);
+
+  state.catalogDeleteStatus = "confirming";
+  state.catalogDeleteTarget = {
+    locatorId: "ready",
+    callsign: "N1RWJ",
+    bundleName: "ready.session.antennabundle",
+  };
+  renderSavedSessions(e, state, document);
+  assert.equal(e.savedDeleteDialog.getAttribute("aria-labelledby"), "saved-delete-title");
+  assert.equal(e.savedDeleteDialog.getAttribute("aria-describedby"), "saved-delete-description");
+  assert.match(e.savedDeleteIdentity.textContent, /N1RWJ.*ready\.session\.antennabundle/);
+  assert.equal(e.savedDeleteCancel.disabled, false);
+  assert.equal(e.savedDeleteConfirm.textContent, "Move to Trash");
+
+  state.catalogDeleteStatus = "deleting";
+  renderSavedSessions(e, state, document);
+  assert.equal(e.savedDeleteCancel.disabled, true);
+  assert.equal(e.savedDeleteConfirm.disabled, true);
+  assert.equal(e.savedDeleteConfirm.textContent, "Moving to Trash…");
+  assert.equal(e.savedCatalog.querySelector('[data-locator-id="ready"] [data-saved-action="delete"]').textContent, "Moving…");
+  assert.equal(e.savedCatalog.querySelector('[data-locator-id="ended"] button').disabled, false, "unaffected rows stay interactive");
+
+  state.catalogDeleteStatus = "idle";
+  state.catalogDeleteTarget = null;
 
   state.managedCatalog.status = "incomplete";
   state.managedCatalog.diagnostics = [{ message: "Inspection budget reached." }];

@@ -143,6 +143,14 @@ Finder reveal actions for the managed folder and individual entries. Refresh
 failures leave the last useful list visible, while partial-list and problem-row
 messages identify entries that could not be fully inspected.
 
+Use a row’s **Delete…** action only when you want to remove that complete
+portable record from the managed library. AntennaBench identifies the exact
+callsign and bundle in a confirmation dialog and asks the operating system to
+**Move to Trash**; it does not fall back to permanent deletion. The active
+session must be closed first. If the bundle changed after it was listed or the
+platform Trash is unavailable, the bundle is left in place and the row shows
+the failure.
+
 Each available row summarizes the planned repetitions, TX/RX direction
 coverage, planned cycle count, and total recorded observations. Expand
 **Experiment and evidence** for antenna labels, bands, and the stored local,

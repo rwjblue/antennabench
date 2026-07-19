@@ -260,6 +260,16 @@ row failure does not clear the active session or unrelated rows. The renderer
 uses catalog lifecycle only to label the operator's requested intent; the fresh
 Rust open result remains routing authority.
 
+Managed deletion is a separate, explicit destructive command, never a catalog
+side effect. The webview submits only an opaque locator. Rust revalidates the
+managed root, direct-child identity, bounded non-following removal snapshot,
+and supported-bundle projection fingerprint when one exists, then refuses the
+currently active source. Only the platform Trash implementation receives the
+verified path. An unavailable or failed Trash operation returns a typed error;
+there is no recursive permanent-delete fallback. Unsafe or unbounded rows do
+not receive a locator, while invalid and unsupported direct bundles can still
+be removed when the removal snapshot proves their identity.
+
 This direct projection is the simple in-memory approach anticipated by ADR
 0020, not evidence that a persistent cross-session index is required. Any
 future cache lives outside bundles, keys generations by strong
