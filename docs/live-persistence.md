@@ -20,9 +20,9 @@ accounts for, appends, and recognizes idempotent v2/v3/v5 mutations;
 `checkpoint` loads committed prefixes and constructs, publishes, reopens, and
 exactly verifies checkpoints; `recovery` resolves pending plan generations,
 stream tails, checkpoint temporary files, and recovery artifacts;
-`attachments` verifies and durably copies content-addressed files; and
+`attachments` verifies and durably copies content-addressed files;
 `durability` owns the platform-specific sync, replace, publish, and capability
-probe primitives. These modules are internal seams behind the same synchronous
+probe primitives; and `lock` owns advisory-lock acquisition. These modules are internal seams behind the same synchronous
 facade, not additional persistence authorities.
 
 Schema-v1 bundles remain immutable inputs. They must be explicitly upgraded to
@@ -61,9 +61,14 @@ identity and file digests is promoted. A selected plan is immutable after the
 session starts.
 
 The lock file's existence has no liveness meaning. The open file description
-and its OS lock are the lease. Completed checkpointed exports exclude the lock,
-temporary checkpoint, previous checkpoint, uncommitted stream tails, and
-orphan generations.
+and its OS lock are the lease. Because spawning a child process clones the
+descriptor table, a lock being released can stay transiently pinned by the
+child until it execs; acquisition absorbs that with a brief bounded retry
+before failing closed with `WriterBusy`, and never waits on a genuine
+concurrent writer beyond that budget.
+
+Completed checkpointed exports exclude the lock, temporary checkpoint,
+previous checkpoint, uncommitted stream tails, and orphan generations.
 
 ## Append And Acknowledgement Boundary
 
