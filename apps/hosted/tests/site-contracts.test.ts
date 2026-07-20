@@ -88,14 +88,22 @@ describe("public project site contracts", () => {
 
   it("publishes the WSPR and RBN choice as user-facing site guidance", () => {
     const page = read("../src/pages/why-wspr.astro");
+    const globes = read("../src/components/ReceiverGridGlobes.astro");
     const header = read("../src/components/SiteHeader.astro");
     const footer = read("../src/components/SiteFooter.astro");
     const sitemap = read("../src/pages/sitemap.xml.ts");
     const doc = read("../../../docs/why-not-just-use-rbn.md");
 
     expect(page).toContain("receiver-census-summary.json");
-    expect(page).toContain("four-character Maidenhead grids");
-    expect(page).toContain("Use both networks, in sequence.");
+    expect(page).toContain("stronger signals");
+    expect(page).toContain("Use WSPR to understand the setup");
+    expect(page).toContain("Confirm the live result with RBN");
+    expect(page).not.toContain("—");
+    expect(page).not.toContain("The snapshot is bounded, checked in, and reproducible.");
+    expect(globes).toContain("wspr-receivers-by-band.csv?raw");
+    expect(globes).toContain("world-outline-natural-earth.geojson?raw");
+    expect(globes).toContain("receiver-grid-cell");
+    expect(globes).toContain("four-character Maidenhead grid");
     expect(header).toContain('href="/why-wspr/"');
     expect(footer).toContain('href="/why-wspr/"');
     expect(sitemap).toContain('"/why-wspr/"');
