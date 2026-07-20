@@ -1,6 +1,7 @@
 mod answerability;
 mod builder;
 mod coverage;
+mod distance;
 mod geography;
 mod html;
 mod model;

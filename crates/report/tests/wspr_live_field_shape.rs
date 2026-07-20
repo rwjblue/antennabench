@@ -145,6 +145,16 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(html.contains("Active-receiver coverage"));
         assert!(html.contains("active, not heard"));
         assert!(html.contains("1 unmapped"));
+        for category in [
+            "Near / local proxy (under 500 km)",
+            "Regional (500–1499 km)",
+            "Longer path (1500–2999 km)",
+            "DX-oriented (3000 km and above)",
+        ] {
+            assert!(html.contains(category));
+        }
+        assert!(!html.contains("0–1 Mm"));
+        assert!(!html.contains("3–8 Mm"));
         assert!(!html.contains("<script"));
     }
     let full = render_standalone_html(&report).unwrap();

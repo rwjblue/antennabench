@@ -8,10 +8,8 @@ use antennabench_analysis::{
 use crate::{
     great_circle_position, station_coordinates_from_grid, ReportCoverageCell,
     ReportCoverageMapGroup, ReportCoveragePanel, ReportCoveragePolarCell, ReportCoverageReporter,
-    ReportCoverageState,
+    ReportCoverageState, ReportDistanceBin,
 };
-
-const POLAR_RING_EDGES_KM: [f64; 4] = [1_000.0, 3_000.0, 8_000.0, 20_015.0];
 
 pub(crate) fn build_coverage_maps(
     station_grid: &str,
@@ -95,10 +93,7 @@ fn build_panel(
         {
             if let Some(position) = great_circle_position(station, destination) {
                 let sector = ((position.initial_bearing_degrees + 22.5) / 45.0).floor() as u8 % 8;
-                let ring = POLAR_RING_EDGES_KM
-                    .iter()
-                    .position(|edge| position.distance_km <= *edge)
-                    .unwrap_or(3) as u8;
+                let ring = ReportDistanceBin::classify(position.distance_km)?.index() as u8;
                 let counts = polar.entry((sector, ring)).or_default();
                 counts.0 += 1;
                 counts.1 += usize::from(heard);

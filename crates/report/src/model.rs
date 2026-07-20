@@ -324,15 +324,6 @@ pub enum ReportDistanceBin {
     Km3000AndAbove,
 }
 
-impl ReportDistanceBin {
-    pub const ALL: [Self; 4] = [
-        Self::Under500Km,
-        Self::Km500To1499,
-        Self::Km1500To2999,
-        Self::Km3000AndAbove,
-    ];
-}
-
 /// Fixed 45° compass sectors for observed-session path context. North wraps
 /// across 360°: [337.5°, 360°) and [0°, 22.5°).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

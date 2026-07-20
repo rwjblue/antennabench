@@ -274,10 +274,23 @@ is collapsed and named, just as it is in the result table.
 
 ## Distance And Azimuth
 
-Distance and azimuth views group located, matched paths into fixed distance bins
-and 45-degree compass sectors. Each remote path contributes once to a bin and a
-sector; a separate count shows how many matched pairs support it. Missing or
-inconsistent location stays visible instead of being silently discarded.
+Distance and azimuth views group located paths into one fixed taxonomy and
+45-degree compass sectors. The categories are near / local proxy (under 500
+km), regional (500 km to less than 1500 km), longer path (1500 km to less than
+3000 km), and DX-oriented (3000 km and above). Each remote path contributes
+once to a category and sector; a separate count shows how many observations or
+matched pairs support it. Missing or inconsistent location stays visible
+instead of being silently discarded.
+
+The near / local category is an NVIS-oriented proxy only when that goal was
+chosen before the run. It does not establish NVIS propagation. Likewise,
+DX-oriented is a stable report category, not a claim that every path meets a
+particular award, band, or propagation definition. “Longer path” describes
+distance and does not assert long-path-around-the-globe propagation.
+
+Polar maps use square-root radial geometry so nearby evidence remains visible,
+but their rings, labels, tooltips, and accessible tables use these same four
+semantic categories. The transform changes drawing geometry, not membership.
 
 These are the locations of **observed matched paths only**. They are not an
 antenna radiation pattern, a propagation model, or evidence about directions

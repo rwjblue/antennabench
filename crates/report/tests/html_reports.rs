@@ -1366,7 +1366,7 @@ fn renders_fixed_path_context_tables_with_equivalent_visual_states() {
     assert!(html.contains("0 dB (near-zero)"));
     assert!(html.contains("Sparse evidence: 1 path(s), 1 row(s)"));
     assert!(html.contains("No observed paired paths"));
-    assert_eq!(html.matches("Under 500 km").count(), 2);
+    assert_eq!(html.matches("Near / local proxy (under 500 km)").count(), 2);
     assert_eq!(html.matches("NE (22.5°–67.5°)").count(), 2);
 }
 

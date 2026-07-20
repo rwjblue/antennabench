@@ -172,12 +172,7 @@ pub(in super::super) fn render_location_path_audit(
     out.push_str("</tbody></table></div></div></details>");
 }
 pub(in super::super) fn distance_bin_label(bin: ReportDistanceBin) -> &'static str {
-    match bin {
-        ReportDistanceBin::Under500Km => "Under 500 km",
-        ReportDistanceBin::Km500To1499 => "500–1499 km",
-        ReportDistanceBin::Km1500To2999 => "1500–2999 km",
-        ReportDistanceBin::Km3000AndAbove => "3000 km and above",
-    }
+    bin.label()
 }
 pub(in super::super) fn fixed_azimuth_sector_label(sector: ReportAzimuthSector) -> &'static str {
     match sector {

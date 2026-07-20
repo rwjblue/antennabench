@@ -534,7 +534,9 @@ fn project_location_context(
                 distance_km,
                 azimuth_degrees,
             } => {
-                let distance_index = distance_bin_index(distance_km);
+                let distance_index = ReportDistanceBin::classify(distance_km)
+                    .expect("validated distance has a semantic category")
+                    .index();
                 let azimuth_index = azimuth_sector_index(azimuth_degrees);
                 let distance = &mut context.distance_bins[distance_index];
                 distance.unique_located_path_count += 1;
@@ -654,15 +656,6 @@ fn valid_distance(value: Option<f64>) -> Option<f64> {
 
 fn valid_azimuth(value: Option<f64>) -> Option<f64> {
     value.filter(|value| value.is_finite() && *value >= 0.0 && *value < 360.0)
-}
-
-fn distance_bin_index(distance_km: f64) -> usize {
-    match distance_km {
-        value if value < 500.0 => 0,
-        value if value < 1_500.0 => 1,
-        value if value < 3_000.0 => 2,
-        _ => 3,
-    }
 }
 
 fn azimuth_sector_index(azimuth_degrees: f64) -> usize {

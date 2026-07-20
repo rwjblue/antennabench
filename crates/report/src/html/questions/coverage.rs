@@ -8,7 +8,6 @@ use crate::{
 };
 use antennabench_analysis::ComparisonSide;
 
-const POLAR_RING_EDGES_KM: [f64; 4] = [1_000.0, 3_000.0, 8_000.0, 20_015.0];
 const SECTOR_LABELS: [&str; 8] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 pub(in super::super) fn render_coverage_map_section(
@@ -183,8 +182,9 @@ fn render_compact_group(
 }
 
 fn render_polar_cells(out: &mut CheckedHtmlWriter<'_>, panel: &ReportCoveragePanel, hatch: &str) {
-    let frame = SquareRootPolarFrame::new(POLAR_RING_EDGES_KM[3]).unwrap();
-    let radii = POLAR_RING_EDGES_KM.map(|edge| frame.radius(edge).unwrap() * 100.0);
+    let edges = ReportDistanceBin::GEOMETRY_OUTER_EDGES_KM;
+    let frame = SquareRootPolarFrame::new(edges[3]).unwrap();
+    let radii = edges.map(|edge| frame.radius(edge).unwrap() * 100.0);
     for sector in 0..8u8 {
         for ring in 0..4u8 {
             let cell = polar_cell(panel, sector, ring);
@@ -334,12 +334,11 @@ fn state_label(state: ReportCoverageState) -> &'static str {
 }
 
 fn ring_label(ring: u8) -> &'static str {
-    match ring {
-        0 => "0–1 Mm",
-        1 => "1–3 Mm",
-        2 => "3–8 Mm",
-        _ => "8–20 Mm",
-    }
+    ReportDistanceBin::ALL
+        .get(ring as usize)
+        .copied()
+        .unwrap_or(ReportDistanceBin::Km3000AndAbove)
+        .label()
 }
 
 #[derive(Clone, Copy)]
