@@ -158,6 +158,7 @@ fn build_report_with_resources_and_snapshot_and_activity(
         + summary.reporter_activity.census_cycles.len()
         + summary.reporter_activity.cycle_rates.len()
         + summary.reporter_activity.paired_rates.len()
+        + summary.reporter_activity.joint_summaries.len()
         + coverage_maps
             .iter()
             .flat_map(|group| &group.panels)
@@ -229,6 +230,9 @@ fn build_report_with_resources_and_snapshot_and_activity(
         }
         for rate in &mut reporter_activity.cycle_rates {
             rate.heard_reporters.clear();
+        }
+        for rate in &mut reporter_activity.paired_rates {
+            rate.receivers.clear();
         }
         for panel in coverage_maps.iter_mut().flat_map(|group| &mut group.panels) {
             panel.reporters.clear();
@@ -930,6 +934,12 @@ impl DetailCounts {
                             .cycle_rates
                             .iter()
                             .map(|rate| rate.heard_reporters.len())
+                            .sum::<usize>()
+                        + summary
+                            .reporter_activity
+                            .paired_rates
+                            .iter()
+                            .map(|rate| rate.receivers.len())
                             .sum::<usize>(),
                 ),
                 (
@@ -983,6 +993,9 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     }
     for rate in &mut report.reporter_activity.cycle_rates {
         rate.heard_reporters.clear();
+    }
+    for rate in &mut report.reporter_activity.paired_rates {
+        rate.receivers.clear();
     }
     for panel in report
         .coverage_maps

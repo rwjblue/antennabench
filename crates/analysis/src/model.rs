@@ -40,11 +40,16 @@ pub struct ReporterActivityAnalysis {
     pub census_cycles: Vec<ReporterActivityCensusCycle>,
     pub cycle_rates: Vec<ReporterActivityCycleRate>,
     pub paired_rates: Vec<ReporterActivityPairedRate>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joint_summaries: Vec<ReporterActivityJointSummary>,
 }
 
 impl ReporterActivityAnalysis {
     pub fn is_empty(&self) -> bool {
-        self.census_cycles.is_empty() && self.cycle_rates.is_empty() && self.paired_rates.is_empty()
+        self.census_cycles.is_empty()
+            && self.cycle_rates.is_empty()
+            && self.paired_rates.is_empty()
+            && self.joint_summaries.is_empty()
     }
 }
 
@@ -84,6 +89,7 @@ impl ReporterActivityCoverage {
 pub enum ReporterActivityUnknownReason {
     NoCensusCoverage,
     UnsupportedReceiveDirection,
+    UnsupportedSignalMode,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -106,6 +112,7 @@ pub struct ReporterActivityCycleRate {
 pub struct ReporterActivityPairedRate {
     pub stratum: ComparisonStratum,
     pub block_index: usize,
+    pub order: ComparisonOrder,
     pub coverage: ReporterActivityCoverage,
     pub left_slot_id: String,
     pub right_slot_id: String,
@@ -114,6 +121,45 @@ pub struct ReporterActivityPairedRate {
     pub right_heard_count: usize,
     pub left_hearing_rate: Option<f64>,
     pub right_hearing_rate: Option<f64>,
+    pub heard_both_count: usize,
+    pub left_only_count: usize,
+    pub right_only_count: usize,
+    pub heard_neither_count: usize,
+    pub receivers: Vec<ReporterActivityJointReceiver>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReporterActivityJointOutcome {
+    HeardBoth,
+    LeftOnly,
+    RightOnly,
+    HeardNeither,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReporterActivityJointReceiver {
+    pub receiver: String,
+    pub receiver_grid: Option<String>,
+    pub outcome: ReporterActivityJointOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReporterActivityJointSummary {
+    pub stratum: ComparisonStratum,
+    pub coverage: ReporterActivityCoverage,
+    pub eligible_block_count: usize,
+    pub known_coverage_block_count: usize,
+    pub left_then_right_block_count: usize,
+    pub right_then_left_block_count: usize,
+    pub unique_active_receiver_count: usize,
+    pub receiver_block_opportunity_count: usize,
+    pub heard_both_count: usize,
+    pub left_only_count: usize,
+    pub right_only_count: usize,
+    pub heard_neither_count: usize,
+    pub left_detection_rate: Option<f64>,
+    pub right_detection_rate: Option<f64>,
 }
 
 /// Record-level accounting for an observation excluded by the existing

@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use antennabench_analysis::{
-    summarize_bundle_with_activity, PathDirection, ReporterActivityCoverage,
-    ReporterActivityUnknownReason,
+    summarize_bundle_with_activity, ComparisonOrder, PathDirection, ReporterActivityCoverage,
+    ReporterActivityJointOutcome, ReporterActivityUnknownReason,
 };
 use antennabench_core::{
     normalize_bundle,
@@ -45,6 +45,195 @@ fn computes_field_shape_cycle_and_paired_active_set_rates() {
     assert_eq!(paired.right_heard_count, 2);
     assert_eq!(paired.left_hearing_rate, Some(0.75));
     assert_eq!(paired.right_hearing_rate, Some(0.25));
+    assert_eq!(paired.heard_both_count, 2);
+    assert_eq!(paired.left_only_count, 4);
+    assert_eq!(paired.right_only_count, 0);
+    assert_eq!(paired.heard_neither_count, 2);
+    assert_eq!(
+        paired.active_in_both_count,
+        paired.heard_both_count
+            + paired.left_only_count
+            + paired.right_only_count
+            + paired.heard_neither_count
+    );
+    assert!(paired
+        .receivers
+        .iter()
+        .all(|receiver| receiver.receiver_grid.as_deref() == Some("EM12")));
+    assert!(paired
+        .receivers
+        .iter()
+        .all(|receiver| receiver.receiver != "K020ACT" && receiver.receiver != "K021ACT"));
+}
+
+#[test]
+fn partitions_all_four_joint_outcomes_and_aggregates_repeated_receivers() {
+    let (bundle, records, directions) = joint_shape();
+    let activity = summarize_bundle_with_activity(&bundle, &records, &directions)
+        .expect("joint outcome fixture should analyze")
+        .reporter_activity;
+
+    assert_eq!(activity.paired_rates.len(), 2);
+    for row in &activity.paired_rates {
+        assert_eq!(row.active_in_both_count, 4);
+        assert_eq!(row.heard_both_count, 1);
+        assert_eq!(row.left_only_count, 1);
+        assert_eq!(row.right_only_count, 1);
+        assert_eq!(row.heard_neither_count, 1);
+        assert_eq!(row.receivers.len(), 4);
+        assert_eq!(
+            row.active_in_both_count,
+            row.heard_both_count
+                + row.left_only_count
+                + row.right_only_count
+                + row.heard_neither_count
+        );
+        assert_eq!(row.left_hearing_rate, Some(0.5));
+        assert_eq!(row.right_hearing_rate, Some(0.5));
+    }
+    assert_eq!(
+        activity.paired_rates[0].order,
+        ComparisonOrder::LeftThenRight
+    );
+    assert_eq!(
+        activity.paired_rates[1].order,
+        ComparisonOrder::RightThenLeft
+    );
+    assert_eq!(
+        activity.paired_rates[0]
+            .receivers
+            .iter()
+            .map(|row| row.outcome)
+            .collect::<Vec<_>>(),
+        vec![
+            ReporterActivityJointOutcome::HeardBoth,
+            ReporterActivityJointOutcome::LeftOnly,
+            ReporterActivityJointOutcome::RightOnly,
+            ReporterActivityJointOutcome::HeardNeither,
+        ]
+    );
+
+    let summary = &activity.joint_summaries[0];
+    assert_eq!(summary.eligible_block_count, 2);
+    assert_eq!(summary.known_coverage_block_count, 2);
+    assert_eq!(summary.left_then_right_block_count, 1);
+    assert_eq!(summary.right_then_left_block_count, 1);
+    assert_eq!(summary.unique_active_receiver_count, 4);
+    assert_eq!(summary.receiver_block_opportunity_count, 8);
+    assert_eq!(summary.heard_both_count, 2);
+    assert_eq!(summary.left_only_count, 2);
+    assert_eq!(summary.right_only_count, 2);
+    assert_eq!(summary.heard_neither_count, 2);
+}
+
+#[test]
+fn joint_analysis_is_independent_of_evidence_input_order() {
+    let (bundle, records, directions) = joint_shape();
+    let expected = summarize_bundle_with_activity(&bundle, &records, &directions)
+        .unwrap()
+        .reporter_activity;
+    let mut reversed_bundle = bundle.clone();
+    reversed_bundle.observations.reverse();
+    let mut reversed_records = records;
+    reversed_records.reverse();
+    let actual = summarize_bundle_with_activity(&reversed_bundle, &reversed_records, &directions)
+        .unwrap()
+        .reporter_activity;
+
+    assert_eq!(actual.paired_rates, expected.paired_rates);
+    assert_eq!(actual.joint_summaries, expected.joint_summaries);
+}
+
+#[test]
+fn receive_direction_is_explicitly_unsupported_for_joint_activity() {
+    let (mut bundle, records, _) = joint_shape();
+    for observation in &mut bundle.observations {
+        let remote = observation.reporter_call.take().unwrap();
+        observation.reporter_call = Some(bundle.station.callsign.clone());
+        observation.heard_call = Some(remote);
+        observation.reporter_grid = Some(bundle.station.grid.clone());
+        observation.heard_grid = Some("EM12".into());
+    }
+    let directions = bundle
+        .schedule
+        .slots
+        .iter()
+        .map(|slot| (slot.slot_id.clone(), PathDirection::Receive))
+        .collect::<BTreeMap<_, _>>();
+    let activity = summarize_bundle_with_activity(&bundle, &records, &directions)
+        .unwrap()
+        .reporter_activity;
+
+    assert!(!activity.paired_rates.is_empty());
+    assert!(activity.paired_rates.iter().all(|row| {
+        row.coverage
+            == ReporterActivityCoverage::Unknown(
+                ReporterActivityUnknownReason::UnsupportedReceiveDirection,
+            )
+            && row.receivers.is_empty()
+            && row.active_in_both_count == 0
+    }));
+}
+
+#[test]
+fn non_wspr_activity_is_explicitly_outside_the_census_boundary() {
+    let (mut bundle, records, directions) = joint_shape();
+    for observation in &mut bundle.observations {
+        observation.mode = Some("FT8".into());
+    }
+    let activity = summarize_bundle_with_activity(&bundle, &records, &directions)
+        .unwrap()
+        .reporter_activity;
+
+    assert!(!activity.paired_rates.is_empty());
+    assert!(activity.paired_rates.iter().all(|row| {
+        row.coverage
+            == ReporterActivityCoverage::Unknown(
+                ReporterActivityUnknownReason::UnsupportedSignalMode,
+            )
+            && row.receivers.is_empty()
+    }));
+}
+
+#[test]
+fn useful_one_sided_detection_survives_without_a_finite_matched_path() {
+    let (mut bundle, records, directions) = joint_shape();
+    bundle.observations.retain(|observation| {
+        let slot = observation.slot_id.as_deref().unwrap();
+        let receiver = observation.reporter_call.as_deref().unwrap();
+        (slot == "joint-slot-1" && receiver == "K001ACT")
+            || (slot == "joint-slot-2" && receiver == "K002ACT")
+            || (slot == "joint-slot-3" && receiver == "K002ACT")
+            || (slot == "joint-slot-4" && receiver == "K001ACT")
+    });
+    let summary = summarize_bundle_with_activity(&bundle, &records, &directions).unwrap();
+
+    assert!(summary.comparison.paired_rows.is_empty());
+    assert_eq!(summary.reporter_activity.paired_rates.len(), 2);
+    assert!(summary.reporter_activity.paired_rates.iter().all(|row| {
+        row.left_only_count == 1
+            && row.right_only_count == 1
+            && row.heard_both_count == 0
+            && row.heard_neither_count == 2
+    }));
+}
+
+#[test]
+fn partial_coverage_preserves_the_exact_joint_partition() {
+    let (bundle, mut records, directions) = joint_shape();
+    records[0].disposition = AdapterDisposition::PartiallyNormalized;
+    let activity = summarize_bundle_with_activity(&bundle, &records, &directions)
+        .unwrap()
+        .reporter_activity;
+
+    assert!(activity.paired_rates.iter().all(|row| {
+        row.coverage == ReporterActivityCoverage::Partial
+            && row.active_in_both_count
+                == row.heard_both_count
+                    + row.left_only_count
+                    + row.right_only_count
+                    + row.heard_neither_count
+    }));
 }
 
 #[test]
@@ -171,6 +360,87 @@ fn field_shape(
         json!({
             "cycle_time": first_canonical,
             "reporter": "K999OLD",
+            "reporter_grid": "FN42"
+        }),
+    ));
+    (bundle, records, directions)
+}
+
+fn joint_shape() -> (
+    BundleContents,
+    Vec<AdapterRecordV2>,
+    BTreeMap<String, PathDirection>,
+) {
+    let mut bundle = fixture_bundle();
+    bundle.events.clear();
+    bundle.observations.clear();
+    let template = bundle.schedule.slots[0].clone();
+    bundle.schedule.slots = ["A", "B", "B", "A"]
+        .into_iter()
+        .enumerate()
+        .map(|(index, label)| {
+            let mut slot = template.clone();
+            slot.slot_id = format!("joint-slot-{}", index + 1);
+            slot.sequence_number = (index + 1) as u32;
+            slot.starts_at = template.starts_at + Duration::minutes((index * 2) as i64);
+            slot.antenna_label = label.to_string();
+            slot
+        })
+        .collect();
+    for (slot, reporters) in [
+        (0, vec!["K000ACT", "K001ACT"]),
+        (1, vec!["K000ACT", "K002ACT"]),
+        (2, vec!["K000ACT", "K002ACT"]),
+        (3, vec!["K000ACT", "K001ACT"]),
+    ] {
+        for reporter in reporters {
+            bundle
+                .observations
+                .push(tx_observation(&bundle, slot, reporter));
+        }
+    }
+    let bundle = normalize_bundle(bundle);
+    let directions = bundle
+        .schedule
+        .slots
+        .iter()
+        .map(|slot| (slot.slot_id.clone(), PathDirection::Transmit))
+        .collect::<BTreeMap<_, _>>();
+    let first_canonical = bundle.schedule.slots[0].starts_at - Duration::seconds(1);
+    let last_canonical = bundle.schedule.slots[3].starts_at - Duration::seconds(1);
+    let mut records = vec![adapter_record(
+        "joint-summary",
+        "wspr_live_activity_census_summary",
+        AdapterDisposition::Accepted,
+        json!({
+            "window_start": first_canonical,
+            "window_end": last_canonical + Duration::minutes(2),
+            "selected_bands": [Band::M20],
+            "truncated": false,
+            "counts": { "malformed": 0 }
+        }),
+    )];
+    for (slot, reporter) in (0..4).flat_map(|slot| (0..4).map(move |reporter| (slot, reporter))) {
+        records.push(adapter_record(
+            &format!("joint-census-{slot}-{reporter}"),
+            "wspr_live_activity_census",
+            AdapterDisposition::Accepted,
+            json!({
+                "cycle_time": bundle.schedule.slots[slot].starts_at - Duration::seconds(1),
+                "band": Band::M20,
+                "reporter": format!("K{reporter:03}ACT"),
+                "reporter_grid": "EM12"
+            }),
+        ));
+    }
+    records.push(adapter_record(
+        "joint-census-right-only-extra",
+        "wspr_live_activity_census",
+        AdapterDisposition::Accepted,
+        json!({
+            "cycle_time": bundle.schedule.slots[1].starts_at - Duration::seconds(1),
+            "band": Band::M20,
+            "reporter": "K999EXTRA",
             "reporter_grid": "FN42"
         }),
     ));

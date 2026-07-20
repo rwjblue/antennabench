@@ -53,7 +53,9 @@ five conditional question families separate:
 - **Shared-path signal** uses finite-SNR reports for the same remote path in
   both cycles of an eligible block.
 - **Detection among receivers active in both cycles** uses the common,
-  band-qualified active-receiver population as its denominator.
+  band-qualified active-receiver population as its denominator. Each
+  receiver-block opportunity is classified as heard both, heard only A, heard
+  only B, or heard neither.
 - **Observed reach** counts unique usable paths that appeared for each antenna.
 - **Observed distance and direction profile** uses located observed paths and
   does not claim a radiation pattern or unobserved coverage.
@@ -65,6 +67,29 @@ of receiving a full empty primary panel. Full and compact reports consume the
 same typed availability facts, and primary navigation contains only question
 families with usable evidence. Shared-path signal remains the first comparison
 result whenever it is available.
+
+### Detection And Signal Are Different Estimands
+
+The detection family answers `detection outcome | receiver active during both
+cycles`. Its four outcome counts partition the receiver-block opportunities
+exactly. A receiver active in both censuses but missing a session decode is
+below-threshold evidence, not missing evidence, and AntennaBench does not
+invent an SNR for it. A receiver absent from either census is excluded.
+
+The headline shows unique active receivers alongside receiver-block
+opportunities. The same receiver is counted once in the unique total but can
+contribute one opportunity in each eligible block. Those repeated
+opportunities are descriptive and are not treated as independent samples.
+Results remain separated by exact direction, band, mode, observation kind,
+and source, with block order and census coverage visible.
+
+The shared-path signal family answers `SNR difference | both antennas
+decoded`. It therefore uses a narrower population and may be unavailable even
+when one-sided detection outcomes are useful. Live activity census evidence is
+limited to transmit-side WSPR; receive-direction and non-WSPR activity remain
+explicitly unsupported. See
+[Decision 0026](decisions/0026-condition-detection-on-common-active-receivers.md)
+for the full methodology contract.
 
 ### Legacy Shared-Path Comparison States
 

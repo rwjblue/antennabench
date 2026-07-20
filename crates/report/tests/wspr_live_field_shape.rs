@@ -89,6 +89,18 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert_eq!(activity.cycle_rates[1].active_reporter_count, 180);
     assert_eq!(activity.cycle_rates[1].heard_reporter_count, 43);
     assert_eq!(activity.paired_rates[0].active_in_both_count, 180);
+    assert_eq!(activity.paired_rates[0].heard_both_count, 33);
+    assert_eq!(activity.paired_rates[0].left_only_count, 112);
+    assert_eq!(activity.paired_rates[0].right_only_count, 10);
+    assert_eq!(activity.paired_rates[0].heard_neither_count, 25);
+    assert_eq!(
+        activity.joint_summaries[0].unique_active_receiver_count,
+        180
+    );
+    assert_eq!(
+        activity.joint_summaries[0].receiver_block_opportunity_count,
+        180
+    );
 
     let report = build_report_with_snapshot_and_activity(
         bundle,
@@ -124,7 +136,11 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(html.contains("Detection among receivers active in both cycles"));
         assert!(html.contains("145 / 200 (72.5%)"));
         assert!(html.contains("43 / 180 (23.9%)"));
-        assert!(html.contains("180</td><td>145 / 180 (80.6%)"));
+        assert!(html.contains("Joint detection outcomes by separate comparison group"));
+        assert!(html.contains("Receiver-block opportunities"));
+        assert!(html.contains("<td>33</td><td>112</td><td>10</td><td>25</td>"));
+        assert!(html.contains("80.6% / 23.9%"));
+        assert!(html.contains("Per-block joint detection outcome audit"));
         assert!(html.contains("Complete band-qualified census"));
         assert!(html.contains("Active-receiver coverage"));
         assert!(html.contains("active, not heard"));
@@ -198,7 +214,9 @@ fn truncated_census_caveat_qualifies_each_cycle_and_paired_rate() {
         compact
             .matches("Truncated census — capture limit may reduce the denominator")
             .count(),
-        report.reporter_activity.cycle_rates.len() + report.reporter_activity.paired_rates.len()
+        report.reporter_activity.cycle_rates.len()
+            + report.reporter_activity.paired_rates.len()
+            + report.reporter_activity.joint_summaries.len()
     );
 }
 

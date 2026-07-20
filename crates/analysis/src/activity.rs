@@ -12,7 +12,8 @@ use crate::{
     summary::{ClassifiedObservation, ObservationDisposition},
     AnalysisBudget, AnalysisError, AnalysisResourceStage, ComparisonSide, ComparisonStratum,
     PairedComparisonAnalysis, PathDirection, ReporterActivityAnalysis, ReporterActivityCensusCycle,
-    ReporterActivityCoverage, ReporterActivityCycleRate, ReporterActivityPairedRate,
+    ReporterActivityCoverage, ReporterActivityCycleRate, ReporterActivityJointOutcome,
+    ReporterActivityJointReceiver, ReporterActivityJointSummary, ReporterActivityPairedRate,
     ReporterActivityReporter, ReporterActivityUnknownReason, SignalMode,
 };
 
@@ -146,6 +147,14 @@ pub(crate) fn analyze_reporter_activity(
                         None,
                         Vec::new(),
                     )
+                } else if !stratum.mode.as_str().eq_ignore_ascii_case("WSPR") {
+                    (
+                        ReporterActivityCoverage::Unknown(
+                            ReporterActivityUnknownReason::UnsupportedSignalMode,
+                        ),
+                        None,
+                        Vec::new(),
+                    )
                 } else {
                     let (coverage, summary_record_ids) =
                         coverage_for(canonical_time, slot.band, &summaries);
@@ -225,32 +234,60 @@ pub(crate) fn analyze_reporter_activity(
                 continue;
             };
             let coverage = combined_coverage(left.coverage, right.coverage);
-            let (common, left_heard_count, right_heard_count) =
-                match (left.census_cycle_index, right.census_cycle_index) {
-                    (Some(left_index), Some(right_index)) => {
-                        let left_active = reporter_ids(&census_cycles[left_index]);
-                        let right_active = reporter_ids(&census_cycles[right_index]);
-                        let common = left_active
-                            .intersection(&right_active)
-                            .copied()
-                            .collect::<BTreeSet<_>>();
-                        let left_heard = left
-                            .heard_reporters
-                            .iter()
-                            .filter(|reporter| common.contains(reporter.as_str()))
-                            .count();
-                        let right_heard = right
-                            .heard_reporters
-                            .iter()
-                            .filter(|reporter| common.contains(reporter.as_str()))
-                            .count();
-                        (common.len(), left_heard, right_heard)
-                    }
-                    _ => (0, 0, 0),
-                };
+            let receivers = match (left.census_cycle_index, right.census_cycle_index) {
+                (Some(left_index), Some(right_index)) => {
+                    let left_active = reporter_ids(&census_cycles[left_index]);
+                    let right_active = reporter_ids(&census_cycles[right_index]);
+                    let common = left_active
+                        .intersection(&right_active)
+                        .copied()
+                        .collect::<BTreeSet<_>>();
+                    let left_heard = left
+                        .heard_reporters
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<BTreeSet<_>>();
+                    let right_heard = right
+                        .heard_reporters
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<BTreeSet<_>>();
+                    common
+                        .into_iter()
+                        .map(|receiver| ReporterActivityJointReceiver {
+                            receiver: receiver.to_string(),
+                            receiver_grid: common_receiver_grid(
+                                &census_cycles[left_index],
+                                &census_cycles[right_index],
+                                receiver,
+                            ),
+                            outcome: joint_outcome(
+                                left_heard.contains(receiver),
+                                right_heard.contains(receiver),
+                            ),
+                        })
+                        .collect::<Vec<_>>()
+                }
+                _ => Vec::new(),
+            };
+            let heard_both_count =
+                outcome_count(&receivers, ReporterActivityJointOutcome::HeardBoth);
+            let left_only_count = outcome_count(&receivers, ReporterActivityJointOutcome::LeftOnly);
+            let right_only_count =
+                outcome_count(&receivers, ReporterActivityJointOutcome::RightOnly);
+            let heard_neither_count =
+                outcome_count(&receivers, ReporterActivityJointOutcome::HeardNeither);
+            let common = receivers.len();
+            let left_heard_count = heard_both_count + left_only_count;
+            let right_heard_count = heard_both_count + right_only_count;
+            debug_assert_eq!(
+                common,
+                heard_both_count + left_only_count + right_only_count + heard_neither_count
+            );
             paired_rates.push(ReporterActivityPairedRate {
                 stratum: stratum.clone(),
                 block_index: block.block_index,
+                order: block.order.expect("eligible comparison block has an order"),
                 coverage,
                 left_slot_id: left.slot_id.clone(),
                 right_slot_id: right.slot_id.clone(),
@@ -259,15 +296,136 @@ pub(crate) fn analyze_reporter_activity(
                 right_heard_count,
                 left_hearing_rate: rate(left_heard_count, common),
                 right_hearing_rate: rate(right_heard_count, common),
+                heard_both_count,
+                left_only_count,
+                right_only_count,
+                heard_neither_count,
+                receivers,
             });
         }
     }
+
+    let joint_summaries = summarize_joint_outcomes(&paired_rates);
 
     Ok(ReporterActivityAnalysis {
         census_cycles,
         cycle_rates,
         paired_rates,
+        joint_summaries,
     })
+}
+
+fn summarize_joint_outcomes(
+    rows: &[ReporterActivityPairedRate],
+) -> Vec<ReporterActivityJointSummary> {
+    let mut grouped = BTreeMap::<StratumKey, Vec<&ReporterActivityPairedRate>>::new();
+    for row in rows {
+        grouped
+            .entry(stratum_key(&row.stratum))
+            .or_default()
+            .push(row);
+    }
+    grouped
+        .into_values()
+        .filter_map(|rows| {
+            let first = rows.first()?;
+            let mut coverage = first.coverage;
+            let mut unique = BTreeSet::new();
+            let mut known_coverage_block_count = 0;
+            let mut left_then_right_block_count = 0;
+            let mut right_then_left_block_count = 0;
+            let mut receiver_block_opportunity_count = 0;
+            let mut heard_both_count = 0;
+            let mut left_only_count = 0;
+            let mut right_only_count = 0;
+            let mut heard_neither_count = 0;
+            for row in &rows {
+                coverage = combined_coverage(coverage, row.coverage);
+                known_coverage_block_count += usize::from(row.coverage.is_known());
+                match row.order {
+                    crate::ComparisonOrder::LeftThenRight => left_then_right_block_count += 1,
+                    crate::ComparisonOrder::RightThenLeft => right_then_left_block_count += 1,
+                }
+                unique.extend(
+                    row.receivers
+                        .iter()
+                        .map(|receiver| receiver.receiver.clone()),
+                );
+                receiver_block_opportunity_count += row.active_in_both_count;
+                heard_both_count += row.heard_both_count;
+                left_only_count += row.left_only_count;
+                right_only_count += row.right_only_count;
+                heard_neither_count += row.heard_neither_count;
+            }
+            debug_assert_eq!(
+                receiver_block_opportunity_count,
+                heard_both_count + left_only_count + right_only_count + heard_neither_count
+            );
+            Some(ReporterActivityJointSummary {
+                stratum: first.stratum.clone(),
+                coverage,
+                eligible_block_count: rows.len(),
+                known_coverage_block_count,
+                left_then_right_block_count,
+                right_then_left_block_count,
+                unique_active_receiver_count: unique.len(),
+                receiver_block_opportunity_count,
+                heard_both_count,
+                left_only_count,
+                right_only_count,
+                heard_neither_count,
+                left_detection_rate: rate(
+                    heard_both_count + left_only_count,
+                    receiver_block_opportunity_count,
+                ),
+                right_detection_rate: rate(
+                    heard_both_count + right_only_count,
+                    receiver_block_opportunity_count,
+                ),
+            })
+        })
+        .collect()
+}
+
+fn joint_outcome(left_heard: bool, right_heard: bool) -> ReporterActivityJointOutcome {
+    match (left_heard, right_heard) {
+        (true, true) => ReporterActivityJointOutcome::HeardBoth,
+        (true, false) => ReporterActivityJointOutcome::LeftOnly,
+        (false, true) => ReporterActivityJointOutcome::RightOnly,
+        (false, false) => ReporterActivityJointOutcome::HeardNeither,
+    }
+}
+
+fn outcome_count(
+    receivers: &[ReporterActivityJointReceiver],
+    outcome: ReporterActivityJointOutcome,
+) -> usize {
+    receivers
+        .iter()
+        .filter(|row| row.outcome == outcome)
+        .count()
+}
+
+fn common_receiver_grid(
+    left: &ReporterActivityCensusCycle,
+    right: &ReporterActivityCensusCycle,
+    receiver: &str,
+) -> Option<String> {
+    let left_grid = left
+        .active_reporters
+        .iter()
+        .find(|row| row.reporter == receiver)
+        .and_then(|row| row.reporter_grid.as_deref());
+    let right_grid = right
+        .active_reporters
+        .iter()
+        .find(|row| row.reporter == receiver)
+        .and_then(|row| row.reporter_grid.as_deref());
+    match (left_grid, right_grid) {
+        (Some(left), Some(right)) if left == right => Some(left.to_string()),
+        (Some(grid), None) | (None, Some(grid)) => Some(grid.to_string()),
+        _ => None,
+    }
 }
 
 #[derive(Debug)]
