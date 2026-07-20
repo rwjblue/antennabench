@@ -246,34 +246,44 @@ receive-direction cycle, so receive-direction activity coverage stays unknown.
 
 ## Active-Receiver Coverage Map
 
-The coverage map turns the same conditioned evidence into three geographic
-states, separately for each antenna and comparison group:
+The primary coverage view groups the common-opportunity detection population
+by station-centered bearing and the same four distance categories used by the
+all-path profile. Each receiver-block opportunity remains exactly one of four
+outcomes:
 
-- **Heard** uses that antenna's identity color: at least one active reporter in
-  the cell reported the session callsign.
-- **Active, not heard** uses neutral hatching: reporters in the cell were proven
-  active on the band but none reported that antenna. This is below-threshold
-  evidence for the mapped cycle or cycles, not an SNR value.
-- **No active receivers** is plain land: the census provides no evidence about
-  reach there. It must not be read as “the signal did not get there.”
+- **First antenna only** means the common-active receiver decoded only the
+  first cycle in the eligible block.
+- **Both** means it decoded both antenna cycles.
+- **Second antenna only** means it decoded only the second cycle.
+- **Heard neither** means it was proven active on the band during both cycles
+  but did not decode the session callsign in either one. This is
+  below-threshold evidence, not an invented SNR value.
 
-The full report defaults to four-character Maidenhead cells and offers a
-script-free **Bearing and distance** view of the same reporter states. Printing
-always uses the grid-square view. The compact report uses 8 bearing sectors and
-the four square-root-scaled distance categories defined below. Its table is the
-accessible numeric equivalent of the 32 polar cells.
+The station-centered view uses 8 bearing sectors and the four
+square-root-scaled distance categories defined below. Its 32-row table is the
+accessible numeric equivalent of every visual cell. Distance and azimuth
+marginal tables retain unique common-active receivers, receiver-block
+opportunities, all four outcomes, and per-antenna heard counts. Repeated
+receivers count once in each unique-receiver cell and once per eligible block
+in opportunity counts.
 
-Four-character cells are the display aggregation only. Retained six-character
-locators still place individual reporters in the polar view. Reporters with a
-missing or invalid locator remain in active and heard totals and appear in the
-visible **unmapped** count; they are not silently discarded. If either antenna
-lacks supported band-qualified census coverage, the map is omitted with
-coverage-unknown language instead of displaying an empty world.
+Retained Maidenhead locators place receivers using station-centered
+great-circle distance and initial bearing. Receivers with missing, invalid, or
+conflicting locators remain in the common-active and outcome totals and appear
+in explicit location-unavailable counts; they are not silently discarded. If
+the stratum lacks supported band-qualified census coverage, the report shows
+explicit unavailability instead of displaying empty cells.
 
-Color is not the only carrier of state: panel labels, outlines, hatching, SVG
-titles, and the visible numbers tables repeat the meaning. The two antennas are
-shown side by side; the map does not combine them into a difference layer or
-select a winner.
+Color is not the only carrier of state: the legend, SVG titles, outcome counts,
+detection rates, and visible numeric tables repeat the meaning. Concise
+distance-bin findings are scoped to recorded common listening opportunities;
+they do not select a universal winner or imply gain, radiation angle, NVIS,
+DX superiority, statistical significance, or confidence.
+
+The full report retains the older side-by-side per-cycle activity maps inside
+an audit disclosure. Those panels use each cycle's own active-receiver
+population, so they are context only and must not replace the comparative
+common-opportunity view.
 
 ## Reach And Unique Paths
 

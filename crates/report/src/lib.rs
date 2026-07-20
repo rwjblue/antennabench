@@ -1,5 +1,6 @@
 mod answerability;
 mod builder;
+mod common_opportunity;
 mod coverage;
 mod distance;
 mod geography;

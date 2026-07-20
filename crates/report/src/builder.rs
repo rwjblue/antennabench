@@ -11,6 +11,7 @@ use antennabench_core::{
 use chrono::Duration;
 use std::collections::BTreeMap;
 
+use crate::common_opportunity::build_common_opportunity_maps;
 use crate::observed_profile::project_observed_profile;
 use crate::{
     answerability::build_question_answerability, check_cancelled, coverage::build_coverage_maps,
@@ -147,7 +148,15 @@ fn build_report_with_resources_and_snapshot_and_activity(
         )?
     };
     let mut coverage_maps = build_coverage_maps(&bundle.station.grid, &summary.reporter_activity);
-    let detail_counts = DetailCounts::new(bundle, &summary, &coverage_maps, &snapshot);
+    let mut common_opportunity_maps =
+        build_common_opportunity_maps(&bundle.station.grid, &summary.reporter_activity);
+    let detail_counts = DetailCounts::new(
+        bundle,
+        &summary,
+        &coverage_maps,
+        &common_opportunity_maps,
+        &snapshot,
+    );
     // The question-first views retain every path median, rather than sampling
     // them in the renderer. Count those rows up front so a bounded overview is
     // complete or explicitly rejected, never silently partial.
@@ -165,6 +174,7 @@ fn build_report_with_resources_and_snapshot_and_activity(
             .flat_map(|group| &group.panels)
             .map(|panel| panel.cells.len() + panel.polar_cells.len())
             .sum::<usize>()
+        + crate::common_opportunity::overview_row_count(&common_opportunity_maps)
         + summary.slots.len()
         + snapshot.operator_events.len();
     if required_overview_rows as u64 > limits.rows {
@@ -239,6 +249,9 @@ fn build_report_with_resources_and_snapshot_and_activity(
         for panel in coverage_maps.iter_mut().flat_map(|group| &mut group.panels) {
             panel.reporters.clear();
         }
+        for group in &mut common_opportunity_maps {
+            group.blocks.clear();
+        }
         detail_counts.append_notices(&mut notices);
     }
 
@@ -254,6 +267,7 @@ fn build_report_with_resources_and_snapshot_and_activity(
         comparison: project_comparison(comparison, full_detail),
         reporter_activity,
         coverage_maps,
+        common_opportunity_maps,
         solar_context,
         chart_data,
         notices,
@@ -874,6 +888,7 @@ impl DetailCounts {
         bundle: &BundleContents,
         summary: &AnalysisSummary,
         coverage_maps: &[crate::ReportCoverageMapGroup],
+        common_opportunity_maps: &[crate::ReportCommonOpportunityMapGroup],
         snapshot: &ReportSnapshotContext,
     ) -> Self {
         let comparison = &summary.comparison;
@@ -965,6 +980,14 @@ impl DetailCounts {
                         .map(|panel| panel.reporters.len())
                         .sum(),
                 ),
+                (
+                    ReportDetailFamily::CommonOpportunityGeographyAudit,
+                    common_opportunity_maps
+                        .iter()
+                        .flat_map(|group| &group.blocks)
+                        .map(|block| 1 + block.polar_cells.len())
+                        .sum(),
+                ),
                 (ReportDetailFamily::Charts, chart_rows),
             ],
             eligibility_rows: summary.eligibility.exclusions.len(),
@@ -1018,6 +1041,9 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
         .flat_map(|group| &mut group.panels)
     {
         panel.reporters.clear();
+    }
+    for group in &mut report.common_opportunity_maps {
+        group.blocks.clear();
     }
     report.chart_data = ReportChartData::default();
     report.snapshot.lifecycle_events.clear();

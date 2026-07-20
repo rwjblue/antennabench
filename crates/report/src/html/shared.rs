@@ -473,6 +473,9 @@ pub(super) fn detail_family(value: ReportDetailFamily) -> &'static str {
         ReportDetailFamily::ObservedPathProfileRows => "observed-path profile",
         ReportDetailFamily::ReporterActivityAudit => "reporter-activity audit",
         ReportDetailFamily::CoverageMapReporters => "coverage-map reporter",
+        ReportDetailFamily::CommonOpportunityGeographyAudit => {
+            "common-opportunity geographic audit"
+        }
         ReportDetailFamily::Charts => "chart",
     }
 }

@@ -31,6 +31,8 @@ pub struct SessionReport {
     pub reporter_activity: ReporterActivityAnalysis,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub coverage_maps: Vec<ReportCoverageMapGroup>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub common_opportunity_maps: Vec<ReportCommonOpportunityMapGroup>,
     pub solar_context: SolarContextAnalysis,
     pub chart_data: ReportChartData,
     pub notices: Vec<ReportNotice>,
@@ -91,6 +93,60 @@ pub struct ReportCoverageReporter {
 pub enum ReportCoverageState {
     Heard,
     ActiveNotHeard,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportCommonOpportunityMapGroup {
+    pub stratum: ComparisonStratum,
+    pub coverage: antennabench_analysis::ReporterActivityCoverage,
+    pub eligible_block_count: usize,
+    pub known_coverage_block_count: usize,
+    pub unique_common_active_receiver_count: usize,
+    pub receiver_block_opportunity_count: usize,
+    pub located_unique_receiver_count: usize,
+    pub located_receiver_block_opportunity_count: usize,
+    pub location_unavailable_unique_receiver_count: usize,
+    pub location_unavailable_receiver_block_opportunity_count: usize,
+    pub distance_cells: Vec<ReportCommonOpportunityCell<ReportDistanceBin>>,
+    pub azimuth_cells: Vec<ReportCommonOpportunityCell<ReportAzimuthSector>>,
+    pub polar_cells: Vec<ReportCommonOpportunityPolarCell>,
+    pub blocks: Vec<ReportCommonOpportunityBlock>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportCommonOpportunityCell<T> {
+    pub category: T,
+    pub coverage: antennabench_analysis::ReporterActivityCoverage,
+    pub unique_common_active_receiver_count: usize,
+    pub receiver_block_opportunity_count: usize,
+    pub heard_both_count: usize,
+    pub left_only_count: usize,
+    pub right_only_count: usize,
+    pub heard_neither_count: usize,
+    pub left_heard_count: usize,
+    pub right_heard_count: usize,
+    pub left_detection_rate: Option<f64>,
+    pub right_detection_rate: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportCommonOpportunityPolarCell {
+    pub bearing_sector: ReportAzimuthSector,
+    pub distance_bin: ReportDistanceBin,
+    pub facts: ReportCommonOpportunityCell<ReportDistanceBin>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportCommonOpportunityBlock {
+    pub block_index: usize,
+    pub order: antennabench_analysis::ComparisonOrder,
+    pub left_slot_id: String,
+    pub right_slot_id: String,
+    pub coverage: antennabench_analysis::ReporterActivityCoverage,
+    pub common_active_receiver_count: usize,
+    pub located_receiver_count: usize,
+    pub location_unavailable_receiver_count: usize,
+    pub polar_cells: Vec<ReportCommonOpportunityPolarCell>,
 }
 
 /// A concise, renderer-neutral projection of the session questions and the
@@ -880,6 +936,7 @@ pub enum ReportDetailFamily {
     ObservedPathProfileRows,
     ReporterActivityAudit,
     CoverageMapReporters,
+    CommonOpportunityGeographyAudit,
     Charts,
 }
 

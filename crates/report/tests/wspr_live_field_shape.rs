@@ -20,7 +20,7 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report_with_snapshot_and_activity, render_compact_summary_html, render_standalone_html,
-    ReportSnapshotContext,
+    ReportAzimuthSector, ReportCommonOpportunityMapGroup, ReportDistanceBin, ReportSnapshotContext,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 
@@ -112,6 +112,30 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert_eq!(report.evidence.overall.observation_counts.usable, 188);
     assert_eq!(report.comparison.paired_rows.len(), 33);
     assert_eq!(report.coverage_maps.len(), 1);
+    assert_eq!(report.common_opportunity_maps.len(), 1);
+    let common = &report.common_opportunity_maps[0];
+    assert_eq!(common.unique_common_active_receiver_count, 180);
+    assert_eq!(common.receiver_block_opportunity_count, 180);
+    assert_eq!(common.located_unique_receiver_count, 179);
+    assert_eq!(common.located_receiver_block_opportunity_count, 179);
+    assert_eq!(common.location_unavailable_unique_receiver_count, 1);
+    assert_eq!(
+        common.location_unavailable_receiver_block_opportunity_count,
+        1
+    );
+    assert_eq!(
+        common
+            .distance_cells
+            .iter()
+            .map(|cell| (
+                cell.heard_both_count,
+                cell.left_only_count,
+                cell.right_only_count,
+                cell.heard_neither_count,
+            ))
+            .collect::<Vec<_>>(),
+        vec![(33, 112, 0, 0), (0, 0, 0, 24), (0, 0, 0, 0), (0, 0, 10, 0)]
+    );
     assert_eq!(report.coverage_maps[0].panels.len(), 2);
     assert!(report.coverage_maps[0]
         .panels
@@ -142,9 +166,16 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(html.contains("80.6% / 23.9%"));
         assert!(html.contains("Per-block joint detection outcome audit"));
         assert!(html.contains("Complete band-qualified census"));
-        assert!(html.contains("Active-receiver coverage"));
-        assert!(html.contains("active, not heard"));
-        assert!(html.contains("1 unmapped"));
+        assert!(html.contains("Common-opportunity detection"));
+        assert!(html.contains("Heard neither"));
+        assert!(html.contains("Common-opportunity polar cells (accessible equivalent)"));
+        assert!(html
+            .contains("Location unavailable: 1 unique receivers / 1 receiver-block opportunities"));
+        assert!(
+            html.contains("This is not the all-path observed profile")
+                || html
+                    .contains("separate from the all-path observed distance and direction profile")
+        );
         for category in [
             "Near / local proxy (under 500 km)",
             "Regional (500–1499 km)",
@@ -158,6 +189,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(!html.contains("<script"));
     }
     let full = render_standalone_html(&report).unwrap();
+    assert_common_visual_has_accessible_rows(&full, common);
     assert!(full.contains("activity-summary-field-shape"));
     assert!(full.contains("activity-first-000"));
     assert!(full.contains("id=\"coverage-grid-0\" checked"));
@@ -165,9 +197,37 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert!(full.contains("coverage-polar-view"));
     assert!(full.contains("@media print"));
     let compact = render_compact_summary_html(&report).unwrap();
+    assert_common_visual_has_accessible_rows(&compact, common);
     assert!(compact.contains("coverage-polar-cells"));
-    assert!(compact.contains("Polar-cell numbers (accessible equivalent)"));
+    assert!(compact.contains("Common-opportunity polar cells (accessible equivalent)"));
     assert!(!compact.contains("<svg class=\"coverage-world\""));
+}
+
+fn assert_common_visual_has_accessible_rows(html: &str, group: &ReportCommonOpportunityMapGroup) {
+    let sector_labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    for (sector_index, sector) in ReportAzimuthSector::ALL.iter().enumerate() {
+        for distance in ReportDistanceBin::ALL {
+            let facts = group
+                .polar_cells
+                .iter()
+                .find(|cell| cell.bearing_sector == *sector && cell.distance_bin == distance)
+                .map(|cell| &cell.facts);
+            let unique = facts.map_or(0, |cell| cell.unique_common_active_receiver_count);
+            let opportunities = facts.map_or(0, |cell| cell.receiver_block_opportunity_count);
+            let both = facts.map_or(0, |cell| cell.heard_both_count);
+            let left_only = facts.map_or(0, |cell| cell.left_only_count);
+            let right_only = facts.map_or(0, |cell| cell.right_only_count);
+            let neither = facts.map_or(0, |cell| cell.heard_neither_count);
+            let sector_label = sector_labels[sector_index];
+            let distance_label = distance.label();
+            assert!(html.contains(&format!(
+                "{sector_label}, {distance_label}: {opportunities} opportunities; {both} both, {left_only} first only, {right_only} second only, {neither} neither"
+            )));
+            assert!(html.contains(&format!(
+                "<tr><td>{sector_label}</td><td>{distance_label}</td><td>{unique}</td><td>{opportunities}</td><td>{both}</td><td>{left_only}</td><td>{right_only}</td><td>{neither}</td>"
+            )));
+        }
+    }
 }
 
 #[test]
@@ -196,6 +256,58 @@ fn absent_census_renders_coverage_unknown_without_inventing_zero_activity() {
 }
 
 #[test]
+fn zero_matched_paths_still_render_useful_common_opportunity_geography() {
+    let mut durable = field_shape_fixture();
+    durable.observations.retain(|observation| {
+        !observation
+            .observation_id
+            .starts_with("wspr-cycle-b-spot-0")
+    });
+    durable
+        .adapter_records
+        .retain(|record| !record.record_id.starts_with("wspr-cycle-b-adapter-0"));
+    let current = durable.into_current();
+    let report = build_report_with_snapshot_and_activity(
+        &current.bundle,
+        &validate_bundle_report(&current.bundle),
+        &current.adapter_records,
+        ReportSnapshotContext::default(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        report.comparison.availability,
+        ComparisonAvailability::NoMatchedPaths
+    );
+    assert!(report.comparison.paired_rows.is_empty());
+    let common = &report.common_opportunity_maps[0];
+    assert_eq!(
+        common
+            .distance_cells
+            .iter()
+            .map(|cell| (
+                cell.heard_both_count,
+                cell.left_only_count,
+                cell.right_only_count,
+                cell.heard_neither_count,
+            ))
+            .collect::<Vec<_>>(),
+        vec![(0, 145, 0, 0), (0, 0, 0, 24), (0, 0, 0, 0), (0, 0, 10, 0)]
+    );
+
+    for html in [
+        render_standalone_html(&report).unwrap(),
+        render_compact_summary_html(&report).unwrap(),
+    ] {
+        assert!(html.contains("No same-path SNR comparison: no matched paths"));
+        assert!(html.contains("Common-opportunity detection"));
+        assert!(html.contains("Near / local proxy (under 500 km): 145 versus 0 detections"));
+        assert!(html.contains("DX-oriented (3000 km and above): 0 versus 10 detections"));
+        assert!(html.contains("session-scoped detection counts"));
+    }
+}
+
+#[test]
 fn truncated_census_caveat_qualifies_each_cycle_and_paired_rate() {
     let mut durable = field_shape_fixture();
     let summary = durable
@@ -220,14 +332,11 @@ fn truncated_census_caveat_qualifies_each_cycle_and_paired_rate() {
     .unwrap();
     let compact = render_compact_summary_html(&report).unwrap();
 
-    assert_eq!(
-        compact
-            .matches("Truncated census — capture limit may reduce the denominator")
-            .count(),
-        report.reporter_activity.cycle_rates.len()
-            + report.reporter_activity.paired_rates.len()
-            + report.reporter_activity.joint_summaries.len()
-    );
+    assert!(report
+        .common_opportunity_maps
+        .iter()
+        .all(|group| group.coverage == antennabench_analysis::ReporterActivityCoverage::Truncated));
+    assert!(compact.contains("Truncated census — capture limit may reduce the denominator"));
 }
 
 fn field_shape_fixture() -> BundleV3Contents {
@@ -412,9 +521,9 @@ fn append_activity_census(
 fn activity_grid(reporter_index: usize) -> Option<&'static str> {
     match reporter_index {
         0..=32 => Some("AA00aa"),
-        33..=144 => Some("BB11bb"),
-        145..=154 => Some("CC22cc"),
-        155..=178 => Some("DD33dd"),
+        33..=144 => Some("AA00bb"),
+        145..=154 => Some("AJ00aa"),
+        155..=178 => Some("AB00aa"),
         179 => None,
         _ => Some("EE44ee"),
     }

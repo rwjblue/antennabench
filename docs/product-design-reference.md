@@ -100,6 +100,18 @@ estimand. Receiver/transmitter availability may differ across antenna periods,
 so the all-path view is descriptive and is not a controlled detection
 comparison. Missing or inconsistent location evidence remains visible.
 
+The comparative geographic view projects the common-opportunity detection
+estimand without changing its denominator. Within each exact stratum and
+eligible block, receivers active during both cycles remain partitioned into
+first-only, both, second-only, and neither outcomes, then are grouped by the
+fixed distance and azimuth taxonomy. Each aggregate retains unique receivers,
+receiver-block opportunities, per-antenna heard rates, coverage qualification,
+and explicit location-unavailable counts. Repeated receivers remain visible as
+repeated opportunities, and block order stays auditable. The accessible table
+is numerically equivalent to the station-centered visual. Unsupported receive
+direction and inaccessible census evidence produce explicit unavailability,
+not an empty map or a zero denominator.
+
 The fixed policy is one operator-facing taxonomy: near /
 local proxy under 500 km, regional from 500 km to less than 1500 km, longer
 path from 1500 km to less than 3000 km, and DX-oriented at 3000 km and above.
