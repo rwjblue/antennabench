@@ -121,7 +121,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     ] {
         assert!(!html.contains("0 usable"));
         assert!(!html.contains("No matched paths"));
-        assert!(html.contains("Hearing rate among active reporters"));
+        assert!(html.contains("Detection among receivers active in both cycles"));
         assert!(html.contains("145 / 200 (72.5%)"));
         assert!(html.contains("43 / 180 (23.9%)"));
         assert!(html.contains("180</td><td>145 / 180 (80.6%)"));
@@ -163,8 +163,8 @@ fn absent_census_renders_coverage_unknown_without_inventing_zero_activity() {
         render_standalone_html(&report).unwrap(),
         render_compact_summary_html(&report).unwrap(),
     ] {
-        assert!(html.contains("Coverage unknown — no band-qualified census covers this cycle"));
-        assert!(html.contains("Not available (coverage unknown; not zero)"));
+        assert!(html.contains("Activity coverage unknown"));
+        assert!(!html.contains("id=\"reporter-activity\""));
         assert!(!html.contains("0 / 0 (0.0%)"));
     }
 }

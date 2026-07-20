@@ -72,6 +72,16 @@ distance/azimuth context for observed paths. Existing insufficient/weak/moderate
 labels describe evidence coverage only; they do not say that one antenna is
 better.
 
+Report answerability is modeled per conditional question rather than by one
+global success gate. Shared-path signal, detection among receivers active in
+both cycles, observed reach, observed distance and direction profile, and
+repeatability across blocks each retain a typed availability or limitation.
+The renderer names answered families in the headline, omits unavailable
+families from primary navigation and full empty panels, and keeps limitations
+in one secondary disclosure. Full and compact reports consume the same
+renderer-neutral projection. The original paired-comparison availability field
+remains only as a compatibility view of finite-SNR shared-path analysis.
+
 Transmit-path reports and receive-path local decodes answer different questions
 and must not be pooled. Missing decodes are not zero-SNR observations. Goal
 lenses may choose documented views or filters, but they do not change effect or

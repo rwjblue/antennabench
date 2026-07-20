@@ -1,19 +1,34 @@
 use super::*;
 use crate::ReportAcquisitionWorkflowStatus;
 
-pub(in super::super) fn render_question_navigation(out: &mut CheckedHtmlWriter<'_>) {
-    out.push_str(
-        "<nav class=\"question-nav\" aria-label=\"Report questions\"><ul>\
-<li><a href=\"#what-run-show\">What did the run show?</a></li>\
-<li><a href=\"#same-path-signal\">Same-path signal</a></li>\
-<li><a href=\"#reporter-activity\">Active-reporter hearing rate</a></li>\
-<li><a href=\"#coverage-map\">Active-receiver coverage map</a></li>\
-<li><a href=\"#reach-unique-paths\">Reach and unique paths</a></li>\
-<li><a href=\"#distance-direction\">Distance and direction</a></li>\
-<li><a href=\"#run-quality\">Run quality</a></li>\
-<li><a href=\"#audit-appendix\">Audit appendix</a></li>\
-</ul></nav>",
-    );
+pub(in super::super) fn render_question_navigation(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+    include_audit: bool,
+) {
+    out.push_str("<nav class=\"question-nav\" aria-label=\"Report questions\"><ul><li><a href=\"#what-run-show\">What did the run show?</a></li>");
+    if report.overview.answerability.same_path_signal == SamePathSignalAnswerability::Available {
+        out.push_str("<li><a href=\"#same-path-signal\">Shared-path signal</a></li>");
+    }
+    if report.overview.answerability.paired_detectability
+        == PairedDetectabilityAnswerability::Available
+    {
+        out.push_str("<li><a href=\"#reporter-activity\">Detection among receivers active in both cycles</a></li><li><a href=\"#coverage-map\">Active-receiver coverage map</a></li>");
+    }
+    if report.overview.answerability.observed_reach == ObservedReachAnswerability::Available {
+        out.push_str("<li><a href=\"#reach-unique-paths\">Observed reach</a></li>");
+    }
+    if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
+    {
+        out.push_str(
+            "<li><a href=\"#distance-direction\">Observed distance and direction profile</a></li>",
+        );
+    }
+    out.push_str("<li><a href=\"#run-quality\">Run quality</a></li>");
+    if include_audit {
+        out.push_str("<li><a href=\"#audit-appendix\">Audit appendix</a></li>");
+    }
+    out.push_str("</ul></nav>");
 }
 pub(in super::super) fn render_how_to_read(out: &mut CheckedHtmlWriter<'_>) {
     out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.</li><li>A block is a back-to-back pair of cycles, one per antenna.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul></aside>");
@@ -68,6 +83,7 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         .sum::<usize>();
 
     out.push_str("<section id=\"what-run-show\" class=\"panel overview\" tabindex=\"-1\" aria-labelledby=\"what-run-show-title\"><p class=\"eyebrow\">Answer first</p><h2 id=\"what-run-show-title\">What did the run show?</h2>");
+    render_answerability_headline(out, report);
     render_plain_language_answer(out, report);
     write_html!(
         out,
@@ -176,7 +192,120 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     }
     out.push_str("</div>");
     render_visible_acquisition_limitations(out, report, audit_reference);
+    render_answerability_disclosure(out, report);
     out.push_str("</section>");
+}
+
+fn render_answerability_headline(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let answerability = &report.overview.answerability;
+    let mut answered = Vec::new();
+    if answerability.same_path_signal == SamePathSignalAnswerability::Available {
+        answered.push("Shared-path signal");
+    }
+    if answerability.paired_detectability == PairedDetectabilityAnswerability::Available {
+        answered.push("Detection among receivers active in both cycles");
+    }
+    if answerability.observed_reach == ObservedReachAnswerability::Available {
+        answered.push("Observed reach");
+    }
+    if answerability.geographic_profile == GeographicProfileAnswerability::Available {
+        answered.push("Observed distance and direction profile");
+    }
+    if answerability.repeatability == RepeatabilityAnswerability::Available {
+        answered.push("Repeatability across blocks");
+    }
+    let answered = if answered.is_empty() {
+        "None of the five report question families has usable evidence yet.".to_string()
+    } else {
+        format!("Answered by this run: {}.", answered.join("; "))
+    };
+    write_html!(
+        out,
+        "<p class=\"answerability-headline\"><strong>{}</strong></p>",
+        escape_html(&answered)
+    );
+}
+
+fn render_answerability_disclosure(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let answerability = &report.overview.answerability;
+    out.push_str("<details class=\"answerability-disclosure\"><summary>Question availability and limits</summary><dl class=\"facts answerability-facts\">");
+    answerability_fact(
+        out,
+        "Shared-path signal",
+        same_path_answerability_text(answerability.same_path_signal),
+    );
+    answerability_fact(
+        out,
+        "Detection among receivers active in both cycles",
+        paired_detectability_answerability_text(answerability.paired_detectability),
+    );
+    answerability_fact(
+        out,
+        "Observed reach",
+        match answerability.observed_reach {
+            ObservedReachAnswerability::Available => "Available from unique observed paths",
+            ObservedReachAnswerability::NoUsablePaths => "No usable paths",
+        },
+    );
+    answerability_fact(
+        out,
+        "Observed distance and direction profile",
+        match answerability.geographic_profile {
+            GeographicProfileAnswerability::Available => "Available from located observed paths",
+            GeographicProfileAnswerability::NoLocatedPaths => "No located paths",
+        },
+    );
+    answerability_fact(
+        out,
+        "Repeatability across blocks",
+        match answerability.repeatability {
+            RepeatabilityAnswerability::Available => "Available across repeated eligible blocks",
+            RepeatabilityAnswerability::InsufficientRepetition => "Insufficient repetition",
+        },
+    );
+    out.push_str("</dl></details>");
+}
+
+fn answerability_fact(out: &mut CheckedHtmlWriter<'_>, question: &str, availability: &str) {
+    write_html!(
+        out,
+        "<div><dt>{}</dt><dd>{}</dd></div>",
+        escape_html(question),
+        escape_html(availability)
+    );
+}
+
+fn same_path_answerability_text(value: SamePathSignalAnswerability) -> &'static str {
+    match value {
+        SamePathSignalAnswerability::Available => "Available from matched finite-SNR paths",
+        SamePathSignalAnswerability::NoMatchedPaths => {
+            "No same-path SNR comparison: no matched paths"
+        }
+        SamePathSignalAnswerability::NoFiniteSnr => "No same-path SNR comparison: no finite SNR",
+        SamePathSignalAnswerability::NoEligibleBlocks => {
+            "No same-path SNR comparison: no eligible blocks"
+        }
+        SamePathSignalAnswerability::NotApplicable => "Not applicable for this session shape",
+        SamePathSignalAnswerability::UnsupportedShape => "Unsupported comparison shape",
+    }
+}
+
+fn paired_detectability_answerability_text(
+    value: PairedDetectabilityAnswerability,
+) -> &'static str {
+    match value {
+        PairedDetectabilityAnswerability::Available => {
+            "Available among receivers active in both cycles"
+        }
+        PairedDetectabilityAnswerability::NoCommonActiveReporters => "No common active reporters",
+        PairedDetectabilityAnswerability::ActivityCoverageUnknown => "Activity coverage unknown",
+        PairedDetectabilityAnswerability::UnsupportedDirection => {
+            "Unsupported direction: the census supports transmit paths only"
+        }
+        PairedDetectabilityAnswerability::NoEligibleBlocks => "No eligible blocks",
+        PairedDetectabilityAnswerability::NotApplicable => "Not applicable for this session shape",
+        PairedDetectabilityAnswerability::UnsupportedShape => "Unsupported comparison shape",
+    }
 }
 fn render_plain_language_answer(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     write_html!(

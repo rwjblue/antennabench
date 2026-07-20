@@ -1,8 +1,9 @@
 use std::fmt::Write as _;
 
 use crate::{
-    check_cancelled, ReportCancellationToken, ReportError, ReportResourceLimits,
-    ReportResourceStage, SessionReport, REPORT_RESOURCE_LIMITS,
+    check_cancelled, GeographicProfileAnswerability, ObservedReachAnswerability,
+    PairedDetectabilityAnswerability, ReportCancellationToken, ReportError, ReportResourceLimits,
+    ReportResourceStage, SamePathSignalAnswerability, SessionReport, REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
@@ -137,14 +138,25 @@ fn render_standalone_html_document(
 <h1>Session evidence report</h1><p class=\"muted\">Session <code>{}</code></p></header>",
         escape_html(&report.overview.scope.session_id)
     );
-    render_question_navigation(&mut out);
+    render_question_navigation(&mut out, report, true);
     render_how_to_read(&mut out);
     render_answer_first_overview(&mut out, report);
-    render_same_path_section(&mut out, report);
-    render_reporter_activity_section(&mut out, report);
-    render_coverage_map_section(&mut out, report);
-    render_reach_section(&mut out, report);
-    render_distance_section(&mut out, report);
+    if report.overview.answerability.same_path_signal == SamePathSignalAnswerability::Available {
+        render_same_path_section(&mut out, report);
+    }
+    if report.overview.answerability.paired_detectability
+        == PairedDetectabilityAnswerability::Available
+    {
+        render_reporter_activity_section(&mut out, report);
+        render_coverage_map_section(&mut out, report);
+    }
+    if report.overview.answerability.observed_reach == ObservedReachAnswerability::Available {
+        render_reach_section(&mut out, report);
+    }
+    if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
+    {
+        render_distance_section(&mut out, report);
+    }
     render_run_quality_section(&mut out, report);
     render_audit_appendix(&mut out, report, options.controller_evidence);
 

@@ -1,17 +1,18 @@
 use std::fmt::Write as _;
 
 use crate::{
-    check_cancelled, ReportAcquisitionWorkflowStatus, ReportCancellationToken, ReportCompleteness,
-    ReportError, ReportProviderCompleteness, ReportResourceLimits, ReportResourceStage,
-    SessionReport, REPORT_RESOURCE_LIMITS,
+    check_cancelled, ObservedReachAnswerability, PairedDetectabilityAnswerability,
+    ReportAcquisitionWorkflowStatus, ReportCancellationToken, ReportCompleteness, ReportError,
+    ReportProviderCompleteness, ReportResourceLimits, ReportResourceStage,
+    SamePathSignalAnswerability, SessionReport, REPORT_RESOURCE_LIMITS,
 };
 
 use super::{
     geometry::render_geometry_styles,
     questions::{
         overview_lifecycle_label, render_answer_first_overview_with_reference,
-        render_compact_coverage_map_section, render_how_to_read, render_reach_bar,
-        render_reporter_activity_section, render_same_path_stratum,
+        render_compact_coverage_map_section, render_how_to_read, render_question_navigation,
+        render_reach_bar, render_reporter_activity_section, render_same_path_stratum,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
@@ -75,20 +76,29 @@ pub fn render_compact_summary_html_with_resources(
 <h1>Compact session summary</h1><p class=\"muted\">Not the full audit report · Session <code>{}</code></p></header>",
         escape_html(&report.overview.scope.session_id)
     );
+    render_question_navigation(&mut out, report, false);
     render_how_to_read(&mut out);
     render_answer_first_overview_with_reference(
         &mut out,
         report,
         "the full evidence report and session bundle",
     );
-    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2>");
-    render_compact_same_path_view(&mut out, report);
-    out.push_str("</section>");
-    render_reporter_activity_section(&mut out, report);
-    render_compact_coverage_map_section(&mut out, report);
-    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
-    render_compact_reach_view(&mut out, report);
-    out.push_str("</section>");
+    if report.overview.answerability.same_path_signal == SamePathSignalAnswerability::Available {
+        out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Shared-path signal</h2>");
+        render_compact_same_path_view(&mut out, report);
+        out.push_str("</section>");
+    }
+    if report.overview.answerability.paired_detectability
+        == PairedDetectabilityAnswerability::Available
+    {
+        render_reporter_activity_section(&mut out, report);
+        render_compact_coverage_map_section(&mut out, report);
+    }
+    if report.overview.answerability.observed_reach == ObservedReachAnswerability::Available {
+        out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2>");
+        render_compact_reach_view(&mut out, report);
+        out.push_str("</section>");
+    }
     render_compact_run_quality(&mut out, report);
     render_compact_reference(&mut out, report);
     out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This compact summary is descriptive and does not select an antenna winner.</p></main></body></html>");

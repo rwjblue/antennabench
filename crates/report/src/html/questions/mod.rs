@@ -1,11 +1,12 @@
 use std::fmt::Write as _;
 
 use crate::{
-    ReportAzimuthSector, ReportDistanceBin, ReportLifecycleEventKind, ReportOperatorEvent,
-    ReportOperatorEventKind, ReportOverviewLifecycleState, ReportOverviewLimitation,
-    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportOverviewReach,
-    ReportOverviewStratum, ReportPathLocationAvailability, ReportRunTimelineRow,
-    ReportStratumAvailability, SessionReport,
+    GeographicProfileAnswerability, ObservedReachAnswerability, PairedDetectabilityAnswerability,
+    RepeatabilityAnswerability, ReportAzimuthSector, ReportDistanceBin, ReportLifecycleEventKind,
+    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLifecycleState,
+    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
+    ReportOverviewReach, ReportOverviewStratum, ReportPathLocationAvailability,
+    ReportRunTimelineRow, ReportStratumAvailability, SamePathSignalAnswerability, SessionReport,
 };
 use antennabench_core::AlignedSlotStatus;
 

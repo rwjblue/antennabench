@@ -12,19 +12,19 @@ use chrono::Duration;
 use std::collections::BTreeMap;
 
 use crate::{
-    check_cancelled, coverage::build_coverage_maps, report_resource_error, AntennaEvidenceSection,
-    AntennaSnrRow, BandEvidenceCountRow, BandEvidenceSection, CountingWriter, EvidenceSections,
-    ReportAzimuthSector, ReportCancellationToken, ReportChartData, ReportComparisonData,
-    ReportCompleteness, ReportDetailFamily, ReportDistanceBin, ReportError, ReportEvidenceSummary,
-    ReportNotice, ReportOperatorEvent, ReportOperatorEventKind, ReportOverview,
-    ReportOverviewLifecycle, ReportOverviewLifecycleState, ReportOverviewLimitation,
-    ReportOverviewLocationCell, ReportOverviewLocationContext, ReportOverviewLocationPath,
-    ReportOverviewPathDelta, ReportOverviewPathMedianDelta, ReportOverviewReach,
-    ReportOverviewScope, ReportOverviewStratum, ReportPathLocationAvailability,
-    ReportResourceLimits, ReportResourceStage, ReportRunTimelineRow, ReportSnapshotContext,
-    ReportStratumAvailability, ScheduleOverview, ScheduledSlotContext, ScheduledTimeRange,
-    SessionContext, SessionReport, SlotEvidenceCountRow, SlotEvidenceSection, StationContext,
-    UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
+    answerability::build_question_answerability, check_cancelled, coverage::build_coverage_maps,
+    report_resource_error, AntennaEvidenceSection, AntennaSnrRow, BandEvidenceCountRow,
+    BandEvidenceSection, CountingWriter, EvidenceSections, ReportAzimuthSector,
+    ReportCancellationToken, ReportChartData, ReportComparisonData, ReportCompleteness,
+    ReportDetailFamily, ReportDistanceBin, ReportError, ReportEvidenceSummary, ReportNotice,
+    ReportOperatorEvent, ReportOperatorEventKind, ReportOverview, ReportOverviewLifecycle,
+    ReportOverviewLifecycleState, ReportOverviewLimitation, ReportOverviewLocationCell,
+    ReportOverviewLocationContext, ReportOverviewLocationPath, ReportOverviewPathDelta,
+    ReportOverviewPathMedianDelta, ReportOverviewReach, ReportOverviewScope, ReportOverviewStratum,
+    ReportPathLocationAvailability, ReportResourceLimits, ReportResourceStage,
+    ReportRunTimelineRow, ReportSnapshotContext, ReportStratumAvailability, ScheduleOverview,
+    ScheduledSlotContext, ScheduledTimeRange, SessionContext, SessionReport, SlotEvidenceCountRow,
+    SlotEvidenceSection, StationContext, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
 
 pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportError> {
@@ -182,6 +182,7 @@ fn build_report_with_resources_and_snapshot_and_activity(
         bundle,
         &context,
         &summary.comparison,
+        &summary.reporter_activity,
         &summary.slots,
         &snapshot,
     );
@@ -270,6 +271,7 @@ fn build_overview(
     bundle: &BundleContents,
     context: &SessionContext,
     comparison: &PairedComparisonAnalysis,
+    reporter_activity: &antennabench_analysis::ReporterActivityAnalysis,
     slots: &[SlotEvidenceSummary],
     snapshot: &ReportSnapshotContext,
 ) -> ReportOverview {
@@ -283,6 +285,7 @@ fn build_overview(
             directions
         });
     let limitations = build_overview_limitations(comparison);
+    let answerability = build_question_answerability(comparison, reporter_activity);
 
     ReportOverview {
         scope: ReportOverviewScope {
@@ -307,6 +310,7 @@ fn build_overview(
                 .map(ReportOverviewLifecycleState::Recorded)
                 .unwrap_or_default(),
         },
+        answerability,
         comparison_availability: comparison.availability,
         strata: comparison
             .strata

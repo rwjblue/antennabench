@@ -101,6 +101,11 @@ pub enum ReportCoverageState {
 pub struct ReportOverview {
     pub scope: ReportOverviewScope,
     pub lifecycle: ReportOverviewLifecycle,
+    /// Availability is projected separately for each operator question. The
+    /// legacy comparison availability below remains the compatibility view for
+    /// the original finite-SNR paired comparison only.
+    #[serde(default)]
+    pub answerability: ReportQuestionAnswerability,
     pub comparison_availability: ComparisonAvailability,
     pub strata: Vec<ReportOverviewStratum>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -113,12 +118,73 @@ impl Default for ReportOverview {
         Self {
             scope: ReportOverviewScope::default(),
             lifecycle: ReportOverviewLifecycle::default(),
+            answerability: ReportQuestionAnswerability::default(),
             comparison_availability: ComparisonAvailability::NotApplicable,
             strata: Vec::new(),
             timeline: Vec::new(),
             limitations: Vec::new(),
         }
     }
+}
+
+/// Renderer-neutral availability for the distinct questions a report may
+/// answer. These values are availability facts, never grades or conclusions.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportQuestionAnswerability {
+    pub same_path_signal: SamePathSignalAnswerability,
+    pub paired_detectability: PairedDetectabilityAnswerability,
+    pub observed_reach: ObservedReachAnswerability,
+    pub geographic_profile: GeographicProfileAnswerability,
+    pub repeatability: RepeatabilityAnswerability,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SamePathSignalAnswerability {
+    Available,
+    NoMatchedPaths,
+    NoFiniteSnr,
+    NoEligibleBlocks,
+    #[default]
+    NotApplicable,
+    UnsupportedShape,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PairedDetectabilityAnswerability {
+    Available,
+    NoCommonActiveReporters,
+    ActivityCoverageUnknown,
+    UnsupportedDirection,
+    NoEligibleBlocks,
+    #[default]
+    NotApplicable,
+    UnsupportedShape,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservedReachAnswerability {
+    Available,
+    #[default]
+    NoUsablePaths,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeographicProfileAnswerability {
+    Available,
+    #[default]
+    NoLocatedPaths,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RepeatabilityAnswerability {
+    Available,
+    #[default]
+    InsufficientRepetition,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

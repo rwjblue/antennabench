@@ -284,17 +284,24 @@ invariant(
 );
 
 const canonicalSample = read("apps/hosted/public/sample-report/index.html");
-for (const postCompactReportContract of [
+for (const reportContract of [
   "What did the run show?",
-  "Same-path signal",
+  "Answered by this run: Observed reach",
+  "No same-path SNR comparison",
+  "Observed reach",
   "Run quality and answerability",
   "does not select an antenna winner",
 ]) {
   invariant(
-    canonicalSample.includes(postCompactReportContract),
-    `Canonical sample is missing the post-#133 report contract: ${postCompactReportContract}`,
+    canonicalSample.includes(reportContract),
+    `Canonical sample is missing the report contract: ${reportContract}`,
   );
 }
+invariant(
+  !canonicalSample.includes('id="same-path-signal"') &&
+    !canonicalSample.includes('href="#same-path-signal"'),
+  "Unavailable shared-path signal must not dominate canonical sample navigation",
+);
 invariant(!/<script\b/i.test(canonicalSample), "Canonical sample must remain standalone and script-free");
 
 const deployedMark = read("apps/hosted/public/mark.svg");

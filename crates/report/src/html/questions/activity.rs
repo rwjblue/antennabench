@@ -5,7 +5,7 @@ pub(in super::super) fn render_reporter_activity_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"reporter-activity\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reporter-activity-title\"><h2 id=\"reporter-activity-title\">Hearing rate among active reporters</h2><p class=\"muted\">This conditions each transmit-cycle result on stations proven by the band-qualified census to be decoding that band. Groups and cycles remain separate; this does not select a winner.</p>");
+    out.push_str("<section id=\"reporter-activity\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reporter-activity-title\"><h2 id=\"reporter-activity-title\">Detection among receivers active in both cycles</h2><p class=\"muted\">Evidence basis and denominator: receivers proven by the band-qualified census to be active during both transmit cycles of one eligible block. Per-cycle context, groups, and blocks remain separate; this does not select a winner.</p>");
     if report.reporter_activity.cycle_rates.is_empty() {
         out.push_str("<p class=\"empty\"><strong>Coverage unknown:</strong> no band-qualified reporter-activity analysis is available. Missing census evidence is not zero activity and does not mean that no station was listening.</p></section>");
         return;

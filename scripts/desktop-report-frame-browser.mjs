@@ -540,16 +540,16 @@ try {
       assert.ok(Math.abs(geometry[name] - expected) < 0.01, `${mode} ${name}: ${geometry[name]}`);
     }
 
-    const navigationTargets = mode === "full"
-      ? [
-        "what-run-show",
-        "same-path-signal",
-        "reach-unique-paths",
-        "distance-direction",
-        "run-quality",
-        "audit-appendix",
-      ]
-      : ["what-run-show"];
+    const navigationTargets = await evaluateReportFrame(pageUrl, `Array.from(
+      document.querySelectorAll('.question-nav a[href^="#"]'),
+      (link) => link.getAttribute("href").slice(1),
+    )`);
+    assert.deepEqual(
+      navigationTargets,
+      mode === "full"
+        ? ["what-run-show", "reach-unique-paths", "run-quality", "audit-appendix"]
+        : ["what-run-show", "reach-unique-paths", "run-quality"],
+    );
     const outerScrollBefore = (await browser([
       "eval",
       "document.scrollingElement.scrollTop",
@@ -572,13 +572,7 @@ try {
         linkFocused: true,
         linkOutline: "solid",
       });
-      if (targetId === "same-path-signal" || mode === "compact") {
-        await browser(["press", "Enter"]);
-      } else {
-        await evaluateReportFrame(pageUrl, `(() => {
-          document.querySelector('a[href="#${targetId}"]').click();
-        })()`);
-      }
+      await browser(["press", "Enter"]);
       await browser(["wait", "500"]);
       const navigated = await evaluateReportFrame(pageUrl, `(() => {
         const target = document.querySelector("#${targetId}");

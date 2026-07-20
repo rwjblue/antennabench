@@ -20,7 +20,7 @@ use antennabench_report::{
     ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
     ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
     ReportProviderCompleteness, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
-    ReportWsprReadinessBasis, SessionReport, StandaloneHtmlOptions,
+    ReportWsprReadinessBasis, SamePathSignalAnswerability, SessionReport, StandaloneHtmlOptions,
 };
 use antennabench_storage::BundleStore;
 use chrono::Duration;
@@ -45,9 +45,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
 
     for section in [
         "What did the run show?",
-        "Same-path signal",
-        "Reach and unique paths",
-        "Distance and direction",
+        "Observed reach",
         "Run quality",
         "Audit appendix",
         "Session context",
@@ -81,14 +79,20 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     assert!(first.contains("<nav class=\"question-nav\" aria-label=\"Report questions\">"));
     for anchor in [
         "what-run-show",
-        "same-path-signal",
         "reach-unique-paths",
-        "distance-direction",
         "run-quality",
         "audit-appendix",
     ] {
         assert!(first.contains(&format!("href=\"#{anchor}\"")));
         assert!(first.contains(&format!("id=\"{anchor}\"")));
+    }
+    for unavailable_anchor in [
+        "same-path-signal",
+        "reporter-activity",
+        "distance-direction",
+    ] {
+        assert!(!first.contains(&format!("href=\"#{unavailable_anchor}\"")));
+        assert!(!first.contains(&format!("id=\"{unavailable_anchor}\"")));
     }
     assert!(first.contains("<details class=\"audit-disclosure\">"));
     assert!(first.contains("details:not([open])>:not(summary){display:none!important}"));
@@ -178,8 +182,8 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
     for shared_fact in [
         "Signed values:",
         "Supported by this run",
-        "Same-path signal",
-        "Reach and unique paths",
+        "Shared-path signal",
+        "Observed reach",
         "Run quality and answerability",
     ] {
         assert!(full.contains(shared_fact), "full output lost {shared_fact}");
@@ -862,12 +866,22 @@ fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_compact_
         ComparisonAvailability::NoMatchedPaths
     );
     assert!(report.evidence.overall.observation_counts.usable > 0);
+    assert_ne!(
+        report.overview.answerability.same_path_signal,
+        SamePathSignalAnswerability::Available
+    );
 
     let full = render_standalone_html(&report).unwrap();
     let compact = render_compact_summary_html(&report).unwrap();
     let full_answer = plain_language_answer_from(&full);
     let compact_answer = plain_language_answer_from(&compact);
     assert_eq!(full_answer, compact_answer);
+    for html in [&full, &compact] {
+        assert!(html.contains("Answered by this run: Observed reach"));
+        assert!(html.contains("No same-path SNR comparison"));
+        assert!(!html.contains("id=\"same-path-signal\""));
+        assert!(!html.contains("href=\"#same-path-signal\""));
+    }
     assert!(full_answer.starts_with("Both Vertical and Inverted V produced usable path evidence."));
     for expected in [
         "On TX path · 40 m · WSPR · Public report · WSPRnet: 1 Vertical-only, 0 shared, and 1 Inverted V-only unique paths.",
@@ -1041,6 +1055,7 @@ fn keeps_answerability_headlines_short_and_all_diagnostics_disclosed() {
 fn renders_answer_first_order_unavailable_states_and_visible_limitations() {
     let mut report = paired_report(true);
     report.overview.comparison_availability = ComparisonAvailability::NotApplicable;
+    report.overview.answerability = Default::default();
     report.overview.scope.delta_orientation = None;
     report.overview.strata.clear();
     report.overview.limitations = vec![ReportOverviewLimitation::ComparisonNotApplicable];
@@ -1052,15 +1067,13 @@ fn renders_answer_first_order_unavailable_states_and_visible_limitations() {
     });
 
     let html = render_standalone_html(&report).unwrap();
-    let overview = html.find("id=\"what-run-show\"").unwrap();
-    let same_path = html.find("id=\"same-path-signal\"").unwrap();
     let omission = html
         .find("full paired observation detail is omitted")
         .unwrap();
     let run_quality = html.find("id=\"run-quality\"").unwrap();
     let first_details = html.find("<details").unwrap();
 
-    assert!(overview < same_path);
+    assert!(!html.contains("id=\"same-path-signal\""));
     assert!(run_quality < omission);
     assert!(html.find("2 recorded acquisition gaps").unwrap() < first_details);
     assert!(html.contains("Delta orientation:</strong> unavailable"));
@@ -1316,7 +1329,8 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     assert!(!html.contains("https://"));
 
     let empty = render_standalone_html(&canonical_report()).unwrap();
-    assert!(empty.contains("No matched pairs are available for location views."));
+    assert!(!empty.contains("id=\"distance-direction\""));
+    assert!(empty.contains("Observed distance and direction profile</dt><dd>No located paths"));
 }
 
 #[test]

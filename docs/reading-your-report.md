@@ -31,10 +31,12 @@ The **How to read this report** panel states five rules that apply everywhere:
 - Alternating antennas reduces time and propagation effects but cannot remove
   them.
 
-Read the plain-language answer under **What did the run show?** next. It is a
-summary of the recorded [comparison availability](glossary.md#comparison-availability),
-not an extra statistical conclusion. It may also suggest an experiment-quality
-next step, such as completing more repetitions or concentrating on one band.
+Read the question-family headline and plain-language answer under **What did
+the run show?** next. The headline names the questions with usable evidence;
+the adjacent disclosure records a typed availability or limitation for every
+question family. These are not extra statistical conclusions. The answer may
+also suggest an experiment-quality next step, such as completing more
+repetitions or concentrating on one band.
 
 The facts immediately below identify the [session](glossary.md#session),
 station, goal,
@@ -43,9 +45,32 @@ and recorded session state. Check these before interpreting any number. A
 correct calculation for the wrong setup is still the wrong answer to your
 question.
 
-### The Five Availability States
+### Availability Is Per Question
 
-The report uses one of five comparison states:
+One run can answer some questions and not others. The report therefore keeps
+five conditional question families separate:
+
+- **Shared-path signal** uses finite-SNR reports for the same remote path in
+  both cycles of an eligible block.
+- **Detection among receivers active in both cycles** uses the common,
+  band-qualified active-receiver population as its denominator.
+- **Observed reach** counts unique usable paths that appeared for each antenna.
+- **Observed distance and direction profile** uses located observed paths and
+  does not claim a radiation pattern or unobserved coverage.
+- **Repeatability across blocks** asks whether eligible opportunities repeat;
+  it does not turn repetition into a confidence or significance claim.
+
+An unavailable family is summarized once in the headline disclosure instead
+of receiving a full empty primary panel. Full and compact reports consume the
+same typed availability facts, and primary navigation contains only question
+families with usable evidence. Shared-path signal remains the first comparison
+result whenever it is available.
+
+### Legacy Shared-Path Comparison States
+
+The original [comparison availability](glossary.md#comparison-availability)
+field remains the compatibility view for shared-path finite-SNR analysis. It
+uses one of five states:
 
 - **Not applicable** means this is a single-antenna profiling session. There is
   no A/B comparison to compute.
@@ -241,10 +266,11 @@ difference occurred.
 
 ## Run Quality, Timeline, And Exclusions
 
-**Run quality and answerability** restates availability for each comparison
-group with matched-pair and block counts. It is not a score for the operator or
-an antenna-quality grade. Open the per-group diagnostics to inspect antenna
-order, unmatched paths, missing SNR, exclusions, duplicates, and conflicts.
+**Run quality and answerability** restates per-question availability and the
+legacy shared-path state alongside matched-pair and block counts. It is not a
+score for the operator or an antenna-quality grade. Open the per-group
+diagnostics to inspect antenna order, unmatched paths, missing SNR, exclusions,
+duplicates, and conflicts.
 
 **Planned versus actual** shows what the schedule requested beside what the
 recorded run supports. Each cycle or older-format

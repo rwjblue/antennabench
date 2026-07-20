@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
 use antennabench_analysis::EvidenceQuality;
-use antennabench_report::{build_report, ReportNotice, UsableObservationKindCounts};
+use antennabench_report::{
+    build_report, ReportNotice, ReportQuestionAnswerability, SessionReport,
+    UsableObservationKindCounts,
+};
 use antennabench_storage::BundleStore;
 
 #[test]
@@ -46,6 +49,13 @@ fn reports_the_minimal_whole_station_fixture() {
         "lifecycle": {
           "checkpoint_revision": null,
           "state": "not_recorded"
+        },
+        "answerability": {
+          "same_path_signal": "no_eligible_blocks",
+          "paired_detectability": "no_eligible_blocks",
+          "observed_reach": "no_usable_paths",
+          "geographic_profile": "no_located_paths",
+          "repeatability": "insufficient_repetition"
         },
         "comparison_availability": "no_eligible_blocks",
         "strata": [
@@ -1153,6 +1163,24 @@ fn reports_the_minimal_whole_station_fixture() {
 }
 
 #[test]
+fn older_serialized_reports_default_missing_question_answerability() {
+    let report =
+        build_report(&fixture_bundle("minimal-whole-station.session.wsprabundle")).unwrap();
+    let mut value = serde_json::to_value(report).unwrap();
+    value
+        .pointer_mut("/overview")
+        .and_then(serde_json::Value::as_object_mut)
+        .unwrap()
+        .remove("answerability");
+
+    let restored: SessionReport = serde_json::from_value(value).unwrap();
+    assert_eq!(
+        restored.overview.answerability,
+        ReportQuestionAnswerability::default()
+    );
+}
+
+#[test]
 fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
     let bundle = fixture_bundle("wsjtx-import-hardening.session.wsprabundle");
     assert_eq!(bundle.observations.len(), 3);
@@ -1210,6 +1238,13 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
         "lifecycle": {
           "checkpoint_revision": null,
           "state": "not_recorded"
+        },
+        "answerability": {
+          "same_path_signal": "no_matched_paths",
+          "paired_detectability": "activity_coverage_unknown",
+          "observed_reach": "no_usable_paths",
+          "geographic_profile": "no_located_paths",
+          "repeatability": "insufficient_repetition"
         },
         "comparison_availability": "no_matched_paths",
         "strata": [
@@ -2264,6 +2299,13 @@ fn reports_the_analysis_rich_whole_station_fixture() {
         "lifecycle": {
           "checkpoint_revision": null,
           "state": "not_recorded"
+        },
+        "answerability": {
+          "same_path_signal": "no_matched_paths",
+          "paired_detectability": "activity_coverage_unknown",
+          "observed_reach": "available",
+          "geographic_profile": "no_located_paths",
+          "repeatability": "available"
         },
         "comparison_availability": "no_matched_paths",
         "strata": [

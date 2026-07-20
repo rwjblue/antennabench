@@ -4,7 +4,7 @@ pub(in super::super) fn render_distance_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Distance and azimuth</h2><p class=\"notice\">These views describe only paired paths observed in this session. They are not a radiation pattern, propagation model, or causal conclusion about antenna performance in observed or unobserved directions and distances.</p>");
+    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Observed distance and direction profile</h2><p class=\"notice\">Evidence basis: located paired paths observed in this session. This is not a radiation pattern, propagation model, or causal conclusion about antenna performance in observed or unobserved directions and distances.</p>");
     render_observed_path_context(out, report);
     out.push_str("<details class=\"audit-disclosure\"><summary>Review exact paired-row distance and azimuth detail</summary><div class=\"disclosure-body\">");
     render_location_views(out, report);
