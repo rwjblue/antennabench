@@ -1062,6 +1062,47 @@ test("report refresh watchdog leaves prior presentation visible with a retryable
   assert.deepEqual(cleared, ["report-watchdog"]);
 });
 
+test("default report watchdog timers retain the Window receiver", async () => {
+  const nativeSetTimeout = globalThis.setTimeout;
+  const nativeClearTimeout = globalThis.clearTimeout;
+  const watchdog = Symbol("report-watchdog");
+  let cleared;
+  globalThis.setTimeout = function (_callback, milliseconds) {
+    assert.equal(this, globalThis);
+    assert.equal(milliseconds, 60_000);
+    return watchdog;
+  };
+  globalThis.clearTimeout = function (handle) {
+    assert.equal(this, globalThis);
+    cleared = handle;
+  };
+
+  try {
+    const prior = openSessionSucceeded(initialState("report"), session({
+      presentationId: 3,
+      revision: 3,
+    }));
+    const run = harness({
+      refresh_active_session_report: {
+        presentationId: 4,
+        reportHtml: "<p>fresh</p>",
+        revision: 4,
+        lifecycle: "running",
+        completeness: "full_detail",
+      },
+    }, { state: prior });
+
+    await run.controller.refreshReport();
+
+    assert.equal(run.controller.state.reportStatus, "ready");
+    assert.equal(run.controller.state.session.reportHtml, "<p>fresh</p>");
+    assert.equal(cleared, watchdog);
+  } finally {
+    globalThis.setTimeout = nativeSetTimeout;
+    globalThis.clearTimeout = nativeClearTimeout;
+  }
+});
+
 test("focus, visibility, periodic, countdown, and disposal use injected lifecycle ports", async () => {
   const intervals = [];
   const cleared = [];

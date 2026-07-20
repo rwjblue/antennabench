@@ -133,8 +133,9 @@ export function createDesktopController(options = {}) {
     monotonicNow: options.monotonicNow ?? (() => Date.now()),
     setInterval: options.setInterval ?? (() => null),
     clearInterval: options.clearInterval ?? (() => {}),
-    setTimeout: options.setTimeout ?? globalThis.setTimeout,
-    clearTimeout: options.clearTimeout ?? globalThis.clearTimeout,
+    setTimeout: options.setTimeout
+      ?? ((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds)),
+    clearTimeout: options.clearTimeout ?? ((handle) => globalThis.clearTimeout(handle)),
     onFocus: options.onFocus ?? (() => () => {}),
     onVisibilityChange: options.onVisibilityChange ?? (() => () => {}),
     onHashChange: options.onHashChange ?? (() => () => {}),
