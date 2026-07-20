@@ -566,6 +566,68 @@ test("conductor mutations serialize follow-up adapter, acquisition, and report r
   assert.match(loadFailed.controller.state.conductorError.detail, /cannot recover/);
 });
 
+test("skip-cycle submission uses presented authority once and preserves typed failures", async () => {
+  const state = openSessionSucceeded(initialState("run"), session());
+  state.activeWorkflow = "run";
+  state.conductorStatus = "ready";
+  state.conductor = conductor({
+    nextIntent: {
+      intentId: "intent-7",
+      sequenceNumber: 7,
+      antennaLabel: "Dipole",
+      direction: "receive",
+      band: "20m",
+    },
+  });
+  let resolveMutation;
+  const run = harness({
+    mutate_active_session_conductor: () => new Promise((resolve) => { resolveMutation = resolve; }),
+    active_session_wsjtx_status: { phase: "stopped" },
+    refresh_active_session_report: {
+      presentationId: 5,
+      reportHtml: "<p>revision 4</p>",
+      revision: 4,
+      lifecycle: "ended",
+      completeness: "full_detail",
+    },
+  }, { state });
+
+  run.controller.requestSkipCycle();
+  const first = run.controller.submitSkipCycle("storm nearby");
+  const duplicate = run.controller.submitSkipCycle("duplicate");
+  assert.equal(run.controller.state.skipCycleStatus, "submitting");
+  assert.equal(run.calls.filter(([command]) => command === "mutate_active_session_conductor").length, 1);
+  assert.deepEqual(run.calls[0][1].request, {
+    actionToken: "action-1",
+    expectedRevision: 3,
+    action: {
+      kind: "skip_wspr_cycle",
+      intentId: "intent-7",
+      reason: "storm nearby",
+    },
+  });
+  resolveMutation(conductor({ revision: 4, lifecycle: "ended", nextIntent: null }));
+  await Promise.all([first, duplicate]);
+  assert.equal(run.controller.state.skipCycleStatus, "succeeded");
+  assert.equal(run.controller.state.skipCycleNotice, "Cycle skipped.");
+
+  const failed = harness({
+    mutate_active_session_conductor: () => {
+      throw {
+        kind: "busy",
+        message: "Another foreground action is committing.",
+        detail: "Refresh and try again.",
+      };
+    },
+  }, { state });
+  failed.controller.requestSkipCycle();
+  await failed.controller.submitSkipCycle("");
+  assert.equal(failed.controller.state.skipCycleDialog, null);
+  assert.equal(failed.controller.state.skipCycleStatus, "error");
+  assert.equal(failed.controller.state.skipCycleError.kind, "busy");
+  assert.match(failed.controller.state.skipCycleError.detail, /Refresh/);
+});
+
 test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () => {
   const state = openSessionSucceeded(initialState("run"), session());
   state.activeWorkflow = "run";

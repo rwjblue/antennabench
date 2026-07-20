@@ -150,6 +150,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   let managedOpenAttempts = 0;
   let reportRefreshes = 0;
   let importedCatalog = false;
+  let resolveSkipCycle;
   let controllerCatalog = {
     inputStyle: "one_line",
     profiles: [{
@@ -314,7 +315,9 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
         nextDirection: "transmit",
       },
     }),
-    mutate_active_session_conductor: conductorView({ revision: 2 }),
+    mutate_active_session_conductor: (payload) => payload.request.action.kind === "skip_wspr_cycle"
+      ? new Promise((resolve) => { resolveSkipCycle = resolve; })
+      : conductorView({ revision: 2 }),
     active_session_antenna_controller: {
       policy: "manual",
       attached: false,
@@ -605,6 +608,66 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       assert.ok(calls.some(([command]) => command === "mutate_active_session_conductor"));
       assert.equal(elements.wsjtxReadiness.hidden, true);
     });
+
+    const skip = elements.lifecycleButtons.find(
+      (button) => button.dataset.conductorAction === "skip_wspr_cycle",
+    );
+    const skipCalls = () => calls.filter(([command, payload]) =>
+      command === "mutate_active_session_conductor"
+      && payload.request.action.kind === "skip_wspr_cycle");
+    skip.click();
+    await vi.waitFor(() => assert.equal(elements.skipCycleDialog.open, true));
+    assert.equal(document.activeElement, elements.skipCycleReason);
+    assert.match(elements.skipCycleIdentity.textContent, /Cycle 1 · DXC · Transmit · 20m/);
+    assert.match(elements.skipCycleDescription.textContent, /this one planned cycle/);
+    assert.match(elements.skipCycleDescription.textContent, /End session/);
+    elements.skipCycleConfirm.focus();
+    elements.skipCycleDialog.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+    }));
+    assert.equal(document.activeElement, elements.skipCycleReason, "skip modal traps focus");
+    elements.skipCycleDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    await vi.waitFor(() => {
+      assert.equal(elements.skipCycleDialog.open, false);
+      assert.equal(document.activeElement, skip, "Escape restores skip-action focus");
+    });
+    assert.equal(skipCalls().length, 0, "cancel records nothing");
+
+    skip.click();
+    await vi.waitFor(() => assert.equal(elements.skipCycleDialog.open, true));
+    elements.skipCycleReason.value = "storm nearby";
+    elements.skipCycleConfirm.click();
+    elements.skipCycleConfirm.click();
+    assert.equal(elements.skipCycleConfirm.disabled, true);
+    assert.equal(elements.skipCycleConfirm.textContent, "Skipping…");
+    assert.equal(elements.skipCyclePending.hidden, false);
+    assert.equal(skipCalls().length, 1, "confirmation cannot submit twice");
+    assert.deepEqual(skipCalls()[0][1].request, {
+      actionToken: "token-1",
+      expectedRevision: 2,
+      action: {
+        kind: "skip_wspr_cycle",
+        intentId: "intent-1",
+        reason: "storm nearby",
+      },
+    });
+    resolveSkipCycle(conductorView({
+      revision: 3,
+      actionToken: "token-3",
+      nextIntent: {
+        intentId: "intent-2",
+        sequenceNumber: 2,
+        direction: "receive",
+        antennaLabel: "Attic EFHW",
+        band: "20m",
+      },
+    }));
+    await vi.waitFor(() => {
+      assert.equal(elements.skipCycleDialog.open, false);
+      assert.equal(document.activeElement, skip);
+      assert.match(elements.skipCycleFeedback.textContent, /Cycle skipped/);
+    });
     assert.deepEqual(uncaught, []);
   } finally {
     delete window.__TAURI__;
@@ -615,4 +678,4 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     vi.clearAllTimers();
     vi.useRealTimers();
   }
-});
+}, 15_000);

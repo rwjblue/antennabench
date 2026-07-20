@@ -158,6 +158,11 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .saved-delete-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; }
 .saved-delete-actions button { border: 1px solid #8ab3aa; border-radius: 9px; padding: 9px 12px; color: #245451; background: #fff; font: inherit; font-size: 0.76rem; font-weight: 800; cursor: pointer; }
 .saved-delete-actions .danger-action { border-color: #b6543f; color: #fff; background: #9b432f; }
+.skip-cycle-feedback { max-width: 620px; margin: 10px auto 4px; }
+.skip-cycle-dialog .saved-delete-identity { margin-bottom: 14px; }
+.skip-cycle-reason { display: grid; gap: 7px; color: #315d57; font-size: 0.76rem; font-weight: 800; }
+.skip-cycle-reason textarea { width: 100%; resize: vertical; border: 1px solid #bfcac3; border-radius: 9px; padding: 10px; color: #294440; background: #fff; font: inherit; font-weight: 500; }
+.skip-cycle-pending { margin-top: 12px; color: #75511f; font-size: 0.74rem; font-weight: 750; }
 .saved-row-details p, .saved-row-details li { color: #697873; font-size: 0.72rem; line-height: 1.5; }
 .saved-open-now { align-self: center; color: #1d6d62; font-size: 0.7rem; font-weight: 800; }
 .saved-help { margin-top: 28px; padding: 18px; border-radius: 14px; background: #eef4ef; }

@@ -50,6 +50,7 @@ import {
   beginReportExportCancellation,
   beginReportReplacement,
   beginReportRefresh,
+  beginSkipCycleMutation,
   beginSupportSummaryCopy,
   beginRbnImport,
   beginSetupCreation,
@@ -75,6 +76,7 @@ import {
   managedRevealFailed,
   managedRevealSucceeded,
   cancelManagedDelete,
+  cancelSkipCycle,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
@@ -88,6 +90,7 @@ import {
   reportExportSucceeded,
   reportRefreshFailed,
   reportRefreshSucceeded,
+  requestSkipCycle,
   selectWorkflow,
   setWsjtxReadinessAcknowledged,
   setupCreationCancelled,
@@ -95,6 +98,8 @@ import {
   setupCreationSucceeded,
   setupReviewFailed,
   setupReviewSucceeded,
+  skipCycleMutationFailed,
+  skipCycleMutationSucceeded,
   supportSummaryCopyFailed,
   supportSummaryCopySucceeded,
   wsjtxActionFailed,
@@ -704,6 +709,43 @@ export function createDesktopController(options = {}) {
         commit(conductorLoadSucceeded(state, await invokeMutateSessionConductor(invoke(), request)));
       } catch (error) {
         commit(conductorMutationFailed(state, error));
+      }
+      if (state.conductorStatus === "ready") {
+        await controller.refreshWsjtxStatus();
+        await controller.advanceWsprLive();
+        await controller.refreshReport();
+      }
+      return state;
+    },
+
+    requestSkipCycle() {
+      return commit(requestSkipCycle(state));
+    },
+
+    cancelSkipCycle() {
+      return commit(cancelSkipCycle(state));
+    },
+
+    async submitSkipCycle(reason = "") {
+      const presented = state.skipCycleDialog;
+      if (!presented || state.skipCycleStatus === "submitting") return state;
+      const request = {
+        actionToken: presented.actionToken,
+        expectedRevision: presented.expectedRevision,
+        action: {
+          kind: "skip_wspr_cycle",
+          intentId: presented.intentId,
+          reason,
+        },
+      };
+      commit(beginSkipCycleMutation(state));
+      try {
+        commit(skipCycleMutationSucceeded(
+          state,
+          await invokeMutateSessionConductor(invoke(), request),
+        ));
+      } catch (error) {
+        commit(skipCycleMutationFailed(state, error));
       }
       if (state.conductorStatus === "ready") {
         await controller.refreshWsjtxStatus();

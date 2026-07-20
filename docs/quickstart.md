@@ -88,7 +88,9 @@ switch the radio or antenna for this manual run.
 9. **Record what actually happens.** If you cannot conduct the upcoming cycle,
    select **Skip this cycle** and optionally enter a reason. That records the
    planned cycle as missed and advances to the next one; it does not pretend the
-   cycle occurred. To preserve useful context, select **Add note**, type the
+   cycle occurred, and it does not stop the remaining run. To stop all remaining
+   cycles, open **Run details and session controls** and select **End session**.
+   To preserve useful context, select **Add note**, type the
    text in **Note or reason**, and select **Save entry**. For example, record
    `Rain started; checked both feedline connections.` Both actions stay in the
    bundle's evidence history.

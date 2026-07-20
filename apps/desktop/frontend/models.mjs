@@ -67,8 +67,8 @@ export const CONTEXT_HELP = Object.freeze({
     text: "This card shows the next planned antenna and band. Its exact start time appears only after you switch antennas and press the named ready button.",
   },
   skip_cycle: {
-    title: "Skip cycle",
-    text: "Skip records that this planned cycle was missed and moves to the next antenna. Use it when you cannot conduct the cycle; the record can be corrected later.",
+    title: "Skip one cycle",
+    text: "Skip this cycle records only the named planned cycle as missed and advances to the next intention. To stop the remaining run, use End session under Run details and session controls.",
   },
   notes_corrections: {
     title: "Notes and corrections",

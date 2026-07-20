@@ -489,6 +489,20 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.wsprLiveCompact.dataset.kind, "checking");
   assert.match(e.wsprLiveCompact.textContent, /Checking/);
   assert.equal(e.skipCycleControl.hidden, false);
+  for (const kind of ["busy", "stale_revision", "validation", "persistence"]) {
+    state.skipCycleStatus = "error";
+    state.skipCycleError = {
+      kind,
+      message: `Skip failed: ${kind}`,
+      detail: "Refresh the run and choose the action again.",
+    };
+    renderRun(e, state, document, { monotonicNow: () => 1000 });
+    assert.equal(e.skipCycleFeedback.dataset.kind, "error");
+    assert.match(e.skipCycleFeedbackMessage.textContent, new RegExp(kind));
+    assert.match(e.skipCycleFeedbackDetail.textContent, /Refresh the run/);
+  }
+  state.skipCycleStatus = "idle";
+  state.skipCycleError = null;
 
   const slot = {
     slotId: "slot-1", sequenceNumber: 1, direction: "transmit", band: "20m",

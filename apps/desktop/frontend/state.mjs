@@ -1,4 +1,4 @@
-import { WORKFLOWS, wsjtxReadinessModel } from "./models.mjs";
+import { conductorActionAvailable, WORKFLOWS, wsjtxReadinessModel } from "./models.mjs";
 
 export function initialState(workflow = "saved") {
   return selectWorkflow(
@@ -45,6 +45,12 @@ export function initialState(workflow = "saved") {
       conductorStatus: "idle",
       conductor: null,
       conductorError: null,
+      conductorPendingAction: null,
+      conductorNotice: null,
+      skipCycleDialog: null,
+      skipCycleStatus: "idle",
+      skipCycleError: null,
+      skipCycleNotice: null,
       wsjtxStatus: "idle",
       wsjtx: null,
       wsjtxError: null,
@@ -73,7 +79,16 @@ export function selectWorkflow(state, workflow) {
     return state;
   }
 
-  return { ...state, activeWorkflow: workflow };
+  return {
+    ...state,
+    activeWorkflow: workflow,
+    ...(workflow === "run" ? {} : {
+      skipCycleDialog: null,
+      skipCycleStatus: "idle",
+      skipCycleError: null,
+      skipCycleNotice: null,
+    }),
+  };
 }
 
 export function beginOpenSession(state, source = "external", intent = null, locatorId = null) {
@@ -190,6 +205,10 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     conductorError: null,
     conductorPendingAction: null,
     conductorNotice: null,
+    skipCycleDialog: null,
+    skipCycleStatus: "idle",
+    skipCycleError: null,
+    skipCycleNotice: null,
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
@@ -246,6 +265,12 @@ export function openSessionSucceeded(
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
+    conductorPendingAction: null,
+    conductorNotice: null,
+    skipCycleDialog: null,
+    skipCycleStatus: "idle",
+    skipCycleError: null,
+    skipCycleNotice: null,
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
@@ -576,7 +601,7 @@ export function beginConductorLoad(state) {
 
 export function conductorLoadSucceeded(state, conductor) {
   const completedAction = state.conductorPendingAction;
-  return {
+  return reconcileSkipCycleDialog({
     ...state,
     conductorStatus: "ready",
     conductor,
@@ -586,14 +611,103 @@ export function conductorLoadSucceeded(state, conductor) {
     conductorNotice: completedAction
       ? conductorActionCompletedLabel(completedAction)
       : state.conductorNotice,
-  };
+  }, conductor);
 }
 
 export function conductorPollSucceeded(state, conductor) {
-  return {
+  return reconcileSkipCycleDialog({
     ...state,
     conductor,
     session: reconcileSessionWithConductor(state.session, conductor),
+  }, conductor);
+}
+
+export function requestSkipCycle(state) {
+  const conductor = state.conductor;
+  const intent = conductor?.nextIntent;
+  if (
+    !conductor
+    || !intent
+    || state.skipCycleStatus === "submitting"
+    || !conductorActionAvailable(conductor, "skip_wspr_cycle")
+  ) return state;
+  return {
+    ...state,
+    skipCycleDialog: {
+      actionToken: conductor.actionToken,
+      expectedRevision: conductor.revision,
+      intentId: intent.intentId,
+      sequenceNumber: intent.sequenceNumber,
+      antennaLabel: intent.antennaLabel ?? null,
+      direction: intent.direction ?? null,
+      band: intent.band ?? null,
+    },
+    skipCycleStatus: "confirming",
+    skipCycleError: null,
+    skipCycleNotice: null,
+  };
+}
+
+export function cancelSkipCycle(state) {
+  if (state.skipCycleStatus === "submitting") return state;
+  return {
+    ...state,
+    skipCycleDialog: null,
+    skipCycleStatus: "idle",
+    skipCycleError: null,
+    skipCycleNotice: null,
+  };
+}
+
+export function beginSkipCycleMutation(state) {
+  if (!state.skipCycleDialog || state.skipCycleStatus === "submitting") return state;
+  return {
+    ...beginConductorMutation(state, "skip_wspr_cycle"),
+    skipCycleStatus: "submitting",
+    skipCycleError: null,
+    skipCycleNotice: null,
+  };
+}
+
+export function skipCycleMutationSucceeded(state, conductor) {
+  return {
+    ...conductorLoadSucceeded({ ...state, skipCycleDialog: null }, conductor),
+    skipCycleDialog: null,
+    skipCycleStatus: "succeeded",
+    skipCycleError: null,
+    skipCycleNotice: "Cycle skipped.",
+  };
+}
+
+export function skipCycleMutationFailed(state, error) {
+  return {
+    ...conductorMutationFailed(state, error),
+    skipCycleDialog: null,
+    skipCycleStatus: "error",
+    skipCycleError: normalizeOpenError(error),
+    skipCycleNotice: null,
+  };
+}
+
+function reconcileSkipCycleDialog(state, conductor) {
+  const presented = state.skipCycleDialog;
+  if (!presented || state.skipCycleStatus === "submitting") return state;
+  const current = conductor?.nextIntent;
+  const unchanged = conductor?.lifecycle === "running"
+    && conductor.revision === presented.expectedRevision
+    && conductor.actionToken === presented.actionToken
+    && current?.intentId === presented.intentId;
+  if (unchanged) return state;
+  return {
+    ...state,
+    skipCycleDialog: null,
+    skipCycleStatus: "error",
+    skipCycleError: {
+      kind: "stale_revision",
+      message: "The cycle changed before it was skipped.",
+      detail: "Review the current run state, then choose Skip this cycle again if it is still appropriate.",
+    },
+    skipCycleNotice: null,
   };
 }
 
@@ -621,6 +735,10 @@ export function beginConductorMutation(state, action = "operator_action") {
     conductorError: null,
     conductorPendingAction: action,
     conductorNotice: null,
+    ...(action === "skip_wspr_cycle" ? {} : {
+      skipCycleError: null,
+      skipCycleNotice: null,
+    }),
   };
 }
 

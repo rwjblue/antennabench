@@ -82,6 +82,7 @@ import {
   beginReportReplacement,
   beginReportRefresh,
   beginRbnImport,
+  beginSkipCycleMutation,
   beginSetupCreation,
   beginSetupReview,
   beginWsjtxAction,
@@ -90,6 +91,7 @@ import {
   conductorLoadSucceeded,
   conductorMutationFailed,
   conductorPollSucceeded,
+  cancelSkipCycle,
   editSessionSetup,
   initialState,
   managedCatalogLoadFailed,
@@ -109,6 +111,7 @@ import {
   openSessionFailed,
   openSessionSucceeded,
   requestManagedDelete,
+  requestSkipCycle,
   reportExportCancelled,
   reportExportConfirmationRequired,
   reportExportSucceeded,
@@ -124,6 +127,8 @@ import {
   setupCreationSucceeded,
   setupReviewFailed,
   setupReviewSucceeded,
+  skipCycleMutationFailed,
+  skipCycleMutationSucceeded,
   wsjtxActionFailed,
   wsjtxActionSucceeded,
   wsprLiveAcquisitionFailed,
@@ -240,6 +245,12 @@ test("the shell starts in saved sessions", () => {
     conductorStatus: "idle",
     conductor: null,
     conductorError: null,
+    conductorPendingAction: null,
+    conductorNotice: null,
+    skipCycleDialog: null,
+    skipCycleStatus: "idle",
+    skipCycleError: null,
+    skipCycleNotice: null,
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
@@ -798,6 +809,64 @@ test("the conductor retains its coherent view through refresh, mutation, and typ
   assert.equal(failed.conductorStatus, "error");
   assert.equal(failed.conductor, saved.conductor);
   assert.equal(failed.conductorError.kind, "stale_revision");
+});
+
+test("skip-cycle confirmation preserves exact authority and reconciles stale run state", () => {
+  const conductor = {
+    sessionId: "session-1",
+    revision: 4,
+    lifecycle: "running",
+    phase: "between_slots",
+    actionToken: "mutation-4",
+    nextIntent: {
+      intentId: "intent-2",
+      sequenceNumber: 2,
+      antennaLabel: "Dipole",
+      direction: "receive",
+      band: "20m",
+    },
+  };
+  const ready = conductorLoadSucceeded(initialState("run"), conductor);
+  const confirming = requestSkipCycle(ready);
+  assert.deepEqual(confirming.skipCycleDialog, {
+    actionToken: "mutation-4",
+    expectedRevision: 4,
+    intentId: "intent-2",
+    sequenceNumber: 2,
+    antennaLabel: "Dipole",
+    direction: "receive",
+    band: "20m",
+  });
+  assert.equal(confirming.skipCycleStatus, "confirming");
+  assert.equal(cancelSkipCycle(confirming).skipCycleDialog, null);
+
+  const submitting = beginSkipCycleMutation(confirming);
+  assert.equal(submitting.conductorStatus, "mutating");
+  assert.equal(submitting.skipCycleStatus, "submitting");
+  const succeeded = skipCycleMutationSucceeded(submitting, {
+    ...conductor,
+    revision: 5,
+    actionToken: "mutation-5",
+    nextIntent: { ...conductor.nextIntent, intentId: "intent-3", sequenceNumber: 3 },
+  });
+  assert.equal(succeeded.skipCycleDialog, null);
+  assert.equal(succeeded.skipCycleNotice, "Cycle skipped.");
+
+  const failed = skipCycleMutationFailed(submitting, {
+    kind: "busy",
+    message: "Another foreground action is committing.",
+    detail: "Try the action again after refreshing.",
+  });
+  assert.equal(failed.skipCycleDialog, null);
+  assert.equal(failed.skipCycleError.kind, "busy");
+
+  const unchanged = conductorPollSucceeded(confirming, { ...conductor, now: "later" });
+  assert.equal(unchanged.skipCycleDialog.intentId, "intent-2");
+  const stale = conductorPollSucceeded(confirming, { ...conductor, revision: 5 });
+  assert.equal(stale.skipCycleDialog, null);
+  assert.equal(stale.skipCycleError.kind, "stale_revision");
+  assert.match(stale.skipCycleError.detail, /choose Skip this cycle again/);
+  assert.equal(selectWorkflow(confirming, "saved").skipCycleDialog, null);
 });
 
 test("WSJT-X readiness acknowledgement is local, session-specific, and revision-scoped", () => {

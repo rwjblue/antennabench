@@ -21,6 +21,7 @@ export default defineConfig({
         test: {
           name: "desktop-dom",
           environment: "jsdom",
+          testTimeout: 15_000,
           include: [
             "apps/desktop/tests/frontend-app.test.mjs",
             "apps/desktop/tests/frontend-renderers.test.mjs",

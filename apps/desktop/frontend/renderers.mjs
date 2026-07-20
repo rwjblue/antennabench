@@ -616,12 +616,14 @@ export function renderRun(elements, state, root, options = {}) {
     conductorFeedbackDetail,
     conductorFeedbackModel(state),
   );
+  renderSkipCycleFlow(elements, state);
   renderReopenedHistoricalDiagnostic(
     { runHistoricalDiagnostic, runHistoricalTitle, runHistoricalSummary, runHistoricalMeta },
     state,
   );
 
   if (!hasConductor) {
+    skipCycleControl.hidden = true;
     wsjtxReadiness.hidden = true;
     lifecycleButtons.forEach((button) => { button.disabled = true; });
     conductorDiagnostics.replaceChildren();
@@ -738,6 +740,7 @@ export function renderRun(elements, state, root, options = {}) {
     const available = conductorActionAvailable(view, action);
     button.hidden = !available;
     button.disabled = conductorBusy || !available
+      || (action === "skip_wspr_cycle" && state.skipCycleDialog !== null)
       || (["start", "resume"].includes(action) && readiness.visible && !readiness.acknowledged)
       || (action === "start" && view.wsjtxRequired && !wsjtxRunning);
   });
@@ -799,6 +802,45 @@ export function renderRun(elements, state, root, options = {}) {
   wsprLiveEndWithout.hidden = !acquisition.endWithout;
   wsprLiveEndWithout.disabled = conductorBusy || state.wsprLiveAcquisitionStatus === "fetching";
   return { anchor, key: anchor?.key ?? null };
+}
+
+function renderSkipCycleFlow(elements, state) {
+  const {
+    skipCycleFeedback, skipCycleFeedbackMessage, skipCycleFeedbackDetail,
+    skipCycleDialog, skipCycleTitle, skipCycleDescription, skipCycleIdentity,
+    skipCycleReason, skipCyclePending, skipCycleCancel, skipCycleConfirm,
+  } = elements;
+  renderFeedback(
+    skipCycleFeedback,
+    skipCycleFeedbackMessage,
+    skipCycleFeedbackDetail,
+    skipCycleFeedbackModel(state),
+  );
+  const presented = state.skipCycleDialog;
+  if (!presented) {
+    if (skipCycleDialog.open) skipCycleDialog.close?.();
+    skipCycleDialog.removeAttribute("open");
+    return;
+  }
+  skipCycleTitle.textContent = `Skip cycle ${presented.sequenceNumber}?`;
+  skipCycleDescription.textContent = "This records this one planned cycle as missed and advances to the next intention. To stop the remaining run, cancel and use End session under Run details and session controls.";
+  skipCycleIdentity.textContent = [
+    `Cycle ${presented.sequenceNumber}`,
+    presented.antennaLabel,
+    presented.direction ? humanizeIdentifier(presented.direction) : null,
+    presented.band,
+  ].filter(Boolean).join(" · ");
+  const pending = state.skipCycleStatus === "submitting";
+  skipCycleReason.disabled = pending;
+  skipCyclePending.hidden = !pending;
+  skipCycleCancel.disabled = pending;
+  skipCycleConfirm.disabled = pending;
+  skipCycleConfirm.textContent = pending ? "Skipping…" : "Skip cycle";
+  if (!skipCycleDialog.open) {
+    skipCycleReason.value = "";
+    if (typeof skipCycleDialog.showModal === "function") skipCycleDialog.showModal();
+    else skipCycleDialog.setAttribute("open", "");
+  }
 }
 
 export function renderEvidenceImports(elements, state) {
@@ -1100,6 +1142,29 @@ function conductorFeedbackModel(state) {
   if (state.conductor?.phase === "interrupted") return { kind: "ready", message: "Session paused.", detail: "Resume when the station is ready, or end with the evidence already recorded." };
   if (state.conductor?.phase === "finalizing") return { kind: "loading", message: "Waiting for the final public reports…", detail: "Retry collection, or explicitly end without the final public spots." };
   if (["complete", "ended", "abandoned"].includes(state.conductor?.phase)) return { kind: "ready", message: "Session is terminal.", detail: "Existing evidence remains exportable and reportable." };
+  return null;
+}
+
+function skipCycleFeedbackModel(state) {
+  if (state.skipCycleStatus === "submitting") return {
+    kind: "loading",
+    message: state.skipCycleDialog
+      ? `Skipping cycle ${state.skipCycleDialog.sequenceNumber}…`
+      : "Skipping cycle…",
+    detail: "Recording one missed planned cycle before the conductor advances.",
+  };
+  if (state.skipCycleError) return {
+    kind: "error",
+    message: state.skipCycleError.message,
+    detail: [humanizeIdentifier(state.skipCycleError.kind), state.skipCycleError.detail]
+      .filter(Boolean)
+      .join(" · "),
+  };
+  if (state.skipCycleNotice) return {
+    kind: "ready",
+    message: state.skipCycleNotice,
+    detail: "The missed cycle is committed and the conductor has advanced to the next intention.",
+  };
   return null;
 }
 

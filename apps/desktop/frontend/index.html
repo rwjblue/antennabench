@@ -392,6 +392,24 @@
               </div>
 
               <div class="inline-help-action" data-skip-cycle-control hidden><button type="button" class="text-action skip-cycle-action" data-conductor-action="skip_wspr_cycle">Skip this cycle</button><button class="context-help" type="button" data-help-trigger="skip_cycle">?</button></div>
+              <div class="open-feedback skip-cycle-feedback" data-skip-cycle-feedback hidden role="status" aria-live="polite">
+                <span class="feedback-mark" aria-hidden="true"></span>
+                <div><strong data-skip-cycle-feedback-message></strong><p data-skip-cycle-feedback-detail></p></div>
+              </div>
+              <dialog class="saved-delete-dialog skip-cycle-dialog" data-skip-cycle-dialog aria-labelledby="skip-cycle-title" aria-describedby="skip-cycle-description">
+                <div class="saved-delete-content">
+                  <p class="eyebrow">Skip one planned cycle</p>
+                  <h2 id="skip-cycle-title" data-skip-cycle-title>Skip this cycle?</h2>
+                  <p id="skip-cycle-description" data-skip-cycle-description>This records this one planned cycle as missed and advances to the next intention. To stop the remaining run, cancel and use End session under Run details and session controls.</p>
+                  <p class="saved-delete-identity" data-skip-cycle-identity></p>
+                  <label class="skip-cycle-reason" for="skip-cycle-reason">Optional reason<textarea id="skip-cycle-reason" rows="3" maxlength="4096" data-skip-cycle-reason></textarea></label>
+                  <p class="skip-cycle-pending" data-skip-cycle-pending role="status" aria-live="polite" hidden>Recording this missed cycle before the run advances…</p>
+                  <div class="saved-delete-actions">
+                    <button type="button" data-skip-cycle-cancel>Cancel</button>
+                    <button type="button" class="danger-action" data-skip-cycle-confirm>Skip cycle</button>
+                  </div>
+                </div>
+              </dialog>
               <div class="action-help-row">
                 <div class="conductor-actions run-task-actions">
                   <button type="button" data-add-run-note>Add note</button>

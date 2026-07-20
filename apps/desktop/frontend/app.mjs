@@ -44,6 +44,7 @@ export function mount(root, browserWindow) {
   let noteShortcutInitialized = false;
   let deleteTrigger = null;
   let reportExportTrigger = null;
+  let skipCycleTrigger = null;
   let synchronizedControllerProfile = null;
   const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
@@ -167,6 +168,10 @@ export function mount(root, browserWindow) {
     conductorRefreshButtons,
     lifecycleButtons,
     wsjtxReadinessAcknowledge,
+    skipCycleDialog,
+    skipCycleReason,
+    skipCycleCancel,
+    skipCycleConfirm,
   } = elements;
   installContextualHelp(root);
 
@@ -201,8 +206,14 @@ export function mount(root, browserWindow) {
     state,
     invoke: browserWindow.__TAURI__?.core?.invoke,
     render(nextState) {
+      const hadSkipDialog = state.skipCycleDialog !== null;
       state = nextState;
       render();
+      if (hadSkipDialog && state.skipCycleDialog === null && skipCycleTrigger) {
+        const trigger = skipCycleTrigger;
+        skipCycleTrigger = null;
+        Promise.resolve().then(() => trigger.isConnected && trigger.focus());
+      }
     },
     navigate(workflow) {
       browserWindow.history.replaceState(null, "", `#${workflow}`);
@@ -235,6 +246,9 @@ export function mount(root, browserWindow) {
       conductorCountdown.textContent = seconds === null ? "" : formatCountdown(seconds);
     },
     onDispose() {
+      if (skipCycleDialog.open) skipCycleDialog.close?.();
+      skipCycleDialog.removeAttribute("open");
+      skipCycleTrigger = null;
       releaseReportFrame(reportFrame, reportDocuments);
     },
   });
@@ -375,15 +389,9 @@ export function mount(root, browserWindow) {
         return;
       }
       if (kind === "skip_wspr_cycle") {
-        const intent = state.conductor?.nextIntent;
-        if (!intent) return;
-        const reason = controller.prompt(`Optional reason for skipping cycle ${intent.sequenceNumber}:`, "");
-        if (reason === null) return;
-        await controller.submitConductorAction({
-          kind,
-          intentId: intent.intentId,
-          reason,
-        });
+        skipCycleTrigger = button;
+        controller.requestSkipCycle();
+        Promise.resolve().then(() => skipCycleReason.focus());
         return;
       }
       if (kind === "start" || kind === "resume") {
@@ -395,6 +403,35 @@ export function mount(root, browserWindow) {
       if (detail === null) return;
       await controller.submitConductorAction({ kind, reason: detail });
     });
+  });
+
+  const cancelSkipCycle = () => {
+    if (state.skipCycleStatus === "submitting") return;
+    controller.cancelSkipCycle();
+  };
+  skipCycleCancel.addEventListener("click", cancelSkipCycle);
+  skipCycleDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    cancelSkipCycle();
+  });
+  skipCycleDialog.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [skipCycleReason, skipCycleCancel, skipCycleConfirm]
+      .filter((control) => !control.disabled);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && rootDocument.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && rootDocument.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  skipCycleConfirm.addEventListener("click", async () => {
+    if (state.skipCycleStatus === "submitting") return;
+    await controller.submitSkipCycle(skipCycleReason.value);
   });
 
   wsjtxReadinessAcknowledge.addEventListener("change", () => {
