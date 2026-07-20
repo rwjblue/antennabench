@@ -191,6 +191,7 @@ pub(in super::super) fn render_snapshot(
             let readiness = match cycle.readiness_basis {
                 Some(crate::ReportWsprReadinessBasis::OperatorConfirmed) => "Operator confirmed",
                 Some(crate::ReportWsprReadinessBasis::CommandVerified) => "Command verified",
+                Some(crate::ReportWsprReadinessBasis::Continued) => "Continued readiness",
                 None => "Not recorded",
             };
             write_html!(out, "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", cycle.sequence_number, band(cycle.band), direction, escape_html(&cycle.planned_antenna), escape_html(cycle.actual_antenna.as_deref().unwrap_or("Not recorded")), readiness, cycle.ready_at.map_or_else(|| "—".into(), timestamp), cycle.starts_at.map_or_else(|| "—".into(), timestamp), cycle.transmission_ends_at.map_or_else(|| "—".into(), timestamp), attribution);

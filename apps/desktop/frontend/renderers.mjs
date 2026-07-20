@@ -738,7 +738,7 @@ export function renderRun(elements, state, root, options = {}) {
         : `${view.nextIntent.antennaLabel} ready`;
     }
     const available = conductorActionAvailable(view, action);
-    button.hidden = !available;
+    button.hidden = !available || (action === "arm_wspr_cycle" && automaticBusy);
     button.disabled = conductorBusy || !available
       || (action === "skip_wspr_cycle" && state.skipCycleDialog !== null)
       || (["start", "resume"].includes(action) && readiness.visible && !readiness.acknowledged)

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Band, BundleV3Contents, ExperimentMode, OperatorEventPayloadV3, RigRecordV3, ScheduleV3,
-    WsprCycleDirection, SCHEMA_VERSION_V5,
+    WsprCycleDirection, WsprCycleWindow, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +41,9 @@ pub enum WsprReadinessBasisV5 {
     CommandVerified {
         switch_record_id: String,
         verification_record_id: String,
+    },
+    Continued {
+        source_ready_event_id: String,
     },
 }
 
@@ -226,6 +229,13 @@ pub fn validate_antenna_control_v5(bundle: &BundleV5Contents) -> Result<(), Stri
         let Some(readiness) = readiness else {
             return Err("schema-v5 armed WSPR cycles require an explicit readiness basis".into());
         };
+        if let WsprReadinessBasisV5::Continued {
+            source_ready_event_id,
+        } = readiness
+        {
+            validate_continued_readiness(bundle, event, source_ready_event_id)?;
+            continue;
+        }
         let WsprReadinessBasisV5::CommandVerified {
             switch_record_id,
             verification_record_id,
@@ -314,6 +324,121 @@ pub fn validate_antenna_control_v5(bundle: &BundleV5Contents) -> Result<(), Stri
         {
             return Err("command-verified mutation order or target context is invalid".into());
         }
+    }
+    Ok(())
+}
+
+fn validate_continued_readiness(
+    bundle: &BundleV5Contents,
+    event: &OperatorEventV5,
+    source_ready_event_id: &str,
+) -> Result<(), String> {
+    if bundle.manifest.schema_version < SCHEMA_VERSION_V6 {
+        return Err("continued readiness requires schema v6".into());
+    }
+    let event_index = bundle
+        .events
+        .iter()
+        .position(|candidate| candidate.event_id == event.event_id)
+        .ok_or_else(|| "continued readiness event is missing from its bundle".to_string())?;
+    let source_index = bundle
+        .events
+        .iter()
+        .position(|candidate| candidate.event_id == source_ready_event_id)
+        .ok_or_else(|| "continued readiness references an unknown source event".to_string())?;
+    if source_index >= event_index {
+        return Err("continued readiness must reference earlier readiness".into());
+    }
+    let source = &bundle.events[source_index];
+    let OperatorEventPayloadV3::WsprCycleArmed {
+        antenna_label: source_antenna,
+        cycle_starts_at: source_starts_at,
+        readiness: source_readiness,
+    } = &source.payload
+    else {
+        return Err("continued readiness source is not an armed WSPR cycle".into());
+    };
+    if matches!(
+        source_readiness,
+        Some(WsprReadinessBasisV5::Continued { .. })
+    ) {
+        return Err("continued readiness must reference original readiness evidence".into());
+    }
+    let OperatorEventPayloadV3::WsprCycleArmed { antenna_label, .. } = &event.payload else {
+        unreachable!("caller filters armed WSPR events")
+    };
+    if source_antenna != antenna_label {
+        return Err("continued readiness cannot change the antenna".into());
+    }
+    let source_intent_id = source
+        .slot_id
+        .as_deref()
+        .ok_or_else(|| "continued readiness source has no intention".to_string())?;
+    let intent_id = event
+        .slot_id
+        .as_deref()
+        .ok_or_else(|| "continued readiness has no intention".to_string())?;
+    let source_intent = bundle
+        .schedule
+        .wspr_cycle_intents
+        .iter()
+        .find(|intent| intent.intent_id == source_intent_id)
+        .ok_or_else(|| "continued readiness source intention is unknown".to_string())?;
+    let intent = bundle
+        .schedule
+        .wspr_cycle_intents
+        .iter()
+        .find(|intent| intent.intent_id == intent_id)
+        .ok_or_else(|| "continued readiness intention is unknown".to_string())?;
+    if source_intent.antenna_label != intent.antenna_label
+        || source_intent.direction != intent.direction
+        || source_intent.band != intent.band
+        || source_intent.signal != intent.signal
+    {
+        return Err(
+            "continued readiness cannot change antenna, direction, band, or signal context".into(),
+        );
+    }
+    let source_window = WsprCycleWindow::from_start(*source_starts_at)
+        .map_err(|_| "continued readiness source has invalid WSPR timing".to_string())?;
+    if source_window.transmission_ends_at > event.occurred_at {
+        return Err("continued readiness cannot be recorded during an active transmission".into());
+    }
+    let latest_prior_window = bundle.events[..event_index]
+        .iter()
+        .rev()
+        .find_map(|candidate| match &candidate.payload {
+            OperatorEventPayloadV3::WsprCycleArmed {
+                cycle_starts_at, ..
+            } => WsprCycleWindow::from_start(*cycle_starts_at).ok(),
+            _ => None,
+        })
+        .ok_or_else(|| "continued readiness has no prior armed cycle".to_string())?;
+    if latest_prior_window.transmission_ends_at > event.occurred_at {
+        return Err("continued readiness cannot be recorded during an active transmission".into());
+    }
+    if bundle.events[source_index + 1..event_index]
+        .iter()
+        .any(|candidate| {
+            matches!(
+                candidate.payload,
+                OperatorEventPayloadV3::AntennaSwitchStarted { .. }
+                    | OperatorEventPayloadV3::SessionInterrupted { .. }
+                    | OperatorEventPayloadV3::InterruptionDetected { .. }
+                    | OperatorEventPayloadV3::SessionEnded { .. }
+                    | OperatorEventPayloadV3::SessionAbandoned { .. }
+            ) || matches!(
+                candidate.payload,
+                OperatorEventPayloadV3::WsprCycleArmed {
+                    readiness: Some(WsprReadinessBasisV5::OperatorConfirmed)
+                        | Some(WsprReadinessBasisV5::CommandVerified { .. })
+                        | None,
+                    ..
+                }
+            )
+        })
+    {
+        return Err("continued readiness source no longer owns an open antenna occupancy".into());
     }
     Ok(())
 }

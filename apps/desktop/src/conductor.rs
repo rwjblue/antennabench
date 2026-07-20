@@ -21,6 +21,7 @@ use crate::wsjtx_session::WsjtxSessionState;
 mod actions;
 mod live_session;
 mod timing;
+pub(crate) mod transition;
 mod view;
 
 #[cfg(test)]
@@ -31,6 +32,7 @@ use live_session::PendingAction;
 use live_session::{mutate_conductor_with_hooks, read_conductor_with_hooks};
 #[cfg(test)]
 use timing::slot_evidence;
+pub(crate) use transition::schedule_transition_coordinator;
 #[cfg(test)]
 use view::build_view_v3;
 use view::requires_wsjtx_receiver;
@@ -99,6 +101,27 @@ struct ConductorIntentView {
     band: String,
     antenna_label: String,
     direction: Option<WsprCycleDirection>,
+    transition: ConductorTransitionView,
+    operator_action_required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ConductorTransitionView {
+    pub(crate) antenna: TransitionDisposition,
+    pub(crate) direction: TransitionDisposition,
+    pub(crate) band: TransitionDisposition,
+    pub(crate) signal: TransitionDisposition,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TransitionDisposition {
+    NoChangeNeeded,
+    AutomaticActionPending,
+    AutomaticallyCompletedAndVerified,
+    OperatorActionRequired,
+    UnknownBlocked,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -256,7 +279,8 @@ pub(crate) fn mutate_active_session_conductor(
             "WSJT-X reception stopped because the durable session is not running.",
         );
     } else {
-        schedule_automatic_coordinator(app);
+        schedule_automatic_coordinator(app.clone());
+        schedule_transition_coordinator(app);
     }
     Ok(view)
 }

@@ -155,6 +155,15 @@ intention context as supporting diagnostics. Review-disabled workflows create
 independent verification committed atomically with that event. Invocation may
 be operator-triggered or Rust-automatic without changing those evidence rules.
 
+Schema v6 also permits `continued`, which references the original durable
+readiness event for the same still-open antenna occupancy. Rust may append it
+only after the prior complete transmission ends and only when antenna,
+direction, band, and controlled-signal context are unchanged. It arms the next
+eligible cycle without claiming an operator click or controller command and
+does not close and reopen occupancy. Any switch-start, interruption, recovery
+interruption, end, abandon, changed setting, unknown source, or premature event
+invalidates continuation deterministically.
+
 Explicit v1-v4 upgrade maps historical armed cycles to
 `operator_confirmed` and invents no controller or invocation facts. There is no
 schema downgrade.

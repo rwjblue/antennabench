@@ -34,6 +34,13 @@ the prior interval at the recorded ready time. New routine operation does not
 record a separate switch-start time or switch duration. Interruption, recovery
 interruption, end, or abandon also closes the current occupancy.
 
+When a later intention requires the exact same antenna, direction, band, and
+controlled-signal context, schema-v6 `continued` readiness references the
+original ready event and preserves that one occupancy instead of synthesizing
+a new operator action. Rust records it only after the prior complete WSPR
+transmission ends. Unknown or interrupted occupancy always requires fresh
+readiness.
+
 Historical schema-v3 `AntennaSwitchStarted` events remain readable and keep
 their original conservative effect of closing occupancy at their recorded
 time. A spot may be assigned to a cycle only when one interval covers the

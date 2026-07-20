@@ -18,6 +18,7 @@ use antennabench_storage::{RecoveryDispositionV2, RecoveryReportV2};
 use chrono::{DateTime, Duration, Utc};
 
 use super::timing::{slot_evidence, slot_evidence_v3, timing_projection, timing_projection_v3};
+use super::transition::transition_plan;
 use super::{
     ConductorDiagnostic, ConductorEventView, ConductorIntentView, ConductorPlannedSignalView,
     ConductorRecoveryView, ConductorSlotView, ConductorView, SignalEvidenceStatus,
@@ -206,6 +207,9 @@ pub(super) fn build_view_v3(
                     Some(antennabench_core::v5::WsprReadinessBasisV5::CommandVerified {
                         ..
                     }) => "Command verification",
+                    Some(antennabench_core::v5::WsprReadinessBasisV5::Continued { .. }) => {
+                        "Continued readiness"
+                    }
                     _ => "Operator confirmation",
                 };
                 (
@@ -410,11 +414,13 @@ pub(super) fn build_view_v3(
                 OperatorEventPayloadV3::AntennaSwitchStarted { .. }
             )
         });
+    let transition = transition_plan(bundle, next_intent);
     let (phase, guidance, seconds_to_transition, current_index, next_index) = timing_projection_v3(
         reduction.lifecycle,
         bundle.session_state.wspr_live_acquisition_enabled,
         &slots,
         next_intent,
+        &transition,
         switching,
         now,
     );
@@ -477,6 +483,8 @@ pub(super) fn build_view_v3(
                 .unwrap_or_else(|| format!("{:?}", intent.band)),
             antenna_label: intent.antenna_label.clone(),
             direction: intent.direction,
+            transition: transition.view.clone(),
+            operator_action_required: transition.operator_action_required,
         }),
         antenna_in_use,
         slots,

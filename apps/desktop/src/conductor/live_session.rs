@@ -19,6 +19,8 @@ pub(crate) struct ConductorSessionState(Mutex<ConductorRuntime>);
 struct ConductorRuntime {
     initialized_source: Option<PathBuf>,
     pending_actions: VecDeque<PendingAction>,
+    continuation_worker_running: bool,
+    continuation_generation: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -37,8 +39,24 @@ impl ConductorRuntime {
     fn mark_initialized(&mut self, source: PathBuf) {
         if self.initialized_source.as_ref() != Some(&source) {
             self.pending_actions.clear();
+            self.continuation_worker_running = false;
+            self.continuation_generation = self.continuation_generation.wrapping_add(1);
         }
         self.initialized_source = Some(source);
+    }
+
+    fn begin_continuation_worker(&mut self, source: &Path) -> Option<u64> {
+        if !self.is_initialized(source) || self.continuation_worker_running {
+            return None;
+        }
+        self.continuation_worker_running = true;
+        Some(self.continuation_generation)
+    }
+
+    fn finish_continuation_worker(&mut self, generation: u64) {
+        if self.continuation_generation == generation {
+            self.continuation_worker_running = false;
+        }
     }
 
     fn register_action(&mut self, action: PendingAction) {
@@ -87,6 +105,25 @@ impl ControllerActionPort for ConductorSessionState {
             ));
         }
         Ok(())
+    }
+}
+
+impl ConductorSessionState {
+    pub(super) fn begin_continuation_worker(
+        &self,
+        source: &Path,
+    ) -> Result<Option<u64>, SessionErrorPayload> {
+        Ok(self
+            .0
+            .lock()
+            .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?
+            .begin_continuation_worker(source))
+    }
+
+    pub(super) fn finish_continuation_worker(&self, generation: u64) {
+        if let Ok(mut runtime) = self.0.lock() {
+            runtime.finish_continuation_worker(generation);
+        }
     }
 }
 

@@ -558,10 +558,15 @@ translation, WSPR timing/readiness/occupancy and signal-state projection, and
 live-session checkpoint orchestration with error mapping. Schema dispatch
 remains explicit at the live-session boundary. Operator-triggered controller
 assistance receives only a token-authorisation port for a displayed session
-revision. The automatic coordinator instead runs entirely in Rust, owns its
-timer and single-flight process generation, re-derives the current intention
-from each checkpoint, and never grants generic checkpoint or process authority
-to the webview.
+revision. The controller and cycle-transition coordinators instead run entirely
+in Rust. They own their timers and single-flight generations and re-derive the
+current intention from each checkpoint. The transition projection compares
+only trusted open occupancy and the latest coherently armed cycle with the next
+complete antenna/direction/band/signal requirement. An exact no-op transition
+persists continued readiness after the protected transmission; a changed
+antenna can enter the existing verified controller path, while other changes
+remain operator work. Neither coordinator grants generic checkpoint or process
+authority to the webview.
 
 The allowlisted `active_session_wsjtx_status`,
 `start_active_session_wsjtx`, and `stop_active_session_wsjtx` commands expose

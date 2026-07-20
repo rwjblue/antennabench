@@ -308,10 +308,14 @@ Rust response anchors a disposable frontend countdown that advances once per
 second, resynchronizes on refresh/mutation/focus, and requests a new conductor
 view at zero; it never timestamps evidence or selects a cycle. Active cycle
 cards use concise local time, adding a short date only for another day. Routine
-operation tells the operator to switch to the named antenna and press that
-antenna's ready button once afterward; it neither requests nor persists a
-switch-start time. Each readiness action closes the prior occupancy at the
-recorded ready time and opens the newly confirmed antenna occupancy. Historical
+operation asks only for unresolved antenna, WSPR direction, band, or controlled-
+signal work. When trusted open occupancy and the latest coherently armed cycle
+prove the complete required state is unchanged, a Rust-owned coordinator waits
+for the prior transmission to end and arms the next eligible cycle without
+another ready prompt or controller command. Its explicit continued-readiness
+evidence keeps the original occupancy open. A fresh operator- or command-
+confirmed readiness closes the prior occupancy and opens the newly confirmed
+occupancy. Historical
 schema-v3 switch-start events remain readable and retain their conservative
 occupancy effect. A Rust-issued action token binds the first submission time and
 idempotent mutation identity;

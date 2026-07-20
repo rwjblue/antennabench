@@ -320,6 +320,7 @@ pub(super) fn wspr_readiness(value: crate::ReportWsprReadinessBasis) -> &'static
     match value {
         crate::ReportWsprReadinessBasis::OperatorConfirmed => "Operator confirmed",
         crate::ReportWsprReadinessBasis::CommandVerified => "Command verified",
+        crate::ReportWsprReadinessBasis::Continued => "Continued readiness",
     }
 }
 

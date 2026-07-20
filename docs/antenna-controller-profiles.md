@@ -102,6 +102,11 @@ For each pending antenna instruction, Rust runs switch and then verification
 back-to-back. Automatic invocation starts only after explicit **Start** or
 **Resume**. Later intentions wait until the complete prior 110.592-second WSPR
 transmission interval has ended, even when the antenna label repeats.
+If the trusted antenna, direction, band, and signal context are all unchanged,
+the Rust transition coordinator carries the existing readiness forward and
+does not invoke either controller command. A changed antenna follows the normal
+switch/verification policy; changed WSJT-X or controlled-signal settings remain
+operator work even after an automatic antenna verification.
 
 In review-required mode:
 

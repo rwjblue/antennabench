@@ -629,6 +629,10 @@ test("readiness is the only normal antenna-change action", () => {
   assert.equal(conductorActionAvailable({ ...between, phase: "awaiting_slot" }, "arm_wspr_cycle"), false);
   assert.equal(conductorActionAvailable({ ...between, lifecycle: "interrupted" }, "arm_wspr_cycle"), false);
   assert.equal(conductorActionAvailable({ ...between, nextIntent: null }, "arm_wspr_cycle"), false);
+  assert.equal(conductorActionAvailable({
+    ...between,
+    nextIntent: { ...between.nextIntent, operatorActionRequired: false },
+  }, "arm_wspr_cycle"), false);
 });
 
 test("saved station details fill only an untouched setup form", () => {

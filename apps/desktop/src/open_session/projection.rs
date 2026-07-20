@@ -275,6 +275,9 @@ pub(super) fn report_snapshot_v3(bundle: &BundleV3Contents) -> ReportSnapshotCon
                         Some(WsprReadinessBasisV5::OperatorConfirmed) | None => {
                             ReportWsprReadinessBasis::OperatorConfirmed
                         }
+                        Some(WsprReadinessBasisV5::Continued { .. }) => {
+                            ReportWsprReadinessBasis::Continued
+                        }
                     })
                 }),
             }

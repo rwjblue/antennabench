@@ -7,7 +7,10 @@ use antennabench_core::{
 use antennabench_wsjtx::WSPR_LIVE_INGESTION_GRACE_SECONDS;
 use chrono::{DateTime, Duration, Utc};
 
-use super::{ConductorPhase, ConductorSlotView, SlotEvidenceStatus};
+use super::{
+    transition::TransitionPlan, ConductorPhase, ConductorSlotView, SlotEvidenceStatus,
+    TransitionDisposition,
+};
 
 pub(super) fn slot_evidence(
     facts: &[&CorrectableOperatorEventPayloadV2],
@@ -222,6 +225,7 @@ pub(super) fn timing_projection_v3(
     wspr_live_acquisition_enabled: bool,
     slots: &[ConductorSlotView],
     next_intent: Option<&antennabench_core::v3::WsprCycleIntentV3>,
+    transition: &TransitionPlan,
     switching: bool,
     now: DateTime<Utc>,
 ) -> (
@@ -328,31 +332,79 @@ pub(super) fn timing_projection_v3(
         .max_by_key(|(_, slot)| slot.ends_at)
         .map(|(index, _)| index);
     if let Some(intent) = next_intent {
-        let prior_slot = completed_index.and_then(|index| slots.get(index));
-        let prior_antenna = prior_slot.and_then(|slot| {
-            slot.actual_antenna
-                .as_deref()
-                .or(Some(&slot.planned_antenna))
-        });
-        let antenna_instruction = if prior_antenna == Some(intent.antenna_label.as_str()) {
-            format!("Keep {} connected", intent.antenna_label)
-        } else {
-            format!("Switch to {}", intent.antenna_label)
+        if transition.can_continue() {
+            return (
+                ConductorPhase::BetweenSlots,
+                format!(
+                    "{} remains ready with unchanged WSPR settings. AntennaBench will continue automatically.",
+                    intent.antenna_label
+                ),
+                transition
+                    .prior_transmission_ends_at()
+                    .map(|deadline| (deadline - now).num_seconds().max(0)),
+                completed_index,
+                None,
+            );
+        }
+
+        let mut instructions = Vec::new();
+        let antenna_instruction = match transition.view.antenna {
+            TransitionDisposition::OperatorActionRequired
+            | TransitionDisposition::UnknownBlocked => {
+                Some(format!("Switch to {}", intent.antenna_label))
+            }
+            TransitionDisposition::AutomaticActionPending => Some(format!(
+                "Waiting for automatic switch to {} and independent verification",
+                intent.antenna_label
+            )),
+            TransitionDisposition::NoChangeNeeded
+            | TransitionDisposition::AutomaticallyCompletedAndVerified => None,
         };
-        let direction_changed = prior_slot.map(|slot| slot.direction) != Some(intent.direction);
-        let (wsjtx_instruction, ready_label) = match intent.direction {
+        let direction_instruction = match intent.direction {
             Some(WsprCycleDirection::Receive) => (
-                direction_changed.then_some("In WSJT-X, turn Enable Tx off and keep Monitor on"),
+                "In WSJT-X, turn Enable Tx off and keep Monitor on",
                 format!("Receive on {}", intent.antenna_label),
             ),
             Some(WsprCycleDirection::Transmit) => (
-                direction_changed.then_some("In WSJT-X, set Tx Pct to 100% and turn Enable Tx on"),
+                "In WSJT-X, set Tx Pct to 100% and turn Enable Tx on",
                 format!("Transmit on {}", intent.antenna_label),
             ),
             None => (
-                Some("Prepare WSJT-X for the next WSPR period"),
+                "Prepare WSJT-X for the next WSPR period",
                 intent.antenna_label.clone(),
             ),
+        };
+        if matches!(
+            transition.view.direction,
+            TransitionDisposition::OperatorActionRequired | TransitionDisposition::UnknownBlocked
+        ) {
+            instructions.push(direction_instruction.0.into());
+        }
+        if transition.view.band == TransitionDisposition::OperatorActionRequired {
+            let band = serde_json::to_value(intent.band)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_string))
+                .unwrap_or_else(|| format!("{:?}", intent.band));
+            instructions.push(format!("Set the station to {band}"));
+        }
+        if transition.view.signal == TransitionDisposition::OperatorActionRequired {
+            instructions.push("Prepare the next controlled-signal allocation".into());
+        }
+        if let Some(instruction) = antenna_instruction {
+            instructions.push(instruction);
+        }
+        if transition.operator_action_required {
+            instructions.push(format!("then click {} ready", direction_instruction.1));
+        }
+        let guidance = if instructions.is_empty() {
+            "Waiting for the Rust-owned transition coordinator.".into()
+        } else {
+            format!(
+                "{}.",
+                instructions
+                    .join(". ")
+                    .replace(". then click", ", then click")
+            )
         };
         return (
             if switching {
@@ -360,12 +412,7 @@ pub(super) fn timing_projection_v3(
             } else {
                 ConductorPhase::BetweenSlots
             },
-            wsjtx_instruction.map_or_else(
-                || format!("{antenna_instruction}, then click {ready_label} ready."),
-                |instruction| {
-                    format!("{instruction}. {antenna_instruction}, then click {ready_label} ready.")
-                },
-            ),
+            guidance,
             None,
             completed_index,
             None,

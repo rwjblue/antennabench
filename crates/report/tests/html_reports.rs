@@ -507,8 +507,15 @@ fn renders_readiness_basis_and_bounded_command_diagnostics() {
         adapter_evidence: ReportAdapterEvidence::default(),
     };
 
+    let mut continued = report.snapshot.wspr_cycles[0].clone();
+    continued.intent_id = "intent-2".into();
+    continued.sequence_number = 2;
+    continued.readiness_basis = Some(ReportWsprReadinessBasis::Continued);
+    report.snapshot.wspr_cycles.push(continued);
+
     let html = render_standalone_html(&report).unwrap();
     assert!(html.contains("Command verified"));
+    assert!(html.contains("Continued readiness"));
     assert!(html.contains("Antenna-control command attempts"));
     assert!(html.contains("Transmit-focused"));
     assert!(html.contains("switch &lt;profile&gt;"));

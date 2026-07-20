@@ -20,7 +20,10 @@ use super::{
     profiles::{read_catalog, resolved_app_data_dir, ControllerProfile},
 };
 use crate::{
-    conductor::live_error_payload,
+    conductor::{
+        live_error_payload,
+        transition::{persist_continued_readiness, ContinuationOutcome},
+    },
     open_session::{
         active_session_source, with_waiting_foreground_operation, ActiveSessionState,
         SessionErrorKind, SessionErrorPayload,
@@ -52,6 +55,11 @@ pub(crate) fn schedule_automatic_coordinator(app: AppHandle) {
             })
         )
     {
+        return;
+    }
+    if crate::conductor::transition::transition_plan(&bundle, next_intent(&bundle)).can_continue() {
+        // The conductor's no-op coordinator owns unchanged-state continuation;
+        // no controller worker is needed for this transition.
         return;
     }
 
@@ -125,7 +133,8 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
         if let Some(summary) = committed_attempt(&bundle, &intent.intent_id) {
             let successful = summary.successful_switch
                 && (manual_review_required || summary.successful_verification == Some(true));
-            if successful && manual_review_required {
+            let transition = crate::conductor::transition::transition_plan(&bundle, Some(&intent));
+            if successful && (manual_review_required || transition.operator_action_required) {
                 finish(
                     &app,
                     generation,
@@ -156,6 +165,41 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
                     return;
                 }
                 thread::sleep(WAIT_POLL);
+            }
+        }
+
+        // An unchanged trusted station state is a durable no-op transition.
+        // Re-evaluate it after the protected transmission interval so an
+        // automatic controller is never invoked merely to select the antenna
+        // that is already continuously occupied.
+        let active_state = app.state::<ActiveSessionState>();
+        match persist_continued_readiness(
+            active_state.inner(),
+            &source,
+            std::sync::Arc::new(SystemLivePersistenceHooks),
+        ) {
+            Ok(ContinuationOutcome::Continued) => continue,
+            Ok(ContinuationOutcome::Waiting(_)) => continue,
+            Ok(ContinuationOutcome::NotApplicable) => {
+                if BundleStore::new(&source)
+                    .read_v3_checkpointed()
+                    .ok()
+                    .and_then(|current| next_intent(&current).map(|value| value.intent_id.clone()))
+                    .as_deref()
+                    != Some(intent.intent_id.as_str())
+                {
+                    continue;
+                }
+            }
+            Err(error) => {
+                block(
+                    &app,
+                    generation,
+                    &intent.intent_id,
+                    "Automatic continued-readiness evidence could not be committed.",
+                    &format!("{}: {}", error.message, error.detail),
+                );
+                return;
             }
         }
 
@@ -341,10 +385,25 @@ fn persist_attempt(
             ));
         }
         let current_intent = next_intent(&current);
+        let run = project_wspr_run_v3(&current.schedule, &current.events);
+        let initial_intent = run.cycles.is_empty()
+            && run.skipped_intent_ids.is_empty()
+            && current_intent.is_some_and(|intent| {
+                current
+                    .schedule
+                    .wspr_cycle_intents
+                    .first()
+                    .is_some_and(|first| first.intent_id == intent.intent_id)
+            });
+        let transition_can_arm = current_intent.is_some_and(|intent| {
+            crate::conductor::transition::transition_plan(&current, Some(intent))
+                .automatic_verification_can_arm()
+        });
         let armed_event = if !manual_review_required
             && switch_success
             && verification_success == Some(true)
             && current_intent.is_some_and(|intent| intent.intent_id == intent_id)
+            && (initial_intent || transition_can_arm)
         {
             let intent = current_intent.expect("matching current intention exists");
             Some(command_verified_event(

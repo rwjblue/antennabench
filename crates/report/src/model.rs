@@ -726,6 +726,7 @@ pub struct ReportWsprCycle {
 pub enum ReportWsprReadinessBasis {
     OperatorConfirmed,
     CommandVerified,
+    Continued,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

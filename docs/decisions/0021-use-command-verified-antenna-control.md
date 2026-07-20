@@ -172,8 +172,7 @@ that they may disclose usernames, paths, network addresses, or credentials.
 AntennaBench does not invent silent redaction that would make the audit record
 look exact when it is not.
 
-This behavior requires schema version 5. An armed WSPR cycle records one of two
-readiness bases:
+Schema version 5 introduced two armed-cycle readiness bases:
 
 - `operator_confirmed`; or
 - `command_verified`, with references to one successful switch rig record and
@@ -187,6 +186,13 @@ and armed event commit in one checkpointed multi-stream mutation. Failed
 attempt records can commit without an armed event. Manual review produces
 `operator_confirmed` even when successful command attempts exist; those rig
 records remain associated through their intention context.
+
+Schema v6 adds `continued`, which references earlier original readiness for an
+unchanged, uninterrupted antenna/direction/band/signal state. Continued
+readiness is neither operator confirmation nor command verification. It runs no
+controller command, preserves one continuous occupancy, and becomes invalid
+after any occupancy-closing event. Automatic control still handles genuinely
+changed antennas; review-required policy still leaves operator review pending.
 
 Explicit upgrade from schema v1 through v4 maps every historical armed cycle
 to `operator_confirmed` and invents no rig invocation. Older versions remain

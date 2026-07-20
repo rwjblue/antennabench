@@ -534,6 +534,39 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.conductorEvents.children[0].children[1].children[0].textContent, "Replace");
 });
 
+test("continued readiness shows progress without a redundant ready action", () => {
+  const e = loadDesktopDocument();
+  const state = initialState("run");
+  state.conductorStatus = "ready";
+  state.conductor = conductorView({
+    guidance: "Dipole remains ready with unchanged WSPR settings. AntennaBench will continue automatically.",
+    nextIntent: {
+      intentId: "intent-2",
+      sequenceNumber: 2,
+      direction: "transmit",
+      antennaLabel: "Dipole",
+      band: "20m",
+      operatorActionRequired: false,
+      transition: {
+        antenna: "no_change_needed",
+        direction: "no_change_needed",
+        band: "no_change_needed",
+        signal: "no_change_needed",
+      },
+    },
+  });
+  state.wsjtx = { phase: "running", receivedDatagrams: 0, committedMutations: 0, ignoredDatagrams: 0 };
+  state.antennaController = { policy: "manual", attached: false, armed: false, targets: {} };
+
+  renderRun(e, state, document, { monotonicNow: () => 1000 });
+
+  const ready = e.lifecycleButtons.find((button) => button.dataset.conductorAction === "arm_wspr_cycle");
+  const skip = e.lifecycleButtons.find((button) => button.dataset.conductorAction === "skip_wspr_cycle");
+  assert.equal(ready.hidden, true);
+  assert.equal(skip.hidden, false);
+  assert.match(e.conductorGuidance.textContent, /continue automatically/);
+});
+
 test("ready and interrupted runs require the persistent WSJT-X acknowledgement", () => {
   const e = loadDesktopDocument();
   const state = initialState("run");

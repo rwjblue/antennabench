@@ -82,8 +82,10 @@ switch the radio or antenna for this manual run.
    named antenna, make the requested WSJT-X change, and then select **Antenna
    ready**.
    AntennaBench waits for the next eligible even-minute WSPR boundary. Keep that
-   antenna connected until the current cycle finishes; then repeat the
-   switch → WSJT-X setting → **Antenna ready** rhythm for the next prompt.
+   antenna connected until the current cycle finishes. For the next intention,
+   AntennaBench asks only for settings that changed. If antenna, TX/RX direction,
+   band, and signal context are all unchanged, it keeps the confirmed state and
+   schedules the next cycle automatically without another **ready** prompt.
 
 9. **Record what actually happens.** If you cannot conduct the upcoming cycle,
    select **Skip this cycle** and optionally enter a reason. That records the

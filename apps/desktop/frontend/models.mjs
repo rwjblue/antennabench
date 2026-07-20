@@ -297,6 +297,7 @@ export function conductorActionAvailable(view, action) {
   if (action === "arm_wspr_cycle") {
     return view.lifecycle === "running"
       && view.nextIntent !== null
+      && view.nextIntent.operatorActionRequired !== false
       && ["between_slots", "switching"].includes(view.phase);
   }
   if (action === "skip_wspr_cycle") {

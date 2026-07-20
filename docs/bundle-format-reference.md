@@ -164,6 +164,15 @@ roles, order, session, intention, antenna, target, direction, band, frequency,
 sequence, callsign, and exit-zero outcomes must agree. Failed attempts may be
 committed alone and never arm a cycle or change antenna occupancy.
 
+Schema v6 adds `continued` readiness for a cycle whose complete required state
+is unchanged. It names the earlier original `operator_confirmed` or
+`command_verified` event whose still-open occupancy is inherited. Validation
+requires ordered intentions, matching antenna/direction/band/signal context,
+an elapsed prior transmission, and no intervening occupancy-closing or fresh
+readiness event. Continued cycles share the source ready time and occupancy;
+they do not invent operator or controller evidence. Older bundles retain their
+original readiness meaning unchanged.
+
 ## Provider-Neutral Evidence
 
 Every v2 provenance contains `provider_id`, `source_id`,

@@ -403,6 +403,11 @@ recorded run supports. Each cycle or older-format
 - usable and excluded observation counts; and
 - notes, interruptions, and corrections.
 
+Readiness is labeled **Operator confirmed**, **Command verified**, or
+**Continued readiness**. Continued readiness means the complete station state
+was unchanged and inherited one still-open confirmed occupancy; it does not
+claim another click or hardware command occurred.
+
 Use this timeline to spot missed cycles, late switches, unknown occupancy, or
 an order pattern that may be confused with changing propagation. Corrections
 remain visible with the original history.

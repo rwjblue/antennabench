@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::v5::WsprReadinessBasisV5;
 use crate::{
     reduce_operator_events_v3, Band, CorrectableOperatorEventPayloadV3, OperatorEventPayloadV3,
     OperatorEventV3, ScheduleV3, SessionLifecycleV2,
@@ -187,23 +188,46 @@ pub fn project_wspr_run_v3(
         let OperatorEventPayloadV3::WsprCycleArmed {
             antenna_label,
             cycle_starts_at,
-            ..
+            readiness,
         } = &event.payload
         else {
             continue;
         };
-        close_occupancy(
-            &mut open_occupancy,
-            event.occurred_at,
-            &event.event_id,
-            &mut projection,
-        );
-        open_occupancy = Some(AntennaOccupancyIntervalV3 {
-            antenna_label: antenna_label.clone(),
-            starts_at: event.occurred_at,
-            ends_at: None,
-            ready_event_id: event.event_id.clone(),
-        });
+        let continued_source = match readiness {
+            Some(WsprReadinessBasisV5::Continued {
+                source_ready_event_id,
+            }) => {
+                let valid = open_occupancy.as_ref().is_some_and(|occupancy| {
+                    occupancy.antenna_label == *antenna_label
+                        && occupancy.ready_event_id == *source_ready_event_id
+                });
+                if !valid {
+                    projection.diagnostics.push(WsprRunDiagnosticV3 {
+                        code: "wspr_run.invalid_continued_readiness",
+                        event_id: event.event_id.clone(),
+                        message: "continued readiness does not reference the still-open antenna occupancy"
+                            .into(),
+                    });
+                    continue;
+                }
+                Some(source_ready_event_id.as_str())
+            }
+            _ => {
+                close_occupancy(
+                    &mut open_occupancy,
+                    event.occurred_at,
+                    &event.event_id,
+                    &mut projection,
+                );
+                open_occupancy = Some(AntennaOccupancyIntervalV3 {
+                    antenna_label: antenna_label.clone(),
+                    starts_at: event.occurred_at,
+                    ends_at: None,
+                    ready_event_id: event.event_id.clone(),
+                });
+                None
+            }
+        };
 
         let Some(intent_id) = event.slot_id.as_deref() else {
             projection.diagnostics.push(WsprRunDiagnosticV3 {
@@ -269,8 +293,15 @@ pub fn project_wspr_run_v3(
             sequence_number: intent.sequence_number,
             band: intent.band,
             antenna_label: antenna_label.clone(),
-            ready_at: event.occurred_at,
-            ready_event_id: event.event_id.clone(),
+            ready_at: continued_source
+                .and_then(|source| {
+                    open_occupancy
+                        .as_ref()
+                        .filter(|occupancy| occupancy.ready_event_id == source)
+                        .map(|occupancy| occupancy.starts_at)
+                })
+                .unwrap_or(event.occurred_at),
+            ready_event_id: continued_source.unwrap_or(&event.event_id).to_string(),
             window,
             occupancy_fully_covers_transmission: false,
         });
@@ -549,5 +580,64 @@ mod tests {
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.code == "wspr_run.intent_reused"));
+    }
+
+    #[test]
+    fn continued_readiness_preserves_one_occupancy_across_repeated_state() {
+        let mut schedule = run_schedule();
+        schedule.wspr_cycle_intents.push(WsprCycleIntentV3 {
+            intent_id: "intent-b-repeat".into(),
+            sequence_number: 3,
+            band: Band::M20,
+            antenna_label: "B".into(),
+            direction: None,
+            signal: None,
+        });
+        let events = vec![
+            event(
+                "ready-a",
+                utc(12, 0, 0, 0),
+                Some("intent-a"),
+                OperatorEventPayloadV3::WsprCycleArmed {
+                    antenna_label: "A".into(),
+                    cycle_starts_at: utc(12, 0, 1, 0),
+                    readiness: Some(WsprReadinessBasisV5::OperatorConfirmed),
+                },
+            ),
+            event(
+                "ready-b",
+                utc(12, 1, 52, 0),
+                Some("intent-b"),
+                OperatorEventPayloadV3::WsprCycleArmed {
+                    antenna_label: "B".into(),
+                    cycle_starts_at: utc(12, 2, 1, 0),
+                    readiness: Some(WsprReadinessBasisV5::OperatorConfirmed),
+                },
+            ),
+            event(
+                "continued-b",
+                utc(12, 3, 52, 0),
+                Some("intent-b-repeat"),
+                OperatorEventPayloadV3::WsprCycleArmed {
+                    antenna_label: "B".into(),
+                    cycle_starts_at: utc(12, 4, 1, 0),
+                    readiness: Some(WsprReadinessBasisV5::Continued {
+                        source_ready_event_id: "ready-b".into(),
+                    }),
+                },
+            ),
+        ];
+
+        let projection = project_wspr_run_v3(&schedule, &events);
+        assert!(projection.diagnostics.is_empty());
+        assert_eq!(projection.occupancies.len(), 2);
+        let b = projection.occupancies.last().unwrap();
+        assert_eq!(b.ready_event_id, "ready-b");
+        assert_eq!(b.starts_at, utc(12, 1, 52, 0));
+        assert!(b.ends_at.is_none());
+        assert_eq!(projection.cycles[1].ready_event_id, "ready-b");
+        assert_eq!(projection.cycles[2].ready_event_id, "ready-b");
+        assert!(projection.cycles[1].occupancy_fully_covers_transmission);
+        assert!(projection.cycles[2].occupancy_fully_covers_transmission);
     }
 }
