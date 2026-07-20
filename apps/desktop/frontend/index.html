@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="AntennaBench offline desktop workflow shell"
+      content="Evidence-first desktop workspace for better antenna comparisons"
     />
     <title>AntennaBench</title>
     <link rel="icon" href="mark.svg" type="image/svg+xml" />
@@ -14,17 +14,6 @@
   </head>
   <body>
     <div class="app-shell">
-      <header class="topbar">
-        <a class="brand" href="#saved" aria-label="AntennaBench home">
-          <img src="mark.svg" alt="" width="40" height="40" />
-          <span>
-            <strong>AntennaBench</strong>
-            <small>WSPR experiment workspace</small>
-          </span>
-        </a>
-        <span class="mode-badge"><span aria-hidden="true"></span> Offline shell</span>
-      </header>
-
       <div class="workspace">
         <aside class="sidebar">
           <nav class="app-navigation" aria-label="Application">
@@ -49,10 +38,10 @@
             </button>
           </nav>
 
-          <div class="local-note">
-            <span class="signal" aria-hidden="true">⌁</span>
-            <div><strong>Local by design</strong><p>No account or network service is required.</p></div>
-          </div>
+          <a class="sidebar-brand" href="#saved" aria-label="AntennaBench home — Saved sessions">
+            <img src="mark.svg" alt="" width="36" height="36" />
+            <span><strong>AntennaBench</strong><small>Better antenna comparisons. Evidence included.</small></span>
+          </a>
         </aside>
 
         <main class="content" tabindex="-1">

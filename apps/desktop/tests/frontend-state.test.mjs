@@ -500,7 +500,8 @@ test("desktop shell gives long workflows one bounded scroll owner", () => {
   const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
   const app = readFileSync(new URL("../frontend/app.mjs", import.meta.url), "utf8");
   assert.match(css, /html, body \{[^}]*height: 100%[^}]*overflow: hidden/);
-  assert.match(css, /\.app-shell \{[^}]*grid-template-rows: 74px minmax\(0, 1fr\)[^}]*height: 100dvh[^}]*overflow: hidden/);
+  assert.match(css, /\.app-shell \{[^}]*height: 100dvh[^}]*overflow: hidden/);
+  assert.doesNotMatch(css, /grid-template-rows: 74px|100(?:d)?vh - 74px/);
   assert.match(css, /\.workspace \{[^}]*height: 100%[^}]*min-height: 0/);
   assert.match(css, /\.content \{[^}]*min-height: 0[^}]*overflow-y: auto[^}]*overscroll-behavior-y: contain/);
   assert.match(
@@ -509,6 +510,22 @@ test("desktop shell gives long workflows one bounded scroll owner", () => {
   );
   assert.match(css, /env\(safe-area-inset-top\)/);
   assert.match(app, /prefers-reduced-motion: reduce/);
+});
+
+test("desktop shell branding lives in an accessible sidebar footer", () => {
+  const html = readFileSync(new URL("../frontend/index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
+  const brand = html.match(/<a class="sidebar-brand"[\s\S]*?<\/a>/u)?.[0];
+
+  assert.match(brand, /href="#saved"/u);
+  assert.match(brand, /aria-label="AntennaBench home — Saved sessions"/u);
+  assert.match(brand, /src="mark\.svg"[^>]*alt=""/u);
+  assert.match(brand, /<strong>AntennaBench<\/strong>/u);
+  assert.match(brand, /Better antenna comparisons\. Evidence included\./u);
+  assert.doesNotMatch(html, /Offline shell|WSPR experiment workspace|Local by design|No account or network service is required/u);
+  assert.doesNotMatch(html, /<header class="topbar"/u);
+  assert.match(css, /\.sidebar-brand \{[^}]*margin: auto 4px 0/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*\.sidebar-brand \{ display: none; \}/u);
 });
 
 test("workflow scroll memory restores each panel without disturbing same-panel renders", () => {

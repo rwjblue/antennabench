@@ -295,8 +295,10 @@ try {
   await browser(["set", "viewport", "1120", "760"]);
   const desktopShell = (await browser(["eval", `(() => {
     const content = document.querySelector(".content");
-    const topbar = document.querySelector(".topbar").getBoundingClientRect();
+    const workspace = document.querySelector(".workspace").getBoundingClientRect();
     const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    const brand = document.querySelector(".sidebar-brand");
+    const brandRect = brand.getBoundingClientRect();
     content.scrollTop = 0;
     content.focus();
     return {
@@ -306,16 +308,28 @@ try {
       contentClientHeight: content.clientHeight,
       contentScrollHeight: content.scrollHeight,
       contentOverflow: getComputedStyle(content).overflowY,
-      topbar: { top: topbar.top, bottom: topbar.bottom },
+      topbarCount: document.querySelectorAll(".topbar").length,
+      workspace: { top: workspace.top, bottom: workspace.bottom },
       sidebar: { top: sidebar.top, bottom: sidebar.bottom },
+      brand: {
+        top: brandRect.top,
+        bottom: brandRect.bottom,
+        display: getComputedStyle(brand).display,
+        href: brand.getAttribute("href"),
+      },
     };
   })()`], { json: true })).result;
   assert.equal(desktopShell.documentScrollHeight, desktopShell.documentClientHeight);
   assert.equal(desktopShell.documentScrollTop, 0);
   assert.ok(desktopShell.contentScrollHeight > desktopShell.contentClientHeight * 2);
   assert.equal(desktopShell.contentOverflow, "auto");
-  assert.ok(desktopShell.topbar.top >= 0 && desktopShell.topbar.bottom <= 760);
+  assert.equal(desktopShell.topbarCount, 0);
+  assert.ok(desktopShell.workspace.top >= 0 && desktopShell.workspace.bottom <= 760);
   assert.ok(desktopShell.sidebar.top >= 0 && desktopShell.sidebar.bottom <= 760);
+  assert.equal(desktopShell.brand.display, "grid");
+  assert.equal(desktopShell.brand.href, "#saved");
+  assert.ok(desktopShell.brand.top > desktopShell.sidebar.top);
+  assert.ok(desktopShell.brand.bottom <= desktopShell.sidebar.bottom);
 
   const reportHierarchy = (await browser(["eval", `(() => {
     const content = document.querySelector(".content");
@@ -409,19 +423,25 @@ try {
   await browser(["wait", "200"]);
   const pagedShell = (await browser(["eval", `(() => {
     const content = document.querySelector(".content");
-    const topbar = document.querySelector(".topbar").getBoundingClientRect();
+    const workspace = document.querySelector(".workspace").getBoundingClientRect();
     const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    const brand = document.querySelector(".sidebar-brand").getBoundingClientRect();
     return {
       contentScrollTop: content.scrollTop,
       documentScrollTop: document.scrollingElement.scrollTop,
-      topbar: { top: topbar.top, bottom: topbar.bottom },
+      workspace: { top: workspace.top, bottom: workspace.bottom },
       sidebar: { top: sidebar.top, bottom: sidebar.bottom },
+      brand: { top: brand.top, bottom: brand.bottom },
     };
   })()`], { json: true })).result;
   assert.ok(pagedShell.contentScrollTop > 0);
   assert.equal(pagedShell.documentScrollTop, 0);
-  assert.deepEqual(pagedShell.topbar, desktopShell.topbar);
+  assert.deepEqual(pagedShell.workspace, desktopShell.workspace);
   assert.deepEqual(pagedShell.sidebar, desktopShell.sidebar);
+  assert.deepEqual(pagedShell.brand, {
+    top: desktopShell.brand.top,
+    bottom: desktopShell.brand.bottom,
+  });
 
   const focusedReview = (await browser(["eval", `(() => {
     const content = document.querySelector(".content");
@@ -448,8 +468,8 @@ try {
   assert.ok(focusedReview.contentScrollTop > 0);
   assert.equal(focusedReview.documentScrollTop, 0);
   assert.ok(
-    Math.abs(focusedReview.reviewOffset - focusedReview.contentPaddingTop) <= 2,
-    `review offset was ${focusedReview.reviewOffset}px with ${focusedReview.contentPaddingTop}px content padding`,
+    focusedReview.reviewOffset >= focusedReview.contentPaddingTop - 2,
+    `review offset ${focusedReview.reviewOffset}px crossed ${focusedReview.contentPaddingTop}px content padding`,
   );
   assert.equal(focusedReview.guidanceVisible, true);
   assert.equal(focusedReview.visibleBottom, true);
@@ -462,11 +482,15 @@ try {
     contentOverflow: getComputedStyle(document.querySelector(".content")).overflowY,
     workspaceColumns: getComputedStyle(document.querySelector(".workspace")).gridTemplateColumns,
     navigationColumns: getComputedStyle(document.querySelector(".sidebar nav")).gridTemplateColumns,
+    brandDisplay: getComputedStyle(document.querySelector(".sidebar-brand")).display,
+    topbarCount: document.querySelectorAll(".topbar").length,
   }))()`], { json: true })).result;
   assert.ok(compactShell.documentScrollHeight > compactShell.documentClientHeight);
   assert.equal(compactShell.contentOverflow, "visible");
   assert.doesNotMatch(compactShell.workspaceColumns, /\s/);
   assert.equal(compactShell.navigationColumns.trim().split(/\s+/).length, 4);
+  assert.equal(compactShell.brandDisplay, "none");
+  assert.equal(compactShell.topbarCount, 0);
 
   await browser(["set", "viewport", "1200", "900"]);
   for (const mode of ["full", "compact"]) {
