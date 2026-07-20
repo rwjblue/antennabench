@@ -84,6 +84,11 @@ test("controller manual review keeps native checkbox, label, and help semantics"
 test("the headless desktop relaunches into Saved sessions before creating a managed session", async () => {
   window.history.replaceState(null, "", "#saved");
   const elements = loadDesktopDocument();
+  const restoredControllerProfile = document.createElement("option");
+  restoredControllerProfile.value = "profile-1";
+  restoredControllerProfile.textContent = "Bench switch";
+  elements.controllerProfileSelect.append(restoredControllerProfile);
+  elements.controllerProfileSelect.value = restoredControllerProfile.value;
   elements.setupReviewPanel.scrollIntoView = vi.fn();
   const reportDocumentUrls = [];
   Object.defineProperty(window.URL, "createObjectURL", {
@@ -145,6 +150,23 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   let managedOpenAttempts = 0;
   let reportRefreshes = 0;
   let importedCatalog = false;
+  let controllerCatalog = {
+    inputStyle: "one_line",
+    profiles: [{
+      profileId: "profile-1",
+      revision: "revision-1",
+      name: "Bench switch",
+      timeoutSeconds: 12,
+      switchCommand: {
+        programTemplate: "/usr/local/bin/switch-antenna",
+        argumentTemplates: ["--target", "{target}"],
+      },
+      verificationCommand: {
+        programTemplate: "/usr/local/bin/check-antenna",
+        argumentTemplates: ["{target}"],
+      },
+    }],
+  };
   const existingCatalogEntry = {
     locatorId: "locator-existing",
     bundleName: "existing.session.antennabundle",
@@ -173,7 +195,27 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   };
   const responses = {
     load_station_preferences: null,
-    antenna_controller_profiles: { inputStyle: "one_line", profiles: [] },
+    antenna_controller_profiles: () => controllerCatalog,
+    save_antenna_controller_profile: () => {
+      controllerCatalog = {
+        inputStyle: "structured",
+        profiles: [{
+          profileId: "profile-1",
+          revision: "revision-2",
+          name: "Bench switch updated",
+          timeoutSeconds: 15,
+          switchCommand: {
+            programTemplate: "/opt/antennabench/switch",
+            argumentTemplates: ["--antenna", "{target}"],
+          },
+          verificationCommand: {
+            programTemplate: "/opt/antennabench/verify",
+            argumentTemplates: ["--expect", "{target}"],
+          },
+        }],
+      };
+      return controllerCatalog.profiles[0];
+    },
     list_managed_sessions: () => ({
       status: "complete",
       diagnostics: [],
@@ -306,6 +348,34 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       assert.match(elements.savedCatalog.textContent, /W1AW/);
       assert.match(elements.savedCatalog.textContent, /View report/);
     });
+    const profileField = (name) => elements.setupForm.querySelector(
+      `[data-setup-field="${name}"]`,
+    );
+    assert.equal(elements.controllerProfileSelect.value, "profile-1");
+    assert.equal(profileField("controllerProfileName").value, "Bench switch");
+    assert.equal(profileField("controllerTimeoutSeconds").value, "12");
+    assert.equal(
+      profileField("controllerSwitchCommand").value,
+      '"/usr/local/bin/switch-antenna" "--target" "{target}"',
+    );
+    assert.equal(
+      profileField("controllerVerificationCommand").value,
+      '"/usr/local/bin/check-antenna" "{target}"',
+    );
+
+    profileField("controllerProfileName").value = "Unsaved local edit";
+    profileField("controllerProfileName").dispatchEvent(new InputEvent("input", { bubbles: true }));
+    assert.equal(profileField("controllerProfileName").value, "Unsaved local edit");
+
+    elements.controllerProfileSave.click();
+    await vi.waitFor(() => {
+      assert.equal(profileField("controllerProfileName").value, "Bench switch updated");
+    });
+    assert.equal(profileField("controllerTimeoutSeconds").value, "15");
+    assert.equal(profileField("controllerSwitchProgram").value, "/opt/antennabench/switch");
+    assert.equal(profileField("controllerSwitchArguments").value, "--antenna\n{target}");
+    assert.equal(profileField("controllerVerificationProgram").value, "/opt/antennabench/verify");
+    assert.equal(profileField("controllerVerificationArguments").value, "--expect\n{target}");
     elements.savedImport.click();
     await vi.waitFor(() => {
       assert.match(elements.savedImportFeedback.textContent, /imported\.session\.antennabundle was imported/);
@@ -451,9 +521,6 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     controllerEnabled.dispatchEvent(new InputEvent("input", { bubbles: true }));
     assert.equal(elements.controllerSetupFields.hidden, false);
     assert.equal(elements.setupForm.querySelectorAll("[data-controller-target]").length, 2);
-    elements.setupForm.querySelector('[data-setup-field="controllerProfileName"]').value = "Elecraft";
-    elements.setupForm.querySelector('[data-setup-field="controllerSwitchCommand"]').value = "switch {target}";
-    elements.setupForm.querySelector('[data-setup-field="controllerVerificationCommand"]').value = "true";
     const antennaRows = [...elements.setupForm.querySelectorAll("[data-antenna-row]")];
     antennaRows[0].querySelector('[data-antenna-field="label"]').value = "DXC";
     antennaRows[0].querySelector('[data-antenna-field="label"]').dispatchEvent(new InputEvent("input", { bubbles: true }));
@@ -462,6 +529,15 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     const controllerTargets = [...elements.setupForm.querySelectorAll("[data-controller-target]")];
     controllerTargets[0].value = "2";
     controllerTargets[1].value = "1";
+    elements.controllerProfileSelect.value = "";
+    elements.controllerProfileSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    assert.equal(profileField("controllerProfileName").value, "");
+    assert.equal(profileField("controllerSwitchCommand").value, "");
+    assert.equal(profileField("controllerSwitchProgram").value, "");
+    assert.deepEqual(controllerTargets.map((input) => input.value), ["2", "1"]);
+    profileField("controllerProfileName").value = "Elecraft";
+    profileField("controllerSwitchCommand").value = "switch {target}";
+    profileField("controllerVerificationCommand").value = "true";
     assert.equal(controllerTargets[0].closest("label").textContent, "Controller value");
     elements.setupAddAntennaButton.click();
     assert.deepEqual(

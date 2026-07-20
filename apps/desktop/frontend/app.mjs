@@ -44,6 +44,7 @@ export function mount(root, browserWindow) {
   let noteShortcutInitialized = false;
   let deleteTrigger = null;
   let reportExportTrigger = null;
+  let synchronizedControllerProfile = null;
   const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const preferredScrollBehavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -177,6 +178,12 @@ export function mount(root, browserWindow) {
     renderNavigation(elements, state);
     renderSavedSessions(elements, state, root);
     renderSetup(elements, state, root);
+    synchronizedControllerProfile = syncControllerProfileDraft(
+      setupForm,
+      controllerProfileSelect,
+      state.antennaControllerCatalog,
+      synchronizedControllerProfile,
+    );
     const countdown = renderRun(elements, state, root, {
       monotonicNow,
       countdownAnchor,
@@ -495,6 +502,7 @@ export function mount(root, browserWindow) {
       (candidate) => candidate.profileId === controllerProfileSelect.value,
     );
     applyControllerProfile(setupForm, profile ?? null);
+    synchronizedControllerProfile = controllerProfileKey(profile);
     controller.editSetup();
     render();
   });
@@ -513,6 +521,7 @@ export function mount(root, browserWindow) {
     const deleted = await controller.deleteAntennaControllerProfile(profile.profileId);
     if (deleted) {
       applyControllerProfile(setupForm, null);
+      synchronizedControllerProfile = controllerProfileKey(null);
       controller.editSetup();
     }
   });
@@ -752,6 +761,25 @@ function applyControllerProfile(form, profile) {
   set("controllerSwitchArguments", profile?.switchCommand?.argumentTemplates?.join("\n") ?? "");
   set("controllerVerificationProgram", profile?.verificationCommand?.programTemplate ?? "");
   set("controllerVerificationArguments", profile?.verificationCommand?.argumentTemplates?.join("\n") ?? "");
+}
+
+function controllerProfileKey(profile) {
+  return profile ? `${profile.profileId}:${profile.revision}` : "new";
+}
+
+function syncControllerProfileDraft(form, select, catalog, synchronizedProfile) {
+  if (!catalog) return synchronizedProfile;
+  const profile = catalog.profiles.find((candidate) => candidate.profileId === select.value) ?? null;
+  const nextProfile = controllerProfileKey(profile);
+  if (profile && nextProfile !== synchronizedProfile) {
+    applyControllerProfile(form, profile);
+    return nextProfile;
+  }
+  if (!profile && synchronizedProfile !== null && synchronizedProfile !== nextProfile) {
+    applyControllerProfile(form, null);
+    return nextProfile;
+  }
+  return synchronizedProfile ?? nextProfile;
 }
 
 function syncControllerSetupFields(form, fields) {
