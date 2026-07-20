@@ -1,5 +1,6 @@
 ---
 import receiverSummaryJson from "../../../../docs/assets/why-not-rbn/data/receiver-census-summary.json";
+import ReceiverGridGlobes from "../components/ReceiverGridGlobes.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import "../styles/why-wspr.css";
 
@@ -65,8 +66,8 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
 ---
 
 <BaseLayout
-  title="Why WSPR is the AntennaBench default—and where RBN wins"
-  socialTitle="Why WSPR is the default—and where RBN wins"
+  title="Why AntennaBench starts with WSPR, and where RBN wins"
+  socialTitle="Why AntennaBench starts with WSPR, and where RBN wins"
   description={description}
   canonicalPath="/why-wspr/"
 >
@@ -74,7 +75,7 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
     <div class="shell why-hero-grid">
       <div class="why-hero-copy">
         <p class="eyebrow">Choosing the measurement network</p>
-        <h1>Why WSPR is the default—and where RBN wins.</h1>
+        <h1>Why AntennaBench starts with WSPR. Where RBN wins.</h1>
         <p class="why-lede">
           AntennaBench is not choosing a better mode. It is choosing a more repeatable
           starting point for an A/B experiment: more observable remote paths, a fixed
@@ -139,8 +140,8 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
         <h2 id="answer-title">Use WSPR to run the controlled experiment. Use RBN to validate it on the signal you actually operate.</h2>
         <p>
           RBN is often the better tool for a CW or RTTY operating question. WSPR is the
-          easier default when the question is whether antenna A consistently produces
-          stronger or more complete evidence than antenna B across many remote paths.
+          easier default when you want to compare which antenna produces stronger signals,
+          reaches more stations, or performs more consistently across many remote paths.
         </p>
       </div>
     </div>
@@ -151,7 +152,7 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
       <div class="snapshot-heading">
         <div>
           <p class="eyebrow">Measured receiver footprint</p>
-          <h2 id="snapshot-title">More reporting stations—and more distinct regions—were observable on every band measured.</h2>
+          <h2 id="snapshot-title">In this snapshot, WSPR showed more reporting stations and more occupied regions on every band measured.</h2>
         </div>
         <p class="snapshot-date">
           Snapshot: {snapshotStart}–{snapshotEnd} UTC<br />
@@ -176,6 +177,8 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
           <p>distinct WSPR reporter calls over seven days, compared with {formatCount(receiverSummary.rbn_active_nodes.records_returned)} active RBN nodes.</p>
         </article>
       </div>
+
+      <ReceiverGridGlobes />
 
       <div class="band-comparison-grid">
         {bands.map((band) => (
@@ -229,13 +232,13 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
       </div>
 
       <aside class="method-note">
-        <strong>“Occupied grids” is the defensible claim—not “percentage of the globe covered.”</strong>
+        <strong>Occupied grids show geographic spread, not a percentage of the globe covered.</strong>
         <p>
           A four-character Maidenhead grid count reduces the effect of dense receiver clusters,
-          but it is still not calibrated geographic coverage. The WSPR values are reporting calls
-          or grids seen during seven days; RBN is a point-in-time list of active nodes advertising
-          each band. Neither number measures receiver quality, local noise, antenna performance,
-          or continuous availability.
+          but it is not calibrated coverage. The WSPR values are reporting calls or grids seen
+          during seven days; RBN is a point-in-time list of active nodes advertising each band.
+          Neither number measures receiver quality, local noise, antenna performance, or continuous
+          availability.
         </p>
       </aside>
     </div>
@@ -260,7 +263,7 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
         <article>
           <span aria-hidden="true">02</span>
           <h3>A fixed two-minute cadence</h3>
-          <p>WSPR’s UTC sequence makes frequent A/B interleaving practical while propagation and the band are changing.</p>
+          <p>WSPR’s two-minute transmit cycle makes frequent A/B interleaving practical while propagation conditions are changing.</p>
         </article>
         <article>
           <span aria-hidden="true">03</span>
@@ -283,7 +286,7 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
     <div class="shell">
       <div class="mode-choice-heading">
         <p class="eyebrow">Choose the tool that matches the question</p>
-        <h2 id="mode-choice-title">RBN is not the wrong answer. It answers a different—and often very useful—question.</h2>
+        <h2 id="mode-choice-title">RBN is not the wrong answer. It answers a different, often very useful question.</h2>
       </div>
       <div class="mode-card-grid">
         <article class="mode-card rbn-mode-card">
@@ -322,39 +325,17 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
   <section class="use-both-section" aria-labelledby="use-both-title">
     <div class="shell use-both-grid">
       <div>
-        <p class="eyebrow">The strongest workflow</p>
-        <h2 id="use-both-title">Use both networks, in sequence.</h2>
+        <p class="eyebrow">From comparison to operation</p>
+        <h2 id="use-both-title">Use WSPR to understand the setup, then use RBN while operating.</h2>
       </div>
       <ol>
-        <li><span>1</span><div><strong>Run the controlled WSPR A/B</strong><p>Distribute changing conditions across the antennas with a fixed cadence.</p></div></li>
-        <li><span>2</span><div><strong>Inspect matched paths and limitations</strong><p>Keep missingness, imbalance, switching context, and source boundaries visible.</p></div></li>
-        <li><span>3</span><div><strong>Validate with RBN</strong><p>Check whether the result carries over to the CW or RTTY signal you actually use.</p></div></li>
+        <li><span>1</span><div><strong>Characterize the antenna setup</strong><p>Use AntennaBench and WSPR to compare signal strength, reach, and consistency across many remote paths.</p></div></li>
+        <li><span>2</span><div><strong>Choose for the operation</strong><p>Select the antenna that gives the direction, reach, or coverage needed for the contact, event, or activation.</p></div></li>
+        <li><span>3</span><div><strong>Confirm the live result with RBN</strong><p>During CW or RTTY operation, check where the signal is being copied and whether it matches expectations.</p></div></li>
       </ol>
       <div class="use-both-actions">
         <a class="button button-light" href="/how-it-works/">See the complete workflow</a>
         <a class="button use-both-secondary" href="/sample-report/">Read the sample report</a>
-      </div>
-    </div>
-  </section>
-
-  <section class="sources-section section-pad" aria-labelledby="sources-title">
-    <div class="shell sources-grid">
-      <div>
-        <p class="eyebrow">Sources and reproducibility</p>
-        <h2 id="sources-title">The snapshot is bounded, checked in, and reproducible.</h2>
-      </div>
-      <div>
-        <p>
-          The repository contains the exact aggregate snapshot, queries, map source, generated
-          figures, and refresh script. The website reads the checked-in summary directly, so a
-          regenerated snapshot updates these figures at the next site build.
-        </p>
-        <ul>
-          <li><a href="https://github.com/rwjblue/antennabench/tree/main/tools/why-not-rbn">Snapshot and regeneration tools <span aria-hidden="true">↗</span></a></li>
-          <li><a href="https://www.reversebeacon.net/pages/How%2Bto%2Bget%2Bspotted%2Bby%2Bthe%2BRBN%2B44">RBN spotting guidance <span aria-hidden="true">↗</span></a></li>
-          <li><a href="https://wsjt.sourceforge.io/wsjtx-main_en.html#WSPR">WSJT-X WSPR documentation <span aria-hidden="true">↗</span></a></li>
-          <li><a href="https://wspr.live/">WSPR.live database documentation <span aria-hidden="true">↗</span></a></li>
-        </ul>
       </div>
     </div>
   </section>
