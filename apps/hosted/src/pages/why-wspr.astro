@@ -1,6 +1,6 @@
 ---
 import receiverSummaryJson from "../../../../docs/assets/why-not-rbn/data/receiver-census-summary.json";
-import ReceiverGridGlobes from "../components/ReceiverGridGlobes.astro";
+import ReceiverFootprintMaps from "../components/ReceiverFootprintMaps.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import "../styles/why-wspr.css";
 
@@ -11,16 +11,20 @@ interface WsprWindowSummary {
   unique_four_character_grids: number;
 }
 
+interface SiteWindowSummary {
+  start_utc: string;
+  end_utc: string;
+  unique_reporter_calls: number;
+}
+
 interface ReceiverSummary {
   windows: {
-    "168": {
-      start_utc: string;
-      end_utc: string;
-      unique_reporter_calls: number;
-    };
+    "24": SiteWindowSummary;
+    "168": SiteWindowSummary;
   };
   wspr_popular_bands: Record<BandName, {
     windows: {
+      "24": WsprWindowSummary;
       "168": WsprWindowSummary;
     };
   }>;
@@ -34,21 +38,24 @@ interface ReceiverSummary {
 const receiverSummary = receiverSummaryJson as unknown as ReceiverSummary;
 const bandNames = ["40m", "20m", "15m"] as const;
 const bands = bandNames.map((name) => {
-  const wspr = receiverSummary.wspr_popular_bands[name].windows["168"];
+  const day = receiverSummary.wspr_popular_bands[name].windows["24"];
+  const week = receiverSummary.wspr_popular_bands[name].windows["168"];
   const rbnReceivers = receiverSummary.rbn_active_nodes.band_counts[name];
   const rbnGrids = receiverSummary.rbn_active_nodes.band_four_character_grids[name];
   return {
     name,
-    wsprReceivers: wspr.unique_reporter_calls,
+    dayReceivers: day.unique_reporter_calls,
+    dayGrids: day.unique_four_character_grids,
+    weekReceivers: week.unique_reporter_calls,
+    weekGrids: week.unique_four_character_grids,
     rbnReceivers,
-    receiverRatio: wspr.unique_reporter_calls / rbnReceivers,
-    wsprGrids: wspr.unique_four_character_grids,
     rbnGrids,
-    gridRatio: wspr.unique_four_character_grids / rbnGrids,
+    receiverRatio: day.unique_reporter_calls / rbnReceivers,
+    gridRatio: day.unique_four_character_grids / rbnGrids,
   };
 });
-const maxReceivers = Math.max(...bands.map((band) => band.wsprReceivers));
-const maxGrids = Math.max(...bands.map((band) => band.wsprGrids));
+const maxReceivers = Math.max(...bands.map((band) => band.dayReceivers));
+const maxGrids = Math.max(...bands.map((band) => band.dayGrids));
 const reportingRatios = bands.map((band) => band.receiverRatio);
 const gridRatios = bands.map((band) => band.gridRatio);
 const reportingRange = `${Math.min(...reportingRatios).toFixed(1)}–${Math.max(...reportingRatios).toFixed(1)}×`;
@@ -59,8 +66,16 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   timeZone: "UTC",
 });
-const snapshotStart = dateFormatter.format(new Date(receiverSummary.windows["168"].start_utc));
-const snapshotEnd = dateFormatter.format(new Date(receiverSummary.windows["168"].end_utc));
+const dayFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+const singleDayStart = dayFormatter.format(new Date(receiverSummary.windows["24"].start_utc));
+const singleDayEnd = dateFormatter.format(new Date(receiverSummary.windows["24"].end_utc));
+const weekStart = dayFormatter.format(new Date(receiverSummary.windows["168"].start_utc));
+const weekEnd = dateFormatter.format(new Date(receiverSummary.windows["168"].end_utc));
+const rbnCaptured = dateFormatter.format(new Date(receiverSummary.windows["168"].end_utc));
 const formatCount = (value: number) => value.toLocaleString("en-US");
 const description = "Why AntennaBench starts with WSPR for repeatable antenna comparisons, where the receiver-network advantage comes from, and when CW or RTTY operators should use RBN instead.";
 ---
@@ -82,8 +97,28 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
           two-minute cadence, and a standardized weak-signal transmission.
         </p>
         <div class="hero-mode-row" aria-label="Network roles">
-          <span><strong>WSPR</strong> controlled comparison</span>
-          <span><strong>RBN</strong> real CW or RTTY validation</span>
+          <span class="term-chip">
+            <span class="term-anchor" tabindex="0" aria-describedby="wspr-definition">
+              <strong>WSPR</strong> controlled comparison
+            </span>
+            <span class="term-pop" role="tooltip" id="wspr-definition">
+              <strong>Weak Signal Propagation Reporter</strong>
+              Amateur stations around the world run automated receivers that decode a
+              standardized low-power beacon transmission and upload every decode, with a
+              signal-to-noise reading, to a public database.
+            </span>
+          </span>
+          <span class="term-chip">
+            <span class="term-anchor" tabindex="0" aria-describedby="rbn-definition">
+              <strong>RBN</strong> real CW or RTTY validation
+            </span>
+            <span class="term-pop" role="tooltip" id="rbn-definition">
+              <strong>Reverse Beacon Network</strong>
+              Volunteer wideband skimmer stations automatically spot live CW and RTTY
+              signals, mostly stations calling CQ, and publish who was heard, where, and
+              how strongly.
+            </span>
+          </span>
         </div>
       </div>
 
@@ -152,11 +187,18 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
       <div class="snapshot-heading">
         <div>
           <p class="eyebrow">Measured receiver footprint</p>
-          <h2 id="snapshot-title">In this snapshot, WSPR showed more reporting stations and more occupied regions on every band measured.</h2>
+          <h2 id="snapshot-title">Even one day of WSPR reached more reporting stations, in more places, than RBN listed as active nodes.</h2>
+          <p class="snapshot-framing">
+            The two networks count differently, so no comparison is perfectly matched:
+            WSPR reporters accumulate over a time window, while RBN publishes a live list
+            of active nodes. The headline numbers below use our shortest window, a single
+            day, to keep the claim conservative. Longer windows only widen the gap.
+          </p>
         </div>
         <p class="snapshot-date">
-          Snapshot: {snapshotStart}–{snapshotEnd} UTC<br />
-          WSPR seven-day window · RBN active-node snapshot
+          Single day: {singleDayStart}–{singleDayEnd} UTC<br />
+          Seven-day context: {weekStart}–{weekEnd}<br />
+          RBN active-node list: {rbnCaptured}
         </p>
       </div>
 
@@ -164,21 +206,21 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
         <article>
           <span>Reporting population</span>
           <strong>{reportingRange}</strong>
-          <p>more distinct WSPR reporting calls than active RBN nodes on 40, 20, and 15 meters.</p>
+          <p>more distinct WSPR reporting calls than active RBN nodes in a single day on 40, 20, and 15 meters.</p>
         </article>
         <article>
           <span>Geographic footprint</span>
           <strong>{gridRange}</strong>
-          <p>more occupied four-character Maidenhead grids in the WSPR window than in the RBN snapshot.</p>
+          <p>more occupied four-character Maidenhead grids in one day of WSPR than in the RBN active-node list.</p>
         </article>
         <article>
-          <span>All included HF bands</span>
+          <span>Seven-day pool</span>
           <strong>{formatCount(receiverSummary.windows["168"].unique_reporter_calls)}</strong>
-          <p>distinct WSPR reporter calls over seven days, compared with {formatCount(receiverSummary.rbn_active_nodes.records_returned)} active RBN nodes.</p>
+          <p>distinct WSPR reporter calls appeared across all included HF bands over seven days. The single-day comparison uses only {formatCount(receiverSummary.windows["24"].unique_reporter_calls)} of them, against {formatCount(receiverSummary.rbn_active_nodes.records_returned)} RBN nodes.</p>
         </article>
       </div>
 
-      <ReceiverGridGlobes />
+      <ReceiverFootprintMaps />
 
       <div class="band-comparison-grid">
         {bands.map((band) => (
@@ -197,12 +239,12 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
             <div class="metric-block">
               <div class="metric-title">
                 <span>Reporting calls / active nodes</span>
-                <small>Seven days vs snapshot</small>
+                <small>Single day vs live list</small>
               </div>
               <div class="comparison-bar wspr-bar">
-                <span style={`--bar-width:${Math.round((band.wsprReceivers / maxReceivers) * 100)}%`}></span>
+                <span style={`--bar-width:${Math.round((band.dayReceivers / maxReceivers) * 100)}%`}></span>
                 <b>WSPR</b>
-                <strong>{formatCount(band.wsprReceivers)}</strong>
+                <strong>{formatCount(band.dayReceivers)}</strong>
               </div>
               <div class="comparison-bar rbn-bar">
                 <span style={`--bar-width:${Math.round((band.rbnReceivers / maxReceivers) * 100)}%`}></span>
@@ -217,9 +259,9 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
                 <small>{band.gridRatio.toFixed(1)}× wider footprint</small>
               </div>
               <div class="comparison-bar wspr-bar">
-                <span style={`--bar-width:${Math.round((band.wsprGrids / maxGrids) * 100)}%`}></span>
+                <span style={`--bar-width:${Math.round((band.dayGrids / maxGrids) * 100)}%`}></span>
                 <b>WSPR</b>
-                <strong>{formatCount(band.wsprGrids)}</strong>
+                <strong>{formatCount(band.dayGrids)}</strong>
               </div>
               <div class="comparison-bar rbn-bar">
                 <span style={`--bar-width:${Math.round((band.rbnGrids / maxGrids) * 100)}%`}></span>
@@ -227,6 +269,10 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
                 <strong>{formatCount(band.rbnGrids)}</strong>
               </div>
             </div>
+
+            <p class="band-week-note">
+              Seven-day WSPR pool: {formatCount(band.weekReceivers)} calls in {formatCount(band.weekGrids)} grids.
+            </p>
           </article>
         ))}
       </div>
@@ -235,9 +281,9 @@ const description = "Why AntennaBench starts with WSPR for repeatable antenna co
         <strong>Occupied grids show geographic spread, not a percentage of the globe covered.</strong>
         <p>
           A four-character Maidenhead grid count reduces the effect of dense receiver clusters,
-          but it is not calibrated coverage. The WSPR values are reporting calls or grids seen
-          during seven days; RBN is a point-in-time list of active nodes advertising each band.
-          Neither number measures receiver quality, local noise, antenna performance, or continuous
+          but it is not calibrated coverage. WSPR counts accumulate over the stated window;
+          RBN is a point-in-time list of active nodes advertising each band. Neither number
+          measures receiver quality, local noise, antenna performance, or continuous
           availability.
         </p>
       </aside>

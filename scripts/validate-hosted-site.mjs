@@ -192,12 +192,17 @@ invariant(
   !whyWspr.includes("The snapshot is bounded, checked in, and reproducible."),
   "WSPR and RBN explanation still contains the removed generic reproducibility section",
 );
-const receiverGlobes = whyWspr.match(/class="receiver-globe"/g)?.length ?? 0;
-invariant(receiverGlobes === 6, `Expected six receiver hemispheres, found ${receiverGlobes}`);
+const footprintMaps = whyWspr.match(/class="receiver-footprint-map"/g)?.length ?? 0;
+invariant(footprintMaps === 3, `Expected three band footprint maps, found ${footprintMaps}`);
 const occupiedGridCells = whyWspr.match(/class="receiver-grid-cell"/g)?.length ?? 0;
 invariant(
-  occupiedGridCells >= 1400,
-  `Expected the receiver globe to render the checked-in occupied grids, found ${occupiedGridCells}`,
+  occupiedGridCells >= 800,
+  `Expected the footprint maps to render the checked-in occupied grids, found ${occupiedGridCells}`,
+);
+const rbnNodeMarkers = whyWspr.match(/class="receiver-rbn-node"/g)?.length ?? 0;
+invariant(
+  rbnNodeMarkers >= 400,
+  `Expected the footprint maps to render the checked-in RBN nodes, found ${rbnNodeMarkers}`,
 );
 
 const stylesheet = outputFiles

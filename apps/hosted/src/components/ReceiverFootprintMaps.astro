@@ -1,0 +1,386 @@
+---
+import receiverSummaryJson from "../../../../docs/assets/why-not-rbn/data/receiver-census-summary.json";
+import rbnNodesCsv from "../../../../tools/why-not-rbn/snapshots/rbn-active-nodes-reduced.csv?raw";
+import receiverRowsCsv from "../../../../tools/why-not-rbn/snapshots/wspr-receivers-by-band.csv?raw";
+import worldGeoJsonRaw from "../../../../tools/why-not-rbn/world-outline-natural-earth.geojson?raw";
+import "../styles/receiver-footprint-maps.css";
+
+type BandName = "40m" | "20m" | "15m";
+type Coordinate = [number, number];
+type Ring = Coordinate[];
+type Polygon = Ring[];
+type MultiPolygon = Polygon[];
+
+interface WorldFeature {
+  geometry: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates: Polygon | MultiPolygon;
+  } | null;
+}
+
+interface WorldGeoJson {
+  features: WorldFeature[];
+}
+
+interface ReceiverSummary {
+  wspr_popular_bands: Record<BandName, {
+    windows: {
+      "24": {
+        unique_reporter_calls: number;
+        unique_four_character_grids: number;
+      };
+    };
+  }>;
+  rbn_active_nodes: {
+    band_counts: Record<BandName, number>;
+    band_four_character_grids: Record<BandName, number>;
+  };
+}
+
+interface GridCell {
+  grid: string;
+  reporterCount: number;
+  minLatitude: number;
+  maxLatitude: number;
+  minLongitude: number;
+  maxLongitude: number;
+}
+
+interface RbnNode {
+  latitude: number;
+  longitude: number;
+}
+
+const map = {
+  topLatitude: 84,
+  bottomLatitude: -58,
+  unitsPerDegree: 2,
+};
+const mapWidth = 360 * map.unitsPerDegree;
+const mapHeight = (map.topLatitude - map.bottomLatitude) * map.unitsPerDegree;
+const summary = receiverSummaryJson as unknown as ReceiverSummary;
+const world = JSON.parse(worldGeoJsonRaw) as WorldGeoJson;
+const bandDefinitions = [
+  { name: "40m", code: "7" },
+  { name: "20m", code: "14" },
+  { name: "15m", code: "21" },
+] as const satisfies ReadonlyArray<{ name: BandName; code: string }>;
+const bandByCode = new Map(bandDefinitions.map((band) => [band.code, band.name]));
+
+function formatNumber(value: number): string {
+  return value.toLocaleString("en-US");
+}
+
+function fixed(value: number): string {
+  return value.toFixed(2).replace(/\.00$/, "");
+}
+
+function projectX(longitude: number): number {
+  return (longitude + 180) * map.unitsPerDegree;
+}
+
+function projectY(latitude: number): number {
+  return (map.topLatitude - latitude) * map.unitsPerDegree;
+}
+
+function maidenheadBounds(grid: string): Omit<GridCell, "grid" | "reporterCount"> | null {
+  const longitudeField = grid.charAt(0);
+  const latitudeField = grid.charAt(1);
+  if (
+    grid.length < 4 ||
+    longitudeField < "A" || longitudeField > "R" ||
+    latitudeField < "A" || latitudeField > "R" ||
+    !/^\d{2}$/.test(grid.slice(2, 4))
+  ) {
+    return null;
+  }
+
+  const minLongitude = (longitudeField.charCodeAt(0) - 65) * 20 - 180 + Number(grid.charAt(2)) * 2;
+  const minLatitude = (latitudeField.charCodeAt(0) - 65) * 10 - 90 + Number(grid.charAt(3));
+  return {
+    minLatitude,
+    maxLatitude: minLatitude + 1,
+    minLongitude,
+    maxLongitude: minLongitude + 2,
+  };
+}
+
+function linePath(points: Coordinate[]): string {
+  const segments: string[] = [];
+  let current: string[] = [];
+  let previousLongitude: number | undefined;
+  for (const [longitude, latitude] of points) {
+    if (previousLongitude !== undefined && Math.abs(longitude - previousLongitude) > 180) {
+      if (current.length > 1) {
+        segments.push(current.join(" "));
+      }
+      current = [];
+    }
+    previousLongitude = longitude;
+    current.push(
+      `${current.length === 0 ? "M" : "L"}${fixed(projectX(longitude))} ${fixed(projectY(latitude))}`,
+    );
+  }
+  if (current.length > 1) {
+    segments.push(current.join(" "));
+  }
+  return segments.join(" ");
+}
+
+function perpendicularDistance(
+  point: Coordinate,
+  start: Coordinate,
+  end: Coordinate,
+): number {
+  const [x, y] = point;
+  const [x1, y1] = start;
+  const [x2, y2] = end;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(x - x1, y - y1);
+  }
+  const numerator = Math.abs(dy * x - dx * y + x2 * y1 - y2 * x1);
+  return numerator / Math.hypot(dx, dy);
+}
+
+function simplifyRing(points: Ring, tolerance = 0.45): Ring {
+  if (points.length <= 3) {
+    return points;
+  }
+  let farthestIndex = 0;
+  let farthestDistance = 0;
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const distance = perpendicularDistance(
+      points[index]!,
+      points[0]!,
+      points[points.length - 1]!,
+    );
+    if (distance > farthestDistance) {
+      farthestDistance = distance;
+      farthestIndex = index;
+    }
+  }
+  if (farthestDistance <= tolerance) {
+    return [points[0]!, points[points.length - 1]!];
+  }
+  const left = simplifyRing(points.slice(0, farthestIndex + 1), tolerance);
+  const right = simplifyRing(points.slice(farthestIndex), tolerance);
+  return [...left.slice(0, -1), ...right];
+}
+
+function worldRings(): Ring[] {
+  const rings: Ring[] = [];
+  for (const feature of world.features) {
+    if (feature.geometry === null) {
+      continue;
+    }
+    if (feature.geometry.type === "Polygon") {
+      rings.push(...(feature.geometry.coordinates as Polygon));
+      continue;
+    }
+    for (const polygon of feature.geometry.coordinates as MultiPolygon) {
+      rings.push(...polygon);
+    }
+  }
+  return rings.map((ring) => simplifyRing(ring));
+}
+
+function graticulePath(): string {
+  const paths: string[] = [];
+  for (let latitude = -30; latitude <= 60; latitude += 30) {
+    paths.push(
+      `M0 ${fixed(projectY(latitude))}H${fixed(mapWidth)}`,
+    );
+  }
+  for (let longitude = -150; longitude <= 150; longitude += 30) {
+    paths.push(
+      `M${fixed(projectX(longitude))} 0V${fixed(mapHeight)}`,
+    );
+  }
+  return paths.join(" ");
+}
+
+const gridReporters = new Map<BandName, Map<string, Set<string>>>(
+  bandDefinitions.map((band) => [band.name, new Map()]),
+);
+for (const row of receiverRowsCsv.trim().split(/\r?\n/).slice(1)) {
+  const columns = row.split(",");
+  const bandName = bandByCode.get(columns[0] ?? "");
+  const reporterCall = columns[1]?.trim().toUpperCase();
+  const grid = columns[2]?.trim().toUpperCase().slice(0, 4);
+  const spotsInDay = Number(columns[5] ?? "0");
+  if (bandName === undefined || !reporterCall || !grid || grid.length < 4 || spotsInDay <= 0) {
+    continue;
+  }
+  const reporters = gridReporters.get(bandName);
+  if (reporters === undefined) {
+    continue;
+  }
+  const calls = reporters.get(grid) ?? new Set<string>();
+  calls.add(reporterCall);
+  reporters.set(grid, calls);
+}
+
+const rbnNodesByBand = new Map<BandName, RbnNode[]>(
+  bandDefinitions.map((band) => [band.name, []]),
+);
+const rbnGridsByBand = new Map<BandName, Set<string>>(
+  bandDefinitions.map((band) => [band.name, new Set()]),
+);
+for (const row of rbnNodesCsv.trim().split(/\r?\n/).slice(1)) {
+  const columns = row.split(",");
+  const grid = columns[1]?.trim().toUpperCase().slice(0, 4);
+  const latitude = Number(columns[2]);
+  const longitude = Number(columns[3]);
+  const advertisedBands = new Set((columns[5] ?? "").trim().split(/\s+/));
+  if (!grid || grid.length < 4 || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    continue;
+  }
+  for (const band of bandDefinitions) {
+    if (advertisedBands.has(band.name)) {
+      rbnNodesByBand.get(band.name)!.push({ latitude, longitude });
+      rbnGridsByBand.get(band.name)!.add(grid);
+    }
+  }
+}
+
+const worldLandPath = worldRings().map((ring) => linePath(ring)).join(" ");
+const worldGraticulePath = graticulePath();
+const renderedBands = bandDefinitions.map((band) => {
+  const reportersByGrid = gridReporters.get(band.name);
+  if (reportersByGrid === undefined) {
+    throw new Error(`Missing WSPR receiver data for ${band.name}`);
+  }
+  const cells: GridCell[] = [];
+  const reporterCalls = new Set<string>();
+  for (const [grid, reporters] of reportersByGrid) {
+    const bounds = maidenheadBounds(grid);
+    if (bounds === null) {
+      continue;
+    }
+    for (const reporter of reporters) {
+      reporterCalls.add(reporter);
+    }
+    cells.push({ grid, reporterCount: reporters.size, ...bounds });
+  }
+  const expected = summary.wspr_popular_bands[band.name].windows["24"];
+  if (cells.length !== expected.unique_four_character_grids) {
+    throw new Error(
+      `${band.name} map has ${cells.length} cells, expected ${expected.unique_four_character_grids}`,
+    );
+  }
+  if (reporterCalls.size !== expected.unique_reporter_calls) {
+    throw new Error(
+      `${band.name} map has ${reporterCalls.size} calls, expected ${expected.unique_reporter_calls}`,
+    );
+  }
+  const rbnNodes = rbnNodesByBand.get(band.name) ?? [];
+  if (rbnNodes.length !== summary.rbn_active_nodes.band_counts[band.name]) {
+    throw new Error(
+      `${band.name} map has ${rbnNodes.length} RBN nodes, expected ${summary.rbn_active_nodes.band_counts[band.name]}`,
+    );
+  }
+  const rbnGrids = rbnGridsByBand.get(band.name) ?? new Set<string>();
+  if (rbnGrids.size !== summary.rbn_active_nodes.band_four_character_grids[band.name]) {
+    throw new Error(
+      `${band.name} map has ${rbnGrids.size} RBN grids, expected ${summary.rbn_active_nodes.band_four_character_grids[band.name]}`,
+    );
+  }
+  return {
+    name: band.name,
+    gridCount: cells.length,
+    reporterCount: reporterCalls.size,
+    rbnNodeCount: rbnNodes.length,
+    cells: cells.map((cell) => ({
+      x: fixed(projectX(cell.minLongitude)),
+      y: fixed(projectY(cell.maxLatitude)),
+      width: fixed((cell.maxLongitude - cell.minLongitude) * map.unitsPerDegree),
+      height: fixed((cell.maxLatitude - cell.minLatitude) * map.unitsPerDegree),
+      opacity: Math.min(0.95, 0.5 + Math.log2(cell.reporterCount + 1) * 0.12).toFixed(2),
+    })),
+    rbnNodes: rbnNodes.map((node) => ({
+      x: fixed(projectX(node.longitude)),
+      y: fixed(projectY(node.latitude)),
+    })),
+  };
+});
+---
+
+<section class="receiver-map-section" aria-labelledby="receiver-maps-title">
+  <div class="receiver-map-heading">
+    <div>
+      <p class="eyebrow">Both networks on the same map</p>
+      <h3 id="receiver-maps-title">One day of receivers, band by band.</h3>
+    </div>
+    <p>
+      Each teal cell is a four-character Maidenhead grid where at least one station
+      reported WSPR during the 24-hour window. Each amber square is an RBN node that
+      advertised the band in the same snapshot.
+    </p>
+  </div>
+
+  <div class="receiver-map-legend" aria-hidden="true">
+    <span><i class="receiver-legend-wspr"></i> WSPR reporter grid, 24 hours</span>
+    <span><i class="receiver-legend-rbn"></i> RBN active node</span>
+  </div>
+
+  <div class="receiver-map-rows">
+    {renderedBands.map((band) => (
+      <article class="receiver-map-row">
+        <header>
+          <div>
+            <span>HF band</span>
+            <h4>{band.name}</h4>
+          </div>
+          <p>
+            <strong class="receiver-count-wspr">{formatNumber(band.reporterCount)}</strong>
+            WSPR reporting calls in {formatNumber(band.gridCount)} grids
+            <strong class="receiver-count-rbn">{formatNumber(band.rbnNodeCount)}</strong>
+            RBN active nodes
+          </p>
+        </header>
+        <div class="receiver-map-scroll">
+          <svg
+            class="receiver-footprint-map"
+            viewBox={`0 0 ${mapWidth} ${mapHeight}`}
+            role="img"
+          >
+            <title>{band.name} WSPR reporter grids and RBN active nodes</title>
+            <desc>
+              {formatNumber(band.gridCount)} occupied four-character Maidenhead grids with
+              {` ${formatNumber(band.reporterCount)} distinct WSPR reporting calls in 24 hours, alongside`}
+              {` ${formatNumber(band.rbnNodeCount)} RBN nodes advertising ${band.name}.`}
+            </desc>
+            <rect class="receiver-map-ocean" x="0" y="0" width={mapWidth} height={mapHeight}></rect>
+            <path class="receiver-map-graticule" d={worldGraticulePath}></path>
+            <path class="receiver-map-land" d={worldLandPath}></path>
+            {band.cells.map((cell) => (
+              <rect
+                class="receiver-grid-cell"
+                x={cell.x}
+                y={cell.y}
+                width={cell.width}
+                height={cell.height}
+                fill-opacity={cell.opacity}
+              ></rect>
+            ))}
+            {band.rbnNodes.map((node) => (
+              <path
+                class="receiver-rbn-node"
+                d={`M${node.x} ${node.y}m0 -2.6l2.6 2.6l-2.6 2.6l-2.6 -2.6Z`}
+              ></path>
+            ))}
+          </svg>
+        </div>
+      </article>
+    ))}
+  </div>
+
+  <p class="receiver-map-note">
+    Cell brightness reflects the number of distinct reporting calls in that grid. Markers show
+    receiver locations, not guaranteed coverage from any transmitter, and the RBN list is a
+    point-in-time snapshot rather than a 24-hour census.
+    <a href="https://github.com/rwjblue/antennabench/tree/main/tools/why-not-rbn">Review the snapshot method and source data <span aria-hidden="true">↗</span></a>
+  </p>
+</section>

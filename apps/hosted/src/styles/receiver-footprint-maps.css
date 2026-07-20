@@ -1,0 +1,228 @@
+.receiver-map-section {
+  padding: clamp(2rem, 5vw, 3.8rem);
+  margin: clamp(3rem, 6vw, 5rem) 0 1.25rem;
+  border-radius: 1.25rem;
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 16% 15%, rgb(112 197 184 / 14%), transparent 22rem),
+    linear-gradient(150deg, #153c3a, #0b2323 72%);
+  box-shadow: var(--shadow);
+}
+
+.receiver-map-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(280px, 0.55fr);
+  align-items: end;
+  gap: clamp(2rem, 6vw, 5rem);
+}
+
+.receiver-map-heading .eyebrow {
+  color: var(--teal-bright);
+}
+
+.receiver-map-heading h3 {
+  max-width: 660px;
+  margin-bottom: 0;
+  font-size: clamp(2rem, 4vw, 3.35rem);
+}
+
+.receiver-map-heading > p {
+  margin-bottom: 0.25rem;
+  color: #c8d8d4;
+  font-size: 0.92rem;
+}
+
+.receiver-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.5rem;
+  margin-top: clamp(1.4rem, 3vw, 2.2rem);
+  color: #d5e1de;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.receiver-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.receiver-map-legend i {
+  display: inline-block;
+  width: 0.72rem;
+  height: 0.72rem;
+}
+
+.receiver-legend-wspr {
+  border-radius: 0.14rem;
+  background: var(--teal-bright);
+}
+
+.receiver-legend-rbn {
+  background: var(--amber);
+  transform: rotate(45deg) scale(0.82);
+}
+
+.receiver-map-rows {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.receiver-map-row {
+  min-width: 0;
+  padding: 1.1rem 1.1rem 0.9rem;
+  border: 1px solid rgb(247 241 223 / 14%);
+  border-radius: 0.9rem;
+  background: rgb(247 241 223 / 5%);
+}
+
+.receiver-map-row > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.1rem 0.1rem 0.85rem;
+}
+
+.receiver-map-row header span {
+  display: block;
+  color: var(--teal-bright);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.receiver-map-row h4 {
+  margin: 0.15rem 0 0;
+  font-size: 2rem;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.receiver-map-row header p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.35rem 0.55rem;
+  margin-bottom: 0.15rem;
+  color: #c8d8d4;
+  font-size: 0.74rem;
+  text-align: right;
+}
+
+.receiver-map-row header strong {
+  color: var(--teal-bright);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+
+.receiver-map-row header strong.receiver-count-rbn {
+  margin-left: 0.9rem;
+  color: var(--amber);
+}
+
+.receiver-map-scroll {
+  overflow-x: auto;
+  border-radius: 0.55rem;
+}
+
+.receiver-footprint-map {
+  display: block;
+  width: 100%;
+  min-width: 620px;
+  height: auto;
+}
+
+.receiver-map-ocean {
+  fill: rgb(112 197 184 / 6%);
+}
+
+.receiver-map-graticule {
+  fill: none;
+  stroke: rgb(247 241 223 / 9%);
+  stroke-width: 0.6;
+}
+
+.receiver-map-land {
+  fill: none;
+  stroke: rgb(247 241 223 / 42%);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 0.75;
+}
+
+.receiver-grid-cell {
+  fill: var(--teal-bright);
+  stroke: rgb(213 241 235 / 55%);
+  stroke-width: 0.18;
+}
+
+.receiver-rbn-node {
+  fill: var(--amber);
+  stroke: #0b2323;
+  stroke-width: 0.55;
+}
+
+.receiver-map-note {
+  padding-top: 1rem;
+  margin: 1rem 0 0;
+  border-top: 1px solid rgb(247 241 223 / 13%);
+  color: #9eb3ae;
+  font-size: 0.72rem;
+}
+
+.receiver-map-note a {
+  color: var(--teal-bright);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.receiver-map-note a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+@media (max-width: 760px) {
+  .receiver-map-section {
+    padding: 1.25rem;
+    margin-inline: -0.15rem;
+  }
+
+  .receiver-map-heading {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .receiver-map-row > header {
+    flex-direction: column;
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .receiver-map-row header p {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+@media print {
+  .receiver-map-section {
+    color: #000;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .receiver-grid-cell {
+    fill: #1f756c;
+  }
+
+  .receiver-rbn-node {
+    stroke: #fff;
+  }
+}
