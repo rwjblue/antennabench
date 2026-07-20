@@ -156,10 +156,11 @@ because those operations append evidence to the active experiment.
 Use a row’s **Delete…** action only when you want to remove that complete
 portable record from the managed library. AntennaBench identifies the exact
 callsign and bundle in a confirmation dialog and asks the operating system to
-**Move to Trash**; it does not fall back to permanent deletion. The active
-session must be closed first. If the bundle changed after it was listed or the
-platform Trash is unavailable, the bundle is left in place and the row shows
-the failure.
+**Move to Trash** through its native Trash facility; on macOS this does not
+control Finder or require Finder Automation permission. It does not fall back
+to permanent deletion. The active session must be closed first. If the bundle
+changed after it was listed or the platform Trash is unavailable, the bundle
+is left in place and the row shows the failure.
 
 Each available row summarizes the planned repetitions, TX/RX direction
 coverage, planned cycle count, and total recorded observations. Expand

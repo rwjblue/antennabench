@@ -195,8 +195,22 @@ struct SystemTrashPort;
 
 impl TrashPort for SystemTrashPort {
     fn move_to_trash(&self, path: &Path) -> Result<(), String> {
-        trash::delete(path).map_err(|error| error.to_string())
+        #[cfg(target_os = "macos")]
+        let result = native_macos_trash_context().delete(path);
+        #[cfg(not(target_os = "macos"))]
+        let result = trash::delete(path);
+
+        result.map_err(|error| error.to_string())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn native_macos_trash_context() -> trash::TrashContext {
+    use trash::macos::{DeleteMethod, TrashContextExtMacos};
+
+    let mut context = trash::TrashContext::new();
+    context.set_delete_method(DeleteMethod::NsFileManager);
+    context
 }
 
 #[derive(Default)]

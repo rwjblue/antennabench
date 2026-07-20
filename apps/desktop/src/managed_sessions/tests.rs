@@ -602,6 +602,19 @@ impl TrashPort for RenameTrashPort {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn system_trash_uses_native_ns_file_manager_backend() {
+    use trash::macos::{DeleteMethod, TrashContextExtMacos};
+
+    let context = native_macos_trash_context();
+
+    assert!(matches!(
+        context.delete_method(),
+        DeleteMethod::NsFileManager
+    ));
+}
+
 #[test]
 fn verified_direct_child_moves_to_trash_without_changing_siblings() {
     let temp = TempDir::new().unwrap();

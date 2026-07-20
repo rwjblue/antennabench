@@ -263,11 +263,13 @@ Managed deletion is a separate, explicit destructive command, never a catalog
 side effect. The webview submits only an opaque locator. Rust revalidates the
 managed root, direct-child identity, bounded non-following removal snapshot,
 and supported-bundle projection fingerprint when one exists, then refuses the
-currently active source. Only the platform Trash implementation receives the
-verified path. An unavailable or failed Trash operation returns a typed error;
-there is no recursive permanent-delete fallback. Unsafe or unbounded rows do
-not receive a locator, while invalid and unsupported direct bundles can still
-be removed when the removal snapshot proves their identity.
+currently active source. Only the platform's native Trash implementation
+receives the verified path; on macOS this is `NSFileManager`, so deletion does
+not control Finder or require Finder Automation permission. An unavailable or
+failed Trash operation returns a typed error; there is no recursive
+permanent-delete fallback. Unsafe or unbounded rows do not receive a locator,
+while invalid and unsupported direct bundles can still be removed when the
+removal snapshot proves their identity.
 
 Managed import and export are separate narrow transfer commands. Import owns a
 native directory picker, copies the selected bundle through bounded lossless
