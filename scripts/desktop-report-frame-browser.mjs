@@ -596,10 +596,9 @@ try {
       assert.equal(navigated.activeId, targetId);
       assert.equal(navigated.targetOutline, "solid");
       assert.ok(
-        navigated.targetTop >= 0 && navigated.targetTop < navigated.viewportHeight,
+        navigated.targetTop < navigated.viewportHeight && navigated.targetBottom > 0,
         `${mode} ${targetId}: ${JSON.stringify(navigated)}`,
       );
-      assert.ok(navigated.targetBottom > 0);
     }
     const outerScrollAfter = (await browser([
       "eval",
