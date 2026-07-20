@@ -25,12 +25,12 @@ pub use compact::{render_compact_summary_html, render_compact_summary_html_with_
 use audit::render_audit_appendix;
 use geometry::render_geometry_styles;
 use questions::{
-    render_answer_first_overview, render_distance_section, render_how_to_read,
-    render_question_navigation, render_reach_section, render_reporter_activity_section,
-    render_run_quality_section, render_same_path_section,
+    render_answer_first_overview, render_coverage_map_section, render_distance_section,
+    render_how_to_read, render_question_navigation, render_reach_section,
+    render_reporter_activity_section, render_run_quality_section, render_same_path_section,
 };
 use shared::{escape_html, CheckedHtmlWriter};
-use styles::STYLES;
+use styles::{COVERAGE_STYLES, STYLES};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -128,6 +128,7 @@ fn render_standalone_html_document(
     );
     out.push_str(STYLES);
     render_geometry_styles(&mut out);
+    out.push_str(COVERAGE_STYLES);
     out.push_str("</style></head><body><main><a class=\"skip-link\" href=\"#what-run-show\">Skip to report findings</a>");
 
     write_html!(
@@ -141,6 +142,7 @@ fn render_standalone_html_document(
     render_answer_first_overview(&mut out, report);
     render_same_path_section(&mut out, report);
     render_reporter_activity_section(&mut out, report);
+    render_coverage_map_section(&mut out, report);
     render_reach_section(&mut out, report);
     render_distance_section(&mut out, report);
     render_run_quality_section(&mut out, report);

@@ -28,6 +28,8 @@ pub struct SessionReport {
     pub comparison: ReportComparisonData,
     #[serde(default, skip_serializing_if = "ReporterActivityAnalysis::is_empty")]
     pub reporter_activity: ReporterActivityAnalysis,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coverage_maps: Vec<ReportCoverageMapGroup>,
     pub solar_context: SolarContextAnalysis,
     pub chart_data: ReportChartData,
     pub notices: Vec<ReportNotice>,
@@ -37,6 +39,57 @@ pub struct SessionReport {
     pub eligibility_exclusions: Vec<EligibilityExclusionCount>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclusion_records: Vec<ObservationExclusionRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportCoverageMapGroup {
+    pub stratum: ComparisonStratum,
+    pub panels: Vec<ReportCoveragePanel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportCoveragePanel {
+    pub side: antennabench_analysis::ComparisonSide,
+    pub antenna_label: String,
+    pub coverage: antennabench_analysis::ReporterActivityCoverage,
+    pub active_reporter_count: usize,
+    pub heard_reporter_count: usize,
+    pub mapped_reporter_count: usize,
+    pub unmapped_reporter_count: usize,
+    pub cells: Vec<ReportCoverageCell>,
+    pub polar_cells: Vec<ReportCoveragePolarCell>,
+    pub reporters: Vec<ReportCoverageReporter>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportCoverageCell {
+    pub maidenhead_4: String,
+    pub state: ReportCoverageState,
+    pub active_reporter_count: usize,
+    pub heard_reporter_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportCoveragePolarCell {
+    pub bearing_sector: u8,
+    pub distance_ring: u8,
+    pub state: ReportCoverageState,
+    pub active_reporter_count: usize,
+    pub heard_reporter_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportCoverageReporter {
+    pub reporter: String,
+    pub reporter_grid: String,
+    pub state: ReportCoverageState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportCoverageState {
+    Heard,
+    ActiveNotHeard,
 }
 
 /// A concise, renderer-neutral projection of the session questions and the
@@ -725,6 +778,7 @@ pub enum ReportDetailFamily {
     PathSummaries,
     Strata,
     ReporterActivityAudit,
+    CoverageMapReporters,
     Charts,
 }
 

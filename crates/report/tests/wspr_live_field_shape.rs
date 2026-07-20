@@ -99,6 +99,22 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     .expect("field-shape fixture should build a report");
     assert_eq!(report.evidence.overall.observation_counts.usable, 188);
     assert_eq!(report.comparison.paired_rows.len(), 33);
+    assert_eq!(report.coverage_maps.len(), 1);
+    assert_eq!(report.coverage_maps[0].panels.len(), 2);
+    assert!(report.coverage_maps[0]
+        .panels
+        .iter()
+        .all(|panel| panel.unmapped_reporter_count == 1));
+    assert!(report.coverage_maps[0].panels.iter().all(|panel| {
+        panel
+            .cells
+            .iter()
+            .any(|cell| cell.state == antennabench_report::ReportCoverageState::Heard)
+            && panel
+                .cells
+                .iter()
+                .any(|cell| cell.state == antennabench_report::ReportCoverageState::ActiveNotHeard)
+    }));
     for html in [
         render_standalone_html(&report).expect("full report should render"),
         render_compact_summary_html(&report).expect("compact report should render"),
@@ -110,10 +126,22 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(html.contains("43 / 180 (23.9%)"));
         assert!(html.contains("180</td><td>145 / 180 (80.6%)"));
         assert!(html.contains("Complete band-qualified census"));
+        assert!(html.contains("Active-receiver coverage"));
+        assert!(html.contains("active, not heard"));
+        assert!(html.contains("1 unmapped"));
+        assert!(!html.contains("<script"));
     }
     let full = render_standalone_html(&report).unwrap();
     assert!(full.contains("activity-summary-field-shape"));
     assert!(full.contains("activity-first-000"));
+    assert!(full.contains("id=\"coverage-grid-0\" checked"));
+    assert!(full.contains("coverage-grid-view"));
+    assert!(full.contains("coverage-polar-view"));
+    assert!(full.contains("@media print"));
+    let compact = render_compact_summary_html(&report).unwrap();
+    assert!(compact.contains("coverage-polar-cells"));
+    assert!(compact.contains("Polar-cell numbers (accessible equivalent)"));
+    assert!(!compact.contains("<svg class=\"coverage-world\""));
 }
 
 #[test]
@@ -334,7 +362,7 @@ fn append_activity_census(
                 "cycle_time": first_cycle,
                 "band": Band::M20,
                 "reporter": synthetic_callsign(reporter_index),
-                "reporter_grid": "AA00"
+                "reporter_grid": activity_grid(reporter_index)
             }),
         ));
     }
@@ -347,9 +375,20 @@ fn append_activity_census(
                 "cycle_time": second_cycle,
                 "band": Band::M20,
                 "reporter": synthetic_callsign(reporter_index),
-                "reporter_grid": "AA00"
+                "reporter_grid": activity_grid(reporter_index)
             }),
         ));
+    }
+}
+
+fn activity_grid(reporter_index: usize) -> Option<&'static str> {
+    match reporter_index {
+        0..=32 => Some("AA00aa"),
+        33..=144 => Some("BB11bb"),
+        145..=154 => Some("CC22cc"),
+        155..=178 => Some("DD33dd"),
+        179 => None,
+        _ => Some("EE44ee"),
     }
 }
 

@@ -222,7 +222,7 @@ fn consolidates_standing_caveats_in_one_shared_reading_panel() {
                 < html.find("id=\"what-run-show-title\"").unwrap()
         );
         for caveat in [
-            "A missing report is missing evidence, never a zero-strength signal.",
+            "A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.",
             "This report describes evidence; it does not select a winner or prove one antenna is better.",
             "Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.",
             "Alternating antennas reduces but does not eliminate time and propagation effects.",

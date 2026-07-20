@@ -176,6 +176,37 @@ The current receiver-activity census conditions transmit-direction public
 reports. It does not prove which remote transmitters were active during a
 receive-direction cycle, so receive-direction activity coverage stays unknown.
 
+## Active-Receiver Coverage Map
+
+The coverage map turns the same conditioned evidence into three geographic
+states, separately for each antenna and comparison group:
+
+- **Heard** uses that antenna's identity color: at least one active reporter in
+  the cell reported the session callsign.
+- **Active, not heard** uses neutral hatching: reporters in the cell were proven
+  active on the band but none reported that antenna. This is below-threshold
+  evidence for the mapped cycle or cycles, not an SNR value.
+- **No active receivers** is plain land: the census provides no evidence about
+  reach there. It must not be read as “the signal did not get there.”
+
+The full report defaults to four-character Maidenhead cells and offers a
+script-free **Bearing and distance** view of the same reporter states. Printing
+always uses the grid-square view. The compact report uses 8 bearing sectors and
+four square-root-scaled distance rings (0–1, 1–3, 3–8, and 8–20 Mm). Its table
+is the accessible numeric equivalent of the 32 polar cells.
+
+Four-character cells are the display aggregation only. Retained six-character
+locators still place individual reporters in the polar view. Reporters with a
+missing or invalid locator remain in active and heard totals and appear in the
+visible **unmapped** count; they are not silently discarded. If either antenna
+lacks supported band-qualified census coverage, the map is omitted with
+coverage-unknown language instead of displaying an empty world.
+
+Color is not the only carrier of state: panel labels, outlines, hatching, SVG
+titles, and the visible numbers tables repeat the meaning. The two antennas are
+shown side by side; the map does not combine them into a difference layer or
+select a winner.
+
 ## Reach And Unique Paths
 
 Reach counts unique observed remote paths in three categories: the first named

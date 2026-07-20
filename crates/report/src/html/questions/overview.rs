@@ -7,6 +7,7 @@ pub(in super::super) fn render_question_navigation(out: &mut CheckedHtmlWriter<'
 <li><a href=\"#what-run-show\">What did the run show?</a></li>\
 <li><a href=\"#same-path-signal\">Same-path signal</a></li>\
 <li><a href=\"#reporter-activity\">Active-reporter hearing rate</a></li>\
+<li><a href=\"#coverage-map\">Active-receiver coverage map</a></li>\
 <li><a href=\"#reach-unique-paths\">Reach and unique paths</a></li>\
 <li><a href=\"#distance-direction\">Distance and direction</a></li>\
 <li><a href=\"#run-quality\">Run quality</a></li>\

@@ -9,11 +9,12 @@ use crate::{
 use super::{
     geometry::render_geometry_styles,
     questions::{
-        overview_lifecycle_label, render_answer_first_overview_with_reference, render_how_to_read,
-        render_reach_bar, render_reporter_activity_section, render_same_path_stratum,
+        overview_lifecycle_label, render_answer_first_overview_with_reference,
+        render_compact_coverage_map_section, render_how_to_read, render_reach_bar,
+        render_reporter_activity_section, render_same_path_stratum,
     },
     shared::*,
-    styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, STYLES},
+    styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
 };
 
 /// Renders a concise, deterministic, standalone HTML summary from the same
@@ -47,6 +48,7 @@ pub fn render_compact_summary_html_with_resources(
     );
     out.push_str(STYLES);
     render_geometry_styles(&mut out);
+    out.push_str(COVERAGE_STYLES);
     out.push_str(COMPACT_STYLES);
     out.push_str(COMPACT_SMALL_PRINT_STYLES);
     let compact_main_class = if report.overview.strata.len() <= 2
@@ -83,6 +85,7 @@ pub fn render_compact_summary_html_with_resources(
     render_compact_same_path_view(&mut out, report);
     out.push_str("</section>");
     render_reporter_activity_section(&mut out, report);
+    render_compact_coverage_map_section(&mut out, report);
     out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
     render_compact_reach_view(&mut out, report);
     out.push_str("</section>");

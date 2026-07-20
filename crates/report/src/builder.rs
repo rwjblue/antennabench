@@ -12,8 +12,8 @@ use chrono::Duration;
 use std::collections::BTreeMap;
 
 use crate::{
-    check_cancelled, report_resource_error, AntennaEvidenceSection, AntennaSnrRow,
-    BandEvidenceCountRow, BandEvidenceSection, CountingWriter, EvidenceSections,
+    check_cancelled, coverage::build_coverage_maps, report_resource_error, AntennaEvidenceSection,
+    AntennaSnrRow, BandEvidenceCountRow, BandEvidenceSection, CountingWriter, EvidenceSections,
     ReportAzimuthSector, ReportCancellationToken, ReportChartData, ReportComparisonData,
     ReportCompleteness, ReportDetailFamily, ReportDistanceBin, ReportError, ReportEvidenceSummary,
     ReportNotice, ReportOperatorEvent, ReportOperatorEventKind, ReportOverview,
@@ -145,7 +145,8 @@ fn build_report_with_resources_and_snapshot_and_activity(
             cancellation,
         )?
     };
-    let detail_counts = DetailCounts::new(bundle, &summary, &snapshot);
+    let mut coverage_maps = build_coverage_maps(&bundle.station.grid, &summary.reporter_activity);
+    let detail_counts = DetailCounts::new(bundle, &summary, &coverage_maps, &snapshot);
     // The question-first views retain every path median, rather than sampling
     // them in the renderer. Count those rows up front so a bounded overview is
     // complete or explicitly rejected, never silently partial.
@@ -157,6 +158,11 @@ fn build_report_with_resources_and_snapshot_and_activity(
         + summary.reporter_activity.census_cycles.len()
         + summary.reporter_activity.cycle_rates.len()
         + summary.reporter_activity.paired_rates.len()
+        + coverage_maps
+            .iter()
+            .flat_map(|group| &group.panels)
+            .map(|panel| panel.cells.len() + panel.polar_cells.len())
+            .sum::<usize>()
         + summary.slots.len()
         + snapshot.operator_events.len();
     if required_overview_rows as u64 > limits.rows {
@@ -223,6 +229,9 @@ fn build_report_with_resources_and_snapshot_and_activity(
         for rate in &mut reporter_activity.cycle_rates {
             rate.heard_reporters.clear();
         }
+        for panel in coverage_maps.iter_mut().flat_map(|group| &mut group.panels) {
+            panel.reporters.clear();
+        }
         detail_counts.append_notices(&mut notices);
     }
 
@@ -237,6 +246,7 @@ fn build_report_with_resources_and_snapshot_and_activity(
         evidence,
         comparison: project_comparison(comparison, full_detail),
         reporter_activity,
+        coverage_maps,
         solar_context,
         chart_data,
         notices,
@@ -848,6 +858,7 @@ impl DetailCounts {
     fn new(
         bundle: &BundleContents,
         summary: &AnalysisSummary,
+        coverage_maps: &[crate::ReportCoverageMapGroup],
         snapshot: &ReportSnapshotContext,
     ) -> Self {
         let comparison = &summary.comparison;
@@ -917,6 +928,14 @@ impl DetailCounts {
                             .map(|rate| rate.heard_reporters.len())
                             .sum::<usize>(),
                 ),
+                (
+                    ReportDetailFamily::CoverageMapReporters,
+                    coverage_maps
+                        .iter()
+                        .flat_map(|group| &group.panels)
+                        .map(|panel| panel.reporters.len())
+                        .sum(),
+                ),
                 (ReportDetailFamily::Charts, chart_rows),
             ],
             eligibility_rows: summary.eligibility.exclusions.len(),
@@ -960,6 +979,13 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     }
     for rate in &mut report.reporter_activity.cycle_rates {
         rate.heard_reporters.clear();
+    }
+    for panel in report
+        .coverage_maps
+        .iter_mut()
+        .flat_map(|group| &mut group.panels)
+    {
+        panel.reporters.clear();
     }
     report.chart_data = ReportChartData::default();
     report.snapshot.lifecycle_events.clear();

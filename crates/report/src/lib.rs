@@ -1,4 +1,5 @@
 mod builder;
+mod coverage;
 mod geography;
 mod html;
 mod model;
