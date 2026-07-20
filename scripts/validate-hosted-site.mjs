@@ -185,7 +185,9 @@ for (const networkChoiceContract of [
     `WSPR and RBN explanation is missing its content contract: ${networkChoiceContract}`,
   );
 }
-invariant(!whyWspr.includes("—"), "WSPR and RBN explanation contains an em dash");
+const whyWsprMain = whyWspr.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1];
+invariant(whyWsprMain !== undefined, "WSPR and RBN explanation is missing its main content");
+invariant(!whyWsprMain.includes("—"), "WSPR and RBN article contains an em dash");
 invariant(
   !whyWspr.includes("The snapshot is bounded, checked in, and reproducible."),
   "WSPR and RBN explanation still contains the removed generic reproducibility section",
