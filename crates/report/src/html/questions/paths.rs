@@ -1,5 +1,6 @@
 use super::super::geometry::geometry_class;
 use super::*;
+use std::collections::BTreeMap;
 
 pub(in super::super) fn render_same_path_section(
     out: &mut CheckedHtmlWriter<'_>,
@@ -61,7 +62,7 @@ pub(in super::super) fn render_same_path_view(
     if let Some(orientation) = orientation {
         write_html!(out, "<p class=\"orientation\"><strong>Signed values:</strong> Positive values mean {} was stronger; negative values mean {} was stronger. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label));
     }
-    out.push_str("<p class=\"path-view-note\">Each blue dot is one unique remote path’s median across its matched pairs; the purple diamond is the median across those path medians. A 0 dB dot is retained as a true zero.</p>");
+    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. The purple marker is the group median and the purple span is the middle half. A 0 dB dot is retained as a true zero.</p>");
     for row in available {
         render_same_path_stratum(out, row, orientation);
     }
@@ -120,13 +121,32 @@ pub(in super::super) fn render_same_path_stratum(
     let (negative_label, positive_label) = orientation
         .map(orientation_antenna_labels)
         .unwrap_or_else(|| ("Negative side".into(), "Positive side".into()));
-    write_html!(out, "<div class=\"path-strip\" aria-hidden=\"true\"><div class=\"path-strip-axis\"><span></span><span class=\"path-strip-axis-track\"><strong class=\"path-strip-side path-strip-side-negative\">{}</strong><span class=\"path-strip-axis-zero\">0 dB</span><strong class=\"path-strip-side path-strip-side-positive\">{}</strong></span><span></span></div>", negative_label, positive_label);
-    for path in &row.path_median_deltas {
-        let position = delta_position(path.median_delta_right_minus_left_db, max_abs);
-        write_html!(out, "<div class=\"path-strip-row\"><span class=\"chart-label\">{}</span><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-dot geometry-left {}\"></span></span><span>{} dB</span></div>", escape_html(&path.remote_path), geometry_class(position), format_signed(path.median_delta_right_minus_left_db));
-    }
-    let median_position = delta_position(median, max_abs);
-    write_html!(out, "<div class=\"path-strip-row\"><strong>Group median</strong><span class=\"path-strip-track\"><span class=\"path-strip-zero\"></span><span class=\"path-strip-median geometry-left {}\"></span></span><strong>{} dB</strong></div></div>", geometry_class(median_position), format_signed(median));
+    let mut values = row
+        .path_median_deltas
+        .iter()
+        .map(|path| path.median_delta_right_minus_left_db)
+        .collect::<Vec<_>>();
+    values.sort_by(f64::total_cmp);
+    let first_quartile = interpolated_quantile(&values, 0.25);
+    let third_quartile = interpolated_quantile(&values, 0.75);
+    let negative_count = values.iter().filter(|value| **value < 0.0).count();
+    let tied_count = values.iter().filter(|value| **value == 0.0).count();
+    let positive_count = values.iter().filter(|value| **value > 0.0).count();
+
+    write_html!(out, "<div class=\"path-distribution\"><dl class=\"facts path-distribution-summary\"><div class=\"fact\"><dt>{} stronger</dt><dd>{}</dd></div><div class=\"fact\"><dt>Tied at 0 dB</dt><dd>{}</dd></div><div class=\"fact\"><dt>{} stronger</dt><dd>{}</dd></div><div class=\"fact\"><dt>Group median</dt><dd>{} dB</dd></div><div class=\"fact\"><dt>Middle half</dt><dd>{} to {} dB</dd></div></dl>", negative_label, negative_count, tied_count, positive_label, positive_count, format_signed(median), format_signed(first_quartile), format_signed(third_quartile));
+    render_path_distribution_svg(
+        out,
+        &values,
+        PathDistributionScale {
+            maximum_absolute: max_abs,
+            median,
+            first_quartile,
+            third_quartile,
+        },
+        &negative_label,
+        &positive_label,
+    );
+    out.push_str("</div>");
     let orientation_text = orientation
         .map(|_| "signed".to_string())
         .unwrap_or_else(|| "right − left".to_string());
@@ -142,6 +162,67 @@ pub(in super::super) fn render_same_path_stratum(
         );
     }
     out.push_str("</tbody></table></div></div></details>");
+}
+
+#[derive(Clone, Copy)]
+struct PathDistributionScale {
+    maximum_absolute: f64,
+    median: f64,
+    first_quartile: f64,
+    third_quartile: f64,
+}
+
+fn render_path_distribution_svg(
+    out: &mut CheckedHtmlWriter<'_>,
+    values: &[f64],
+    scale: PathDistributionScale,
+    negative_label: &str,
+    positive_label: &str,
+) {
+    const LEFT: f64 = 44.0;
+    const WIDTH: f64 = 632.0;
+    const BASELINE: f64 = 156.0;
+    let x = |value: f64| LEFT + delta_position(value, scale.maximum_absolute) / 100.0 * WIDTH;
+    let mut stack_sizes = BTreeMap::<i64, usize>::new();
+    for value in values {
+        *stack_sizes
+            .entry((value * 1_000.0).round() as i64)
+            .or_default() += 1;
+    }
+    let largest_stack = stack_sizes.values().copied().max().unwrap_or(1);
+    let vertical_step = (104.0 / largest_stack as f64).min(11.0);
+    let radius = (vertical_step * 0.38).clamp(2.2, 4.2);
+    let mut stack_offsets = BTreeMap::<i64, usize>::new();
+
+    write_html!(out, "<svg class=\"coverage-polar path-distribution-chart\" viewBox=\"0 0 720 205\" role=\"img\" aria-label=\"Distribution of {} signed path-median SNR differences. Negative values favor {}; positive values favor {}.\"><rect width=\"720\" height=\"205\" rx=\"8\" fill=\"#f5f7fb\"/>", values.len(), escape_html(negative_label), escape_html(positive_label));
+    out.push_str("<line class=\"path-distribution-axis\" x1=\"44\" y1=\"160\" x2=\"676\" y2=\"160\" stroke=\"#5c667a\"/><line class=\"path-distribution-zero\" x1=\"360\" y1=\"38\" x2=\"360\" y2=\"166\" stroke=\"#172033\" stroke-width=\"1.5\"/>");
+    write_html!(out, "<line class=\"path-distribution-iqr\" x1=\"{:.2}\" y1=\"28\" x2=\"{:.2}\" y2=\"28\" stroke=\"#6d4c9a\" stroke-width=\"7\" stroke-linecap=\"round\"/><line class=\"path-distribution-median\" x1=\"{:.2}\" y1=\"18\" x2=\"{:.2}\" y2=\"42\" stroke=\"#6d4c9a\" stroke-width=\"3\"/>", x(scale.first_quartile), x(scale.third_quartile), x(scale.median), x(scale.median));
+    for value in values {
+        let bucket = (*value * 1_000.0).round() as i64;
+        let level = stack_offsets.entry(bucket).or_default();
+        let y = BASELINE - (*level as f64 + 0.5) * vertical_step;
+        *level += 1;
+        let (class, fill) = if *value < 0.0 {
+            ("path-dot-negative", "#315da8")
+        } else if *value > 0.0 {
+            ("path-dot-positive", "#b35c00")
+        } else {
+            ("path-dot-zero", "#5c667a")
+        };
+        write_html!(out, "<circle class=\"path-distribution-dot {class}\" cx=\"{:.2}\" cy=\"{y:.2}\" r=\"{radius:.2}\" fill=\"{fill}\" stroke=\"#fff\"/>", x(*value));
+    }
+    write_html!(out, "<text class=\"path-distribution-label path-distribution-label-negative\" x=\"44\" y=\"186\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\">{} stronger</text><text class=\"path-distribution-label\" x=\"360\" y=\"186\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\" text-anchor=\"middle\">0 dB</text><text class=\"path-distribution-label path-distribution-label-positive\" x=\"676\" y=\"186\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\" text-anchor=\"end\">{} stronger</text></svg>", escape_html(negative_label), escape_html(positive_label));
+}
+
+fn interpolated_quantile(sorted: &[f64], probability: f64) -> f64 {
+    if sorted.len() == 1 {
+        return sorted[0];
+    }
+    let position = probability * (sorted.len() - 1) as f64;
+    let lower = position.floor() as usize;
+    let upper = position.ceil() as usize;
+    let weight = position - lower as f64;
+    sorted[lower] + (sorted[upper] - sorted[lower]) * weight
 }
 pub(in super::super) fn render_reach_view(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let (left_label, right_label) = report_antenna_labels(report);
