@@ -35,8 +35,13 @@ fn attachment() -> AttachmentReference {
 }
 
 fn row(time: &str, reporter: &str, grid: &str) -> Value {
+    row_on_band(time, 14, reporter, grid)
+}
+
+fn row_on_band(time: &str, band: i64, reporter: &str, grid: &str) -> Value {
     json!({
         "time": time,
+        "band": band,
         "rx_sign": reporter,
         "rx_loc": grid,
         "spots_decoded": "37",
@@ -63,9 +68,9 @@ fn census_query_is_aggregated_stable_and_bounded_by_one_sentinel_row() {
     let plan = plan_wspr_live_query(&WsprLiveQueryScope::from(&config())).unwrap();
     let sql = plan.activity_census_sql();
 
-    assert!(sql.starts_with("SELECT time, rx_sign, any(rx_loc) AS rx_loc, count() AS spots_decoded, uniqExact(tx_sign) AS stations_heard, max(snr) AS max_snr, median(snr) AS median_snr FROM wspr.rx"));
+    assert!(sql.starts_with("SELECT time, band, rx_sign, any(rx_loc) AS rx_loc, count() AS spots_decoded, uniqExact(tx_sign) AS stations_heard, max(snr) AS max_snr, median(snr) AS median_snr FROM wspr.rx"));
     assert!(sql.contains("band IN (14) AND code = 1"));
-    assert!(sql.contains("GROUP BY time, rx_sign ORDER BY time, rx_sign"));
+    assert!(sql.contains("GROUP BY time, band, rx_sign ORDER BY time, band, rx_sign"));
     assert!(sql.contains(&format!(
         "LIMIT {WSPR_LIVE_ACTIVITY_QUERY_ROW_LIMIT} FORMAT JSON"
     )));
@@ -89,6 +94,7 @@ fn parsing_normalizes_reporters_and_drops_only_invalid_grids() {
     assert_eq!(parsed.rows.len(), 1);
     assert_eq!(parsed.malformed_rows, 1);
     assert_eq!(parsed.rows[0].reporter, "K1ABC-7");
+    assert_eq!(parsed.rows[0].band, Band::M20);
     assert_eq!(parsed.rows[0].reporter_grid, None);
     assert_eq!(parsed.rows[0].spots_decoded, 37);
     assert_eq!(parsed.rows[0].stations_heard, 12);
@@ -168,6 +174,73 @@ fn overlapping_windows_do_not_append_a_second_cycle_reporter_record() {
         .adapter_records
         .iter()
         .all(|record| record.normalized_records.is_empty()));
+}
+
+#[test]
+fn same_cycle_reporter_is_retained_once_per_band_and_deduped_per_band() {
+    let mut multi_band_config = config();
+    multi_band_config.selected_bands = vec![Band::M20, Band::M40];
+    let parsed = parse_wspr_live_activity_json(
+        &document(vec![
+            row_on_band("2026-07-19 02:00:00", 14, "K1ABC", "FN42"),
+            row_on_band("2026-07-19 02:00:00", 7, "K1ABC", "FN42"),
+        ]),
+        &multi_band_config,
+    )
+    .unwrap();
+    let first = prepare_wspr_live_activity(
+        &parsed,
+        &multi_band_config,
+        "session-1",
+        "capture-1",
+        attachment(),
+        &[],
+    );
+    let second = prepare_wspr_live_activity(
+        &parsed,
+        &multi_band_config,
+        "session-1",
+        "capture-2",
+        attachment(),
+        &first.adapter_records,
+    );
+
+    assert_eq!(first.summary.accepted, 2);
+    assert_eq!(second.summary.accepted, 0);
+    assert_eq!(second.summary.duplicate, 2);
+    let bands = first
+        .adapter_records
+        .iter()
+        .filter(|record| record.record_type == WSPR_LIVE_ACTIVITY_RECORD_TYPE)
+        .map(|record| {
+            let AdapterInput::Inline { data, .. } = &record.input else {
+                panic!("activity row must be inline")
+            };
+            serde_json::from_str::<Value>(data).unwrap()["band"].clone()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(bands, vec![json!("20m"), json!("40m")]);
+}
+
+#[test]
+fn malformed_missing_and_unselected_bands_are_rejected() {
+    let parsed = parse_wspr_live_activity_json(
+        &document(vec![
+            row_on_band("2026-07-19 02:00:00", 999, "K1ABC", "FN42"),
+            row_on_band("2026-07-19 02:02:00", 7, "W1XYZ", "EM12"),
+            {
+                let mut missing = row("2026-07-19 02:04:00", "N1TEST", "FN31");
+                missing.as_object_mut().unwrap().remove("band");
+                missing
+            },
+        ]),
+        &config(),
+    )
+    .unwrap();
+
+    assert!(parsed.rows.is_empty());
+    assert_eq!(parsed.source_rows, 3);
+    assert_eq!(parsed.malformed_rows, 3);
 }
 
 #[test]

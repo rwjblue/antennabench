@@ -203,14 +203,16 @@ activity census for the same half-open UTC window and selected bands. The
 attachment; `wspr_live_activity_census_summary` records source, accepted,
 duplicate, and malformed row counts, the 10,000-row retained limit, and an
 explicit truncation marker. Accepted `wspr_live_activity_census` records contain
-one `(cycle_time, reporter)` key with optional normalized reporter grid,
+one `(cycle_time, band, reporter)` key with optional normalized reporter grid,
 decoded-spot and distinct-station counts, and maximum and median SNR. Overlapping
 cumulative queries do not append a key already present in the bundle. Invalid
 grids are omitted without discarding otherwise valid activity. Query or response
 failure is a typed unsupported census-summary disposition and does not change
 the independently committed public-spot result. Census records are contextual
 adapter evidence: they have no slot attribution or normalized-record links and
-do not create observations or affect current analysis and reports.
+do not create observations or affect current analysis and reports. Older
+bandless census rows have unknown band coverage and are not inferred, migrated,
+backfilled, or used to suppress a new band-qualified row.
 
 The RBN daily-archive boundary uses provider `reverse-beacon-network`, source
 `rbn-daily-archive`, acquisition channel `file-import`, and adapter

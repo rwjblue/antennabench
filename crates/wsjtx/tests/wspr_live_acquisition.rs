@@ -105,7 +105,9 @@ fn activity_acquisition_uses_the_separate_aggregated_query_and_same_body_cap() {
     let requests = acquirer.transport().requests.borrow();
     assert_eq!(requests.len(), 1);
     assert!(requests[0].0.contains("uniqExact%28tx_sign%29"));
-    assert!(requests[0].0.contains("GROUP%20BY%20time%2C%20rx_sign"));
+    assert!(requests[0]
+        .0
+        .contains("GROUP%20BY%20time%2C%20band%2C%20rx_sign"));
     assert_eq!(requests[0].1, WSPR_LIVE_IMPORT_LIMITS.source_bytes);
 }
 

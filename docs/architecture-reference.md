@@ -672,11 +672,14 @@ The durable boundaries are:
   Manual file import is the offline/recovery path; the default HTTPS client
   reuses the same parser for cumulative acquisition across confirmed receive
   and transmit cycles. Automatic passes also preserve a separate aggregated
-  activity census, bounded to 10,000 deterministically ordered cycle/reporter
-  rows plus one query sentinel. Existing `(cycle, reporter)` keys suppress
+  activity census, bounded to 10,000 deterministically ordered
+  cycle/band/reporter rows plus one query sentinel. Existing
+  `(cycle, band, reporter)` keys suppress
   cumulative-window growth, the exact response and truncation state remain
   durable, and census records deliberately bypass observation, slot, analysis,
-  and report projections until a follow-up analysis consumes them. Neither path
+  and report projections until a follow-up analysis consumes them. Older
+  bandless rows have unknown coverage and are neither inferred nor migrated.
+  Neither path
   makes public reports a session prerequisite; see
   [Decision 0015](decisions/0015-use-an-import-first-wspr-public-spot-boundary.md),
   [#84](https://github.com/rwjblue/antennabench/issues/84), and

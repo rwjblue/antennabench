@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use antennabench_core::v2::{
     AdapterDisposition, AdapterInput, AdapterRecordV2, AttachmentReference,
 };
+use antennabench_core::Band;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde_json::Value;
 
@@ -23,8 +24,9 @@ pub const WSPR_LIVE_ACTIVITY_SUMMARY_RECORD_TYPE: &str = "wspr_live_activity_cen
 pub const WSPR_LIVE_ACTIVITY_ROW_LIMIT: usize = 10_000;
 pub const WSPR_LIVE_ACTIVITY_QUERY_ROW_LIMIT: usize = WSPR_LIVE_ACTIVITY_ROW_LIMIT + 1;
 
-pub const WSPR_LIVE_ACTIVITY_COLUMNS: [&str; 7] = [
+pub const WSPR_LIVE_ACTIVITY_COLUMNS: [&str; 8] = [
     "time",
+    "band",
     "rx_sign",
     "rx_loc",
     "spots_decoded",
@@ -45,7 +47,7 @@ impl WsprLiveQueryPlan {
         let window_end = self.window_end.format("%Y-%m-%d %H:%M:%S");
 
         format!(
-            "SELECT time, rx_sign, any(rx_loc) AS rx_loc, count() AS spots_decoded, uniqExact(tx_sign) AS stations_heard, max(snr) AS max_snr, median(snr) AS median_snr FROM wspr.rx WHERE band IN ({bands}) AND code = {} AND time >= toDateTime('{}', 'UTC') AND time < toDateTime('{}', 'UTC') GROUP BY time, rx_sign ORDER BY time, rx_sign LIMIT {} FORMAT JSON",
+            "SELECT time, band, rx_sign, any(rx_loc) AS rx_loc, count() AS spots_decoded, uniqExact(tx_sign) AS stations_heard, max(snr) AS max_snr, median(snr) AS median_snr FROM wspr.rx WHERE band IN ({bands}) AND code = {} AND time >= toDateTime('{}', 'UTC') AND time < toDateTime('{}', 'UTC') GROUP BY time, band, rx_sign ORDER BY time, band, rx_sign LIMIT {} FORMAT JSON",
             WSPR_LIVE_WSPR2_CODE,
             window_start,
             window_end,
@@ -64,6 +66,7 @@ impl WsprLiveQueryPlan {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WsprLiveActivityRow {
     pub cycle_time: DateTime<Utc>,
+    pub band: Band,
     pub reporter: String,
     pub reporter_grid: Option<String>,
     pub spots_decoded: u64,
@@ -194,7 +197,7 @@ pub fn prepare_wspr_live_activity(
     });
 
     for row in &parsed.rows {
-        let key = (row.cycle_time, row.reporter.clone());
+        let key = activity_key(row.cycle_time, row.band, row.reporter.clone());
         if !known.insert(key) {
             summary.duplicate += 1;
             continue;
@@ -218,6 +221,7 @@ pub fn prepare_wspr_live_activity(
             input: AdapterInput::Inline {
                 data: serde_json::to_string(&serde_json::json!({
                     "cycle_time": row.cycle_time,
+                    "band": row.band,
                     "reporter": row.reporter,
                     "reporter_grid": row.reporter_grid,
                     "spots_decoded": row.spots_decoded,
@@ -319,6 +323,13 @@ fn parse_row(raw: &Value, config: &WsprLiveImportConfig) -> Option<WsprLiveActiv
     if cycle_time < config.window_start || cycle_time >= config.window_end {
         return None;
     }
+    let band = object
+        .get("band")
+        .and_then(integer)
+        .and_then(crate::wspr_live::band_from_wspr_live)?;
+    if !config.selected_bands.contains(&band) {
+        return None;
+    }
     let reporter = object
         .get("rx_sign")?
         .as_str()
@@ -343,6 +354,7 @@ fn parse_row(raw: &Value, config: &WsprLiveImportConfig) -> Option<WsprLiveActiv
     }
     Some(WsprLiveActivityRow {
         cycle_time,
+        band,
         reporter,
         reporter_grid,
         spots_decoded,
@@ -352,7 +364,9 @@ fn parse_row(raw: &Value, config: &WsprLiveImportConfig) -> Option<WsprLiveActiv
     })
 }
 
-fn existing_activity_keys(existing: &[AdapterRecordV2]) -> BTreeSet<(DateTime<Utc>, String)> {
+fn existing_activity_keys(
+    existing: &[AdapterRecordV2],
+) -> BTreeSet<(DateTime<Utc>, String, String)> {
     existing
         .iter()
         .filter(|record| {
@@ -364,12 +378,25 @@ fn existing_activity_keys(existing: &[AdapterRecordV2]) -> BTreeSet<(DateTime<Ut
                 return None;
             };
             let value: Value = serde_json::from_str(data).ok()?;
-            Some((
+            Some(activity_key(
                 value.get("cycle_time")?.as_str()?.parse().ok()?,
+                serde_json::from_value(value.get("band")?.clone()).ok()?,
                 value.get("reporter")?.as_str()?.to_string(),
             ))
         })
         .collect()
+}
+
+fn activity_key(
+    cycle_time: DateTime<Utc>,
+    band: Band,
+    reporter: String,
+) -> (DateTime<Utc>, String, String) {
+    (
+        cycle_time,
+        serde_json::to_string(&band).expect("band serializes"),
+        reporter,
+    )
 }
 
 fn validate_columns(meta: Option<&Value>) -> Result<(), WsprLiveImportError> {
@@ -405,6 +432,12 @@ fn timestamp(value: &Value) -> Option<DateTime<Utc>> {
 fn unsigned(value: &Value) -> Option<u64> {
     value
         .as_u64()
+        .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
+}
+
+fn integer(value: &Value) -> Option<i64> {
+    value
+        .as_i64()
         .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
 }
 

@@ -1159,7 +1159,7 @@ fn timestamp(value: &Value) -> Option<DateTime<Utc>> {
         })
 }
 
-fn band_from_wspr_live(value: i64) -> Option<Band> {
+pub(crate) fn band_from_wspr_live(value: i64) -> Option<Band> {
     Some(match value {
         1 => Band::M160,
         3 => Band::M80,
