@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs::OpenOptions,
+    fs::{File, OpenOptions},
     io::{self, Write},
     sync::Arc,
 };
@@ -126,6 +126,10 @@ impl LivePersistenceHooks for Hooks {
 
     fn new_id(&self, kind: &str) -> String {
         format!("{kind}-test")
+    }
+
+    fn sync_all(&self, _file: &File) -> io::Result<()> {
+        Ok(())
     }
 
     fn check(&self, point: LivePersistencePoint) -> io::Result<()> {

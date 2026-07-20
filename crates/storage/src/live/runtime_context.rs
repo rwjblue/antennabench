@@ -92,8 +92,10 @@ impl BundleStore {
                 });
             }
         }
-        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
-            message: format!("live persistence durability probe failed: {source}"),
+        probe_live_persistence(self.root(), hooks.as_ref()).map_err(|source| {
+            LivePersistenceError::Capability {
+                message: format!("live persistence durability probe failed: {source}"),
+            }
         })?;
         let bundle = self.read_v3()?;
         let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;

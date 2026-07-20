@@ -19,7 +19,7 @@ use super::{
         all_streams, commit_checkpoint, read_json_file, stream_checkpoint, stream_path,
         CHECKPOINT_TEMP,
     },
-    durability::sync_directory,
+    durability::sync_directory_with_hooks,
     invalid_serialization, live_io, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError,
     LivePersistenceHooks, LiveStreamV2, RecoveryArtifactV2, RecoveryDispositionV2,
 };
@@ -58,6 +58,12 @@ struct RecoveryBytes<'a> {
     source: &'a str,
     committed_offset: u64,
     bytes: &'a [u8],
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct RecoveryPersistence<'a> {
+    pub(super) detected_at: DateTime<Utc>,
+    pub(super) hooks: &'a dyn LivePersistenceHooks,
 }
 
 pub(super) fn recover_pending_plan_generation(
@@ -162,7 +168,10 @@ pub(super) fn recover_pending_plan_generation(
             paths,
             &generation,
             diagnosis,
-            hooks.now(),
+            RecoveryPersistence {
+                detected_at: hooks.now(),
+                hooks,
+            },
             artifacts,
         )?;
         if generation.is_dir() {
@@ -174,7 +183,7 @@ pub(super) fn recover_pending_plan_generation(
                 .map_err(|source| live_io("remove recovered plan artifact", &generation, source))?;
         }
     }
-    sync_directory(&generations_dir).map_err(|source| {
+    sync_directory_with_hooks(&generations_dir, hooks).map_err(|source| {
         live_io(
             "synchronize recovered plan generation cleanup",
             &generations_dir,
@@ -251,7 +260,7 @@ fn preserve_plan_generation(
     paths: &ResolvedBundlePathsV2,
     generation: &Path,
     diagnosis: &str,
-    detected_at: DateTime<Utc>,
+    persistence: RecoveryPersistence<'_>,
     artifacts: &mut Vec<RecoveryArtifactV2>,
 ) -> Result<(), LivePersistenceError> {
     if generation.is_file() {
@@ -277,7 +286,7 @@ fn preserve_plan_generation(
                 bytes: &bytes,
             },
             diagnosis,
-            detected_at,
+            persistence,
         )?);
         return Ok(());
     }
@@ -320,7 +329,7 @@ fn preserve_plan_generation(
                 bytes: &bytes,
             },
             diagnosis,
-            detected_at,
+            persistence,
         )?);
     }
     Ok(())
@@ -438,7 +447,9 @@ pub(super) fn preserve_tails(
     tails: &[StreamTail],
     diagnosis: &str,
     detected_at: DateTime<Utc>,
+    hooks: &dyn LivePersistenceHooks,
 ) -> Result<Vec<RecoveryArtifactV2>, LivePersistenceError> {
+    let persistence = RecoveryPersistence { detected_at, hooks };
     preserve_tails_for(
         store,
         SCHEMA_VERSION_V2,
@@ -446,7 +457,7 @@ pub(super) fn preserve_tails(
         paths,
         tails,
         diagnosis,
-        detected_at,
+        persistence,
     )
 }
 
@@ -457,7 +468,7 @@ pub(super) fn preserve_tails_for(
     paths: &ResolvedBundlePathsV2,
     tails: &[StreamTail],
     diagnosis: &str,
-    detected_at: DateTime<Utc>,
+    persistence: RecoveryPersistence<'_>,
 ) -> Result<Vec<RecoveryArtifactV2>, LivePersistenceError> {
     let mut artifacts = Vec::new();
     for tail in tails.iter().filter(|tail| !tail.bytes.is_empty()) {
@@ -473,7 +484,7 @@ pub(super) fn preserve_tails_for(
                 bytes: &tail.bytes,
             },
             diagnosis,
-            detected_at,
+            persistence,
         )?);
     }
     Ok(artifacts)
@@ -486,7 +497,7 @@ fn preserve_recovery_bytes(
     paths: &ResolvedBundlePathsV2,
     evidence: RecoveryBytes<'_>,
     diagnosis: &str,
-    detected_at: DateTime<Utc>,
+    persistence: RecoveryPersistence<'_>,
 ) -> Result<RecoveryArtifactV2, LivePersistenceError> {
     let RecoveryBytes {
         source,
@@ -499,13 +510,14 @@ fn preserve_recovery_bytes(
         bytes,
         "application/octet-stream",
         Some(format!("recovery:{source}:{committed_offset}")),
+        persistence.hooks,
     )?;
     let metadata = RecoveryArtifactMetadataV2 {
         schema_version,
         session_id,
         source,
         committed_offset,
-        detected_at,
+        detected_at: persistence.detected_at,
         diagnosis,
         raw_attachment: &raw_attachment,
     };
@@ -516,6 +528,7 @@ fn preserve_recovery_bytes(
         &metadata_bytes,
         "application/json",
         Some(format!("recovery-metadata:{source}:{committed_offset}")),
+        persistence.hooks,
     )?;
     Ok(RecoveryArtifactV2 {
         source: source.into(),
@@ -529,6 +542,7 @@ fn preserve_recovery_bytes(
 pub(super) fn truncate_tails(
     checkpoint: &SessionStateV2,
     paths: &ResolvedBundlePathsV2,
+    hooks: &dyn LivePersistenceHooks,
 ) -> Result<(), LivePersistenceError> {
     for stream in recovery_streams(checkpoint, paths) {
         let committed = stream_checkpoint(checkpoint, stream)?.committed_bytes;
@@ -539,10 +553,15 @@ pub(super) fn truncate_tails(
             .map_err(|source| live_io("open recovery truncation", path, source))?;
         file.set_len(committed)
             .map_err(|source| live_io("truncate recovered stream", path, source))?;
-        file.sync_all()
+        hooks
+            .sync_all(&file)
             .map_err(|source| live_io("synchronize recovered stream", path, source))?;
     }
-    sync_directory(paths.session_state.parent().expect("checkpoint has parent")).map_err(|source| {
+    sync_directory_with_hooks(
+        paths.session_state.parent().expect("checkpoint has parent"),
+        hooks,
+    )
+    .map_err(|source| {
         live_io(
             "synchronize recovered bundle directory",
             paths.session_state.parent().expect("checkpoint has parent"),
@@ -571,6 +590,7 @@ pub(super) fn recover_checkpoint_temp(
     paths: &ResolvedBundlePathsV2,
     artifacts: &mut Vec<RecoveryArtifactV2>,
     detected_at: DateTime<Utc>,
+    hooks: &dyn LivePersistenceHooks,
 ) -> Result<(), LivePersistenceError> {
     recover_checkpoint_temp_for(
         store,
@@ -579,6 +599,7 @@ pub(super) fn recover_checkpoint_temp(
         paths,
         artifacts,
         detected_at,
+        hooks,
     )
 }
 
@@ -589,6 +610,7 @@ pub(super) fn recover_checkpoint_temp_for(
     paths: &ResolvedBundlePathsV2,
     artifacts: &mut Vec<RecoveryArtifactV2>,
     detected_at: DateTime<Utc>,
+    hooks: &dyn LivePersistenceHooks,
 ) -> Result<(), LivePersistenceError> {
     let temp = store.root().join(CHECKPOINT_TEMP);
     if !temp.exists() {
@@ -609,6 +631,7 @@ pub(super) fn recover_checkpoint_temp_for(
             &bytes,
             "application/json",
             Some("recovery:checkpoint-temp".into()),
+            hooks,
         )?;
         let metadata = RecoveryArtifactMetadataV2 {
             schema_version,
@@ -626,6 +649,7 @@ pub(super) fn recover_checkpoint_temp_for(
             &metadata_bytes,
             "application/json",
             Some("recovery-metadata:checkpoint-temp".into()),
+            hooks,
         )?;
         artifacts.push(RecoveryArtifactV2 {
             source: "checkpoint_temp".into(),
@@ -637,6 +661,6 @@ pub(super) fn recover_checkpoint_temp_for(
     }
     fs::remove_file(&temp)
         .map_err(|source| live_io("remove recovered checkpoint temp", &temp, source))?;
-    sync_directory(store.root())
+    sync_directory_with_hooks(store.root(), hooks)
         .map_err(|source| live_io("synchronize checkpoint temp cleanup", store.root(), source))
 }

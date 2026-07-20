@@ -22,7 +22,6 @@ use antennabench_core::{
     RecordSource, Schedule, Station, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
     SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{
@@ -35,6 +34,7 @@ mod checkpoint;
 mod diagnostic;
 mod durability;
 mod error;
+mod hooks;
 mod lock;
 mod mutation;
 mod recovery;
@@ -44,6 +44,7 @@ pub use diagnostic::{
     DiagnosticCommitDispositionV6, DiagnosticCommitReceiptV6, LiveDiagnosticMutationV6,
 };
 pub use error::{DiagnosticPersistenceStatusV6, LivePersistenceError};
+pub use hooks::{LivePersistenceHooks, LivePersistencePoint, SystemLivePersistenceHooks};
 
 use attachments::{copy_checkpointed_attachments, durable_attachment};
 use checkpoint::{
@@ -53,7 +54,7 @@ use checkpoint::{
 };
 use durability::{
     probe_live_persistence, publish_new_bundle, remove_file_if_present, sync_directory,
-    sync_regular_file,
+    sync_directory_with_hooks, sync_regular_file,
 };
 use mutation::{
     append_line, committed_mutation, committed_v5_antenna_control, preflight_live_budget,
@@ -101,51 +102,6 @@ pub enum LivePlanFile {
     Antennas,
     Schedule,
     GenerationMetadata,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LivePersistencePoint {
-    BeforePlanWrite(LivePlanFile),
-    AfterPlanWrite(LivePlanFile),
-    BeforePlanSync(LivePlanFile),
-    AfterPlanSync(LivePlanFile),
-    BeforeStreamWrite(LiveStreamV2),
-    MidStreamWrite(LiveStreamV2),
-    AfterStreamWrite(LiveStreamV2),
-    BeforeStreamSync(LiveStreamV2),
-    AfterStreamSync(LiveStreamV2),
-    BeforeCheckpointWrite,
-    AfterCheckpointWrite,
-    BeforeCheckpointSync,
-    AfterCheckpointSync,
-    BeforeCheckpointReplace,
-    AfterCheckpointReplace,
-    BeforeDirectorySync,
-    AfterDirectorySync,
-    BeforeCheckpointVerify,
-    AfterCheckpointVerify,
-    BeforeAcknowledge,
-}
-
-pub trait LivePersistenceHooks: Send + Sync {
-    fn now(&self) -> DateTime<Utc>;
-    fn new_id(&self, kind: &str) -> String;
-    fn check(&self, _point: LivePersistencePoint) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct SystemLivePersistenceHooks;
-
-impl LivePersistenceHooks for SystemLivePersistenceHooks {
-    fn now(&self) -> DateTime<Utc> {
-        Utc::now()
-    }
-
-    fn new_id(&self, kind: &str) -> String {
-        format!("{kind}-{}", Uuid::new_v4())
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -639,8 +595,10 @@ impl BundleStore {
             }
         }
 
-        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
-            message: format!("live persistence durability probe failed: {source}"),
+        probe_live_persistence(self.root(), hooks.as_ref()).map_err(|source| {
+            LivePersistenceError::Capability {
+                message: format!("live persistence durability probe failed: {source}"),
+            }
         })?;
 
         let manifest_path = self.root().join("manifest.json");
@@ -671,7 +629,7 @@ impl BundleStore {
         let tails = read_stream_tails(self, &checkpoint, &paths)?;
         let has_tails = tails.iter().any(|tail| !tail.bytes.is_empty());
         if has_tails {
-            truncate_tails(&checkpoint, &paths)?;
+            truncate_tails(&checkpoint, &paths, hooks.as_ref())?;
         }
 
         let bundle = self.read_v3()?;
@@ -687,7 +645,10 @@ impl BundleStore {
                 &paths,
                 &tails,
                 "schema-v3 recovery conservatively rolled back uncommitted stream data",
-                hooks.now(),
+                recovery::RecoveryPersistence {
+                    detected_at: hooks.now(),
+                    hooks: hooks.as_ref(),
+                },
             )?
         } else {
             Vec::new()
@@ -699,6 +660,7 @@ impl BundleStore {
             &paths,
             &mut artifacts,
             hooks.now(),
+            hooks.as_ref(),
         )?;
         verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
 
@@ -817,8 +779,10 @@ impl BundleStore {
             }
         }
 
-        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
-            message: format!("live persistence durability probe failed: {source}"),
+        probe_live_persistence(self.root(), hooks.as_ref()).map_err(|source| {
+            LivePersistenceError::Capability {
+                message: format!("live persistence durability probe failed: {source}"),
+            }
         })?;
         let bundle = self.read_v2()?;
         let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
@@ -864,8 +828,10 @@ impl BundleStore {
             }
         }
 
-        probe_live_persistence(self.root()).map_err(|source| LivePersistenceError::Capability {
-            message: format!("live persistence durability probe failed: {source}"),
+        probe_live_persistence(self.root(), hooks.as_ref()).map_err(|source| {
+            LivePersistenceError::Capability {
+                message: format!("live persistence durability probe failed: {source}"),
+            }
         })?;
 
         let (mut bundle, restore_selected_checkpoint) = load_recovery_bundle(self)?;
@@ -908,11 +874,12 @@ impl BundleStore {
                                 &tails,
                                 &diagnosis,
                                 hooks.now(),
+                                hooks.as_ref(),
                             )?);
-                            truncate_tails(&bundle.session_state, &paths)?;
+                            truncate_tails(&bundle.session_state, &paths, hooks.as_ref())?;
                             disposition = RecoveryDispositionV2::RolledBack;
                         } else {
-                            truncate_tails(&bundle.session_state, &paths)?;
+                            truncate_tails(&bundle.session_state, &paths, hooks.as_ref())?;
                             disposition = RecoveryDispositionV2::IdempotentTailRemoved;
                         }
                     } else {
@@ -946,14 +913,22 @@ impl BundleStore {
                         &tails,
                         &diagnosis,
                         hooks.now(),
+                        hooks.as_ref(),
                     )?);
-                    truncate_tails(&bundle.session_state, &paths)?;
+                    truncate_tails(&bundle.session_state, &paths, hooks.as_ref())?;
                     disposition = RecoveryDispositionV2::RolledBack;
                 }
             }
         }
 
-        recover_checkpoint_temp(self, &bundle, &paths, &mut artifacts, hooks.now())?;
+        recover_checkpoint_temp(
+            self,
+            &bundle,
+            &paths,
+            &mut artifacts,
+            hooks.now(),
+            hooks.as_ref(),
+        )?;
         let recovered_revision = bundle.session_state.revision;
         paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
         verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
@@ -1140,8 +1115,14 @@ impl LiveSessionV2 {
         let digest = sha256_hex(bytes);
         let attachment_path = self.paths.attachments_dir.join("sha256").join(&digest);
         let existed = fs::symlink_metadata(&attachment_path).is_ok();
-        let mut attachment =
-            durable_attachment(&self.store, &self.paths, bytes, media_type, source_locator)?;
+        let mut attachment = durable_attachment(
+            &self.store,
+            &self.paths,
+            bytes,
+            media_type,
+            source_locator,
+            self.hooks.as_ref(),
+        )?;
         attachment.encoding = encoding;
         attachment.container = container;
         let mutation = build_mutation(attachment.clone());
@@ -1160,17 +1141,18 @@ impl LiveSessionV2 {
                         live_io("remove uncommitted attachment", &attachment_path, source)
                     })?;
                     if let Some(parent) = attachment_path.parent() {
-                        sync_directory(parent).map_err(|source| {
-                            live_io("synchronize attachment rollback", parent, source)
-                        })?;
+                        sync_directory_with_hooks(parent, self.hooks.as_ref()).map_err(
+                            |source| live_io("synchronize attachment rollback", parent, source),
+                        )?;
                     }
-                    sync_directory(&self.paths.attachments_dir).map_err(|source| {
-                        live_io(
-                            "synchronize attachments rollback",
-                            &self.paths.attachments_dir,
-                            source,
-                        )
-                    })?;
+                    sync_directory_with_hooks(&self.paths.attachments_dir, self.hooks.as_ref())
+                        .map_err(|source| {
+                            live_io(
+                                "synchronize attachments rollback",
+                                &self.paths.attachments_dir,
+                                source,
+                            )
+                        })?;
                 }
                 Err(error)
             }
@@ -1289,7 +1271,7 @@ impl LiveSessionV2 {
             &generation_metadata,
             self.hooks.as_ref(),
         )?;
-        sync_directory(&generation_dir)
+        sync_directory_with_hooks(&generation_dir, self.hooks.as_ref())
             .map_err(|source| live_io("synchronize plan generation", &generation_dir, source))?;
 
         let mut next = self.bundle.session_state.clone();
@@ -1410,7 +1392,8 @@ impl LiveSessionV2 {
                 .map_err(|source| live_io("open stream rollback", path, source))?;
             file.set_len(checkpoint.committed_bytes)
                 .map_err(|source| live_io("truncate uncommitted stream tail", path, source))?;
-            file.sync_all()
+            self.hooks
+                .sync_all(&file)
                 .map_err(|source| live_io("synchronize stream rollback", path, source))?;
         }
         Ok(())
@@ -1582,7 +1565,7 @@ impl LiveSessionV3 {
                 if actor.new_context.is_some() {
                     rollback.insert(0, LiveStreamV2::RuntimeContexts);
                 }
-                rollback_v3_streams(&self.paths, &baseline, &rollback)?;
+                rollback_v3_streams(&self.paths, &baseline, &rollback, self.hooks.as_ref())?;
             }
             return Err(error);
         }
@@ -1773,7 +1756,7 @@ impl LiveSessionV3 {
                 if actor.new_context.is_some() {
                     rollback.insert(0, LiveStreamV2::RuntimeContexts);
                 }
-                rollback_v3_streams(&self.paths, &baseline, &rollback)?;
+                rollback_v3_streams(&self.paths, &baseline, &rollback, self.hooks.as_ref())?;
             }
             return Err(error);
         }
@@ -1806,8 +1789,14 @@ impl LiveSessionV3 {
         let digest = sha256_hex(bytes);
         let attachment_path = self.paths.attachments_dir.join("sha256").join(&digest);
         let existed = fs::symlink_metadata(&attachment_path).is_ok();
-        let mut attachment =
-            durable_attachment(&self.store, &self.paths, bytes, media_type, source_locator)?;
+        let mut attachment = durable_attachment(
+            &self.store,
+            &self.paths,
+            bytes,
+            media_type,
+            source_locator,
+            self.hooks.as_ref(),
+        )?;
         attachment.encoding = encoding;
         attachment.container = container;
         let mutation = build_mutation(attachment.clone());
@@ -1826,17 +1815,18 @@ impl LiveSessionV3 {
                         live_io("remove uncommitted attachment", &attachment_path, source)
                     })?;
                     if let Some(parent) = attachment_path.parent() {
-                        sync_directory(parent).map_err(|source| {
-                            live_io("synchronize attachment rollback", parent, source)
-                        })?;
+                        sync_directory_with_hooks(parent, self.hooks.as_ref()).map_err(
+                            |source| live_io("synchronize attachment rollback", parent, source),
+                        )?;
                     }
-                    sync_directory(&self.paths.attachments_dir).map_err(|source| {
-                        live_io(
-                            "synchronize attachments rollback",
-                            &self.paths.attachments_dir,
-                            source,
-                        )
-                    })?;
+                    sync_directory_with_hooks(&self.paths.attachments_dir, self.hooks.as_ref())
+                        .map_err(|source| {
+                            live_io(
+                                "synchronize attachments rollback",
+                                &self.paths.attachments_dir,
+                                source,
+                            )
+                        })?;
                 }
                 Err(error)
             }
@@ -1983,7 +1973,7 @@ impl LiveSessionV3 {
                 if actor.new_context.is_some() {
                     rollback.insert(0, LiveStreamV2::RuntimeContexts);
                 }
-                rollback_v3_streams(&self.paths, &baseline, &rollback)?;
+                rollback_v3_streams(&self.paths, &baseline, &rollback, self.hooks.as_ref())?;
             }
             return Err(error);
         }

@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{
-    durability::{replace_checkpoint, sync_directory},
+    durability::{replace_checkpoint, sync_directory_with_hooks},
     invalid_serialization, live_io, LivePersistenceError, LivePersistenceHooks,
     LivePersistencePoint, LivePlanFile, LiveStreamV2,
 };
@@ -354,7 +354,8 @@ pub(super) fn write_plan_file(
     hooks
         .check(LivePersistencePoint::BeforePlanSync(kind))
         .map_err(|source| live_io("plan pre-sync failpoint", path, source))?;
-    file.sync_all()
+    hooks
+        .sync_all(&file)
         .map_err(|source| live_io("synchronize plan file", path, source))?;
     hooks
         .check(LivePersistencePoint::AfterPlanSync(kind))
@@ -391,7 +392,8 @@ pub(super) fn commit_checkpoint(
     hooks
         .check(LivePersistencePoint::BeforeCheckpointSync)
         .map_err(|source| live_io("checkpoint pre-sync failpoint", &temp, source))?;
-    file.sync_all()
+    hooks
+        .sync_all(&file)
         .map_err(|source| live_io("synchronize checkpoint temp", &temp, source))?;
     hooks
         .check(LivePersistencePoint::AfterCheckpointSync)
@@ -400,7 +402,7 @@ pub(super) fn commit_checkpoint(
     hooks
         .check(LivePersistencePoint::BeforeCheckpointReplace)
         .map_err(|source| live_io("checkpoint pre-replace failpoint", &temp, source))?;
-    replace_checkpoint(&temp, current, &previous)
+    replace_checkpoint(&temp, current, &previous, hooks)
         .map_err(|source| live_io("atomically replace checkpoint", current, source))?;
     hooks
         .check(LivePersistencePoint::AfterCheckpointReplace)
@@ -408,7 +410,8 @@ pub(super) fn commit_checkpoint(
     hooks
         .check(LivePersistencePoint::BeforeDirectorySync)
         .map_err(|source| live_io("directory pre-sync failpoint", root, source))?;
-    sync_directory(root).map_err(|source| live_io("synchronize bundle directory", root, source))?;
+    sync_directory_with_hooks(root, hooks)
+        .map_err(|source| live_io("synchronize bundle directory", root, source))?;
     hooks
         .check(LivePersistencePoint::AfterDirectorySync)
         .map_err(|source| live_io("directory post-sync failpoint", root, source))?;

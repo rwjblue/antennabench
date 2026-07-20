@@ -8,8 +8,10 @@ use antennabench_core::v2::AttachmentReference;
 use sha2::{Digest, Sha256};
 
 use super::{
-    durability::{sync_directory, sync_regular_file},
-    live_io, LivePersistenceError,
+    durability::{
+        sync_directory, sync_directory_with_hooks, sync_regular_file, sync_regular_file_with_hooks,
+    },
+    live_io, LivePersistenceError, LivePersistenceHooks,
 };
 use crate::{v2::ResolvedBundlePathsV2, BundleStore};
 
@@ -19,6 +21,7 @@ pub(super) fn durable_attachment(
     bytes: &[u8],
     media_type: &str,
     source_locator: Option<String>,
+    hooks: &dyn LivePersistenceHooks,
 ) -> Result<AttachmentReference, LivePersistenceError> {
     let reference = store.write_attachment(bytes, media_type, None, None, source_locator)?;
     let relative =
@@ -28,13 +31,13 @@ pub(super) fn durable_attachment(
                 message: "recovery attachment digest is invalid".into(),
             })?;
     let path = paths.attachments_dir.join(relative);
-    sync_regular_file(&path)
+    sync_regular_file_with_hooks(&path, hooks)
         .map_err(|source| live_io("synchronize recovery attachment", &path, source))?;
     if let Some(parent) = path.parent() {
-        sync_directory(parent)
+        sync_directory_with_hooks(parent, hooks)
             .map_err(|source| live_io("synchronize recovery digest directory", parent, source))?;
     }
-    sync_directory(&paths.attachments_dir).map_err(|source| {
+    sync_directory_with_hooks(&paths.attachments_dir, hooks).map_err(|source| {
         live_io(
             "synchronize recovery attachments directory",
             &paths.attachments_dir,

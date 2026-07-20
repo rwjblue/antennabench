@@ -1,5 +1,5 @@
 use std::{
-    fs::OpenOptions,
+    fs::{File, OpenOptions},
     io,
     io::Write,
     path::{Path, PathBuf},
@@ -17,7 +17,7 @@ use antennabench_core::{
 use antennabench_storage::{
     BundleStore, LiveMutationMemberV2, LiveMutationV2, LivePersistenceError, LivePersistenceHooks,
     LivePersistencePoint, LivePlanFile, LiveSessionV2, LiveStreamV2, PlanCommitV2,
-    RecoveryDispositionV2,
+    RecoveryDispositionV2, SystemLivePersistenceHooks,
 };
 use chrono::{DateTime, TimeZone, Utc};
 
@@ -60,6 +60,10 @@ impl LivePersistenceHooks for DeterministicHooks {
         id
     }
 
+    fn sync_all(&self, _file: &File) -> io::Result<()> {
+        Ok(())
+    }
+
     fn check(&self, point: LivePersistencePoint) -> io::Result<()> {
         self.points.lock().unwrap().push(point);
         let mut fail = self.fail_once.lock().unwrap();
@@ -70,6 +74,20 @@ impl LivePersistenceHooks for DeterministicHooks {
             Ok(())
         }
     }
+}
+
+#[test]
+fn system_hooks_smoke_exercises_platform_sync() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("sync-smoke");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .unwrap();
+    file.write_all(b"durability smoke").unwrap();
+
+    SystemLivePersistenceHooks.sync_all(&file).unwrap();
 }
 
 #[test]

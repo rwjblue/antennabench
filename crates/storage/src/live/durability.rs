@@ -10,14 +10,21 @@ use std::io::Write;
 #[cfg(windows)]
 use uuid::Uuid;
 
+use super::LivePersistenceHooks;
+
 #[cfg(unix)]
-pub(super) fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Result<()> {
+pub(super) fn replace_checkpoint(
+    temp: &Path,
+    current: &Path,
+    previous: &Path,
+    hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
     let previous_temp = previous.with_extension("json.next");
     if previous_temp.exists() {
         fs::remove_file(&previous_temp)?;
     }
     fs::copy(current, &previous_temp)?;
-    sync_regular_file(&previous_temp)?;
+    sync_regular_file_with_hooks(&previous_temp, hooks)?;
     fs::rename(&previous_temp, previous)?;
     fs::rename(temp, current)
 }
@@ -30,11 +37,16 @@ pub(super) fn publish_new_bundle(staging: &Path, destination: &Path) -> io::Resu
 }
 
 #[cfg(windows)]
-pub(super) fn replace_checkpoint(temp: &Path, current: &Path, previous: &Path) -> io::Result<()> {
+pub(super) fn replace_checkpoint(
+    temp: &Path,
+    current: &Path,
+    previous: &Path,
+    hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
     let previous_temp = previous.with_extension("json.next");
     remove_file_if_present(&previous_temp)?;
     fs::copy(current, &previous_temp)?;
-    sync_regular_file(&previous_temp)?;
+    sync_regular_file_with_hooks(&previous_temp, hooks)?;
     move_file_write_through(&previous_temp, previous)?;
     move_file_write_through(temp, current)
 }
@@ -45,21 +57,27 @@ pub(super) fn publish_new_bundle(staging: &Path, destination: &Path) -> io::Resu
 }
 
 #[cfg(unix)]
-pub(super) fn probe_live_persistence(path: &Path) -> io::Result<()> {
-    sync_directory(path)
+pub(super) fn probe_live_persistence(
+    path: &Path,
+    hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
+    sync_directory_with_hooks(path, hooks)
 }
 
 #[cfg(windows)]
-pub(super) fn probe_live_persistence(path: &Path) -> io::Result<()> {
+pub(super) fn probe_live_persistence(
+    path: &Path,
+    hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
     let probe_id = Uuid::new_v4().simple();
     let current = path.join(format!(".antennabench-durability-{probe_id}.current"));
     let replacement = path.join(format!(".antennabench-durability-{probe_id}.next"));
     let previous = path.join(format!(".antennabench-durability-{probe_id}.previous"));
     let previous_temp = previous.with_extension("json.next");
     let result = (|| {
-        write_synced_probe(&current, b"current")?;
-        write_synced_probe(&replacement, b"replacement")?;
-        replace_checkpoint(&replacement, &current, &previous)?;
+        write_synced_probe(&current, b"current", hooks)?;
+        write_synced_probe(&replacement, b"replacement", hooks)?;
+        replace_checkpoint(&replacement, &current, &previous, hooks)?;
         if fs::read(&current)? != b"replacement" {
             return Err(io::Error::other(
                 "write-through replacement did not preserve the replacement bytes",
@@ -84,10 +102,14 @@ pub(super) fn probe_live_persistence(path: &Path) -> io::Result<()> {
 }
 
 #[cfg(windows)]
-fn write_synced_probe(path: &Path, bytes: &[u8]) -> io::Result<()> {
+fn write_synced_probe(
+    path: &Path,
+    bytes: &[u8],
+    hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
     let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
     file.write_all(bytes)?;
-    file.sync_all()
+    hooks.sync_all(&file)
 }
 
 #[cfg(windows)]
@@ -158,9 +180,26 @@ pub(super) fn sync_regular_file(path: &Path) -> io::Result<()> {
     OpenOptions::new().write(true).open(path)?.sync_all()
 }
 
+pub(super) fn sync_regular_file_with_hooks(
+    path: &Path,
+    hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
+    let file = OpenOptions::new().write(true).open(path)?;
+    hooks.sync_all(&file)
+}
+
 #[cfg(unix)]
 pub(super) fn sync_directory(path: &Path) -> io::Result<()> {
     File::open(path)?.sync_all()
+}
+
+#[cfg(unix)]
+pub(super) fn sync_directory_with_hooks(
+    path: &Path,
+    hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
+    let directory = File::open(path)?;
+    hooks.sync_all(&directory)
 }
 
 #[cfg(windows)]
@@ -169,5 +208,13 @@ pub(super) fn sync_directory(_path: &Path) -> io::Result<()> {
     // synchronized before they become reachable, while checkpoint promotion
     // and the capability probe use MoveFileExW with MOVEFILE_WRITE_THROUGH as
     // the metadata durability barrier.
+    Ok(())
+}
+
+#[cfg(windows)]
+pub(super) fn sync_directory_with_hooks(
+    _path: &Path,
+    _hooks: &dyn LivePersistenceHooks,
+) -> io::Result<()> {
     Ok(())
 }

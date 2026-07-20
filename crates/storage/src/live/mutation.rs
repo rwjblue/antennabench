@@ -390,6 +390,7 @@ pub(super) fn rollback_v3_streams(
     paths: &ResolvedBundlePathsV2,
     baseline: &SessionStateV2,
     streams: &[LiveStreamV2],
+    hooks: &dyn LivePersistenceHooks,
 ) -> Result<(), LivePersistenceError> {
     for stream in streams {
         let checkpoint = baseline
@@ -408,7 +409,8 @@ pub(super) fn rollback_v3_streams(
             .map_err(|source| live_io("open schema-v3 evidence rollback", path, source))?;
         file.set_len(checkpoint.committed_bytes)
             .map_err(|source| live_io("truncate schema-v3 evidence rollback", path, source))?;
-        file.sync_all()
+        hooks
+            .sync_all(&file)
             .map_err(|source| live_io("synchronize schema-v3 evidence rollback", path, source))?;
     }
     Ok(())
@@ -811,7 +813,8 @@ pub(super) fn append_line(
     hooks
         .check(LivePersistencePoint::BeforeStreamSync(stream))
         .map_err(|source| live_io("stream pre-sync failpoint", path, source))?;
-    file.sync_all()
+    hooks
+        .sync_all(&file)
         .map_err(|source| live_io("synchronize stream", path, source))?;
     hooks
         .check(LivePersistencePoint::AfterStreamSync(stream))

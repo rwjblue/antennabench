@@ -271,7 +271,7 @@ impl LiveSessionV3 {
                 if actor.new_context.is_some() {
                     rollback.insert(0, LiveStreamV2::RuntimeContexts);
                 }
-                rollback_v3_streams(&self.paths, &baseline, &rollback)?;
+                rollback_v3_streams(&self.paths, &baseline, &rollback, self.hooks.as_ref())?;
             }
             return Err(error);
         }
