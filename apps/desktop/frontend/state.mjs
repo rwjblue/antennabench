@@ -921,6 +921,14 @@ export function reportRefreshFailed(state, error) {
   };
 }
 
+export function reportRefreshSuperseded(state) {
+  return {
+    ...state,
+    reportStatus: state.session?.reportHtml ? "ready" : "unavailable",
+    reportError: null,
+  };
+}
+
 export function beginReportExport(state) {
   return {
     ...state,

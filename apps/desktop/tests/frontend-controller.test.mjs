@@ -5,6 +5,7 @@ import { createDesktopController } from "../frontend/controller.mjs";
 import { initialState, openSessionSucceeded } from "../frontend/state.mjs";
 
 const session = (overrides = {}) => ({
+  sessionId: "session-1",
   bundleName: "test.session.antennabundle",
   lifecycle: "running",
   schemaVersion: 4,
@@ -928,6 +929,137 @@ test("manual report refresh retains visible progress and queues behind a silent 
   await manual;
   assert.equal(run.controller.state.reportStatus, "ready");
   assert.equal(run.renders.length, 2);
+});
+
+test("report refresh survives same-session conductor reconciliation on success and failure", async () => {
+  const prior = openSessionSucceeded(initialState("report"), session({
+    lifecycle: "ended",
+    presentationId: 3,
+    revision: 3,
+  }));
+  const conductorResponses = {
+    active_session_conductor: conductor({ lifecycle: "ended", revision: 4 }),
+    active_session_antenna_controller: {
+      policy: "manual", attached: false, armed: false, targets: {},
+    },
+    active_session_wsjtx_status: { phase: "stopped" },
+  };
+
+  let resolveReport;
+  const succeeded = harness({
+    ...conductorResponses,
+    refresh_active_session_report: () => new Promise((resolve) => { resolveReport = resolve; }),
+  }, { state: prior });
+  const refresh = succeeded.controller.refreshReport();
+  const sessionBeforeReconciliation = succeeded.controller.state.session;
+  await succeeded.controller.refreshConductor();
+  assert.notEqual(succeeded.controller.state.session, sessionBeforeReconciliation);
+  assert.equal(succeeded.controller.state.session.sessionId, "session-1");
+  resolveReport({
+    presentationId: 4,
+    reportHtml: "<p>fresh after reconciliation</p>",
+    revision: 4,
+    lifecycle: "ended",
+    completeness: "full_detail",
+  });
+  await refresh;
+  assert.equal(succeeded.controller.state.reportStatus, "ready");
+  assert.equal(succeeded.controller.state.session.reportHtml, "<p>fresh after reconciliation</p>");
+
+  let rejectReport;
+  const failed = harness({
+    ...conductorResponses,
+    refresh_active_session_report: () => new Promise((_, reject) => { rejectReport = reject; }),
+  }, { state: prior });
+  const rejectedRefresh = failed.controller.refreshReport();
+  await failed.controller.refreshConductor();
+  rejectReport(new Error("report renderer failed"));
+  await rejectedRefresh;
+  assert.equal(failed.controller.state.reportStatus, "ready");
+  assert.equal(failed.controller.state.session.reportHtml, "<p>prior</p>");
+  assert.match(failed.controller.state.reportError.detail, /report renderer failed/);
+});
+
+test("a stale report request cannot update a genuinely different active session", async () => {
+  const prior = openSessionSucceeded(initialState("report"), session({
+    lifecycle: "running",
+    presentationId: 3,
+    revision: 3,
+  }));
+  const resolvers = [];
+  const run = harness({
+    refresh_active_session_report: () => new Promise((resolve) => resolvers.push(resolve)),
+    import_active_session_wspr_live: {
+      status: "imported",
+      session: session({
+        sessionId: "session-2",
+        bundleName: "replacement.session.antennabundle",
+        reportHtml: null,
+        revision: 1,
+      }),
+    },
+  }, { state: prior });
+
+  const staleRefresh = run.controller.refreshReport();
+  const replacement = run.controller.importWsprLive();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(run.controller.state.session.sessionId, "session-2");
+  assert.equal(run.controller.state.reportStatus, "unavailable");
+  resolvers.shift()({
+    presentationId: 4,
+    reportHtml: "<p>stale session</p>",
+    revision: 4,
+    lifecycle: "running",
+    completeness: "full_detail",
+  });
+  await staleRefresh;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(run.controller.state.session.sessionId, "session-2");
+  assert.notEqual(run.controller.state.session.reportHtml, "<p>stale session</p>");
+  assert.equal(run.controller.state.reportStatus, "refreshing");
+  resolvers.shift()({
+    presentationId: 1,
+    reportHtml: "<p>replacement session</p>",
+    revision: 1,
+    lifecycle: "running",
+    completeness: "full_detail",
+  });
+  await replacement;
+  assert.equal(run.controller.state.reportStatus, "ready");
+  assert.equal(run.controller.state.session.reportHtml, "<p>replacement session</p>");
+});
+
+test("report refresh watchdog leaves prior presentation visible with a retryable error", async () => {
+  const prior = openSessionSucceeded(initialState("report"), session({
+    presentationId: 3,
+    revision: 3,
+  }));
+  let expireWatchdog;
+  const cleared = [];
+  const run = harness({
+    refresh_active_session_report: () => new Promise(() => {}),
+  }, {
+    state: prior,
+    effects: {
+      setTimeout(callback, milliseconds) {
+        assert.equal(milliseconds, 60_000);
+        expireWatchdog = callback;
+        return "report-watchdog";
+      },
+      clearTimeout(handle) {
+        cleared.push(handle);
+      },
+    },
+  });
+
+  const refresh = run.controller.refreshReport();
+  assert.equal(run.controller.state.reportStatus, "refreshing");
+  expireWatchdog();
+  await refresh;
+  assert.equal(run.controller.state.reportStatus, "ready");
+  assert.equal(run.controller.state.session.reportHtml, "<p>prior</p>");
+  assert.match(run.controller.state.reportError.message, /took too long/i);
+  assert.deepEqual(cleared, ["report-watchdog"]);
 });
 
 test("focus, visibility, periodic, countdown, and disposal use injected lifecycle ports", async () => {

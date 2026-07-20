@@ -117,6 +117,7 @@ import {
   reportExportSucceeded,
   reportRefreshFailed,
   reportRefreshSucceeded,
+  reportRefreshSuperseded,
   rbnImportCancelled,
   rbnImportFailed,
   rbnImportSucceeded,
@@ -1461,6 +1462,14 @@ test("revision-keyed report refresh retains coherent prior output on failure and
   });
   assert.equal(updateReportFrame(frame, failed, reportDocuments), false);
   assert.equal(failed.session.reportHtml, first.session.reportHtml);
+
+  const superseded = reportRefreshSuperseded(beginReportRefresh({
+    ...failed,
+    session: { ...failed.session, reportHtml: null },
+  }));
+  assert.equal(superseded.reportStatus, "unavailable");
+  assert.equal(superseded.reportError, null);
+  assert.equal(superseded.reportPresentationId, failed.reportPresentationId);
 
   const second = reportRefreshSucceeded(beginReportRefresh(failed), {
     presentationId: 12,

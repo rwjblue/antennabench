@@ -90,6 +90,7 @@ import {
   reportExportSucceeded,
   reportRefreshFailed,
   reportRefreshSucceeded,
+  reportRefreshSuperseded,
   requestSkipCycle,
   selectWorkflow,
   setWsjtxReadinessAcknowledged,
@@ -114,6 +115,15 @@ import {
 const bridgeUnavailable = () => new Error("The native desktop bridge is unavailable.");
 const unexpectedResponse = () => new Error("The desktop command returned an unexpected response.");
 const WSPR_LIVE_ACQUISITION_WATCHDOG_MS = 60_000;
+const REPORT_REFRESH_WATCHDOG_MS = 60_000;
+
+function reportSessionIdentity(session) {
+  if (!session) return null;
+  return JSON.stringify([
+    String(session.sessionId ?? ""),
+    String(session.bundleName ?? ""),
+  ]);
+}
 
 export function createDesktopController(options = {}) {
   const effects = {
@@ -140,6 +150,8 @@ export function createDesktopController(options = {}) {
   let transitionRefreshKey = null;
   let conductorPollInFlight = false;
   let reportPollInFlight = null;
+  let reportRequestEpoch = 0;
+  let activeReportRequest = null;
   let started = false;
   let disposed = false;
   const cleanups = [];
@@ -526,16 +538,42 @@ export function createDesktopController(options = {}) {
         return controller.refreshReport(false);
       }
       if (!silent) commit(beginReportRefresh(state));
-      const sessionAtStart = state.session;
-      const previousPresentationId = state.reportPresentationId;
+      const request = {
+        epoch: reportRequestEpoch + 1,
+        sessionIdentity: reportSessionIdentity(state.session),
+        previousPresentationId: state.reportPresentationId,
+      };
+      reportRequestEpoch = request.epoch;
+      activeReportRequest = request;
+      const isApplicable = () => activeReportRequest?.epoch === request.epoch
+        && reportRequestEpoch === request.epoch
+        && reportSessionIdentity(state.session) === request.sessionIdentity;
+      let watchdog;
       const poll = (async () => {
         try {
-          const presentation = await invokeRefreshActiveSessionReport(invoke());
-          if (state.session !== sessionAtStart) return;
-          const changed = String(presentation.presentationId) !== String(previousPresentationId);
+          const timeout = new Promise((_, reject) => {
+            watchdog = effects.setTimeout(() => reject({
+              kind: "resource",
+              message: "Report refresh took too long. Retry the committed snapshot.",
+              detail: "the 60-second report watchdog expired before the desktop command returned",
+            }), REPORT_REFRESH_WATCHDOG_MS);
+          });
+          const presentation = await Promise.race([
+            invokeRefreshActiveSessionReport(invoke()),
+            timeout,
+          ]);
+          if (!isApplicable()) return;
+          const changed = String(presentation.presentationId)
+            !== String(request.previousPresentationId);
           if (!silent || changed) commit(reportRefreshSucceeded(state, presentation));
         } catch (error) {
-          if (state.session === sessionAtStart) commit(reportRefreshFailed(state, error));
+          if (isApplicable()) commit(reportRefreshFailed(state, error));
+        } finally {
+          effects.clearTimeout(watchdog);
+          if (activeReportRequest?.epoch === request.epoch) {
+            activeReportRequest = null;
+            if (state.reportStatus === "refreshing") commit(reportRefreshSuperseded(state));
+          }
         }
       })();
       reportPollInFlight = poll;
