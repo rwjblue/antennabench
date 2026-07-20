@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) struct LoadedSnapshot {
     pub(super) bundle: BundleContents,
+    pub(super) adapter_records: Vec<AdapterRecordV2>,
     pub(super) intended_cycle_count: usize,
     pub(super) schema_version: u16,
     pub(super) validation: BundleValidationReport,
@@ -98,9 +99,11 @@ pub(super) fn load_snapshot(
         if inspected != current {
             return Err(OpenSessionError::SnapshotChanged);
         }
+        let adapter_records = current.adapter_records;
         let bundle = normalize_bundle(current.bundle);
         Ok(LoadedSnapshot {
             bundle,
+            adapter_records,
             intended_cycle_count,
             schema_version,
             validation,
@@ -116,6 +119,7 @@ pub(super) fn load_snapshot(
             intended_cycle_count: bundle.schedule.slots.len(),
             schema_version,
             bundle,
+            adapter_records: Vec::new(),
             validation,
             report_snapshot: ReportSnapshotContext::default(),
             revision: None,
@@ -773,9 +777,10 @@ pub(super) fn build_active_session(
 pub(super) fn prepare_presentation(
     snapshot: &LoadedSnapshot,
 ) -> Result<ReportPresentation, ReportError> {
-    let report = build_report_with_snapshot(
+    let report = build_report_with_snapshot_and_activity(
         &snapshot.bundle,
         &snapshot.validation,
+        &snapshot.adapter_records,
         snapshot.report_snapshot.clone(),
     )?;
     let has_controller_evidence = !report.snapshot.antenna_control_attempts.is_empty();

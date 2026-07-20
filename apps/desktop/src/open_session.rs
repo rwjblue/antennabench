@@ -24,7 +24,7 @@ use antennabench_core::{
     SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_report::{
-    build_report_with_snapshot, render_compact_summary_html, render_standalone_html,
+    build_report_with_snapshot_and_activity, render_compact_summary_html, render_standalone_html,
     render_standalone_html_with_operational_history, render_standalone_html_with_options,
     ControllerEvidenceHandling, ReportAcquisitionWorkflowStatus, ReportAdapterEvidence,
     ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportEventCorrection,

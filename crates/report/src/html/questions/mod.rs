@@ -11,10 +11,13 @@ use antennabench_core::AlignedSlotStatus;
 
 use super::{audit::*, evidence::*, shared::*};
 
+mod activity;
 mod location;
 mod overview;
 mod paths;
 mod quality;
+
+pub(super) use activity::{coverage_text, render_reporter_activity_section};
 
 pub(super) use location::render_distance_section;
 pub(super) use overview::{

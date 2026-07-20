@@ -26,8 +26,8 @@ use audit::render_audit_appendix;
 use geometry::render_geometry_styles;
 use questions::{
     render_answer_first_overview, render_distance_section, render_how_to_read,
-    render_question_navigation, render_reach_section, render_run_quality_section,
-    render_same_path_section,
+    render_question_navigation, render_reach_section, render_reporter_activity_section,
+    render_run_quality_section, render_same_path_section,
 };
 use shared::{escape_html, CheckedHtmlWriter};
 use styles::STYLES;
@@ -140,6 +140,7 @@ fn render_standalone_html_document(
     render_how_to_read(&mut out);
     render_answer_first_overview(&mut out, report);
     render_same_path_section(&mut out, report);
+    render_reporter_activity_section(&mut out, report);
     render_reach_section(&mut out, report);
     render_distance_section(&mut out, report);
     render_run_quality_section(&mut out, report);

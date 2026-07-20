@@ -3,7 +3,7 @@ use antennabench_analysis::{
     ComparisonDiagnostics, ComparisonStratum, ComparisonTimelineRow, DeltaOrientation,
     EligibilityExclusionCount, EvidenceQuality, ExclusionCount, ObservationCounts,
     ObservationExclusionRecord, PairedObservationRow, PairedPathSummary, PairedStratumSummary,
-    PathDirection, PathOverlapRow, SnrStatistics, SolarContextAnalysis,
+    PathDirection, PathOverlapRow, ReporterActivityAnalysis, SnrStatistics, SolarContextAnalysis,
 };
 use antennabench_core::{
     v2::SessionLifecycleV2,
@@ -26,6 +26,8 @@ pub struct SessionReport {
     pub context: SessionContext,
     pub evidence: EvidenceSections,
     pub comparison: ReportComparisonData,
+    #[serde(default, skip_serializing_if = "ReporterActivityAnalysis::is_empty")]
+    pub reporter_activity: ReporterActivityAnalysis,
     pub solar_context: SolarContextAnalysis,
     pub chart_data: ReportChartData,
     pub notices: Vec<ReportNotice>,
@@ -722,6 +724,7 @@ pub enum ReportDetailFamily {
     SolarContext,
     PathSummaries,
     Strata,
+    ReporterActivityAudit,
     Charts,
 }
 

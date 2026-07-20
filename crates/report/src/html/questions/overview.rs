@@ -6,6 +6,7 @@ pub(in super::super) fn render_question_navigation(out: &mut CheckedHtmlWriter<'
         "<nav class=\"question-nav\" aria-label=\"Report questions\"><ul>\
 <li><a href=\"#what-run-show\">What did the run show?</a></li>\
 <li><a href=\"#same-path-signal\">Same-path signal</a></li>\
+<li><a href=\"#reporter-activity\">Active-reporter hearing rate</a></li>\
 <li><a href=\"#reach-unique-paths\">Reach and unique paths</a></li>\
 <li><a href=\"#distance-direction\">Distance and direction</a></li>\
 <li><a href=\"#run-quality\">Run quality</a></li>\
@@ -14,7 +15,7 @@ pub(in super::super) fn render_question_navigation(out: &mut CheckedHtmlWriter<'
     );
 }
 pub(in super::super) fn render_how_to_read(out: &mut CheckedHtmlWriter<'_>) {
-    out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing report is missing evidence, never a zero-strength signal.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.</li><li>A block is a back-to-back pair of cycles, one per antenna.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul></aside>");
+    out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.</li><li>A block is a back-to-back pair of cycles, one per antenna.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul></aside>");
 }
 pub(in super::super) fn render_answer_first_overview(
     out: &mut CheckedHtmlWriter<'_>,

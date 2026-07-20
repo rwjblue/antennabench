@@ -12,6 +12,7 @@ use antennabench_core::{
 
 use super::{evidence::evidence_summary, shared::*, ControllerEvidenceHandling};
 
+mod activity;
 mod appendix;
 mod comparison;
 mod eligibility;
@@ -19,6 +20,7 @@ mod location;
 mod snapshot;
 
 // Keep cross-section helpers renderer-scoped while presenting one audit façade.
+pub(super) use activity::render_reporter_activity_audit;
 pub(super) use appendix::render_audit_appendix;
 pub(super) use comparison::{
     comparison_stat, render_comparison_blocks, render_comparison_diagnostics,

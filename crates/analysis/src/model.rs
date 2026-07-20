@@ -26,11 +26,94 @@ pub struct AnalysisSummary {
     pub bands: Vec<BandEvidenceSummary>,
     pub slots: Vec<SlotEvidenceSummary>,
     pub comparison: PairedComparisonAnalysis,
+    #[serde(default, skip_serializing_if = "ReporterActivityAnalysis::is_empty")]
+    pub reporter_activity: ReporterActivityAnalysis,
     pub solar_context: SolarContextAnalysis,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclusion_records: Vec<ObservationExclusionRecord>,
     #[serde(default, skip_serializing_if = "EvidenceEligibility::is_empty")]
     pub eligibility: EvidenceEligibility,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReporterActivityAnalysis {
+    pub census_cycles: Vec<ReporterActivityCensusCycle>,
+    pub cycle_rates: Vec<ReporterActivityCycleRate>,
+    pub paired_rates: Vec<ReporterActivityPairedRate>,
+}
+
+impl ReporterActivityAnalysis {
+    pub fn is_empty(&self) -> bool {
+        self.census_cycles.is_empty() && self.cycle_rates.is_empty() && self.paired_rates.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReporterActivityCensusCycle {
+    pub cycle_time: DateTime<Utc>,
+    pub band: Band,
+    pub coverage: ReporterActivityCoverage,
+    pub active_reporters: Vec<ReporterActivityReporter>,
+    pub summary_record_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReporterActivityReporter {
+    pub reporter: String,
+    pub reporter_grid: Option<String>,
+    pub census_record_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "status", content = "reason")]
+pub enum ReporterActivityCoverage {
+    Unknown(ReporterActivityUnknownReason),
+    Complete,
+    Partial,
+    Truncated,
+}
+
+impl ReporterActivityCoverage {
+    pub fn is_known(self) -> bool {
+        !matches!(self, Self::Unknown(_))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReporterActivityUnknownReason {
+    NoCensusCoverage,
+    UnsupportedReceiveDirection,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReporterActivityCycleRate {
+    pub stratum: ComparisonStratum,
+    pub block_index: Option<usize>,
+    pub side: Option<ComparisonSide>,
+    pub slot_id: String,
+    pub antenna_label: String,
+    pub cycle_starts_at: DateTime<Utc>,
+    pub census_cycle_index: Option<usize>,
+    pub coverage: ReporterActivityCoverage,
+    pub active_reporter_count: usize,
+    pub heard_reporter_count: usize,
+    pub hearing_rate: Option<f64>,
+    pub heard_reporters: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReporterActivityPairedRate {
+    pub stratum: ComparisonStratum,
+    pub block_index: usize,
+    pub coverage: ReporterActivityCoverage,
+    pub left_slot_id: String,
+    pub right_slot_id: String,
+    pub active_in_both_count: usize,
+    pub left_heard_count: usize,
+    pub right_heard_count: usize,
+    pub left_hearing_rate: Option<f64>,
+    pub right_hearing_rate: Option<f64>,
 }
 
 /// Record-level accounting for an observation excluded by the existing

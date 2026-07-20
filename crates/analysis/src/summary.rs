@@ -1,20 +1,21 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use antennabench_core::{
-    align_schedule_slots, codes, validate_bundle_report, AlignedSlot, Band, BundleContents,
-    BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation, BundleRecordKind,
-    BundleValidationError, BundleValidationProfile, BundleValidationReport, ObservationKind,
-    ObservationRecord, ObservationSlotAssignment, SlotAlignmentPolicy, SlotAssignmentReason,
+    align_schedule_slots, codes, v2::AdapterRecordV2, validate_bundle_report, AlignedSlot, Band,
+    BundleContents, BundleDiagnostic, BundleDiagnosticCategory, BundleDiagnosticLocation,
+    BundleRecordKind, BundleValidationError, BundleValidationProfile, BundleValidationReport,
+    ObservationKind, ObservationRecord, ObservationSlotAssignment, SlotAlignmentPolicy,
+    SlotAssignmentReason,
 };
 
 use crate::{
-    comparison::analyze_paired_comparison, solar::derive_solar_context, AnalysisBudget,
-    AnalysisCancellationToken, AnalysisError, AnalysisResourceLimits, AnalysisResourceStage,
-    AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary, EligibilityExclusionCategory,
-    EligibilityExclusionCount, EligibilityScope, EvidenceEligibility, EvidenceQuality,
-    EvidenceSummary, ExclusionCount, ObservationCounts, ObservationExclusionReason,
-    ObservationExclusionRecord, ObservationKindCount, SlotEvidenceSummary, SnrStatistics,
-    ANALYSIS_RESOURCE_LIMITS,
+    activity::analyze_reporter_activity, comparison::analyze_paired_comparison,
+    solar::derive_solar_context, AnalysisBudget, AnalysisCancellationToken, AnalysisError,
+    AnalysisResourceLimits, AnalysisResourceStage, AnalysisSummary, AntennaEvidenceSummary,
+    BandEvidenceSummary, EligibilityExclusionCategory, EligibilityExclusionCount, EligibilityScope,
+    EvidenceEligibility, EvidenceQuality, EvidenceSummary, ExclusionCount, ObservationCounts,
+    ObservationExclusionReason, ObservationExclusionRecord, ObservationKindCount, PathDirection,
+    SlotEvidenceSummary, SnrStatistics, ANALYSIS_RESOURCE_LIMITS,
 };
 
 const MINIMUM_USABLE_CONFIDENCE: f32 = 0.70;
@@ -74,9 +75,43 @@ pub fn summarize_bundle_with_report(
     )
 }
 
+pub fn summarize_bundle_with_activity(
+    bundle: &BundleContents,
+    adapter_records: &[AdapterRecordV2],
+    cycle_directions: &BTreeMap<String, PathDirection>,
+) -> Result<AnalysisSummary, AnalysisError> {
+    let validation = validate_bundle_report(bundle);
+    summarize_bundle_with_resources_and_activity(
+        bundle,
+        &validation,
+        adapter_records,
+        cycle_directions,
+        ANALYSIS_RESOURCE_LIMITS,
+        &AnalysisCancellationToken::default(),
+    )
+}
+
 pub fn summarize_bundle_with_resources(
     bundle: &BundleContents,
     validation: &BundleValidationReport,
+    limits: AnalysisResourceLimits,
+    cancellation: &AnalysisCancellationToken,
+) -> Result<AnalysisSummary, AnalysisError> {
+    summarize_bundle_with_resources_and_activity(
+        bundle,
+        validation,
+        &[],
+        &BTreeMap::new(),
+        limits,
+        cancellation,
+    )
+}
+
+pub fn summarize_bundle_with_resources_and_activity(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+    adapter_records: &[AdapterRecordV2],
+    cycle_directions: &BTreeMap<String, PathDirection>,
     limits: AnalysisResourceLimits,
     cancellation: &AnalysisCancellationToken,
 ) -> Result<AnalysisSummary, AnalysisError> {
@@ -87,12 +122,14 @@ pub fn summarize_bundle_with_resources(
     let input_entries = bundle.schedule.slots.len()
         + bundle.events.len()
         + bundle.observations.len()
-        + bundle.antennas.antennas.len();
+        + bundle.antennas.antennas.len()
+        + adapter_records.len();
     for (role, entries) in [
         ("schedule_slots", bundle.schedule.slots.len()),
         ("operator_events", bundle.events.len()),
         ("observations", bundle.observations.len()),
         ("antennas", bundle.antennas.antennas.len()),
+        ("adapter_records", adapter_records.len()),
     ] {
         budget.collection(AnalysisResourceStage::Plan, role, entries)?;
     }
@@ -288,6 +325,15 @@ pub fn summarize_bundle_with_resources(
     budget.cancelled(AnalysisResourceStage::Compare, "paired_comparison")?;
     let comparison =
         analyze_paired_comparison(&analysis_bundle, &alignment.slots, &observations, &budget)?;
+    let reporter_activity = analyze_reporter_activity(
+        &analysis_bundle,
+        &alignment.slots,
+        &observations,
+        &comparison,
+        adapter_records,
+        cycle_directions,
+        &budget,
+    )?;
     let solar_context = derive_solar_context(&analysis_bundle, &comparison, &budget)?;
     let mut exclusion_records = observations
         .iter()
@@ -334,6 +380,7 @@ pub fn summarize_bundle_with_resources(
         bands,
         slots,
         comparison,
+        reporter_activity,
         solar_context,
         exclusion_records,
         eligibility: plan.eligibility,

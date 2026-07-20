@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use antennabench_analysis::{summarize_bundle, ComparisonAvailability};
+use antennabench_analysis::{
+    summarize_bundle, summarize_bundle_with_activity, ComparisonAvailability, PathDirection,
+};
 use antennabench_core::{
     v2::{
         AcquisitionChannelId, AdapterDisposition, AdapterId, AdapterInput, AdapterReasonId,
@@ -13,10 +15,13 @@ use antennabench_core::{
         RecordMetaV3, ScheduleV3, SessionStateV3, WsprCycleDirection, WsprCycleIntentV3,
     },
     v5::{AntennaControlPolicyV5, WsprReadinessBasisV5},
-    AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band, ExperimentMode, ObservationKind,
-    SessionGoal, Station, SCHEMA_VERSION_V5,
+    validate_bundle_report, AnalysisFile, AnalysisStatus, Antenna, AntennasFile, Band,
+    ExperimentMode, ObservationKind, SessionGoal, Station, SCHEMA_VERSION_V5,
 };
-use antennabench_report::{build_report, render_compact_summary_html, render_standalone_html};
+use antennabench_report::{
+    build_report_with_snapshot_and_activity, render_compact_summary_html, render_standalone_html,
+    ReportSnapshotContext,
+};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 
 const SESSION_ID: &str = "session-synthetic-wspr-live-field-shape";
@@ -37,19 +42,22 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
             && observation.slot_confidence.is_none()
     }));
 
-    let current = durable.into_current().bundle;
+    let current = durable.into_current();
+    let bundle = &current.bundle;
     let first_count = current
+        .bundle
         .observations
         .iter()
         .filter(|observation| observation.slot_id.as_deref() == Some(FIRST_SLOT_ID))
         .count();
     let second_count = current
+        .bundle
         .observations
         .iter()
         .filter(|observation| observation.slot_id.as_deref() == Some(SECOND_SLOT_ID))
         .count();
     assert_eq!((first_count, second_count), (145, 43));
-    assert!(current.observations.iter().all(|observation| {
+    assert!(bundle.observations.iter().all(|observation| {
         observation.slot_confidence == Some(0.95)
             && matches!(
                 observation.meta.timestamp,
@@ -57,7 +65,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
             )
     }));
 
-    let summary = summarize_bundle(&current).expect("field-shape fixture should analyze");
+    let summary = summarize_bundle(bundle).expect("field-shape fixture should analyze");
     assert_eq!(summary.overall.observation_counts.total, 188);
     assert_eq!(summary.overall.observation_counts.usable, 188);
     assert_eq!(summary.overall.observation_counts.excluded, 0);
@@ -68,7 +76,27 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert_eq!(summary.comparison.paired_rows.len(), 33);
     assert_eq!(summary.comparison.diagnostics.unique_path_count, 33);
 
-    let report = build_report(&current).expect("field-shape fixture should build a report");
+    let directions = BTreeMap::from([
+        (FIRST_SLOT_ID.to_string(), PathDirection::Transmit),
+        (SECOND_SLOT_ID.to_string(), PathDirection::Transmit),
+    ]);
+    let activity = summarize_bundle_with_activity(bundle, &current.adapter_records, &directions)
+        .expect("field-shape activity should analyze")
+        .reporter_activity;
+    assert_eq!(activity.cycle_rates.len(), 2);
+    assert_eq!(activity.cycle_rates[0].active_reporter_count, 200);
+    assert_eq!(activity.cycle_rates[0].heard_reporter_count, 145);
+    assert_eq!(activity.cycle_rates[1].active_reporter_count, 180);
+    assert_eq!(activity.cycle_rates[1].heard_reporter_count, 43);
+    assert_eq!(activity.paired_rates[0].active_in_both_count, 180);
+
+    let report = build_report_with_snapshot_and_activity(
+        bundle,
+        &validate_bundle_report(bundle),
+        &current.adapter_records,
+        ReportSnapshotContext::default(),
+    )
+    .expect("field-shape fixture should build a report");
     assert_eq!(report.evidence.overall.observation_counts.usable, 188);
     assert_eq!(report.comparison.paired_rows.len(), 33);
     for html in [
@@ -77,14 +105,80 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     ] {
         assert!(!html.contains("0 usable"));
         assert!(!html.contains("No matched paths"));
+        assert!(html.contains("Hearing rate among active reporters"));
+        assert!(html.contains("145 / 200 (72.5%)"));
+        assert!(html.contains("43 / 180 (23.9%)"));
+        assert!(html.contains("180</td><td>145 / 180 (80.6%)"));
+        assert!(html.contains("Complete band-qualified census"));
     }
+    let full = render_standalone_html(&report).unwrap();
+    assert!(full.contains("activity-summary-field-shape"));
+    assert!(full.contains("activity-first-000"));
+}
+
+#[test]
+fn absent_census_renders_coverage_unknown_without_inventing_zero_activity() {
+    let mut durable = field_shape_fixture();
+    durable
+        .adapter_records
+        .retain(|record| !record.record_type.starts_with("wspr_live_activity_census"));
+    let current = durable.into_current();
+    let report = build_report_with_snapshot_and_activity(
+        &current.bundle,
+        &validate_bundle_report(&current.bundle),
+        &current.adapter_records,
+        ReportSnapshotContext::default(),
+    )
+    .unwrap();
+
+    for html in [
+        render_standalone_html(&report).unwrap(),
+        render_compact_summary_html(&report).unwrap(),
+    ] {
+        assert!(html.contains("Coverage unknown — no band-qualified census covers this cycle"));
+        assert!(html.contains("Not available (coverage unknown; not zero)"));
+        assert!(!html.contains("0 / 0 (0.0%)"));
+    }
+}
+
+#[test]
+fn truncated_census_caveat_qualifies_each_cycle_and_paired_rate() {
+    let mut durable = field_shape_fixture();
+    let summary = durable
+        .adapter_records
+        .iter_mut()
+        .find(|record| record.record_id == "activity-summary-field-shape")
+        .unwrap();
+    summary.disposition = AdapterDisposition::PartiallyNormalized;
+    let AdapterInput::Inline { data, .. } = &mut summary.input else {
+        panic!("activity summary must be inline")
+    };
+    let mut value: serde_json::Value = serde_json::from_str(data).unwrap();
+    value["truncated"] = serde_json::Value::Bool(true);
+    *data = serde_json::to_string(&value).unwrap();
+    let current = durable.into_current();
+    let report = build_report_with_snapshot_and_activity(
+        &current.bundle,
+        &validate_bundle_report(&current.bundle),
+        &current.adapter_records,
+        ReportSnapshotContext::default(),
+    )
+    .unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+
+    assert_eq!(
+        compact
+            .matches("Truncated census — capture limit may reduce the denominator")
+            .count(),
+        report.reporter_activity.cycle_rates.len() + report.reporter_activity.paired_rates.len()
+    );
 }
 
 fn field_shape_fixture() -> BundleV3Contents {
     let first_cycle = utc(12, 0, 1);
     let second_cycle = utc(12, 2, 1);
     let captured_at = utc(12, 7, 2);
-    let mut adapter_records = Vec::with_capacity(FIRST_SPOT_COUNT + SECOND_SPOT_COUNT);
+    let mut adapter_records = Vec::with_capacity(FIRST_SPOT_COUNT + SECOND_SPOT_COUNT + 381);
     let mut observations = Vec::with_capacity(FIRST_SPOT_COUNT + SECOND_SPOT_COUNT);
 
     append_cycle_spots(
@@ -94,6 +188,12 @@ fn field_shape_fixture() -> BundleV3Contents {
         first_cycle - Duration::seconds(1),
         captured_at,
         0..FIRST_SPOT_COUNT,
+    );
+    append_activity_census(
+        &mut adapter_records,
+        first_cycle - Duration::seconds(1),
+        second_cycle - Duration::seconds(1),
+        captured_at,
     );
     append_cycle_spots(
         &mut adapter_records,
@@ -204,6 +304,75 @@ fn field_shape_fixture() -> BundleV3Contents {
         },
         runtime_contexts: Vec::new(),
         diagnostics: Vec::new(),
+    }
+}
+
+fn append_activity_census(
+    adapter_records: &mut Vec<AdapterRecordV2>,
+    first_cycle: DateTime<Utc>,
+    second_cycle: DateTime<Utc>,
+    captured_at: DateTime<Utc>,
+) {
+    adapter_records.push(activity_record(
+        "activity-summary-field-shape",
+        "wspr_live_activity_census_summary",
+        captured_at,
+        serde_json::json!({
+            "window_start": first_cycle,
+            "window_end": second_cycle + Duration::minutes(2),
+            "selected_bands": [Band::M20],
+            "truncated": false,
+            "counts": { "malformed": 0 }
+        }),
+    ));
+    for reporter_index in 0..200 {
+        adapter_records.push(activity_record(
+            &format!("activity-first-{reporter_index:03}"),
+            "wspr_live_activity_census",
+            captured_at,
+            serde_json::json!({
+                "cycle_time": first_cycle,
+                "band": Band::M20,
+                "reporter": synthetic_callsign(reporter_index),
+                "reporter_grid": "AA00"
+            }),
+        ));
+    }
+    for reporter_index in 0..180 {
+        adapter_records.push(activity_record(
+            &format!("activity-second-{reporter_index:03}"),
+            "wspr_live_activity_census",
+            captured_at,
+            serde_json::json!({
+                "cycle_time": second_cycle,
+                "band": Band::M20,
+                "reporter": synthetic_callsign(reporter_index),
+                "reporter_grid": "AA00"
+            }),
+        ));
+    }
+}
+
+fn activity_record(
+    record_id: &str,
+    record_type: &str,
+    captured_at: DateTime<Utc>,
+    data: serde_json::Value,
+) -> AdapterRecordV2 {
+    AdapterRecordV2 {
+        meta: record_meta(captured_at, record_id, 0),
+        record_id: record_id.into(),
+        source_time: None,
+        record_type: record_type.into(),
+        disposition: AdapterDisposition::Accepted,
+        reason: AdapterReasonId::new("wspr-live.activity-census").unwrap(),
+        normalized_records: Vec::new(),
+        input: AdapterInput::Inline {
+            data: serde_json::to_string(&data).unwrap(),
+            media_type: "application/json".into(),
+            encoding: None,
+            source_locator: Some("synthetic-field-shape.json".into()),
+        },
     }
 }
 

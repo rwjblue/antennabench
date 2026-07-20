@@ -17,7 +17,9 @@ compact summary uses the same result facts but omits most audit detail.
 
 The **How to read this report** panel states five rules that apply everywhere:
 
-- A missing report is missing evidence, not a zero-strength signal.
+- A missing public report is missing evidence, not a zero-strength signal,
+  unless a band-qualified activity census proves that reporter was active for
+  that cycle.
 - The report is descriptive. It does not select a winner or prove that one
   antenna is better.
 - Each [comparison group](glossary.md#comparison-group-internally-stratum)
@@ -142,6 +144,38 @@ Open **Review same-path signal detail** when you need the underlying block,
 order, missing-SNR, duplicate, conflict, or exclusion counts and the matched-pair
 audit tables.
 
+## Hearing Rate Among Active Reporters
+
+This section answers a different question from matched-pair SNR: among stations
+proven by the census to be decoding this band during this transmit cycle, what
+share reported the session callsign? A row such as `43 / 180 (23.9%)` means 180
+stations were present in the band-qualified activity census and 43 of those
+stations reported the session callsign. The other 137 are durable
+below-threshold evidence for that cycle. A station absent from the census is
+still no evidence at all.
+
+Per-cycle rows remain separate by direction, band, mode, evidence kind, and
+source. Paired rows use only reporters active in both cycles of one eligible
+block, so changing receiver availability cannot silently change the paired
+denominator. These rates sit beside matched-pair SNR; they do not replace it,
+pool groups, impute a missing census, or establish a winner.
+
+Read the coverage column with every rate:
+
+- **Complete band-qualified census** supports the displayed denominator for
+  that cycle.
+- **Partial census** means malformed rows may have reduced the denominator.
+- **Truncated census** means the capture limit may have reduced the
+  denominator. Every affected cycle and paired rate repeats this caveat.
+- **Coverage unknown** means no supported band-qualified census covers the
+  cycle. It is not zero activity and no hearing rate is invented. Older
+  bandless census rows remain in this state rather than being inferred or
+  migrated.
+
+The current receiver-activity census conditions transmit-direction public
+reports. It does not prove which remote transmitters were active during a
+receive-direction cycle, so receive-direction activity coverage stays unknown.
+
 ## Reach And Unique Paths
 
 Reach counts unique observed remote paths in three categories: the first named
@@ -217,6 +251,7 @@ first pass:
 - the committed [checkpoint](glossary.md#checkpoint),
   [lifecycle](glossary.md#lifecycle), acquisition records, and controller
   attempts;
+- reporter-activity summary and census-row record IDs behind conditioned rates;
 - station, antenna, and planned schedule detail; and
 - comparison blocks and the detailed data-quality timeline.
 

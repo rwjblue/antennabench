@@ -10,7 +10,7 @@ use super::{
     geometry::render_geometry_styles,
     questions::{
         overview_lifecycle_label, render_answer_first_overview_with_reference, render_how_to_read,
-        render_reach_bar, render_same_path_stratum,
+        render_reach_bar, render_reporter_activity_section, render_same_path_stratum,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, STYLES},
@@ -81,7 +81,9 @@ pub fn render_compact_summary_html_with_resources(
     );
     out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Same-path signal</h2>");
     render_compact_same_path_view(&mut out, report);
-    out.push_str("</section><section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
+    out.push_str("</section>");
+    render_reporter_activity_section(&mut out, report);
+    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Reach and unique paths</h2>");
     render_compact_reach_view(&mut out, report);
     out.push_str("</section>");
     render_compact_run_quality(&mut out, report);

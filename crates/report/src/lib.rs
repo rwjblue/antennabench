@@ -6,7 +6,7 @@ mod resource;
 
 pub use builder::{
     build_report, build_report_with_resources, build_report_with_snapshot,
-    build_report_with_validation,
+    build_report_with_snapshot_and_activity, build_report_with_validation,
 };
 pub use geography::*;
 pub use html::{

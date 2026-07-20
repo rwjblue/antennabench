@@ -1,10 +1,12 @@
 use antennabench_analysis::{
-    summarize_bundle_with_resources, AnalysisSummary, AntennaEvidenceSummary, BandEvidenceSummary,
-    EvidenceSummary, ObservationKindCount, PairedComparisonAnalysis, SlotEvidenceSummary,
+    summarize_bundle_with_resources, summarize_bundle_with_resources_and_activity, AnalysisSummary,
+    AntennaEvidenceSummary, BandEvidenceSummary, EvidenceSummary, ObservationKindCount,
+    PairedComparisonAnalysis, PathDirection, SlotEvidenceSummary,
 };
 use antennabench_core::{
-    codes, validate_bundle_report, BundleContents, BundleFileRole, BundleRecordKind,
-    BundleValidationReport, ObservationKind, OperatorEventType, PlannedSlot,
+    codes, v2::AdapterRecordV2, v3::WsprCycleDirection, validate_bundle_report, BundleContents,
+    BundleFileRole, BundleRecordKind, BundleValidationReport, ObservationKind, OperatorEventType,
+    PlannedSlot,
 };
 use chrono::Duration;
 use std::collections::BTreeMap;
@@ -51,6 +53,22 @@ pub fn build_report_with_snapshot(
     )
 }
 
+pub fn build_report_with_snapshot_and_activity(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+    adapter_records: &[AdapterRecordV2],
+    snapshot: ReportSnapshotContext,
+) -> Result<SessionReport, ReportError> {
+    build_report_with_resources_and_snapshot_and_activity(
+        bundle,
+        validation,
+        adapter_records,
+        REPORT_RESOURCE_LIMITS,
+        &ReportCancellationToken::default(),
+        snapshot,
+    )
+}
+
 pub fn build_report_with_resources(
     bundle: &BundleContents,
     validation: &BundleValidationReport,
@@ -73,6 +91,24 @@ fn build_report_with_resources_and_snapshot(
     cancellation: &ReportCancellationToken,
     snapshot: ReportSnapshotContext,
 ) -> Result<SessionReport, ReportError> {
+    build_report_with_resources_and_snapshot_and_activity(
+        bundle,
+        validation,
+        &[],
+        limits,
+        cancellation,
+        snapshot,
+    )
+}
+
+fn build_report_with_resources_and_snapshot_and_activity(
+    bundle: &BundleContents,
+    validation: &BundleValidationReport,
+    adapter_records: &[AdapterRecordV2],
+    limits: ReportResourceLimits,
+    cancellation: &ReportCancellationToken,
+    snapshot: ReportSnapshotContext,
+) -> Result<SessionReport, ReportError> {
     check_cancelled(
         cancellation,
         ReportResourceStage::Projection,
@@ -82,8 +118,33 @@ fn build_report_with_resources_and_snapshot(
     if snapshot.operator_events.is_empty() {
         snapshot.operator_events = project_legacy_operator_events(bundle);
     }
-    let summary =
-        summarize_bundle_with_resources(bundle, validation, limits.analysis, cancellation)?;
+    let cycle_directions = snapshot
+        .wspr_cycles
+        .iter()
+        .filter_map(|cycle| {
+            cycle.direction.map(|direction| {
+                (
+                    cycle.intent_id.clone(),
+                    match direction {
+                        WsprCycleDirection::Transmit => PathDirection::Transmit,
+                        WsprCycleDirection::Receive => PathDirection::Receive,
+                    },
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
+    let summary = if adapter_records.is_empty() && cycle_directions.is_empty() {
+        summarize_bundle_with_resources(bundle, validation, limits.analysis, cancellation)?
+    } else {
+        summarize_bundle_with_resources_and_activity(
+            bundle,
+            validation,
+            adapter_records,
+            &cycle_directions,
+            limits.analysis,
+            cancellation,
+        )?
+    };
     let detail_counts = DetailCounts::new(bundle, &summary, &snapshot);
     // The question-first views retain every path median, rather than sampling
     // them in the renderer. Count those rows up front so a bounded overview is
@@ -93,6 +154,9 @@ fn build_report_with_resources_and_snapshot(
     let required_overview_rows = summary.eligibility.exclusions.len()
         + summary.comparison.strata.len() * 13
         + summary.comparison.path_summaries.len()
+        + summary.reporter_activity.census_cycles.len()
+        + summary.reporter_activity.cycle_rates.len()
+        + summary.reporter_activity.paired_rates.len()
         + summary.slots.len()
         + snapshot.operator_events.len();
     if required_overview_rows as u64 > limits.rows {
@@ -123,6 +187,7 @@ fn build_report_with_resources_and_snapshot(
         bands,
         slots,
         comparison,
+        mut reporter_activity,
         mut solar_context,
         mut exclusion_records,
         eligibility,
@@ -152,6 +217,12 @@ fn build_report_with_resources_and_snapshot(
     if !full_detail {
         solar_context.rows.clear();
         exclusion_records.clear();
+        for cycle in &mut reporter_activity.census_cycles {
+            cycle.active_reporters.clear();
+        }
+        for rate in &mut reporter_activity.cycle_rates {
+            rate.heard_reporters.clear();
+        }
         detail_counts.append_notices(&mut notices);
     }
 
@@ -165,6 +236,7 @@ fn build_report_with_resources_and_snapshot(
         context,
         evidence,
         comparison: project_comparison(comparison, full_detail),
+        reporter_activity,
         solar_context,
         chart_data,
         notices,
@@ -830,6 +902,21 @@ impl DetailCounts {
                     comparison.path_summaries.len(),
                 ),
                 (ReportDetailFamily::Strata, comparison.strata.len()),
+                (
+                    ReportDetailFamily::ReporterActivityAudit,
+                    summary
+                        .reporter_activity
+                        .census_cycles
+                        .iter()
+                        .map(|cycle| cycle.active_reporters.len())
+                        .sum::<usize>()
+                        + summary
+                            .reporter_activity
+                            .cycle_rates
+                            .iter()
+                            .map(|rate| rate.heard_reporters.len())
+                            .sum::<usize>(),
+                ),
                 (ReportDetailFamily::Charts, chart_rows),
             ],
             eligibility_rows: summary.eligibility.exclusions.len(),
@@ -868,6 +955,12 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     report.solar_context.rows.clear();
     report.comparison.path_summaries.clear();
     report.comparison.strata.clear();
+    for cycle in &mut report.reporter_activity.census_cycles {
+        cycle.active_reporters.clear();
+    }
+    for rate in &mut report.reporter_activity.cycle_rates {
+        rate.heard_reporters.clear();
+    }
     report.chart_data = ReportChartData::default();
     report.snapshot.lifecycle_events.clear();
     report.snapshot.operator_events.clear();

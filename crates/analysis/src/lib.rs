@@ -1,3 +1,4 @@
+mod activity;
 mod comparison;
 mod model;
 mod resource;
@@ -7,5 +8,6 @@ mod summary;
 pub use model::*;
 pub use resource::*;
 pub use summary::{
-    summarize_bundle, summarize_bundle_with_report, summarize_bundle_with_resources,
+    summarize_bundle, summarize_bundle_with_activity, summarize_bundle_with_report,
+    summarize_bundle_with_resources, summarize_bundle_with_resources_and_activity,
 };
