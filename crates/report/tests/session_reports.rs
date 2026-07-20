@@ -89,6 +89,37 @@ fn reports_the_minimal_whole_station_fixture() {
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 0
             },
+            "observed_profile": {
+              "left": null,
+              "right": null,
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
+            },
             "location_context": {
               "paths": [],
               "distance_bins": [
@@ -200,6 +231,37 @@ fn reports_the_minimal_whole_station_fixture() {
               "left_only_unique_path_count": 0,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 0
+            },
+            "observed_profile": {
+              "left": null,
+              "right": null,
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
             },
             "location_context": {
               "paths": [],
@@ -959,7 +1021,8 @@ fn reports_the_minimal_whole_station_fixture() {
             "median_path_delta_right_minus_left_db": null,
             "maximum_delta_right_minus_left_db": null
           }
-        ]
+        ],
+        "observed_path_profiles": []
       },
       "solar_context": {
         "algorithm": {
@@ -1278,6 +1341,37 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 0
             },
+            "observed_profile": {
+              "left": null,
+              "right": null,
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
+            },
             "location_context": {
               "paths": [],
               "distance_bins": [
@@ -1389,6 +1483,37 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
               "left_only_unique_path_count": 0,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 0
+            },
+            "observed_profile": {
+              "left": null,
+              "right": null,
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
             },
             "location_context": {
               "paths": [],
@@ -2040,7 +2165,8 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "median_path_delta_right_minus_left_db": null,
             "maximum_delta_right_minus_left_db": null
           }
-        ]
+        ],
+        "observed_path_profiles": []
       },
       "solar_context": {
         "algorithm": {
@@ -2304,7 +2430,7 @@ fn reports_the_analysis_rich_whole_station_fixture() {
           "same_path_signal": "no_matched_paths",
           "paired_detectability": "activity_coverage_unknown",
           "observed_reach": "available",
-          "geographic_profile": "no_located_paths",
+          "geographic_profile": "available",
           "repeatability": "available"
         },
         "comparison_availability": "no_matched_paths",
@@ -2338,6 +2464,179 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 0
+            },
+            "observed_profile": {
+              "left": {
+                "side": "left",
+                "antenna_label": "A",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "right": {
+                "side": "right",
+                "antenna_label": "B",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 1,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 1
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
             },
             "location_context": {
               "paths": [],
@@ -2451,6 +2750,179 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
             },
+            "observed_profile": {
+              "left": {
+                "side": "left",
+                "antenna_label": "A",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "right": {
+                "side": "right",
+                "antenna_label": "B",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 1,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 1
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
+            },
             "location_context": {
               "paths": [],
               "distance_bins": [
@@ -2562,6 +3034,179 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
+            },
+            "observed_profile": {
+              "left": {
+                "side": "left",
+                "antenna_label": "A",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "right": {
+                "side": "right",
+                "antenna_label": "B",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  }
+                ]
+              },
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 1,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 1
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
             },
             "location_context": {
               "paths": [],
@@ -2675,6 +3320,179 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
             },
+            "observed_profile": {
+              "left": {
+                "side": "left",
+                "antenna_label": "A",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "right": {
+                "side": "right",
+                "antenna_label": "B",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 1
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 1,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
+            },
             "location_context": {
               "paths": [],
               "distance_bins": [
@@ -2787,6 +3605,179 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
             },
+            "observed_profile": {
+              "left": {
+                "side": "left",
+                "antenna_label": "A",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "right": {
+                "side": "right",
+                "antenna_label": "B",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 1,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 1
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
+            },
             "location_context": {
               "paths": [],
               "distance_bins": [
@@ -2898,6 +3889,179 @@ fn reports_the_analysis_rich_whole_station_fixture() {
               "left_only_unique_path_count": 1,
               "both_unique_path_count": 0,
               "right_only_unique_path_count": 1
+            },
+            "observed_profile": {
+              "left": {
+                "side": "left",
+                "antenna_label": "A",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "right": {
+                "side": "right",
+                "antenna_label": "B",
+                "unique_path_count": 1,
+                "located_path_count": 1,
+                "missing_location_path_count": 0,
+                "inconsistent_location_path_count": 0,
+                "distance_bins": [
+                  {
+                    "category": "under500_km",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km500_to1499",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "km1500_to2999",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "km3000_and_above",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ],
+                "azimuth_sectors": [
+                  {
+                    "category": "north",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_east",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "south_west",
+                    "unique_path_count": 1,
+                    "observation_count": 1
+                  },
+                  {
+                    "category": "west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  },
+                  {
+                    "category": "north_west",
+                    "unique_path_count": 0,
+                    "observation_count": 0
+                  }
+                ]
+              },
+              "distance_composition": [
+                {
+                  "category": "under500_km",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km500_to1499",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 1
+                },
+                {
+                  "category": "km1500_to2999",
+                  "left_only_unique_path_count": 1,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                },
+                {
+                  "category": "km3000_and_above",
+                  "left_only_unique_path_count": 0,
+                  "shared_unique_path_count": 0,
+                  "right_only_unique_path_count": 0
+                }
+              ],
+              "composition_location_unavailable_count": 0
             },
             "location_context": {
               "paths": [],
@@ -4419,6 +5583,536 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "minimum_delta_right_minus_left_db": null,
             "median_path_delta_right_minus_left_db": null,
             "maximum_delta_right_minus_left_db": null
+          }
+        ],
+        "observed_path_profiles": [
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "side": "left",
+            "antenna_label": "A",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "N2FFF",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FN13",
+                  "distance_km": 430.0,
+                  "initial_bearing_degrees": 285.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  2
+                ],
+                "slot_ids": [
+                  "slot-005"
+                ],
+                "observation_ids": [
+                  "obs-009"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -12.0,
+                  "median_db": -12.0,
+                  "mean_db": -12.0,
+                  "max_db": -12.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "side": "right",
+            "antenna_label": "B",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "N4JJJ",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FM18",
+                  "distance_km": 610.0,
+                  "initial_bearing_degrees": 230.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  3
+                ],
+                "slot_ids": [
+                  "slot-008"
+                ],
+                "observation_ids": [
+                  "obs-013"
+                ],
+                "snr": null
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "imported_spot",
+              "source": "imported_file"
+            },
+            "side": "left",
+            "antenna_label": "A",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "K1III",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FN32",
+                  "distance_km": 140.0,
+                  "initial_bearing_degrees": 246.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  3
+                ],
+                "slot_ids": [
+                  "slot-007"
+                ],
+                "observation_ids": [
+                  "obs-012"
+                ],
+                "snr": null
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "imported_spot",
+              "source": "imported_file"
+            },
+            "side": "right",
+            "antenna_label": "B",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "W1HHH",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FN54",
+                  "distance_km": 280.0,
+                  "initial_bearing_degrees": 37.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  2
+                ],
+                "slot_ids": [
+                  "slot-006"
+                ],
+                "observation_ids": [
+                  "obs-011"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -11.0,
+                  "median_db": -11.0,
+                  "mean_db": -11.0,
+                  "max_db": -11.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "side": "left",
+            "antenna_label": "A",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "K9XYZ",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "EN52",
+                  "distance_km": 1350.0,
+                  "initial_bearing_degrees": 276.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  0
+                ],
+                "slot_ids": [
+                  "slot-001"
+                ],
+                "observation_ids": [
+                  "obs-002"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -20.0,
+                  "median_db": -20.0,
+                  "mean_db": -20.0,
+                  "max_db": -20.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "public_report",
+              "source": "wsprnet"
+            },
+            "side": "right",
+            "antenna_label": "B",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "VE3ZZZ",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FN03",
+                  "distance_km": 640.0,
+                  "initial_bearing_degrees": 294.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  0
+                ],
+                "slot_ids": [
+                  "slot-002"
+                ],
+                "observation_ids": [
+                  "obs-004"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -21.0,
+                  "median_db": -21.0,
+                  "mean_db": -21.0,
+                  "max_db": -21.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "imported_spot",
+              "source": "imported_file"
+            },
+            "side": "left",
+            "antenna_label": "A",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "K5CCC",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "EM13",
+                  "distance_km": 2380.0,
+                  "initial_bearing_degrees": 247.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  1
+                ],
+                "slot_ids": [
+                  "slot-003"
+                ],
+                "observation_ids": [
+                  "obs-006"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -18.0,
+                  "median_db": -18.0,
+                  "mean_db": -18.0,
+                  "max_db": -18.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "transmit",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "imported_spot",
+              "source": "imported_file"
+            },
+            "side": "right",
+            "antenna_label": "B",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "W8DDD",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "EN81",
+                  "distance_km": 890.0,
+                  "initial_bearing_degrees": 267.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  1
+                ],
+                "slot_ids": [
+                  "slot-004"
+                ],
+                "observation_ids": [
+                  "obs-007"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -19.0,
+                  "median_db": -19.0,
+                  "mean_db": -19.0,
+                  "max_db": -19.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "side": "left",
+            "antenna_label": "A",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "K2EEE",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FN31",
+                  "distance_km": 180.0,
+                  "initial_bearing_degrees": 222.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  2
+                ],
+                "slot_ids": [
+                  "slot-005"
+                ],
+                "observation_ids": [
+                  "obs-008"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -16.0,
+                  "median_db": -16.0,
+                  "mean_db": -16.0,
+                  "max_db": -16.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "40m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "side": "right",
+            "antenna_label": "B",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "K3GGG",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FN20",
+                  "distance_km": 320.0,
+                  "initial_bearing_degrees": 217.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  2
+                ],
+                "slot_ids": [
+                  "slot-006"
+                ],
+                "observation_ids": [
+                  "obs-010"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -15.0,
+                  "median_db": -15.0,
+                  "mean_db": -15.0,
+                  "max_db": -15.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "side": "left",
+            "antenna_label": "A",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "K1ABC",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "EM12",
+                  "distance_km": 2500.0,
+                  "initial_bearing_degrees": 250.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  0
+                ],
+                "slot_ids": [
+                  "slot-001"
+                ],
+                "observation_ids": [
+                  "obs-001"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -24.0,
+                  "median_db": -24.0,
+                  "mean_db": -24.0,
+                  "max_db": -24.0
+                }
+              }
+            ]
+          },
+          {
+            "stratum": {
+              "direction": "receive",
+              "band": "20m",
+              "mode": "WSPR",
+              "observation_kind": "local_decode",
+              "source": "wsjtx_log"
+            },
+            "side": "right",
+            "antenna_label": "B",
+            "unique_path_count": 1,
+            "located_path_count": 1,
+            "missing_location_path_count": 0,
+            "inconsistent_location_path_count": 0,
+            "paths": [
+              {
+                "remote_path": "W3AAA",
+                "location": {
+                  "availability": "available",
+                  "remote_grid": "FM19",
+                  "distance_km": 650.0,
+                  "initial_bearing_degrees": 231.0
+                },
+                "block_support_count": 1,
+                "slot_support_count": 1,
+                "observation_count": 1,
+                "block_indices": [
+                  0
+                ],
+                "slot_ids": [
+                  "slot-002"
+                ],
+                "observation_ids": [
+                  "obs-003"
+                ],
+                "snr": {
+                  "sample_count": 1,
+                  "min_db": -25.0,
+                  "median_db": -25.0,
+                  "mean_db": -25.0,
+                  "max_db": -25.0
+                }
+              }
+            ]
           }
         ]
       },

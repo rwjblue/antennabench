@@ -5,6 +5,7 @@ mod distance;
 mod geography;
 mod html;
 mod model;
+mod observed_profile;
 mod resource;
 
 pub use builder::{

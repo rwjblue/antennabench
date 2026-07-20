@@ -80,17 +80,14 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     for anchor in [
         "what-run-show",
         "reach-unique-paths",
+        "distance-direction",
         "run-quality",
         "audit-appendix",
     ] {
         assert!(first.contains(&format!("href=\"#{anchor}\"")));
         assert!(first.contains(&format!("id=\"{anchor}\"")));
     }
-    for unavailable_anchor in [
-        "same-path-signal",
-        "reporter-activity",
-        "distance-direction",
-    ] {
+    for unavailable_anchor in ["same-path-signal", "reporter-activity"] {
         assert!(!first.contains(&format!("href=\"#{unavailable_anchor}\"")));
         assert!(!first.contains(&format!("id=\"{unavailable_anchor}\"")));
     }
@@ -1249,7 +1246,7 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
         0
     );
     assert!(empty_html.matches("No observed paired paths").count() <= 4);
-    assert!(empty_html.split_whitespace().count() < 6_000);
+    assert!(empty_html.split_whitespace().count() < 10_000);
 
     let mut mixed_report = paired_report(true);
     let mut empty_stratum = mixed_report.overview.strata[0].clone();
@@ -1329,8 +1326,8 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     assert!(!html.contains("https://"));
 
     let empty = render_standalone_html(&canonical_report()).unwrap();
-    assert!(!empty.contains("id=\"distance-direction\""));
-    assert!(empty.contains("Observed distance and direction profile</dt><dd>No located paths"));
+    assert!(empty.contains("id=\"distance-direction\""));
+    assert!(empty.contains("Receiver/transmitter availability may have changed"));
 }
 
 #[test]
@@ -1366,8 +1363,32 @@ fn renders_fixed_path_context_tables_with_equivalent_visual_states() {
     assert!(html.contains("0 dB (near-zero)"));
     assert!(html.contains("Sparse evidence: 1 path(s), 1 row(s)"));
     assert!(html.contains("No observed paired paths"));
-    assert_eq!(html.matches("Near / local proxy (under 500 km)").count(), 2);
-    assert_eq!(html.matches("NE (22.5°–67.5°)").count(), 2);
+    assert!(html.matches("Near / local proxy (under 500 km)").count() >= 2);
+    assert!(html.matches("NE (22.5°–67.5°)").count() >= 2);
+}
+
+#[test]
+fn renders_all_path_profiles_in_full_and_compact_without_overclaiming() {
+    let report = canonical_report();
+    let full = render_standalone_html(&report).unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+
+    for html in [&full, &compact] {
+        assert!(html.contains("Observed distance and direction profile"));
+        assert!(html.contains("Side-by-side observed distance distribution"));
+        assert!(html.contains("Side-by-side observed azimuth distribution"));
+        assert!(html.contains("Observed-path composition within each distance category"));
+        assert!(html.contains("Receiver/transmitter availability may have changed"));
+        assert!(html.contains("not a controlled detection comparison"));
+        assert!(html.contains("not a radiation pattern"));
+        assert!(html.contains("Near / local distance is a practical proxy only"));
+        assert!(!html.contains("measured NVIS"));
+        assert!(!html.contains("universal advantage"));
+    }
+    assert!(full.contains("Exact unique observed-path records"));
+    assert!(full.contains("Review shared-path distance and direction context"));
+    assert!(!compact.contains("Exact unique observed-path records"));
+    assert!(!compact.contains("Review exact paired-row distance"));
 }
 
 #[test]

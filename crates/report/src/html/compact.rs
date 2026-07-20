@@ -1,18 +1,19 @@
 use std::fmt::Write as _;
 
 use crate::{
-    check_cancelled, ObservedReachAnswerability, PairedDetectabilityAnswerability,
-    ReportAcquisitionWorkflowStatus, ReportCancellationToken, ReportCompleteness, ReportError,
-    ReportProviderCompleteness, ReportResourceLimits, ReportResourceStage,
-    SamePathSignalAnswerability, SessionReport, REPORT_RESOURCE_LIMITS,
+    check_cancelled, GeographicProfileAnswerability, ObservedReachAnswerability,
+    PairedDetectabilityAnswerability, ReportAcquisitionWorkflowStatus, ReportCancellationToken,
+    ReportCompleteness, ReportError, ReportProviderCompleteness, ReportResourceLimits,
+    ReportResourceStage, SamePathSignalAnswerability, SessionReport, REPORT_RESOURCE_LIMITS,
 };
 
 use super::{
     geometry::render_geometry_styles,
     questions::{
         overview_lifecycle_label, render_answer_first_overview_with_reference,
-        render_compact_coverage_map_section, render_how_to_read, render_question_navigation,
-        render_reach_bar, render_reporter_activity_section, render_same_path_stratum,
+        render_compact_coverage_map_section, render_compact_distance_section, render_how_to_read,
+        render_question_navigation, render_reach_bar, render_reporter_activity_section,
+        render_same_path_stratum,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
@@ -98,6 +99,10 @@ pub fn render_compact_summary_html_with_resources(
         out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2>");
         render_compact_reach_view(&mut out, report);
         out.push_str("</section>");
+    }
+    if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
+    {
+        render_compact_distance_section(&mut out, report);
     }
     render_compact_run_quality(&mut out, report);
     render_compact_reference(&mut out, report);

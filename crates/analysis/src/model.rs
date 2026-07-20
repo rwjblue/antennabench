@@ -407,6 +407,8 @@ pub struct PairedComparisonAnalysis {
     pub paired_rows: Vec<PairedObservationRow>,
     pub path_summaries: Vec<PairedPathSummary>,
     pub strata: Vec<PairedStratumSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observed_path_profiles: Vec<ObservedAntennaPathProfile>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -543,6 +545,43 @@ pub struct PathOverlapRow {
     pub missing_snr_right_count: usize,
     pub exact_duplicate_count: usize,
     pub conflicting_duplicate_group_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedAntennaPathProfile {
+    pub stratum: ComparisonStratum,
+    pub side: ComparisonSide,
+    pub antenna_label: String,
+    pub unique_path_count: usize,
+    pub located_path_count: usize,
+    pub missing_location_path_count: usize,
+    pub inconsistent_location_path_count: usize,
+    pub paths: Vec<ObservedAntennaPath>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedAntennaPath {
+    pub remote_path: String,
+    pub location: ObservedPathLocation,
+    pub block_support_count: usize,
+    pub slot_support_count: usize,
+    pub observation_count: usize,
+    pub block_indices: Vec<usize>,
+    pub slot_ids: Vec<String>,
+    pub observation_ids: Vec<String>,
+    pub snr: Option<SnrStatistics>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "availability")]
+pub enum ObservedPathLocation {
+    Available {
+        remote_grid: String,
+        distance_km: f64,
+        initial_bearing_degrees: f64,
+    },
+    Missing,
+    Inconsistent,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -4,13 +4,220 @@ pub(in super::super) fn render_distance_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Observed distance and direction profile</h2><p class=\"notice\">Evidence basis: located paired paths observed in this session. This is not a radiation pattern, propagation model, or causal conclusion about antenna performance in observed or unobserved directions and distances.</p>");
+    render_observed_profile_intro(out);
+    render_all_path_profiles(out, report);
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review exact observed-path profile rows</summary><div class=\"disclosure-body\">");
+    render_observed_profile_audit(out, report);
+    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review shared-path distance and direction context</summary><div class=\"disclosure-body\"><p class=\"muted\">This separate view answers where finite-SNR differences occurred among paths decoded on both antennas.</p>");
     render_observed_path_context(out, report);
-    out.push_str("<details class=\"audit-disclosure\"><summary>Review exact paired-row distance and azimuth detail</summary><div class=\"disclosure-body\">");
+    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review exact paired-row distance and azimuth detail</summary><div class=\"disclosure-body\">");
     render_location_views(out, report);
     out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review derived solar context</summary><div class=\"disclosure-body\">");
     render_solar_context(out, report);
     out.push_str("</div></details></section>");
+}
+
+pub(in super::super) fn render_compact_distance_section(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) {
+    render_observed_profile_intro(out);
+    render_all_path_profiles(out, report);
+    out.push_str("</section>");
+}
+
+fn render_observed_profile_intro(out: &mut CheckedHtmlWriter<'_>) {
+    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Observed distance and direction profile</h2><p class=\"notice\">Evidence basis: all usable paths observed for each antenna in eligible blocks, including paths observed on only one antenna. Receiver/transmitter availability may have changed between antenna periods; this describes collected paths and is not a controlled detection comparison. This is not a radiation pattern, propagation model, or causal conclusion about observed or unobserved distances and directions, and it does not rank antennas universally.</p>");
+}
+
+fn render_all_path_profiles(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let available = report
+        .overview
+        .strata
+        .iter()
+        .filter(|stratum| {
+            stratum.observed_profile.left.is_some() || stratum.observed_profile.right.is_some()
+        })
+        .collect::<Vec<_>>();
+    if available.is_empty() {
+        out.push_str("<p class=\"empty\">No usable observed paths have location evidence for an antenna profile.</p>");
+        return;
+    }
+    out.push_str("<p class=\"muted\">Each remote path contributes once per antenna and exact comparison group. Observation support remains visible, but repeated observations from one endpoint do not inflate the footprint count. Near / local distance is a practical proxy only; propagation mode was not measured.</p>");
+    for (index, stratum) in available.into_iter().enumerate() {
+        let profile = &stratum.observed_profile;
+        write_html!(out, "<section aria-labelledby=\"observed-profile-{index}\"><h3 id=\"observed-profile-{index}\">{}</h3>", comparison_stratum(&stratum.stratum));
+        if let (Some(left), Some(right)) = (&profile.left, &profile.right) {
+            if let (Some(left_bin), Some(right_bin)) = (
+                strict_dominant_distance(left),
+                strict_dominant_distance(right),
+            ) {
+                if left_bin != right_bin {
+                    write_html!(out, "<p><strong>Observed profile:</strong> {}’s observed paths were concentrated in {}, while {}’s observed paths were concentrated in {} in this run.</p>", escape_html(&left.antenna_label), left_bin.label(), escape_html(&right.antenna_label), right_bin.label());
+                }
+            }
+        }
+        render_profile_totals(out, profile.left.as_ref(), profile.right.as_ref());
+        render_profile_distribution(
+            out,
+            "Side-by-side observed distance distribution",
+            profile.left.as_ref(),
+            profile.right.as_ref(),
+            |profile| &profile.distance_bins,
+            |cell| cell.category.label(),
+        );
+        render_profile_distribution(
+            out,
+            "Side-by-side observed azimuth distribution",
+            profile.left.as_ref(),
+            profile.right.as_ref(),
+            |profile| &profile.azimuth_sectors,
+            |cell| fixed_azimuth_sector_label(cell.category),
+        );
+        let (left_label, right_label) = report_antenna_labels(report);
+        write_html!(out, "<div class=\"table-wrap\"><table><caption>Observed-path composition within each distance category</caption><thead><tr><th scope=\"col\">Distance</th><th scope=\"col\">{} only</th><th scope=\"col\">Shared</th><th scope=\"col\">{} only</th></tr></thead><tbody>", left_label, right_label);
+        for cell in &profile.distance_composition {
+            write_html!(
+                out,
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                cell.category.label(),
+                cell.left_only_unique_path_count,
+                cell.shared_unique_path_count,
+                cell.right_only_unique_path_count
+            );
+        }
+        out.push_str("</tbody></table></div>");
+        if profile.composition_location_unavailable_count > 0 {
+            write_html!(out, "<p class=\"muted\">{} path{} could not enter distance composition because location was missing, inconsistent, or differed between antenna records.</p>", profile.composition_location_unavailable_count, plural_suffix(profile.composition_location_unavailable_count));
+        }
+        out.push_str("</section>");
+    }
+}
+
+fn render_profile_totals(
+    out: &mut CheckedHtmlWriter<'_>,
+    left: Option<&ReportObservedAntennaProfile>,
+    right: Option<&ReportObservedAntennaProfile>,
+) {
+    out.push_str("<div class=\"table-wrap\"><table><caption>Unique observed paths and location availability</caption><thead><tr><th scope=\"col\">Antenna</th><th scope=\"col\">Unique paths</th><th scope=\"col\">Located</th><th scope=\"col\">Missing location</th><th scope=\"col\">Inconsistent location</th></tr></thead><tbody>");
+    for profile in [left, right].into_iter().flatten() {
+        write_html!(
+            out,
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            escape_html(&profile.antenna_label),
+            profile.unique_path_count,
+            profile.located_path_count,
+            profile.missing_location_path_count,
+            profile.inconsistent_location_path_count
+        );
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn render_profile_distribution<T: Copy>(
+    out: &mut CheckedHtmlWriter<'_>,
+    caption: &str,
+    left: Option<&ReportObservedAntennaProfile>,
+    right: Option<&ReportObservedAntennaProfile>,
+    cells: impl Fn(&ReportObservedAntennaProfile) -> &[ReportObservedProfileCell<T>],
+    label: impl Fn(&ReportObservedProfileCell<T>) -> &'static str,
+) {
+    let left_label = left.map_or("Left", |profile| profile.antenna_label.as_str());
+    let right_label = right.map_or("Right", |profile| profile.antenna_label.as_str());
+    write_html!(out, "<div class=\"table-wrap\"><table><caption>{}</caption><thead><tr><th scope=\"col\">Category</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>", escape_html(caption), escape_html(left_label), escape_html(right_label));
+    let row_count = left
+        .map(|profile| cells(profile).len())
+        .or_else(|| right.map(|profile| cells(profile).len()))
+        .unwrap_or_default();
+    for index in 0..row_count {
+        let left_cell = left.and_then(|profile| cells(profile).get(index));
+        let right_cell = right.and_then(|profile| cells(profile).get(index));
+        let category = left_cell
+            .or(right_cell)
+            .expect("profile distribution row exists");
+        write_html!(
+            out,
+            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+            label(category),
+            observed_profile_cell_text(left_cell),
+            observed_profile_cell_text(right_cell)
+        );
+    }
+    out.push_str("</tbody></table></div>");
+}
+
+fn observed_profile_cell_text<T>(cell: Option<&ReportObservedProfileCell<T>>) -> String {
+    cell.map_or_else(
+        || "0 paths / 0 observations".to_string(),
+        |cell| {
+            format!(
+                "{} path{} / {} observation{}",
+                cell.unique_path_count,
+                plural_suffix(cell.unique_path_count),
+                cell.observation_count,
+                plural_suffix(cell.observation_count)
+            )
+        },
+    )
+}
+
+fn strict_dominant_distance(profile: &ReportObservedAntennaProfile) -> Option<ReportDistanceBin> {
+    let mut ranked = profile.distance_bins.iter().collect::<Vec<_>>();
+    ranked.sort_by(|left, right| {
+        right
+            .unique_path_count
+            .cmp(&left.unique_path_count)
+            .then_with(|| left.category.index().cmp(&right.category.index()))
+    });
+    let first = ranked.first()?;
+    (first.unique_path_count > 0
+        && ranked
+            .get(1)
+            .is_none_or(|second| first.unique_path_count > second.unique_path_count))
+    .then_some(first.category)
+}
+
+fn render_observed_profile_audit(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    if report.comparison.observed_path_profiles.is_empty() {
+        out.push_str("<p class=\"empty\">Exact observed-path rows were omitted by the bounded report profile.</p>");
+        return;
+    }
+    out.push_str("<div class=\"table-wrap\"><table><caption>Exact unique observed-path records</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Antenna / path</th><th scope=\"col\">Location</th><th scope=\"col\">Block / slot support</th><th scope=\"col\">Observations</th><th scope=\"col\">Observed SNR summary</th></tr></thead><tbody>");
+    for profile in &report.comparison.observed_path_profiles {
+        for path in &profile.paths {
+            let location = match &path.location {
+                antennabench_analysis::ObservedPathLocation::Available {
+                    remote_grid,
+                    distance_km,
+                    initial_bearing_degrees,
+                } => format!(
+                    "{} · {:.0} km · {:.0}°",
+                    escape_html(remote_grid),
+                    distance_km,
+                    initial_bearing_degrees
+                ),
+                antennabench_analysis::ObservedPathLocation::Missing => "Missing".to_string(),
+                antennabench_analysis::ObservedPathLocation::Inconsistent => {
+                    "Inconsistent".to_string()
+                }
+            };
+            let snr = path.snr.map_or_else(
+                || "No finite SNR".to_string(),
+                |snr| {
+                    format!(
+                        "{} sample{} · median {} dB · range {} to {} dB",
+                        snr.sample_count,
+                        plural_suffix(snr.sample_count),
+                        format_number(snr.median_db),
+                        format_number(snr.min_db),
+                        format_number(snr.max_db)
+                    )
+                },
+            );
+            write_html!(out, "<tr><td>{}</td><td>{}<br><span class=\"muted\">{}</span></td><td>{}</td><td>{} / {}<br><span class=\"muted\">blocks {} · slots {}</span></td><td>{}<br><span class=\"muted\">{}</span></td><td>{}</td></tr>", comparison_stratum(&profile.stratum), escape_html(&profile.antenna_label), escape_html(&path.remote_path), location, path.block_support_count, path.slot_support_count, escape_html(&path.block_indices.iter().map(|index| (index + 1).to_string()).collect::<Vec<_>>().join(", ")), escape_html(&path.slot_ids.join(", ")), path.observation_count, escape_html(&path.observation_ids.join(", ")), snr);
+        }
+    }
+    out.push_str("</tbody></table></div>");
 }
 pub(in super::super) fn render_observed_path_context(
     out: &mut CheckedHtmlWriter<'_>,

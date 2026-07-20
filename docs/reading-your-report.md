@@ -57,8 +57,9 @@ five conditional question families separate:
   receiver-block opportunity is classified as heard both, heard only A, heard
   only B, or heard neither.
 - **Observed reach** counts unique usable paths that appeared for each antenna.
-- **Observed distance and direction profile** uses located observed paths and
-  does not claim a radiation pattern or unobserved coverage.
+- **Observed distance and direction profile** uses every unique usable path
+  decoded by each antenna, including paths that were not decoded by the other
+  antenna. It does not claim a radiation pattern or unobserved coverage.
 - **Repeatability across blocks** asks whether eligible opportunities repeat;
   it does not turn repetition into a confidence or significance claim.
 
@@ -90,6 +91,23 @@ limited to transmit-side WSPR; receive-direction and non-WSPR activity remain
 explicitly unsupported. See
 [Decision 0026](decisions/0026-condition-detection-on-common-active-receivers.md)
 for the full methodology contract.
+
+The geographic and detection views answer three different conditional
+questions. Keep their denominators attached when comparing them:
+
+- `distance/bearing | antenna decoded` is the all-usable-path profile. Each
+  remote path contributes once per antenna and stratum; repeated observations,
+  blocks, and slots are retained as support rather than extra unique paths.
+- `distance/bearing | both antennas decoded` is shared-path context. It is the
+  narrower population where same-path signal differences can be described.
+- `detection outcome | receiver active during both cycles` is the common-
+  opportunity receiver population described above.
+
+Receiver or transmitter availability may change between antenna periods, so
+the first view describes collected paths rather than a controlled detection
+comparison. Missing or conflicting location facts remain counted as location
+unavailable. A usable decode with missing SNR still belongs in the all-path
+profile, while finite-SNR summaries use only the finite values.
 
 ### Legacy Shared-Path Comparison States
 
@@ -242,8 +260,8 @@ states, separately for each antenna and comparison group:
 The full report defaults to four-character Maidenhead cells and offers a
 script-free **Bearing and distance** view of the same reporter states. Printing
 always uses the grid-square view. The compact report uses 8 bearing sectors and
-four square-root-scaled distance rings (0–1, 1–3, 3–8, and 8–20 Mm). Its table
-is the accessible numeric equivalent of the 32 polar cells.
+the four square-root-scaled distance categories defined below. Its table is the
+accessible numeric equivalent of the 32 polar cells.
 
 Four-character cells are the display aggregation only. Retained six-character
 locators still place individual reporters in the polar view. Reporters with a
@@ -292,10 +310,14 @@ Polar maps use square-root radial geometry so nearby evidence remains visible,
 but their rings, labels, tooltips, and accessible tables use these same four
 semantic categories. The transform changes drawing geometry, not membership.
 
-These are the locations of **observed matched paths only**. They are not an
-antenna radiation pattern, a propagation model, or evidence about directions
-and distances that the session did not observe. A concentration of paths in one
-sector limits how broadly the display can be read.
+The primary side-by-side tables show `distance/bearing | antenna decoded` for
+all usable paths. Their per-bin composition separates paths seen by the first
+antenna only, both antennas, and the second antenna only. The shared-path
+disclosure separately shows `distance/bearing | both antennas decoded` and the
+available same-path SNR differences. Neither view is an antenna radiation
+pattern, a propagation model, or evidence about directions and distances that
+the session did not observe. A concentration of paths in one sector limits how
+broadly the display can be read.
 
 The detailed disclosures retain exact paired-row location values and derived
 solar context. Solar elevation and light state are geometric context derived

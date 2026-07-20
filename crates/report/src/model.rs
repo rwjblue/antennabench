@@ -1,9 +1,10 @@
 use antennabench_analysis::{
     AnalysisError, ComparisonAvailability, ComparisonBlock, ComparisonBlockEligibility,
-    ComparisonDiagnostics, ComparisonStratum, ComparisonTimelineRow, DeltaOrientation,
-    EligibilityExclusionCount, EvidenceQuality, ExclusionCount, ObservationCounts,
-    ObservationExclusionRecord, PairedObservationRow, PairedPathSummary, PairedStratumSummary,
-    PathDirection, PathOverlapRow, ReporterActivityAnalysis, SnrStatistics, SolarContextAnalysis,
+    ComparisonDiagnostics, ComparisonSide, ComparisonStratum, ComparisonTimelineRow,
+    DeltaOrientation, EligibilityExclusionCount, EvidenceQuality, ExclusionCount,
+    ObservationCounts, ObservationExclusionRecord, PairedObservationRow, PairedPathSummary,
+    PairedStratumSummary, PathDirection, PathOverlapRow, ReporterActivityAnalysis, SnrStatistics,
+    SolarContextAnalysis,
 };
 use antennabench_core::{
     v2::SessionLifecycleV2,
@@ -258,6 +259,11 @@ pub struct ReportOverviewStratum {
     /// Unique finite paths classified by the antennas on which they were
     /// observed. Missing SNR is deliberately accounted for separately.
     pub reach: ReportOverviewReach,
+    /// All usable observed paths, kept separate by antenna and exact stratum.
+    /// This describes collected footprint rather than a matched-path effect or
+    /// controlled detection comparison.
+    #[serde(default)]
+    pub observed_profile: ReportOverviewObservedProfile,
     /// One deterministic location context record per paired remote path. It
     /// never pools strata and never lets repeated paired rows dominate a
     /// distance bin or azimuth sector.
@@ -311,6 +317,41 @@ pub struct ReportOverviewPathMedianDelta {
 pub struct ReportOverviewReach {
     pub left_only_unique_path_count: usize,
     pub both_unique_path_count: usize,
+    pub right_only_unique_path_count: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReportOverviewObservedProfile {
+    pub left: Option<ReportObservedAntennaProfile>,
+    pub right: Option<ReportObservedAntennaProfile>,
+    pub distance_composition: Vec<ReportObservedDistanceComposition>,
+    pub composition_location_unavailable_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportObservedAntennaProfile {
+    pub side: ComparisonSide,
+    pub antenna_label: String,
+    pub unique_path_count: usize,
+    pub located_path_count: usize,
+    pub missing_location_path_count: usize,
+    pub inconsistent_location_path_count: usize,
+    pub distance_bins: Vec<ReportObservedProfileCell<ReportDistanceBin>>,
+    pub azimuth_sectors: Vec<ReportObservedProfileCell<ReportAzimuthSector>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportObservedProfileCell<T> {
+    pub category: T,
+    pub unique_path_count: usize,
+    pub observation_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportObservedDistanceComposition {
+    pub category: ReportDistanceBin,
+    pub left_only_unique_path_count: usize,
+    pub shared_unique_path_count: usize,
     pub right_only_unique_path_count: usize,
 }
 
@@ -673,6 +714,8 @@ pub struct ReportComparisonData {
     pub paired_rows: Vec<PairedObservationRow>,
     pub path_summaries: Vec<PairedPathSummary>,
     pub strata: Vec<PairedStratumSummary>,
+    #[serde(default)]
+    pub observed_path_profiles: Vec<antennabench_analysis::ObservedAntennaPathProfile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -834,6 +877,7 @@ pub enum ReportDetailFamily {
     SolarContext,
     PathSummaries,
     Strata,
+    ObservedPathProfileRows,
     ReporterActivityAudit,
     CoverageMapReporters,
     Charts,

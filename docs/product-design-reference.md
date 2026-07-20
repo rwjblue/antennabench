@@ -89,8 +89,18 @@ conclusion rules. Single-antenna profiling never invents an A/B comparison.
 
 Distance and azimuth report views are observed-session path context, not maps,
 radiation patterns, propagation models, or causal conclusions. They remain
-separate for every comparison stratum and use one paired-path median at most
-once per aggregate. The fixed policy is one operator-facing taxonomy: near /
+separate for every comparison stratum. The primary profile answers
+`distance/bearing | antenna decoded`: it counts every unique usable remote path
+once per antenna, retaining observation, block, and slot support separately.
+Missing-SNR decodes remain paths, while SNR summaries use only finite values.
+The shared-path context separately answers `distance/bearing | both antennas
+decoded` and uses one paired-path median at most once per aggregate. Neither is
+the common-opportunity `detection outcome | receiver active during both cycles`
+estimand. Receiver/transmitter availability may differ across antenna periods,
+so the all-path view is descriptive and is not a controlled detection
+comparison. Missing or inconsistent location evidence remains visible.
+
+The fixed policy is one operator-facing taxonomy: near /
 local proxy under 500 km, regional from 500 km to less than 1500 km, longer
 path from 1500 km to less than 3000 km, and DX-oriented at 3000 km and above.
 Distance is not propagation-mode proof. Maps may use nonlinear radial

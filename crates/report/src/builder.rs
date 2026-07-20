@@ -11,6 +11,7 @@ use antennabench_core::{
 use chrono::Duration;
 use std::collections::BTreeMap;
 
+use crate::observed_profile::project_observed_profile;
 use crate::{
     answerability::build_question_answerability, check_cancelled, coverage::build_coverage_maps,
     report_resource_error, AntennaEvidenceSection, AntennaSnrRow, BandEvidenceCountRow,
@@ -150,10 +151,10 @@ fn build_report_with_resources_and_snapshot_and_activity(
     // The question-first views retain every path median, rather than sampling
     // them in the renderer. Count those rows up front so a bounded overview is
     // complete or explicitly rejected, never silently partial.
-    // Each stratum retains its headline plus four distance bins and eight
-    // azimuth sectors, in addition to one location-status row per paired path.
+    // Each stratum retains its headline, matched-path geographic cells, and
+    // both per-antenna all-path profiles plus distance composition.
     let required_overview_rows = summary.eligibility.exclusions.len()
-        + summary.comparison.strata.len() * 13
+        + summary.comparison.strata.len() * 41
         + summary.comparison.path_summaries.len()
         + summary.reporter_activity.census_cycles.len()
         + summary.reporter_activity.cycle_rates.len()
@@ -177,7 +178,8 @@ fn build_report_with_resources_and_snapshot_and_activity(
         )
         .into());
     }
-    let full_detail = detail_counts.total_rows() <= limits.rows;
+    let full_detail =
+        (required_overview_rows as u64).saturating_add(detail_counts.total_rows()) <= limits.rows;
     let context = build_context(bundle, &summary.bands, validation, full_detail);
     let overview = build_overview(
         bundle,
@@ -367,6 +369,7 @@ fn project_overview_stratum(
             reach
         });
     let location_context = project_location_context(&summary.stratum, comparison);
+    let observed_profile = project_observed_profile(&summary.stratum, comparison);
 
     ReportOverviewStratum {
         stratum: summary.stratum.clone(),
@@ -390,6 +393,7 @@ fn project_overview_stratum(
         path_delta,
         path_median_deltas,
         reach,
+        observed_profile,
         location_context,
     }
 }
@@ -717,8 +721,15 @@ fn project_comparison(
     comparison: PairedComparisonAnalysis,
     full_detail: bool,
 ) -> ReportComparisonData {
-    let (blocks, overlap_rows, timeline_rows, paired_rows, path_summaries, strata) = if full_detail
-    {
+    let (
+        blocks,
+        overlap_rows,
+        timeline_rows,
+        paired_rows,
+        path_summaries,
+        strata,
+        observed_path_profiles,
+    ) = if full_detail {
         (
             comparison.blocks,
             comparison.overlap_rows,
@@ -726,9 +737,11 @@ fn project_comparison(
             comparison.paired_rows,
             comparison.path_summaries,
             comparison.strata,
+            comparison.observed_path_profiles,
         )
     } else {
         (
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -749,6 +762,7 @@ fn project_comparison(
         paired_rows,
         path_summaries,
         strata,
+        observed_path_profiles,
     }
 }
 
@@ -914,6 +928,14 @@ impl DetailCounts {
                     comparison.path_summaries.len(),
                 ),
                 (ReportDetailFamily::Strata, comparison.strata.len()),
+                (
+                    ReportDetailFamily::ObservedPathProfileRows,
+                    comparison
+                        .observed_path_profiles
+                        .iter()
+                        .map(|profile| profile.paths.len())
+                        .sum(),
+                ),
                 (
                     ReportDetailFamily::ReporterActivityAudit,
                     summary

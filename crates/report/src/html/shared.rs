@@ -470,6 +470,7 @@ pub(super) fn detail_family(value: ReportDetailFamily) -> &'static str {
         ReportDetailFamily::SolarContext => "solar-context",
         ReportDetailFamily::PathSummaries => "path summary",
         ReportDetailFamily::Strata => "comparison group",
+        ReportDetailFamily::ObservedPathProfileRows => "observed-path profile",
         ReportDetailFamily::ReporterActivityAudit => "reporter-activity audit",
         ReportDetailFamily::CoverageMapReporters => "coverage-map reporter",
         ReportDetailFamily::Charts => "chart",

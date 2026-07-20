@@ -1,6 +1,6 @@
 use antennabench_analysis::{
-    ComparisonAvailability, PairedComparisonAnalysis, PairedObservationRow,
-    ReporterActivityAnalysis, ReporterActivityCoverage, ReporterActivityUnknownReason,
+    ComparisonAvailability, PairedComparisonAnalysis, ReporterActivityAnalysis,
+    ReporterActivityCoverage, ReporterActivityUnknownReason,
 };
 
 use crate::{
@@ -72,7 +72,11 @@ pub(crate) fn build_question_answerability(
     } else {
         ObservedReachAnswerability::default()
     };
-    let geographic_profile = if comparison.paired_rows.iter().any(paired_row_has_location) {
+    let geographic_profile = if comparison
+        .observed_path_profiles
+        .iter()
+        .any(|profile| profile.located_path_count > 0)
+    {
         GeographicProfileAnswerability::Available
     } else {
         GeographicProfileAnswerability::default()
@@ -90,25 +94,4 @@ pub(crate) fn build_question_answerability(
         geographic_profile,
         repeatability,
     }
-}
-
-fn paired_row_has_location(row: &PairedObservationRow) -> bool {
-    valid_grid(row.left_remote_grid.as_deref())
-        && valid_grid(row.right_remote_grid.as_deref())
-        && valid_distance(row.left_distance_km)
-        && valid_distance(row.right_distance_km)
-        && valid_azimuth(row.left_azimuth_degrees)
-        && valid_azimuth(row.right_azimuth_degrees)
-}
-
-fn valid_grid(grid: Option<&str>) -> bool {
-    grid.is_some_and(|grid| !grid.trim().is_empty())
-}
-
-fn valid_distance(value: Option<f64>) -> bool {
-    value.is_some_and(|value| value.is_finite() && value >= 0.0)
-}
-
-fn valid_azimuth(value: Option<f64>) -> bool {
-    value.is_some_and(|value| value.is_finite() && (0.0..360.0).contains(&value))
 }

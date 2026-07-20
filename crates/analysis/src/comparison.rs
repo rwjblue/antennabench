@@ -9,9 +9,10 @@ use crate::{
     summary::{ClassifiedObservation, ObservationDisposition},
     AnalysisBudget, AnalysisError, AnalysisResourceStage, ComparisonAvailability, ComparisonBlock,
     ComparisonBlockEligibility, ComparisonDiagnostics, ComparisonOrder, ComparisonSide,
-    ComparisonStratum, ComparisonTimelineRow, DeltaOrientation, PairedComparisonAnalysis,
+    ComparisonStratum, ComparisonTimelineRow, DeltaOrientation, ObservedAntennaPath,
+    ObservedAntennaPathProfile, ObservedPathLocation, PairedComparisonAnalysis,
     PairedObservationRow, PairedPathSummary, PairedStratumSummary, PathDirection, PathOverlapRow,
-    SignalMode,
+    SignalMode, SnrStatistics,
 };
 
 type StratumKey = (u8, u8, String, u8, u8);
@@ -174,6 +175,8 @@ pub(crate) fn analyze_paired_comparison(
     let mut paired_rows = Vec::new();
     let mut overlap_accumulators = BTreeMap::<(StratumKey, String), OverlapAccumulator>::new();
     let mut stratum_accumulators = BTreeMap::<StratumKey, StratumAccumulator>::new();
+    let mut profile_accumulators =
+        BTreeMap::<(StratumKey, u8, String), ObservedPathAccumulator<'_>>::new();
 
     for (work_index, ((key, block_index, remote_path), mut group)) in groups.into_iter().enumerate()
     {
@@ -184,6 +187,8 @@ pub(crate) fn analyze_paired_comparison(
         )?;
         let stratum = stratum_from_key(&key);
         let block = &blocks[block_index];
+        let left_first = group.left.first();
+        let right_first = group.right.first();
         let left = group.left.resolve();
         let right = group.right.resolve();
         mark_quality_timeline(
@@ -208,6 +213,28 @@ pub(crate) fn analyze_paired_comparison(
         accumulator.exact_duplicate_count += duplicate_count;
         accumulator.conflicting_duplicate_group_count += conflict_count;
         accumulator.blocks.insert(block_index);
+        if !left.conflict {
+            if let Some(observation) = left
+                .finite
+                .or_else(|| left.missing_snr.then_some(left_first).flatten())
+            {
+                profile_accumulators
+                    .entry((key.clone(), 0, remote_path.clone()))
+                    .or_default()
+                    .add(block_index, observation);
+            }
+        }
+        if !right.conflict {
+            if let Some(observation) = right
+                .finite
+                .or_else(|| right.missing_snr.then_some(right_first).flatten())
+            {
+                profile_accumulators
+                    .entry((key.clone(), 1, remote_path.clone()))
+                    .or_default()
+                    .add(block_index, observation);
+            }
+        }
         let overlap = overlap_accumulators
             .entry((key, remote_path.clone()))
             .or_default();
@@ -294,6 +321,8 @@ pub(crate) fn analyze_paired_comparison(
         .map(|((key, remote_path), row)| row.finish(stratum_from_key(&key), remote_path))
         .collect::<Vec<_>>();
     let path_summaries = build_path_summaries(&paired_rows);
+    let observed_path_profiles =
+        build_observed_path_profiles(bundle, profile_accumulators, &left_label, &right_label);
     for key in exclusions_by_stratum.keys() {
         stratum_accumulators.entry(key.clone()).or_default();
     }
@@ -331,6 +360,7 @@ pub(crate) fn analyze_paired_comparison(
         paired_rows,
         path_summaries,
         strata,
+        observed_path_profiles,
     })
 }
 
@@ -355,7 +385,160 @@ fn unavailable(
         paired_rows: Vec::new(),
         path_summaries: Vec::new(),
         strata: Vec::new(),
+        observed_path_profiles: Vec::new(),
     }
+}
+
+#[derive(Default)]
+struct ObservedPathAccumulator<'a> {
+    observations: Vec<(usize, &'a ObservationRecord)>,
+}
+
+impl<'a> ObservedPathAccumulator<'a> {
+    fn add(&mut self, block_index: usize, observation: &'a ObservationRecord) {
+        self.observations.push((block_index, observation));
+    }
+
+    fn finish(self, bundle: &BundleContents, remote_path: String) -> ObservedAntennaPath {
+        let mut observations = self.observations;
+        observations.sort_by(|left, right| left.1.observation_id.cmp(&right.1.observation_id));
+        let block_indices = observations
+            .iter()
+            .map(|(block_index, _)| *block_index)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let slot_ids = observations
+            .iter()
+            .filter_map(|(_, observation)| observation.slot_id.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let observation_ids = observations
+            .iter()
+            .map(|(_, observation)| observation.observation_id.clone())
+            .collect::<Vec<_>>();
+        let mut snr_values = observations
+            .iter()
+            .filter_map(|(_, observation)| observation.snr_db)
+            .filter(|value| value.is_finite())
+            .map(f64::from)
+            .collect::<Vec<_>>();
+        snr_values.sort_by(f64::total_cmp);
+        let location = observed_path_location(bundle, &observations);
+        ObservedAntennaPath {
+            remote_path,
+            location,
+            block_support_count: block_indices.len(),
+            slot_support_count: slot_ids.len(),
+            observation_count: observations.len(),
+            block_indices,
+            slot_ids,
+            observation_ids,
+            snr: snr_statistics(&snr_values),
+        }
+    }
+}
+
+fn build_observed_path_profiles(
+    bundle: &BundleContents,
+    accumulators: BTreeMap<(StratumKey, u8, String), ObservedPathAccumulator<'_>>,
+    left_label: &str,
+    right_label: &str,
+) -> Vec<ObservedAntennaPathProfile> {
+    let mut grouped = BTreeMap::<(StratumKey, u8), Vec<ObservedAntennaPath>>::new();
+    for ((key, side, remote_path), accumulator) in accumulators {
+        grouped
+            .entry((key, side))
+            .or_default()
+            .push(accumulator.finish(bundle, remote_path));
+    }
+    grouped
+        .into_iter()
+        .map(|((key, side), paths)| {
+            let located_path_count = paths
+                .iter()
+                .filter(|path| matches!(path.location, ObservedPathLocation::Available { .. }))
+                .count();
+            let missing_location_path_count = paths
+                .iter()
+                .filter(|path| path.location == ObservedPathLocation::Missing)
+                .count();
+            let inconsistent_location_path_count = paths
+                .iter()
+                .filter(|path| path.location == ObservedPathLocation::Inconsistent)
+                .count();
+            ObservedAntennaPathProfile {
+                stratum: stratum_from_key(&key),
+                side: if side == 0 {
+                    ComparisonSide::Left
+                } else {
+                    ComparisonSide::Right
+                },
+                antenna_label: if side == 0 { left_label } else { right_label }.to_string(),
+                unique_path_count: paths.len(),
+                located_path_count,
+                missing_location_path_count,
+                inconsistent_location_path_count,
+                paths,
+            }
+        })
+        .collect()
+}
+
+fn observed_path_location(
+    bundle: &BundleContents,
+    observations: &[(usize, &ObservationRecord)],
+) -> ObservedPathLocation {
+    let facts = observations
+        .iter()
+        .filter_map(|(_, observation)| {
+            let grid = remote_grid(bundle, observation)?;
+            let grid = grid.trim();
+            let distance = observation.distance_km?;
+            let bearing = observation.azimuth_degrees?;
+            (!grid.is_empty()
+                && distance.is_finite()
+                && distance >= 0.0
+                && bearing.is_finite()
+                && (0.0..360.0).contains(&bearing))
+            .then(|| {
+                (
+                    grid.to_ascii_uppercase(),
+                    distance.to_bits(),
+                    bearing.to_bits(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    if facts.is_empty() {
+        return ObservedPathLocation::Missing;
+    }
+    let unique = facts.iter().cloned().collect::<BTreeSet<_>>();
+    if facts.len() != observations.len() || unique.len() != 1 {
+        return ObservedPathLocation::Inconsistent;
+    }
+    let (remote_grid, distance, bearing) = unique.into_iter().next().unwrap();
+    ObservedPathLocation::Available {
+        remote_grid,
+        distance_km: f64::from_bits(distance),
+        initial_bearing_degrees: f64::from_bits(bearing),
+    }
+}
+
+fn snr_statistics(values: &[f64]) -> Option<SnrStatistics> {
+    let middle = values.len() / 2;
+    (!values.is_empty()).then(|| SnrStatistics {
+        sample_count: values.len(),
+        min_db: values[0],
+        median_db: if values.len().is_multiple_of(2) {
+            (values[middle - 1] + values[middle]) / 2.0
+        } else {
+            values[middle]
+        },
+        mean_db: values.iter().sum::<f64>() / values.len() as f64,
+        max_db: values[values.len() - 1],
+    })
 }
 
 fn scheduled_labels(bundle: &BundleContents) -> Vec<String> {

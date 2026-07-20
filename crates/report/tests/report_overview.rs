@@ -277,6 +277,35 @@ fn projects_fixed_distance_and_azimuth_context_once_per_paired_path() {
         path.remote_path == "K1MISSING"
             && path.availability == ReportPathLocationAvailability::Missing
     }));
+
+    let observed = &report.overview.strata[0].observed_profile;
+    let left = observed.left.as_ref().unwrap();
+    let right = observed.right.as_ref().unwrap();
+    assert_eq!((left.unique_path_count, right.unique_path_count), (13, 13));
+    assert_eq!(
+        (left.located_path_count, right.located_path_count),
+        (12, 12)
+    );
+    assert_eq!(
+        left.distance_bins
+            .iter()
+            .map(|cell| (cell.unique_path_count, cell.observation_count))
+            .collect::<Vec<_>>(),
+        vec![(1, 1), (8, 9), (2, 2), (1, 1)]
+    );
+    assert_eq!(
+        observed
+            .distance_composition
+            .iter()
+            .map(|cell| (
+                cell.left_only_unique_path_count,
+                cell.shared_unique_path_count,
+                cell.right_only_unique_path_count,
+            ))
+            .collect::<Vec<_>>(),
+        vec![(0, 1, 0), (0, 8, 0), (0, 2, 0), (0, 1, 0)]
+    );
+    assert_eq!(observed.composition_location_unavailable_count, 1);
     assert!(context.paths.iter().any(|path| {
         path.remote_path == "K1INCONSISTENT"
             && path.availability == ReportPathLocationAvailability::Inconsistent
@@ -288,6 +317,96 @@ fn projects_fixed_distance_and_azimuth_context_once_per_paired_path() {
         report,
         build_report(&reordered).expect("input ordering must not change location context")
     );
+}
+
+#[test]
+fn all_path_profiles_survive_disjoint_populations_missing_snr_and_bad_locations() {
+    let mut bundle = all_path_profile_bundle();
+    let report = build_report(&bundle).expect("all-path profile should build");
+
+    assert_eq!(
+        report.overview.comparison_availability,
+        ComparisonAvailability::NoMatchedPaths
+    );
+    let observed = &report.overview.strata[0].observed_profile;
+    let left = observed.left.as_ref().unwrap();
+    let right = observed.right.as_ref().unwrap();
+    assert_eq!((left.unique_path_count, right.unique_path_count), (4, 1));
+    assert_eq!((left.located_path_count, right.located_path_count), (2, 1));
+    assert_eq!(left.missing_location_path_count, 1);
+    assert_eq!(left.inconsistent_location_path_count, 1);
+    assert_eq!(left.distance_bins[0].unique_path_count, 2);
+    assert_eq!(left.distance_bins[0].observation_count, 3);
+    assert_eq!(right.distance_bins[3].unique_path_count, 1);
+    assert_eq!(right.distance_bins[3].observation_count, 4);
+    let left_rows = &report.comparison.observed_path_profiles[0].paths;
+    let near = left_rows
+        .iter()
+        .find(|path| path.remote_path == "K1NEAR")
+        .unwrap();
+    assert_eq!(near.block_support_count, 2);
+    assert_eq!(near.slot_support_count, 2);
+    assert_eq!(near.observation_count, 2);
+    assert_eq!(near.snr.unwrap().sample_count, 2);
+    assert!(left_rows
+        .iter()
+        .find(|path| path.remote_path == "K1NOSNR")
+        .unwrap()
+        .snr
+        .is_none());
+    assert!(matches!(
+        left_rows
+            .iter()
+            .find(|path| path.remote_path == "K1INCONSISTENT")
+            .unwrap()
+            .location,
+        antennabench_analysis::ObservedPathLocation::Inconsistent
+    ));
+
+    bundle.observations.reverse();
+    assert_eq!(
+        report,
+        build_report(&bundle).expect("profile must be input-order independent")
+    );
+}
+
+#[test]
+fn all_path_distance_composition_separates_matched_and_unmatched_paths_in_one_bin() {
+    let mut bundle = all_path_profile_bundle();
+    bundle.observations.extend([
+        located_tx_observation(
+            &bundle,
+            "near-shared-right-1",
+            1,
+            "K1NEAR",
+            -19.0,
+            200.0,
+            10.0,
+        ),
+        located_tx_observation(
+            &bundle,
+            "near-shared-right-2",
+            3,
+            "K1NEAR",
+            -17.0,
+            200.0,
+            10.0,
+        ),
+        located_tx_observation(&bundle, "near-left-only", 0, "K1AONLY", -23.0, 250.0, 15.0),
+        located_tx_observation(&bundle, "near-right-only", 1, "K1BONLY", -24.0, 300.0, 20.0),
+    ]);
+    let report = build_report(&normalize_bundle(bundle)).expect("mixed path profile should build");
+
+    assert_eq!(
+        report.overview.comparison_availability,
+        ComparisonAvailability::DescriptivePairsAvailable
+    );
+    let near = &report.overview.strata[0]
+        .observed_profile
+        .distance_composition[0];
+    assert_eq!(near.left_only_unique_path_count, 2);
+    assert_eq!(near.shared_unique_path_count, 1);
+    assert_eq!(near.right_only_unique_path_count, 1);
 }
 
 #[test]
@@ -308,7 +427,7 @@ fn overview_rows_are_part_of_the_required_bounded_projection() {
         ReportError::Resource(ref error)
             if error.diagnostic.code == "resource.report.rows"
                 && error.diagnostic.role == "required_overview_rows"
-                && error.diagnostic.observed == Some(21)
+                && error.diagnostic.observed == Some(49)
     ));
 }
 
@@ -428,6 +547,46 @@ fn location_context_bundle() -> BundleContents {
         501.0,
         22.5,
     ));
+    bundle.observations = observations;
+    normalize_bundle(bundle)
+}
+
+fn all_path_profile_bundle() -> BundleContents {
+    let mut bundle = bundle_with_layout(&["A", "B", "A", "B", "A", "B", "A", "B"]);
+    let mut observations = vec![
+        located_tx_observation(&bundle, "near-1", 0, "K1NEAR", -20.0, 200.0, 10.0),
+        located_tx_observation(&bundle, "near-2", 2, "K1NEAR", -18.0, 200.0, 10.0),
+        located_tx_observation(&bundle, "dx-1", 1, "K1DX", -25.0, 4_000.0, 220.0),
+        located_tx_observation(&bundle, "dx-2", 3, "K1DX", -24.0, 4_000.0, 220.0),
+        located_tx_observation(&bundle, "dx-3", 5, "K1DX", -23.0, 4_000.0, 220.0),
+        located_tx_observation(&bundle, "dx-4", 7, "K1DX", -22.0, 4_000.0, 220.0),
+        located_tx_observation(
+            &bundle,
+            "inconsistent-1",
+            4,
+            "K1INCONSISTENT",
+            -21.0,
+            400.0,
+            30.0,
+        ),
+        located_tx_observation(
+            &bundle,
+            "inconsistent-2",
+            6,
+            "K1INCONSISTENT",
+            -19.0,
+            600.0,
+            30.0,
+        ),
+    ];
+    let mut missing = tx_observation(&bundle, "missing", 0, "K1MISSING", Some(-22.0));
+    missing.reporter_grid = None;
+    missing.distance_km = None;
+    missing.azimuth_degrees = None;
+    observations.push(missing);
+    let mut no_snr = located_tx_observation(&bundle, "no-snr", 2, "K1NOSNR", -20.0, 300.0, 40.0);
+    no_snr.snr_db = None;
+    observations.push(no_snr);
     bundle.observations = observations;
     normalize_bundle(bundle)
 }

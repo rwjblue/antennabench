@@ -3,10 +3,11 @@ use std::fmt::Write as _;
 use crate::{
     GeographicProfileAnswerability, ObservedReachAnswerability, PairedDetectabilityAnswerability,
     RepeatabilityAnswerability, ReportAzimuthSector, ReportDistanceBin, ReportLifecycleEventKind,
-    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLifecycleState,
-    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
-    ReportOverviewReach, ReportOverviewStratum, ReportPathLocationAvailability,
-    ReportRunTimelineRow, ReportStratumAvailability, SamePathSignalAnswerability, SessionReport,
+    ReportObservedAntennaProfile, ReportObservedProfileCell, ReportOperatorEvent,
+    ReportOperatorEventKind, ReportOverviewLifecycleState, ReportOverviewLimitation,
+    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportOverviewReach,
+    ReportOverviewStratum, ReportPathLocationAvailability, ReportRunTimelineRow,
+    ReportStratumAvailability, SamePathSignalAnswerability, SessionReport,
 };
 use antennabench_core::AlignedSlotStatus;
 
@@ -22,7 +23,7 @@ mod quality;
 pub(super) use activity::{coverage_text, render_reporter_activity_section};
 pub(super) use coverage::{render_compact_coverage_map_section, render_coverage_map_section};
 
-pub(super) use location::render_distance_section;
+pub(super) use location::{render_compact_distance_section, render_distance_section};
 pub(super) use overview::{
     overview_lifecycle_label, render_answer_first_overview,
     render_answer_first_overview_with_reference, render_how_to_read, render_question_navigation,

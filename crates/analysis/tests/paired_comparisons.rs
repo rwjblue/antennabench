@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use antennabench_analysis::{
     summarize_bundle, ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder,
-    PathDirection, SolarContextMissingReason, SolarEndpointRole, SolarLightState,
+    ComparisonSide, PathDirection, SolarContextMissingReason, SolarEndpointRole, SolarLightState,
     SolarPositionResult,
 };
 use antennabench_core::{
@@ -302,6 +302,55 @@ fn separates_band_direction_mode_kind_and_source_and_is_observation_order_indepe
         ObservationKind::PublicReport
     );
     assert_eq!(forward.strata[1].stratum.source, RecordSource::Wsprnet);
+    assert_eq!(forward.observed_path_profiles.len(), 4);
+    assert_eq!(
+        forward
+            .observed_path_profiles
+            .iter()
+            .map(|profile| (
+                profile.stratum.direction,
+                profile.stratum.band,
+                profile.stratum.observation_kind,
+                profile.stratum.source,
+                profile.side,
+                profile.unique_path_count,
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                PathDirection::Transmit,
+                Band::M20,
+                ObservationKind::LocalDecode,
+                RecordSource::WsjtxLog,
+                ComparisonSide::Left,
+                1
+            ),
+            (
+                PathDirection::Transmit,
+                Band::M20,
+                ObservationKind::LocalDecode,
+                RecordSource::WsjtxLog,
+                ComparisonSide::Right,
+                1
+            ),
+            (
+                PathDirection::Receive,
+                Band::M40,
+                ObservationKind::PublicReport,
+                RecordSource::Wsprnet,
+                ComparisonSide::Left,
+                1
+            ),
+            (
+                PathDirection::Receive,
+                Band::M40,
+                ObservationKind::PublicReport,
+                RecordSource::Wsprnet,
+                ComparisonSide::Right,
+                1
+            ),
+        ]
+    );
     let serialized = serde_json::to_string(&forward).expect("comparison should serialize");
     for prohibited in [
         "winner",

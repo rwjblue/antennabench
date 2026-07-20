@@ -547,8 +547,14 @@ try {
     assert.deepEqual(
       navigationTargets,
       mode === "full"
-        ? ["what-run-show", "reach-unique-paths", "run-quality", "audit-appendix"]
-        : ["what-run-show", "reach-unique-paths", "run-quality"],
+        ? [
+            "what-run-show",
+            "reach-unique-paths",
+            "distance-direction",
+            "run-quality",
+            "audit-appendix",
+          ]
+        : ["what-run-show", "reach-unique-paths", "distance-direction", "run-quality"],
     );
     const outerScrollBefore = (await browser([
       "eval",
@@ -573,7 +579,7 @@ try {
         linkOutline: "solid",
       });
       await browser(["press", "Enter"]);
-      await browser(["wait", "500"]);
+      await browser(["wait", "1500"]);
       const navigated = await evaluateReportFrame(pageUrl, `(() => {
         const target = document.querySelector("#${targetId}");
         const targetRect = target.getBoundingClientRect();

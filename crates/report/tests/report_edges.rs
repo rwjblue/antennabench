@@ -15,8 +15,18 @@ fn report_rows_fall_back_to_a_complete_unsampled_overview() {
     let validation = validate_bundle_report(&bundle);
     let full = build_report(&bundle).unwrap();
     let required_overview_rows = full.eligibility_exclusions.len()
-        + full.overview.strata.len() * 13
+        + full.overview.strata.len() * 41
         + full.comparison.path_summaries.len()
+        + full.reporter_activity.census_cycles.len()
+        + full.reporter_activity.cycle_rates.len()
+        + full.reporter_activity.paired_rates.len()
+        + full.reporter_activity.joint_summaries.len()
+        + full
+            .coverage_maps
+            .iter()
+            .flat_map(|group| &group.panels)
+            .map(|panel| panel.cells.len() + panel.polar_cells.len())
+            .sum::<usize>()
         + full.overview.timeline.len()
         + full.snapshot.operator_events.len();
     let overview = build_report_with_resources(
