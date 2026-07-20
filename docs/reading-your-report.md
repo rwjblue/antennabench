@@ -300,6 +300,34 @@ or a signal below the decode threshold.
 The overlap counts remain separate for every comparison group. An empty group
 is collapsed and named, just as it is in the result table.
 
+## Coverage Overlap And Repeatability
+
+The overlap and repeatability section extends the reach counts without turning
+them into a diversity or antenna-quality score. **Observed complementarity**
+counts paths that appeared only on the first antenna, on both, or only on the
+second antenna, plus the total unique two-antenna system reach. A path that
+appeared only on one antenna is an incremental recorded contribution; it does
+not prove the other antenna could never reach that endpoint.
+
+**Opportunity-conditioned complementarity** is a separate, stronger detection
+comparison. It counts first-only, both, second-only, and neither outcomes only
+among receivers proven active during both cycles. Those receiver-block
+opportunities are never merged with uncontrolled observed-only paths, even
+when the endpoint names happen to match.
+
+For each antenna, repeatability counts unique endpoints once and separately
+shows how many path-block observations support them. The block-count
+distribution distinguishes paths seen once from paths seen in multiple
+eligible blocks. Raw observation counts remain in the audit table so one
+prolific endpoint cannot dominate the unique-path summary. Per-path and
+per-receiver rows also retain first-then-second versus second-then-first order
+support.
+
+Zero or one eligible block is labeled as limited repeatability rather than a
+negative or reliable result. Repetition is descriptive support, not a
+confidence interval, independence claim, or probability that a path will be
+heard again.
+
 ## Distance And Azimuth
 
 Distance and azimuth views group located paths into one fixed taxonomy and

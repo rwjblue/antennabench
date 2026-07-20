@@ -550,11 +550,18 @@ try {
         ? [
             "what-run-show",
             "reach-unique-paths",
+            "coverage-overlap",
             "distance-direction",
             "run-quality",
             "audit-appendix",
           ]
-        : ["what-run-show", "reach-unique-paths", "distance-direction", "run-quality"],
+        : [
+            "what-run-show",
+            "reach-unique-paths",
+            "coverage-overlap",
+            "distance-direction",
+            "run-quality",
+          ],
     );
     const outerScrollBefore = (await browser([
       "eval",

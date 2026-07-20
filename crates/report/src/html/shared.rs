@@ -476,6 +476,7 @@ pub(super) fn detail_family(value: ReportDetailFamily) -> &'static str {
         ReportDetailFamily::CommonOpportunityGeographyAudit => {
             "common-opportunity geographic audit"
         }
+        ReportDetailFamily::CoverageOverlapAudit => "coverage overlap and repeatability audit",
         ReportDetailFamily::Charts => "chart",
     }
 }

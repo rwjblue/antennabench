@@ -1,6 +1,7 @@
 mod answerability;
 mod builder;
 mod common_opportunity;
+mod complementarity;
 mod coverage;
 mod distance;
 mod geography;
@@ -8,6 +9,7 @@ mod html;
 mod model;
 mod observed_profile;
 mod resource;
+mod resource_rows;
 
 pub use builder::{
     build_report, build_report_with_resources, build_report_with_snapshot,

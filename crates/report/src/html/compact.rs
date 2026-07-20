@@ -11,7 +11,8 @@ use super::{
     geometry::render_geometry_styles,
     questions::{
         overview_lifecycle_label, render_answer_first_overview_with_reference,
-        render_compact_coverage_map_section, render_compact_distance_section, render_how_to_read,
+        render_compact_coverage_map_section, render_compact_distance_section,
+        render_compact_overlap_repeatability_section, render_how_to_read,
         render_question_navigation, render_reach_bar, render_reporter_activity_section,
         render_same_path_stratum,
     },
@@ -99,6 +100,9 @@ pub fn render_compact_summary_html_with_resources(
         out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2>");
         render_compact_reach_view(&mut out, report);
         out.push_str("</section>");
+    }
+    if !report.coverage_overlap.is_empty() {
+        render_compact_overlap_repeatability_section(&mut out, report);
     }
     if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
     {

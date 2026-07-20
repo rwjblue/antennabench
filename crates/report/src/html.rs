@@ -27,8 +27,9 @@ use audit::render_audit_appendix;
 use geometry::render_geometry_styles;
 use questions::{
     render_answer_first_overview, render_coverage_map_section, render_distance_section,
-    render_how_to_read, render_question_navigation, render_reach_section,
-    render_reporter_activity_section, render_run_quality_section, render_same_path_section,
+    render_how_to_read, render_overlap_repeatability_section, render_question_navigation,
+    render_reach_section, render_reporter_activity_section, render_run_quality_section,
+    render_same_path_section,
 };
 use shared::{escape_html, CheckedHtmlWriter};
 use styles::{COVERAGE_STYLES, STYLES};
@@ -152,6 +153,9 @@ fn render_standalone_html_document(
     }
     if report.overview.answerability.observed_reach == ObservedReachAnswerability::Available {
         render_reach_section(&mut out, report);
+    }
+    if !report.coverage_overlap.is_empty() {
+        render_overlap_repeatability_section(&mut out, report);
     }
     if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
     {

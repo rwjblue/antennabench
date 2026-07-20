@@ -6116,6 +6116,434 @@ fn reports_the_analysis_rich_whole_station_fixture() {
           }
         ]
       },
+      "coverage_overlap": [
+        {
+          "stratum": {
+            "direction": "transmit",
+            "band": "40m",
+            "mode": "WSPR",
+            "observation_kind": "public_report",
+            "source": "wsprnet"
+          },
+          "observed": {
+            "eligible_block_count": 2,
+            "left_only_unique_path_count": 1,
+            "shared_unique_path_count": 0,
+            "right_only_unique_path_count": 1,
+            "total_system_unique_path_count": 2,
+            "incremental_left_path_count": 1,
+            "incremental_right_path_count": 1,
+            "left": {
+              "side": "left",
+              "antenna_label": "A",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "N2FFF",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    2
+                  ]
+                }
+              ]
+            },
+            "right": {
+              "side": "right",
+              "antenna_label": "B",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "N4JJJ",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    3
+                  ]
+                }
+              ]
+            }
+          },
+          "common_opportunity": null
+        },
+        {
+          "stratum": {
+            "direction": "transmit",
+            "band": "40m",
+            "mode": "WSPR",
+            "observation_kind": "imported_spot",
+            "source": "imported_file"
+          },
+          "observed": {
+            "eligible_block_count": 2,
+            "left_only_unique_path_count": 1,
+            "shared_unique_path_count": 0,
+            "right_only_unique_path_count": 1,
+            "total_system_unique_path_count": 2,
+            "incremental_left_path_count": 1,
+            "incremental_right_path_count": 1,
+            "left": {
+              "side": "left",
+              "antenna_label": "A",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "K1III",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    3
+                  ]
+                }
+              ]
+            },
+            "right": {
+              "side": "right",
+              "antenna_label": "B",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "W1HHH",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    2
+                  ]
+                }
+              ]
+            }
+          },
+          "common_opportunity": null
+        },
+        {
+          "stratum": {
+            "direction": "transmit",
+            "band": "20m",
+            "mode": "WSPR",
+            "observation_kind": "public_report",
+            "source": "wsprnet"
+          },
+          "observed": {
+            "eligible_block_count": 2,
+            "left_only_unique_path_count": 1,
+            "shared_unique_path_count": 0,
+            "right_only_unique_path_count": 1,
+            "total_system_unique_path_count": 2,
+            "incremental_left_path_count": 1,
+            "incremental_right_path_count": 1,
+            "left": {
+              "side": "left",
+              "antenna_label": "A",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "K9XYZ",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    0
+                  ]
+                }
+              ]
+            },
+            "right": {
+              "side": "right",
+              "antenna_label": "B",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "VE3ZZZ",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    0
+                  ]
+                }
+              ]
+            }
+          },
+          "common_opportunity": null
+        },
+        {
+          "stratum": {
+            "direction": "transmit",
+            "band": "20m",
+            "mode": "WSPR",
+            "observation_kind": "imported_spot",
+            "source": "imported_file"
+          },
+          "observed": {
+            "eligible_block_count": 2,
+            "left_only_unique_path_count": 1,
+            "shared_unique_path_count": 0,
+            "right_only_unique_path_count": 1,
+            "total_system_unique_path_count": 2,
+            "incremental_left_path_count": 1,
+            "incremental_right_path_count": 1,
+            "left": {
+              "side": "left",
+              "antenna_label": "A",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "K5CCC",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    1
+                  ]
+                }
+              ]
+            },
+            "right": {
+              "side": "right",
+              "antenna_label": "B",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "W8DDD",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    1
+                  ]
+                }
+              ]
+            }
+          },
+          "common_opportunity": null
+        },
+        {
+          "stratum": {
+            "direction": "receive",
+            "band": "40m",
+            "mode": "WSPR",
+            "observation_kind": "local_decode",
+            "source": "wsjtx_log"
+          },
+          "observed": {
+            "eligible_block_count": 2,
+            "left_only_unique_path_count": 1,
+            "shared_unique_path_count": 0,
+            "right_only_unique_path_count": 1,
+            "total_system_unique_path_count": 2,
+            "incremental_left_path_count": 1,
+            "incremental_right_path_count": 1,
+            "left": {
+              "side": "left",
+              "antenna_label": "A",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "K2EEE",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    2
+                  ]
+                }
+              ]
+            },
+            "right": {
+              "side": "right",
+              "antenna_label": "B",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "K3GGG",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    2
+                  ]
+                }
+              ]
+            }
+          },
+          "common_opportunity": null
+        },
+        {
+          "stratum": {
+            "direction": "receive",
+            "band": "20m",
+            "mode": "WSPR",
+            "observation_kind": "local_decode",
+            "source": "wsjtx_log"
+          },
+          "observed": {
+            "eligible_block_count": 2,
+            "left_only_unique_path_count": 1,
+            "shared_unique_path_count": 0,
+            "right_only_unique_path_count": 1,
+            "total_system_unique_path_count": 2,
+            "incremental_left_path_count": 1,
+            "incremental_right_path_count": 1,
+            "left": {
+              "side": "left",
+              "antenna_label": "A",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "K1ABC",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    0
+                  ]
+                }
+              ]
+            },
+            "right": {
+              "side": "right",
+              "antenna_label": "B",
+              "unique_endpoint_count": 1,
+              "path_block_observation_count": 1,
+              "observed_once_path_count": 1,
+              "repeated_path_count": 0,
+              "block_count_distribution": [
+                {
+                  "observed_block_count": 1,
+                  "unique_path_count": 1
+                }
+              ],
+              "paths": [
+                {
+                  "remote_path": "W3AAA",
+                  "observed_block_count": 1,
+                  "observation_count": 1,
+                  "left_then_right_block_count": 1,
+                  "right_then_left_block_count": 0,
+                  "block_indices": [
+                    0
+                  ]
+                }
+              ]
+            }
+          },
+          "common_opportunity": null
+        }
+      ],
       "solar_context": {
         "algorithm": {
           "algorithm_id": "noaa-gml-fractional-year",

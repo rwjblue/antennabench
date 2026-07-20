@@ -18,6 +18,11 @@ pub(in super::super) fn render_question_navigation(
     if report.overview.answerability.observed_reach == ObservedReachAnswerability::Available {
         out.push_str("<li><a href=\"#reach-unique-paths\">Observed reach</a></li>");
     }
+    if !report.coverage_overlap.is_empty() {
+        out.push_str(
+            "<li><a href=\"#coverage-overlap\">Coverage overlap and repeatability</a></li>",
+        );
+    }
     if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
     {
         out.push_str(

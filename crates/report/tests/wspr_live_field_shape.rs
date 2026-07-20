@@ -136,6 +136,28 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
             .collect::<Vec<_>>(),
         vec![(33, 112, 0, 0), (0, 0, 0, 24), (0, 0, 0, 0), (0, 0, 10, 0)]
     );
+    assert_eq!(report.coverage_overlap.len(), 1);
+    let overlap = &report.coverage_overlap[0];
+    let observed_overlap = overlap.observed.as_ref().unwrap();
+    assert_eq!(
+        (
+            observed_overlap.left_only_unique_path_count,
+            observed_overlap.shared_unique_path_count,
+            observed_overlap.right_only_unique_path_count,
+            observed_overlap.total_system_unique_path_count,
+        ),
+        (112, 33, 10, 155)
+    );
+    let opportunity_overlap = overlap.common_opportunity.as_ref().unwrap();
+    assert_eq!(
+        (
+            opportunity_overlap.heard_both_count,
+            opportunity_overlap.left_only_count,
+            opportunity_overlap.right_only_count,
+            opportunity_overlap.heard_neither_count,
+        ),
+        (33, 112, 10, 25)
+    );
     assert_eq!(report.coverage_maps[0].panels.len(), 2);
     assert!(report.coverage_maps[0]
         .panels
@@ -169,6 +191,14 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(html.contains("Common-opportunity detection"));
         assert!(html.contains("Heard neither"));
         assert!(html.contains("Common-opportunity polar cells (accessible equivalent)"));
+        assert!(html.contains("Coverage overlap and repeatability"));
+        assert!(html.contains("Observed complementarity"));
+        assert!(html.contains("Opportunity-conditioned complementarity"));
+        assert!(html
+            .contains("Using both antennas produced <strong>155</strong> unique observed paths"));
+        assert!(html.contains("<td>112</td><td>33</td><td>10</td><td>155</td>"));
+        assert!(html.contains("Repeatability limited:"));
+        assert!(html.contains("descriptive, not an inferential uncertainty statement"));
         assert!(html
             .contains("Location unavailable: 1 unique receivers / 1 receiver-block opportunities"));
         assert!(
@@ -294,6 +324,16 @@ fn zero_matched_paths_still_render_useful_common_opportunity_geography() {
             .collect::<Vec<_>>(),
         vec![(0, 145, 0, 0), (0, 0, 0, 24), (0, 0, 0, 0), (0, 0, 10, 0)]
     );
+    let overlap = report.coverage_overlap[0].observed.as_ref().unwrap();
+    assert_eq!(
+        (
+            overlap.left_only_unique_path_count,
+            overlap.shared_unique_path_count,
+            overlap.right_only_unique_path_count,
+            overlap.total_system_unique_path_count,
+        ),
+        (145, 0, 10, 155)
+    );
 
     for html in [
         render_standalone_html(&report).unwrap(),
@@ -304,6 +344,8 @@ fn zero_matched_paths_still_render_useful_common_opportunity_geography() {
         assert!(html.contains("Near / local proxy (under 500 km): 145 versus 0 detections"));
         assert!(html.contains("DX-oriented (3000 km and above): 0 versus 10 detections"));
         assert!(html.contains("session-scoped detection counts"));
+        assert!(html.contains("Coverage overlap and repeatability"));
+        assert!(html.contains("<td>145</td><td>0</td><td>10</td><td>155</td>"));
     }
 }
 

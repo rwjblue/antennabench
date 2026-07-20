@@ -12,6 +12,7 @@ use chrono::Duration;
 use std::collections::BTreeMap;
 
 use crate::common_opportunity::build_common_opportunity_maps;
+use crate::complementarity::project_coverage_overlap;
 use crate::observed_profile::project_observed_profile;
 use crate::{
     answerability::build_question_answerability, check_cancelled, coverage::build_coverage_maps,
@@ -150,11 +151,14 @@ fn build_report_with_resources_and_snapshot_and_activity(
     let mut coverage_maps = build_coverage_maps(&bundle.station.grid, &summary.reporter_activity);
     let mut common_opportunity_maps =
         build_common_opportunity_maps(&bundle.station.grid, &summary.reporter_activity);
+    let mut coverage_overlap =
+        project_coverage_overlap(&summary.comparison, &summary.reporter_activity);
     let detail_counts = DetailCounts::new(
         bundle,
         &summary,
         &coverage_maps,
         &common_opportunity_maps,
+        &coverage_overlap,
         &snapshot,
     );
     // The question-first views retain every path median, rather than sampling
@@ -162,21 +166,13 @@ fn build_report_with_resources_and_snapshot_and_activity(
     // complete or explicitly rejected, never silently partial.
     // Each stratum retains its headline, matched-path geographic cells, and
     // both per-antenna all-path profiles plus distance composition.
-    let required_overview_rows = summary.eligibility.exclusions.len()
-        + summary.comparison.strata.len() * 41
-        + summary.comparison.path_summaries.len()
-        + summary.reporter_activity.census_cycles.len()
-        + summary.reporter_activity.cycle_rates.len()
-        + summary.reporter_activity.paired_rates.len()
-        + summary.reporter_activity.joint_summaries.len()
-        + coverage_maps
-            .iter()
-            .flat_map(|group| &group.panels)
-            .map(|panel| panel.cells.len() + panel.polar_cells.len())
-            .sum::<usize>()
-        + crate::common_opportunity::overview_row_count(&common_opportunity_maps)
-        + summary.slots.len()
-        + snapshot.operator_events.len();
+    let required_overview_rows = crate::resource_rows::required_overview_row_count(
+        &summary,
+        &coverage_maps,
+        &common_opportunity_maps,
+        &coverage_overlap,
+        &snapshot,
+    );
     if required_overview_rows as u64 > limits.rows {
         return Err(report_resource_error(
             "resource.report.rows",
@@ -252,6 +248,7 @@ fn build_report_with_resources_and_snapshot_and_activity(
         for group in &mut common_opportunity_maps {
             group.blocks.clear();
         }
+        crate::complementarity::clear_audit(&mut coverage_overlap);
         detail_counts.append_notices(&mut notices);
     }
 
@@ -268,6 +265,7 @@ fn build_report_with_resources_and_snapshot_and_activity(
         reporter_activity,
         coverage_maps,
         common_opportunity_maps,
+        coverage_overlap,
         solar_context,
         chart_data,
         notices,
@@ -889,6 +887,7 @@ impl DetailCounts {
         summary: &AnalysisSummary,
         coverage_maps: &[crate::ReportCoverageMapGroup],
         common_opportunity_maps: &[crate::ReportCommonOpportunityMapGroup],
+        coverage_overlap: &[crate::ReportCoverageOverlapGroup],
         snapshot: &ReportSnapshotContext,
     ) -> Self {
         let comparison = &summary.comparison;
@@ -988,6 +987,7 @@ impl DetailCounts {
                         .map(|block| 1 + block.polar_cells.len())
                         .sum(),
                 ),
+                crate::complementarity::audit_detail(coverage_overlap),
                 (ReportDetailFamily::Charts, chart_rows),
             ],
             eligibility_rows: summary.eligibility.exclusions.len(),
@@ -1045,6 +1045,7 @@ fn make_overview(report: &mut SessionReport, counts: &DetailCounts) {
     for group in &mut report.common_opportunity_maps {
         group.blocks.clear();
     }
+    crate::complementarity::clear_audit(&mut report.coverage_overlap);
     report.chart_data = ReportChartData::default();
     report.snapshot.lifecycle_events.clear();
     report.snapshot.operator_events.clear();

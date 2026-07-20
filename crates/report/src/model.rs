@@ -33,6 +33,8 @@ pub struct SessionReport {
     pub coverage_maps: Vec<ReportCoverageMapGroup>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub common_opportunity_maps: Vec<ReportCommonOpportunityMapGroup>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coverage_overlap: Vec<ReportCoverageOverlapGroup>,
     pub solar_context: SolarContextAnalysis,
     pub chart_data: ReportChartData,
     pub notices: Vec<ReportNotice>,
@@ -147,6 +149,94 @@ pub struct ReportCommonOpportunityBlock {
     pub located_receiver_count: usize,
     pub location_unavailable_receiver_count: usize,
     pub polar_cells: Vec<ReportCommonOpportunityPolarCell>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportCoverageOverlapGroup {
+    pub stratum: ComparisonStratum,
+    pub observed: Option<ReportObservedComplementarity>,
+    pub common_opportunity: Option<ReportOpportunityComplementarity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportObservedComplementarity {
+    pub eligible_block_count: usize,
+    pub left_only_unique_path_count: usize,
+    pub shared_unique_path_count: usize,
+    pub right_only_unique_path_count: usize,
+    pub total_system_unique_path_count: usize,
+    pub incremental_left_path_count: usize,
+    pub incremental_right_path_count: usize,
+    pub left: Option<ReportAntennaRepeatability>,
+    pub right: Option<ReportAntennaRepeatability>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportAntennaRepeatability {
+    pub side: ComparisonSide,
+    pub antenna_label: String,
+    pub unique_endpoint_count: usize,
+    pub path_block_observation_count: usize,
+    pub observed_once_path_count: usize,
+    pub repeated_path_count: usize,
+    pub block_count_distribution: Vec<ReportBlockCountFrequency>,
+    pub paths: Vec<ReportPathRepeatability>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportBlockCountFrequency {
+    pub observed_block_count: usize,
+    pub unique_path_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportPathRepeatability {
+    pub remote_path: String,
+    pub observed_block_count: usize,
+    pub observation_count: usize,
+    pub left_then_right_block_count: usize,
+    pub right_then_left_block_count: usize,
+    pub block_indices: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportOpportunityComplementarity {
+    pub coverage: antennabench_analysis::ReporterActivityCoverage,
+    pub eligible_block_count: usize,
+    pub known_coverage_block_count: usize,
+    pub unique_common_active_receiver_count: usize,
+    pub receiver_block_opportunity_count: usize,
+    pub heard_both_count: usize,
+    pub left_only_count: usize,
+    pub right_only_count: usize,
+    pub heard_neither_count: usize,
+    pub order_summaries: Vec<ReportOpportunityOrderSummary>,
+    pub receiver_frequencies: Vec<ReportReceiverDetectionFrequency>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportOpportunityOrderSummary {
+    pub order: antennabench_analysis::ComparisonOrder,
+    pub block_count: usize,
+    pub receiver_block_opportunity_count: usize,
+    pub heard_both_count: usize,
+    pub left_only_count: usize,
+    pub right_only_count: usize,
+    pub heard_neither_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportReceiverDetectionFrequency {
+    pub receiver: String,
+    pub opportunity_count: usize,
+    pub left_detection_count: usize,
+    pub right_detection_count: usize,
+    pub heard_both_count: usize,
+    pub left_only_count: usize,
+    pub right_only_count: usize,
+    pub heard_neither_count: usize,
+    pub left_then_right_opportunity_count: usize,
+    pub right_then_left_opportunity_count: usize,
 }
 
 /// A concise, renderer-neutral projection of the session questions and the
@@ -937,6 +1027,7 @@ pub enum ReportDetailFamily {
     ReporterActivityAudit,
     CoverageMapReporters,
     CommonOpportunityGeographyAudit,
+    CoverageOverlapAudit,
     Charts,
 }
 

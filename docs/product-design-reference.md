@@ -112,6 +112,18 @@ is numerically equivalent to the station-centered visual. Unsupported receive
 direction and inaccessible census evidence produce explicit unavailability,
 not an empty map or a zero denominator.
 
+Coverage overlap and repeatability use exact counts, never a composite score.
+Observed complementarity partitions the union of unique usable paths into
+first-only, shared, and second-only membership and reports the two-antenna
+total. Opportunity-conditioned complementarity separately preserves the four
+common-active receiver outcomes. Per-antenna repeatability counts unique paths
+seen in one versus multiple eligible blocks, retains the path-block count
+distribution, and keeps raw observations and antenna order in audit detail so
+a prolific endpoint cannot dominate the headline. A single eligible block is
+explicitly insufficient for multi-block repeatability. These facts are
+descriptive and do not imply signal strength, confidence, reliability, or an
+automatic recommendation.
+
 The fixed policy is one operator-facing taxonomy: near /
 local proxy under 500 km, regional from 500 km to less than 1500 km, longer
 path from 1500 km to less than 3000 km, and DX-oriented at 3000 km and above.
