@@ -11,6 +11,8 @@ import {
   invokeAntennaControllerProfiles,
   invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
+  invokeCancelReportExport,
+  invokeConfirmReportExport,
   invokeDeleteManagedSession,
   invokeDeleteAntennaControllerProfile,
   invokeExportActiveSessionReport,
@@ -76,6 +78,8 @@ import {
   beginManagedReveal,
   beginOpenSession,
   beginReportExport,
+  beginReportExportCancellation,
+  beginReportReplacement,
   beginReportRefresh,
   beginRbnImport,
   beginSetupCreation,
@@ -106,6 +110,7 @@ import {
   openSessionSucceeded,
   requestManagedDelete,
   reportExportCancelled,
+  reportExportConfirmationRequired,
   reportExportSucceeded,
   reportRefreshFailed,
   reportRefreshSucceeded,
@@ -217,6 +222,7 @@ test("the shell starts in saved sessions", () => {
     reportStatus: "idle",
     reportError: null,
     reportExportStatus: "idle",
+    reportExportPending: null,
     reportExportError: null,
     reportExportNotice: null,
     supportCopyStatus: "idle",
@@ -1331,6 +1337,21 @@ test("revision-keyed report refresh retains coherent prior output on failure and
   assert.equal(updateReportFrame(frame, first, reportDocuments), true);
 
   const exporting = beginReportExport(first);
+  const confirming = reportExportConfirmationRequired(exporting, {
+    pendingExportId: "pending-1",
+    fileName: "snapshot.html",
+    revision: 4,
+    format: "full_evidence_html",
+  });
+  assert.equal(confirming.reportExportStatus, "confirming");
+  assert.deepEqual(confirming.reportExportPending, {
+    pendingExportId: "pending-1",
+    fileName: "snapshot.html",
+    revision: 4,
+    format: "full_evidence_html",
+  });
+  assert.equal(beginReportReplacement(confirming).reportExportStatus, "replacing");
+  assert.equal(beginReportExportCancellation(confirming).reportExportStatus, "cancelling");
   const cancelled = reportExportCancelled(exporting);
   const exported = reportExportSucceeded(exporting, {
     fileName: "snapshot.html",
@@ -1339,6 +1360,7 @@ test("revision-keyed report refresh retains coherent prior output on failure and
   });
   assert.match(exported.reportExportNotice, /compact summary/);
   assert.equal(updateReportFrame(frame, exporting, reportDocuments), false);
+  assert.equal(updateReportFrame(frame, confirming, reportDocuments), false);
   assert.equal(updateReportFrame(frame, cancelled, reportDocuments), false);
   assert.equal(updateReportFrame(frame, exported, reportDocuments), false);
 
@@ -1580,6 +1602,8 @@ test("the frontend invokes only the narrow session commands", async () => {
   const report = await invokeActiveSessionReport(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
   const reportExported = await invokeExportActiveSessionReport(invoke, "full_evidence_html");
+  const reportReplacementConfirmed = await invokeConfirmReportExport(invoke, "pending-1");
+  const reportReplacementCancelled = await invokeCancelReportExport(invoke, "pending-2");
   const imported = await invokeImportActiveSessionWsprLive(invoke);
   const rbnImported = await invokeImportActiveSessionRbn(invoke);
 
@@ -1598,6 +1622,8 @@ test("the frontend invokes only the narrow session commands", async () => {
       controllerEvidence: "complete",
       operationalHistory: "omitted",
     }],
+    ["confirm_report_export", { pendingExportId: "pending-1" }],
+    ["cancel_report_export", { pendingExportId: "pending-2" }],
     ["import_active_session_wspr_live"],
     ["import_active_session_rbn"],
   ]);
@@ -1611,6 +1637,8 @@ test("the frontend invokes only the narrow session commands", async () => {
   assert.equal(report, "<!doctype html>");
   assert.equal(refreshed.status, "exported");
   assert.equal(reportExported.status, "exported");
+  assert.equal(reportReplacementConfirmed.status, "exported");
+  assert.equal(reportReplacementCancelled.status, "exported");
   assert.equal(imported.status, "exported");
   assert.equal(rbnImported.status, "exported");
 });

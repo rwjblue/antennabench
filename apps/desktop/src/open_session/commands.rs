@@ -229,9 +229,10 @@ where
 {
     let _foreground = state.begin_foreground()?;
     let (source, presentation) = {
-        let active = state.0.lock().map_err(|_| {
+        let mut active = state.0.lock().map_err(|_| {
             SessionErrorPayload::report_pipeline("active session state is unavailable")
         })?;
+        active.pending_report_export = None;
         let session = active.active.as_ref().ok_or_else(|| {
             SessionErrorPayload::report_pipeline("no active session report is available")
         })?;
@@ -243,18 +244,10 @@ where
     let Some(destination) = select(&source)? else {
         return Ok(ExportReportOutcome::Cancelled);
     };
-    let file_name = destination
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| name.ends_with(".html"))
-        .ok_or_else(|| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Destination,
-                "Choose an .html destination for the standalone report.",
-                destination.display().to_string(),
-            )
-        })?
-        .to_string();
+    let file_name = report_display_file_name(&destination)?;
+    let presentation_id = presentation.presentation_id;
+    let session_id = presentation.session_id.clone();
+    let revision = presentation.revision;
     let controller_evidence =
         if format == ReportExportFormat::FullEvidenceHtml && presentation.has_controller_evidence {
             controller_evidence
@@ -267,78 +260,444 @@ where
         OperationalHistoryHandling::Omitted
     };
     let html = match (format, controller_evidence, operational_history) {
-        (ReportExportFormat::CompactSummaryHtml, _, _) => &presentation.compact_summary_html,
+        (ReportExportFormat::CompactSummaryHtml, _, _) => presentation.compact_summary_html,
         (
             ReportExportFormat::FullEvidenceHtml,
             ControllerEvidenceHandling::Complete,
             OperationalHistoryHandling::Omitted,
-        ) => &presentation.report_html,
+        ) => presentation.report_html,
         (
             ReportExportFormat::FullEvidenceHtml,
             ControllerEvidenceHandling::OmittedAtExport,
             OperationalHistoryHandling::Omitted,
-        ) => presentation
-            .controller_omitted_report_html
-            .as_ref()
-            .ok_or_else(|| {
-                SessionErrorPayload::report_pipeline(
-                    "controller omission export is unavailable for this report snapshot",
-                )
-            })?,
+        ) => presentation.controller_omitted_report_html.ok_or_else(|| {
+            SessionErrorPayload::report_pipeline(
+                "controller omission export is unavailable for this report snapshot",
+            )
+        })?,
         (
             ReportExportFormat::FullEvidenceHtml,
             ControllerEvidenceHandling::Complete,
             OperationalHistoryHandling::IncludedRedacted,
-        ) => &presentation.operational_history_report_html,
+        ) => presentation.operational_history_report_html,
         (
             ReportExportFormat::FullEvidenceHtml,
             ControllerEvidenceHandling::OmittedAtExport,
             OperationalHistoryHandling::IncludedRedacted,
         ) => presentation
             .operational_history_controller_omitted_report_html
-            .as_ref()
             .ok_or_else(|| {
                 SessionErrorPayload::report_pipeline(
                     "combined controller omission and operational-history export is unavailable",
                 )
             })?,
     };
+    match selected_report_destination(&destination, &file_name)? {
+        None => {
+            write_new_report(&destination, &file_name, html.as_bytes())?;
+            Ok(ExportReportOutcome::Exported {
+                file_name,
+                revision,
+                format,
+            })
+        }
+        Some(destination_identity) => {
+            let pending_export_id = Uuid::new_v4().to_string();
+            let mut active = state.0.lock().map_err(|_| {
+                SessionErrorPayload::report_pipeline("active session state is unavailable")
+            })?;
+            let current = active
+                .active
+                .as_ref()
+                .and_then(|session| session.presentation.as_ref());
+            if !current.is_some_and(|current| {
+                current.presentation_id == presentation_id
+                    && current.session_id == session_id
+                    && current.revision == revision
+            }) {
+                return Err(stale_pending_report_error(
+                    "the active report presentation changed during destination selection",
+                ));
+            }
+            active.pending_report_export = Some(PendingReportExport {
+                pending_export_id: pending_export_id.clone(),
+                destination,
+                destination_identity,
+                file_name: file_name.clone(),
+                presentation_id,
+                session_id,
+                revision,
+                format,
+                html,
+            });
+            Ok(ExportReportOutcome::ConfirmationRequired {
+                pending_export_id,
+                file_name,
+                revision,
+                format,
+            })
+        }
+    }
+}
+
+const REPORT_DISPLAY_FILE_NAME_CHARS: usize = 160;
+
+fn report_display_file_name(destination: &Path) -> Result<String, SessionErrorPayload> {
+    let name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| name.ends_with(".html"))
+        .ok_or_else(|| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Destination,
+                "Choose an .html destination for the standalone report.",
+                "the selected destination does not have a usable .html file name",
+            )
+        })?;
+    let mut chars = name.chars();
+    let bounded = chars
+        .by_ref()
+        .take(REPORT_DISPLAY_FILE_NAME_CHARS)
+        .collect::<String>();
+    if chars.next().is_some() {
+        Ok(format!("{bounded}…"))
+    } else {
+        Ok(bounded)
+    }
+}
+
+fn selected_report_destination(
+    destination: &Path,
+    file_name: &str,
+) -> Result<Option<ReportDestinationIdentity>, SessionErrorPayload> {
+    match std::fs::symlink_metadata(destination) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(report_destination_error(
+            "The selected report destination could not be inspected.",
+            file_name,
+            error,
+        )),
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            Err(SessionErrorPayload::new(
+                SessionErrorKind::Destination,
+                "Choose a new destination or an existing regular HTML file.",
+                format!("{file_name} is a directory, symbolic link, or unsupported entry"),
+            ))
+        }
+        Ok(_) => inspect_report_destination(destination, file_name).map(Some),
+    }
+}
+
+fn inspect_report_destination(
+    destination: &Path,
+    file_name: &str,
+) -> Result<ReportDestinationIdentity, SessionErrorPayload> {
+    let before = std::fs::symlink_metadata(destination).map_err(|error| {
+        report_destination_error(
+            "The existing report destination is no longer available.",
+            file_name,
+            error,
+        )
+    })?;
+    if before.file_type().is_symlink() || !before.is_file() {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Destination,
+            "Only an existing regular HTML file can be replaced.",
+            format!("{file_name} is a directory, symbolic link, or unsupported entry"),
+        ));
+    }
+    let mut file = File::open(destination).map_err(|error| {
+        report_destination_error(
+            "The existing report destination could not be read safely.",
+            file_name,
+            error,
+        )
+    })?;
+    let opened = file.metadata().map_err(|error| {
+        report_destination_error(
+            "The existing report destination could not be verified.",
+            file_name,
+            error,
+        )
+    })?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer).map_err(|error| {
+            report_destination_error(
+                "The existing report destination could not be verified.",
+                file_name,
+                error,
+            )
+        })?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    let digest: [u8; 32] = digest.finalize().into();
+    let opened_identity = report_destination_identity(&opened, digest);
+    let after = std::fs::symlink_metadata(destination).map_err(|error| {
+        report_destination_error(
+            "The existing report destination changed while it was being inspected.",
+            file_name,
+            error,
+        )
+    })?;
+    if after.file_type().is_symlink()
+        || !after.is_file()
+        || report_destination_identity(&after, digest) != opened_identity
+    {
+        return Err(stale_pending_report_error(
+            "the selected destination changed while it was being inspected",
+        ));
+    }
+    Ok(opened_identity)
+}
+
+fn report_destination_identity(
+    metadata: &std::fs::Metadata,
+    content_digest: [u8; 32],
+) -> ReportDestinationIdentity {
+    #[cfg(unix)]
+    use std::os::unix::fs::MetadataExt;
+
+    ReportDestinationIdentity {
+        length: metadata.len(),
+        modified_nanos: metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_nanos()),
+        #[cfg(unix)]
+        device: metadata.dev(),
+        #[cfg(unix)]
+        inode: metadata.ino(),
+        #[cfg(unix)]
+        changed_seconds: metadata.ctime(),
+        #[cfg(unix)]
+        changed_nanos: metadata.ctime_nsec(),
+        content_digest,
+    }
+}
+
+fn write_new_report(
+    destination: &Path,
+    file_name: &str,
+    html: &[u8],
+) -> Result<(), SessionErrorPayload> {
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&destination)
+        .open(destination)
         .map_err(|error| {
-            SessionErrorPayload::new(
-                SessionErrorKind::Destination,
+            report_destination_error(
                 "The report destination could not be created without overwriting a file.",
-                format!("{}: {error}", destination.display()),
+                file_name,
+                error,
             )
         })?;
-    if let Err(error) = file
-        .write_all(html.as_bytes())
-        .and_then(|()| file.sync_all())
-    {
+    if let Err(error) = file.write_all(html).and_then(|()| file.sync_all()) {
         drop(file);
-        let cleanup = std::fs::remove_file(&destination);
+        let cleanup = std::fs::remove_file(destination);
         return Err(SessionErrorPayload::new(
             SessionErrorKind::Filesystem,
             "The standalone report could not be written completely.",
             cleanup.map_or_else(
                 |cleanup| {
                     format!(
-                        "{}: {error}; incomplete destination cleanup failed: {cleanup}",
-                        destination.display()
+                        "{file_name}: {error}; incomplete destination cleanup failed: {cleanup}"
                     )
                 },
-                |()| format!("{}: {error}", destination.display()),
+                |()| format!("{file_name}: {error}"),
             ),
         ));
     }
+    Ok(())
+}
+
+pub(super) trait ReportReplacePort {
+    fn replace(&self, temporary: tempfile::NamedTempFile, destination: &Path)
+        -> Result<(), String>;
+}
+
+pub(super) struct SystemReportReplacePort;
+
+impl ReportReplacePort for SystemReportReplacePort {
+    fn replace(
+        &self,
+        temporary: tempfile::NamedTempFile,
+        destination: &Path,
+    ) -> Result<(), String> {
+        match temporary.persist(destination) {
+            Ok(_) => Ok(()),
+            Err(error) => {
+                let replacement_error = error.error.to_string();
+                match error.file.close() {
+                    Ok(()) => Err(replacement_error),
+                    Err(cleanup) => Err(format!(
+                        "{replacement_error}; temporary output cleanup failed: {cleanup}"
+                    )),
+                }
+            }
+        }
+    }
+}
+
+fn atomic_replace_report(
+    pending: &PendingReportExport,
+    replace_port: &dyn ReportReplacePort,
+) -> Result<(), SessionErrorPayload> {
+    let current = inspect_report_destination(&pending.destination, &pending.file_name)?;
+    if current != pending.destination_identity {
+        return Err(stale_pending_report_error(
+            "the existing report changed after replacement was requested",
+        ));
+    }
+    let parent = pending.destination.parent().ok_or_else(|| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Destination,
+            "The report destination has no writable parent directory.",
+            pending.file_name.clone(),
+        )
+    })?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|error| {
+        report_destination_error(
+            "A sibling temporary report could not be created.",
+            &pending.file_name,
+            error,
+        )
+    })?;
+    if let Err(error) = temporary
+        .write_all(pending.html.as_bytes())
+        .and_then(|()| temporary.as_file().sync_all())
+    {
+        let cleanup = temporary.close();
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Filesystem,
+            "The replacement report could not be written completely.",
+            cleanup.map_or_else(
+                |cleanup| {
+                    format!(
+                        "{}: {error}; temporary output cleanup failed: {cleanup}",
+                        pending.file_name
+                    )
+                },
+                |()| format!("{}: {error}", pending.file_name),
+            ),
+        ));
+    }
+    let current = inspect_report_destination(&pending.destination, &pending.file_name)?;
+    if current != pending.destination_identity {
+        temporary.close().map_err(|cleanup| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Filesystem,
+                "The existing report changed and the temporary output could not be cleaned up.",
+                format!("{}: {cleanup}", pending.file_name),
+            )
+        })?;
+        return Err(stale_pending_report_error(
+            "the existing report changed before atomic replacement",
+        ));
+    }
+    replace_port
+        .replace(temporary, &pending.destination)
+        .map_err(|error| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Filesystem,
+                "The existing report could not be replaced atomically.",
+                format!("{}: {error}", pending.file_name),
+            )
+        })
+}
+
+pub(super) fn confirm_pending_report_export_with(
+    state: &ActiveSessionState,
+    pending_export_id: &str,
+    replace_port: &dyn ReportReplacePort,
+) -> Result<ExportReportOutcome, SessionErrorPayload> {
+    let _foreground = state.begin_foreground()?;
+    let pending = {
+        let mut active = state.0.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+        if active
+            .pending_report_export
+            .as_ref()
+            .is_none_or(|pending| pending.pending_export_id != pending_export_id)
+        {
+            return Err(stale_pending_report_error(
+                "the pending report replacement identity is unknown or already consumed",
+            ));
+        }
+        active
+            .pending_report_export
+            .take()
+            .expect("checked pending export")
+    };
+    let active = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    let presentation = active
+        .active
+        .as_ref()
+        .and_then(|session| session.presentation.as_ref());
+    if !presentation.is_some_and(|presentation| {
+        presentation.presentation_id == pending.presentation_id
+            && presentation.session_id == pending.session_id
+            && presentation.revision == pending.revision
+    }) {
+        return Err(stale_pending_report_error(
+            "the active report presentation changed before replacement was confirmed",
+        ));
+    }
+    drop(active);
+    atomic_replace_report(&pending, replace_port)?;
     Ok(ExportReportOutcome::Exported {
-        file_name,
-        revision: presentation.revision,
-        format,
+        file_name: pending.file_name,
+        revision: pending.revision,
+        format: pending.format,
     })
+}
+
+pub(super) fn cancel_pending_report_export_for(
+    state: &ActiveSessionState,
+    pending_export_id: &str,
+) -> Result<ExportReportOutcome, SessionErrorPayload> {
+    let _foreground = state.begin_foreground()?;
+    let mut active = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    if active
+        .pending_report_export
+        .as_ref()
+        .is_some_and(|pending| pending.pending_export_id == pending_export_id)
+    {
+        active.pending_report_export = None;
+    }
+    Ok(ExportReportOutcome::Cancelled)
+}
+
+fn report_destination_error(
+    message: &str,
+    file_name: &str,
+    error: std::io::Error,
+) -> SessionErrorPayload {
+    SessionErrorPayload::new(
+        SessionErrorKind::Destination,
+        message,
+        format!("{file_name}: {error}"),
+    )
+}
+
+fn stale_pending_report_error(detail: impl Into<String>) -> SessionErrorPayload {
+    SessionErrorPayload::new(
+        SessionErrorKind::Conflict,
+        "The pending report replacement is no longer current.",
+        detail,
+    )
 }
 
 pub(super) fn active_session_report_for(
@@ -457,6 +816,7 @@ pub(super) fn refresh_active_session_report_for(
         session.summary = summary;
         session.presentation = Some(presentation.clone());
         active.next_presentation_id = next_id;
+        active.pending_report_export = None;
         return Ok(presentation);
     }
 
@@ -544,15 +904,24 @@ pub(crate) async fn export_active_session_report(
             })
         },
     );
-    result.map_err(|payload| {
-        persist_active_operation_failure(
-            state.inner(),
-            DiagnosticOperationV6::ReportExport,
-            DiagnosticPhaseV6::WriteDestination,
-            "report.export_failed",
-            payload,
-        )
-    })
+    result.map_err(|payload| persist_report_export_failure(state.inner(), payload))
+}
+
+#[tauri::command]
+pub(crate) fn confirm_report_export(
+    state: State<'_, ActiveSessionState>,
+    pending_export_id: String,
+) -> Result<ExportReportOutcome, SessionErrorPayload> {
+    confirm_pending_report_export_with(state.inner(), &pending_export_id, &SystemReportReplacePort)
+        .map_err(|payload| persist_report_export_failure(state.inner(), payload))
+}
+
+#[tauri::command]
+pub(crate) fn cancel_report_export(
+    state: State<'_, ActiveSessionState>,
+    pending_export_id: String,
+) -> Result<ExportReportOutcome, SessionErrorPayload> {
+    cancel_pending_report_export_for(state.inner(), &pending_export_id)
 }
 
 #[tauri::command]
@@ -602,6 +971,19 @@ fn persist_active_operation_failure(
         code,
         EvidenceEffectV6::NoneCommitted,
         Vec::new(),
+        payload,
+    )
+}
+
+fn persist_report_export_failure(
+    state: &ActiveSessionState,
+    payload: SessionErrorPayload,
+) -> SessionErrorPayload {
+    persist_active_operation_failure(
+        state,
+        DiagnosticOperationV6::ReportExport,
+        DiagnosticPhaseV6::WriteDestination,
+        "report.export_failed",
         payload,
     )
 }

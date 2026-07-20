@@ -623,6 +623,64 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
   assert.equal(completed.controller.state.session.reportHtml, "<p>complete</p>");
 });
 
+test("report replacement confirmation is single-submit and cancellation is normal", async () => {
+  const state = openSessionSucceeded(initialState("report"), session());
+  const confirmed = harness({
+    export_active_session_report: {
+      status: "confirmation_required",
+      pendingExportId: "pending-confirm",
+      fileName: "existing.html",
+      revision: 3,
+      format: "full_evidence_html",
+    },
+    confirm_report_export: {
+      status: "exported",
+      fileName: "existing.html",
+      revision: 3,
+      format: "full_evidence_html",
+    },
+  }, { state });
+
+  await confirmed.controller.exportReport();
+  assert.equal(confirmed.controller.state.reportExportStatus, "confirming");
+  assert.deepEqual(confirmed.controller.state.reportExportPending, {
+    pendingExportId: "pending-confirm",
+    fileName: "existing.html",
+    revision: 3,
+    format: "full_evidence_html",
+  });
+  await Promise.all([
+    confirmed.controller.confirmReportReplacement(),
+    confirmed.controller.confirmReportReplacement(),
+  ]);
+  assert.equal(confirmed.controller.state.reportExportStatus, "ready");
+  assert.equal(
+    confirmed.calls.filter(([command]) => command === "confirm_report_export").length,
+    1,
+    "disabled pending state prevents duplicate replacement",
+  );
+
+  const cancelled = harness({
+    export_active_session_report: {
+      status: "confirmation_required",
+      pendingExportId: "pending-cancel",
+      fileName: "existing.html",
+      revision: 3,
+      format: "compact_summary_html",
+    },
+    cancel_report_export: { status: "cancelled" },
+  }, { state });
+  await cancelled.controller.exportReport("compact_summary_html");
+  await cancelled.controller.cancelReportReplacement();
+  assert.equal(cancelled.controller.state.reportExportStatus, "idle");
+  assert.equal(cancelled.controller.state.reportExportPending, null);
+  assert.equal(cancelled.controller.state.reportExportNotice, "cancelled");
+  assert.deepEqual(
+    cancelled.calls.find(([command]) => command === "cancel_report_export")[1],
+    { pendingExportId: "pending-cancel" },
+  );
+});
+
 test("background refresh does not duplicate an in-flight final WSPR.live acquisition", async () => {
   const state = openSessionSucceeded(initialState("run"), session());
   state.activeWorkflow = "run";

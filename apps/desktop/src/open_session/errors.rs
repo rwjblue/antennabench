@@ -61,6 +61,14 @@ pub(crate) enum ExportSessionOutcome {
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum ExportReportOutcome {
     Cancelled,
+    ConfirmationRequired {
+        #[serde(rename = "pendingExportId")]
+        pending_export_id: String,
+        #[serde(rename = "fileName")]
+        file_name: String,
+        revision: Option<u64>,
+        format: ReportExportFormat,
+    },
     Exported {
         #[serde(rename = "fileName")]
         file_name: String,

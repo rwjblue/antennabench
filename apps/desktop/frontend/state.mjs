@@ -27,6 +27,7 @@ export function initialState(workflow = "saved") {
       reportStatus: "idle",
       reportError: null,
       reportExportStatus: "idle",
+      reportExportPending: null,
       reportExportError: null,
       reportExportNotice: null,
       supportCopyStatus: "idle",
@@ -83,6 +84,10 @@ export function beginOpenSession(state, source = "external", intent = null, loca
     openIntent: intent,
     catalogRowOperation: locatorId ? { locatorId, kind: "opening" } : null,
     catalogRowError: null,
+    reportExportStatus: "idle",
+    reportExportPending: null,
+    reportExportError: null,
+    reportExportNotice: null,
     error: null,
     notice: null,
   };
@@ -167,6 +172,7 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     reportStatus: session.reportHtml ? "ready" : "unavailable",
     reportError: null,
     reportExportStatus: "idle",
+    reportExportPending: null,
     reportExportError: null,
     reportExportNotice: null,
     supportCopyStatus: "idle",
@@ -221,6 +227,7 @@ export function openSessionSucceeded(
     reportStatus: session.reportHtml ? "ready" : "unavailable",
     reportError: null,
     reportExportStatus: "idle",
+    reportExportPending: null,
     reportExportError: null,
     reportExportNotice: null,
     supportCopyStatus: "idle",
@@ -747,11 +754,17 @@ export function beginReportRefresh(state) {
 }
 
 export function reportRefreshSucceeded(state, presentation) {
+  const presentationChanged = String(presentation.presentationId)
+    !== String(state.reportPresentationId);
   return {
     ...state,
     reportStatus: "ready",
     reportError: null,
     reportPresentationId: presentation.presentationId,
+    reportExportStatus: presentationChanged ? "idle" : state.reportExportStatus,
+    reportExportPending: presentationChanged ? null : state.reportExportPending,
+    reportExportError: presentationChanged ? null : state.reportExportError,
+    reportExportNotice: presentationChanged ? null : state.reportExportNotice,
     session: state.session ? {
       ...state.session,
       reportHtml: presentation.reportHtml,
@@ -794,9 +807,35 @@ export function beginReportExport(state) {
   return {
     ...state,
     reportExportStatus: "loading",
+    reportExportPending: null,
     reportExportError: null,
     reportExportNotice: null,
   };
+}
+
+export function reportExportConfirmationRequired(state, outcome) {
+  return {
+    ...state,
+    reportExportStatus: "confirming",
+    reportExportPending: {
+      pendingExportId: outcome.pendingExportId,
+      fileName: outcome.fileName,
+      format: outcome.format,
+      revision: outcome.revision,
+    },
+    reportExportError: null,
+    reportExportNotice: null,
+  };
+}
+
+export function beginReportReplacement(state) {
+  if (!state.reportExportPending || state.reportExportStatus === "replacing") return state;
+  return { ...state, reportExportStatus: "replacing", reportExportError: null };
+}
+
+export function beginReportExportCancellation(state) {
+  if (!state.reportExportPending || state.reportExportStatus === "replacing") return state;
+  return { ...state, reportExportStatus: "cancelling", reportExportError: null };
 }
 
 export function reportExportSucceeded(state, outcome) {
@@ -806,6 +845,7 @@ export function reportExportSucceeded(state, outcome) {
   return {
     ...state,
     reportExportStatus: "ready",
+    reportExportPending: null,
     reportExportError: null,
     reportExportNotice: `${label}: ${outcome.fileName} · revision ${outcome.revision ?? "legacy"}`,
   };
@@ -815,6 +855,7 @@ export function reportExportCancelled(state) {
   return {
     ...state,
     reportExportStatus: "idle",
+    reportExportPending: null,
     reportExportError: null,
     reportExportNotice: "cancelled",
   };
@@ -824,6 +865,7 @@ export function reportExportFailed(state, error) {
   return {
     ...state,
     reportExportStatus: "error",
+    reportExportPending: null,
     reportExportError: normalizeOpenError(error),
     reportExportNotice: null,
   };

@@ -1,9 +1,10 @@
 use std::{
     error::Error as StdError,
-    fs::OpenOptions,
-    io::Write,
+    fs::{File, OpenOptions},
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::Mutex,
+    time::UNIX_EPOCH,
 };
 
 use antennabench_analysis::AnalysisError;
@@ -35,9 +36,11 @@ use antennabench_report::{
 };
 use antennabench_storage::{BundleCopyError, BundleStore, BundleStoreError, LivePersistenceError};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::antenna_control::AntennaControllerState;
 use crate::wsjtx_session::WsjtxSessionState;
@@ -54,9 +57,10 @@ mod state;
 #[cfg(test)]
 pub(crate) use commands::open_session_at_path;
 pub(crate) use commands::{
-    active_session_report, check_ipc_payload, export_active_session_report,
-    export_session_bundle_at_path, finish_open_side_effects, open_session_at_path_verified,
-    refresh_active_session_report, validate_portable_session_at_path,
+    active_session_report, cancel_report_export, check_ipc_payload, confirm_report_export,
+    export_active_session_report, export_session_bundle_at_path, finish_open_side_effects,
+    open_session_at_path_verified, refresh_active_session_report,
+    validate_portable_session_at_path,
 };
 pub(crate) use errors::{
     copy_error_payload, storage_error_payload, OpenSessionOutcome, OpenedSession, SessionErrorKind,
@@ -78,14 +82,18 @@ use errors::{
     OperationalHistoryHandling, ReportExportFormat, ReportPresentation,
 };
 use projection::{load_snapshot, open_bundle, prepare_presentation};
-use state::{assign_presentation_id, ActiveSession};
+use state::{
+    assign_presentation_id, ActiveSession, PendingReportExport, ReportDestinationIdentity,
+};
 
 #[cfg(test)]
 use commands::{
-    active_session_report_for, export_active_report_with_selection,
+    active_session_report_for, cancel_pending_report_export_for,
+    confirm_pending_report_export_with, export_active_report_with_selection,
     export_active_report_with_selection_and_disclosure, export_active_session_with_selection,
     export_bundle, open_session_with_selection, refresh_active_session_report_for,
-    suggested_compact_summary_name, suggested_report_name,
+    suggested_compact_summary_name, suggested_report_name, ReportReplacePort,
+    SystemReportReplacePort,
 };
 #[cfg(test)]
 #[derive(Debug)]
@@ -134,13 +142,21 @@ pub(crate) fn export_e2e_snapshots(
             ..
         } if exported == revision
     ));
-    assert!(export_active_report_with_selection(
+    let report_replacement = export_active_report_with_selection(
         state,
         ReportExportFormat::FullEvidenceHtml,
         ControllerEvidenceHandling::Complete,
         |_| Ok(Some(report_path.clone())),
     )
-    .is_err());
+    .expect("existing report requests replacement confirmation");
+    let ExportReportOutcome::ConfirmationRequired {
+        pending_export_id, ..
+    } = report_replacement
+    else {
+        panic!("existing report did not request replacement confirmation");
+    };
+    confirm_pending_report_export_with(state, &pending_export_id, &SystemReportReplacePort)
+        .expect("replace an existing report through the desktop boundary");
     let compact_summary_outcome = export_active_report_with_selection(
         state,
         ReportExportFormat::CompactSummaryHtml,
@@ -156,13 +172,21 @@ pub(crate) fn export_e2e_snapshots(
             ..
         } if exported == revision
     ));
-    assert!(export_active_report_with_selection(
+    let compact_replacement = export_active_report_with_selection(
         state,
         ReportExportFormat::CompactSummaryHtml,
         ControllerEvidenceHandling::Complete,
         |_| Ok(Some(compact_summary_path.clone())),
     )
-    .is_err());
+    .expect("existing compact report requests replacement confirmation");
+    let ExportReportOutcome::ConfirmationRequired {
+        pending_export_id, ..
+    } = compact_replacement
+    else {
+        panic!("existing compact report did not request replacement confirmation");
+    };
+    confirm_pending_report_export_with(state, &pending_export_id, &SystemReportReplacePort)
+        .expect("replace an existing compact report through the desktop boundary");
     let bundle_outcome =
         export_active_session_with_selection(state, |_| Ok(Some(bundle_path.clone())))
             .expect("lossless checkpoint export");
@@ -205,15 +229,16 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        active_session_report_for, check_ipc_payload, copy_error_payload,
+        active_session_report_for, cancel_pending_report_export_for, check_ipc_payload,
+        confirm_pending_report_export_with, copy_error_payload,
         export_active_report_with_selection, export_active_report_with_selection_and_disclosure,
         export_active_session_with_selection, export_bundle, open_bundle,
         open_session_with_selection, refresh_active_session_report_for, report_error_payload,
         suggested_compact_summary_name, suggested_report_name, ActiveSession, ActiveSessionState,
         ControllerEvidenceHandling, ExportReportOutcome, ExportSessionOutcome, OpenSessionOutcome,
         OpenedSession, OperationalHistoryHandling, ReportCompleteness, ReportExportFormat,
-        ReportPresentation, SessionErrorKind, SessionErrorPayload, SessionLifecycleV2,
-        REPORT_DOCUMENT_IPC_BYTES, SCHEMA_VERSION_V5,
+        ReportPresentation, ReportReplacePort, SessionErrorKind, SessionErrorPayload,
+        SessionLifecycleV2, SystemReportReplacePort, REPORT_DOCUMENT_IPC_BYTES, SCHEMA_VERSION_V5,
     };
 
     fn canonical_fixture() -> std::path::PathBuf {
@@ -264,6 +289,36 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    fn opened_report_state() -> ActiveSessionState {
+        let state = ActiveSessionState::default();
+        open_session_with_selection(&state, || Ok(Some(canonical_fixture())))
+            .expect("open report fixture");
+        state
+    }
+
+    fn expect_pending_export_id(outcome: ExportReportOutcome) -> String {
+        let ExportReportOutcome::ConfirmationRequired {
+            pending_export_id, ..
+        } = outcome
+        else {
+            panic!("expected replacement confirmation");
+        };
+        pending_export_id
+    }
+
+    struct FailingReportReplacePort;
+
+    impl ReportReplacePort for FailingReportReplacePort {
+        fn replace(
+            &self,
+            temporary: tempfile::NamedTempFile,
+            _destination: &Path,
+        ) -> Result<(), String> {
+            temporary.close().map_err(|error| error.to_string())?;
+            Err("injected atomic replacement failure".into())
+        }
     }
 
     #[test]
@@ -486,16 +541,43 @@ mod tests {
             fs::read_to_string(&html_destination).unwrap(),
             first.report_html
         );
+        fs::write(&html_destination, "prior full report bytes").unwrap();
+        let replacement = export_active_report_with_selection(
+            &state,
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::Complete,
+            |_| Ok(Some(html_destination.clone())),
+        )
+        .expect("existing full report requests confirmation");
+        let ExportReportOutcome::ConfirmationRequired {
+            pending_export_id,
+            file_name,
+            ..
+        } = replacement
+        else {
+            panic!("existing full report did not request confirmation");
+        };
+        assert_eq!(file_name, "snapshot.html");
         assert_eq!(
-            export_active_report_with_selection(
+            fs::read_to_string(&html_destination).unwrap(),
+            "prior full report bytes"
+        );
+        confirm_pending_report_export_with(&state, &pending_export_id, &SystemReportReplacePort)
+            .expect("atomically replace full report");
+        assert_eq!(
+            fs::read_to_string(&html_destination).unwrap(),
+            first.report_html
+        );
+        assert_eq!(
+            confirm_pending_report_export_with(
                 &state,
-                ReportExportFormat::FullEvidenceHtml,
-                ControllerEvidenceHandling::Complete,
-                |_| Ok(Some(html_destination.clone())),
+                &pending_export_id,
+                &SystemReportReplacePort,
             )
             .unwrap_err()
             .kind,
-            SessionErrorKind::Destination
+            SessionErrorKind::Conflict,
+            "a pending replacement is single-use",
         );
 
         let compact_destination = temp.path().join("snapshot-compact-summary.html");
@@ -518,16 +600,25 @@ mod tests {
             fs::read_to_string(&compact_destination).unwrap(),
             first.compact_summary_html
         );
+        fs::write(&compact_destination, "prior compact report bytes").unwrap();
+        let replacement = export_active_report_with_selection(
+            &state,
+            ReportExportFormat::CompactSummaryHtml,
+            ControllerEvidenceHandling::Complete,
+            |_| Ok(Some(compact_destination.clone())),
+        )
+        .expect("existing compact report requests confirmation");
+        let ExportReportOutcome::ConfirmationRequired {
+            pending_export_id, ..
+        } = replacement
+        else {
+            panic!("existing compact report did not request confirmation");
+        };
+        confirm_pending_report_export_with(&state, &pending_export_id, &SystemReportReplacePort)
+            .expect("atomically replace compact report");
         assert_eq!(
-            export_active_report_with_selection(
-                &state,
-                ReportExportFormat::CompactSummaryHtml,
-                ControllerEvidenceHandling::Complete,
-                |_| Ok(Some(compact_destination.clone())),
-            )
-            .unwrap_err()
-            .kind,
-            SessionErrorKind::Destination
+            fs::read_to_string(&compact_destination).unwrap(),
+            first.compact_summary_html
         );
 
         let bundle_destination = temp.path().join("snapshot.session.antennabundle");
@@ -549,6 +640,201 @@ mod tests {
                 .revision,
             first.revision.unwrap()
         );
+    }
+
+    #[test]
+    fn cancelling_report_replacement_preserves_existing_bytes() {
+        let temp = TempDir::new().unwrap();
+        let destination = temp.path().join("cancelled.html");
+        fs::write(&destination, "original report bytes").unwrap();
+        let state = opened_report_state();
+        let pending_export_id = expect_pending_export_id(
+            export_active_report_with_selection(
+                &state,
+                ReportExportFormat::FullEvidenceHtml,
+                ControllerEvidenceHandling::Complete,
+                |_| Ok(Some(destination.clone())),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            cancel_pending_report_export_for(&state, &pending_export_id).unwrap(),
+            ExportReportOutcome::Cancelled
+        );
+        assert_eq!(
+            fs::read_to_string(destination).unwrap(),
+            "original report bytes"
+        );
+        assert!(state.0.lock().unwrap().pending_report_export.is_none());
+    }
+
+    #[test]
+    fn failed_atomic_report_replacement_preserves_original_and_cleans_temporary_file() {
+        let temp = TempDir::new().unwrap();
+        let destination = temp.path().join("replace-failure.html");
+        fs::write(&destination, "original report bytes").unwrap();
+        let state = opened_report_state();
+        let pending_export_id = expect_pending_export_id(
+            export_active_report_with_selection(
+                &state,
+                ReportExportFormat::CompactSummaryHtml,
+                ControllerEvidenceHandling::Complete,
+                |_| Ok(Some(destination.clone())),
+            )
+            .unwrap(),
+        );
+
+        let error = confirm_pending_report_export_with(
+            &state,
+            &pending_export_id,
+            &FailingReportReplacePort,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind, SessionErrorKind::Filesystem);
+        assert_eq!(
+            fs::read_to_string(&destination).unwrap(),
+            "original report bytes"
+        );
+        assert_eq!(
+            fs::read_dir(temp.path()).unwrap().count(),
+            1,
+            "the sibling temporary file was cleaned up"
+        );
+    }
+
+    #[test]
+    fn changed_destination_and_presentation_invalidate_pending_report_replacements() {
+        let temp = TempDir::new().unwrap();
+        let destination = temp.path().join("stale.html");
+        fs::write(&destination, "original report bytes").unwrap();
+        let state = opened_report_state();
+        let pending_export_id = expect_pending_export_id(
+            export_active_report_with_selection(
+                &state,
+                ReportExportFormat::FullEvidenceHtml,
+                ControllerEvidenceHandling::Complete,
+                |_| Ok(Some(destination.clone())),
+            )
+            .unwrap(),
+        );
+        fs::write(&destination, "changed after confirmation request").unwrap();
+
+        let error = confirm_pending_report_export_with(
+            &state,
+            &pending_export_id,
+            &SystemReportReplacePort,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, SessionErrorKind::Conflict);
+        assert_eq!(
+            fs::read_to_string(&destination).unwrap(),
+            "changed after confirmation request"
+        );
+
+        let pending_export_id = expect_pending_export_id(
+            export_active_report_with_selection(
+                &state,
+                ReportExportFormat::FullEvidenceHtml,
+                ControllerEvidenceHandling::Complete,
+                |_| Ok(Some(destination.clone())),
+            )
+            .unwrap(),
+        );
+        state
+            .0
+            .lock()
+            .unwrap()
+            .active
+            .as_mut()
+            .unwrap()
+            .presentation
+            .as_mut()
+            .unwrap()
+            .presentation_id += 1;
+
+        let error = confirm_pending_report_export_with(
+            &state,
+            &pending_export_id,
+            &SystemReportReplacePort,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, SessionErrorKind::Conflict);
+        assert_eq!(
+            fs::read_to_string(destination).unwrap(),
+            "changed after confirmation request"
+        );
+    }
+
+    #[test]
+    fn report_replacement_rejects_non_regular_destinations_without_exposing_paths() {
+        let temp = TempDir::new().unwrap();
+        let directory = temp.path().join("directory.html");
+        fs::create_dir(&directory).unwrap();
+        let state = opened_report_state();
+
+        for format in [
+            ReportExportFormat::FullEvidenceHtml,
+            ReportExportFormat::CompactSummaryHtml,
+        ] {
+            let error = export_active_report_with_selection(
+                &state,
+                format,
+                ControllerEvidenceHandling::Complete,
+                |_| Ok(Some(directory.clone())),
+            )
+            .unwrap_err();
+            assert_eq!(error.kind, SessionErrorKind::Destination);
+            assert!(!error
+                .detail
+                .contains(temp.path().to_string_lossy().as_ref()));
+        }
+
+        #[cfg(unix)]
+        {
+            let target = temp.path().join("target.html");
+            let link = temp.path().join("link.html");
+            fs::write(&target, "existing").unwrap();
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            let error = export_active_report_with_selection(
+                &state,
+                ReportExportFormat::FullEvidenceHtml,
+                ControllerEvidenceHandling::Complete,
+                |_| Ok(Some(link.clone())),
+            )
+            .unwrap_err();
+            assert_eq!(error.kind, SessionErrorKind::Destination);
+            assert_eq!(fs::read_to_string(target).unwrap(), "existing");
+            assert!(!error
+                .detail
+                .contains(temp.path().to_string_lossy().as_ref()));
+        }
+    }
+
+    #[test]
+    fn existing_report_confirmation_serializes_only_a_bounded_name_and_opaque_identity() {
+        let temp = TempDir::new().unwrap();
+        let long_name = format!("{}.html", "report-name".repeat(18));
+        let destination = temp.path().join(long_name);
+        fs::write(&destination, "existing").unwrap();
+        let state = opened_report_state();
+
+        let outcome = export_active_report_with_selection(
+            &state,
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::Complete,
+            |_| Ok(Some(destination)),
+        )
+        .unwrap();
+        let json = serde_json::to_value(&outcome).unwrap();
+
+        assert_eq!(json["status"], "confirmation_required");
+        assert!(json["pendingExportId"].as_str().unwrap().len() <= 64);
+        assert!(json["fileName"].as_str().unwrap().chars().count() <= 161);
+        assert!(!json
+            .to_string()
+            .contains(temp.path().to_string_lossy().as_ref()));
     }
 
     #[test]

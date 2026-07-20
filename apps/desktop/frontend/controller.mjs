@@ -6,6 +6,8 @@ import {
   invokeAntennaControllerProfiles,
   invokeAttachSessionAntennaController,
   invokeCreateSessionFromReview,
+  invokeCancelReportExport,
+  invokeConfirmReportExport,
   invokeDeleteManagedSession,
   invokeExportManagedSession,
   invokeDeleteAntennaControllerProfile,
@@ -45,6 +47,8 @@ import {
   beginManagedReveal,
   beginOpenSession,
   beginReportExport,
+  beginReportExportCancellation,
+  beginReportReplacement,
   beginReportRefresh,
   beginSupportSummaryCopy,
   beginRbnImport,
@@ -79,6 +83,7 @@ import {
   rbnImportFailed,
   rbnImportSucceeded,
   reportExportCancelled,
+  reportExportConfirmationRequired,
   reportExportFailed,
   reportExportSucceeded,
   reportRefreshFailed,
@@ -501,7 +506,9 @@ export function createDesktopController(options = {}) {
         !state.session
         || state.openStatus === "loading"
         || state.reportStatus === "refreshing"
-        || state.reportExportStatus === "loading"
+        || ["loading", "confirming", "replacing", "cancelling"].includes(
+          state.reportExportStatus,
+        )
       ) {
         return state;
       }
@@ -537,15 +544,58 @@ export function createDesktopController(options = {}) {
       controllerEvidence = "complete",
       operationalHistory = "omitted",
     ) {
-      if (!state.session?.reportHtml || state.reportExportStatus === "loading") return state;
+      if (
+        !state.session?.reportHtml
+        || ["loading", "confirming", "replacing", "cancelling"].includes(
+          state.reportExportStatus,
+        )
+      ) return state;
       commit(beginReportExport(state));
       try {
         const outcome = await invokeExportActiveSessionReport(
           invoke(), format, controllerEvidence, operationalHistory,
         );
-        commit(outcome.status === "cancelled"
-          ? reportExportCancelled(state)
-          : reportExportSucceeded(state, outcome));
+        if (outcome.status === "cancelled") {
+          commit(reportExportCancelled(state));
+        } else if (outcome.status === "exported" && outcome.fileName) {
+          commit(reportExportSucceeded(state, outcome));
+        } else if (
+          outcome.status === "confirmation_required"
+          && outcome.pendingExportId
+          && outcome.fileName
+        ) {
+          commit(reportExportConfirmationRequired(state, outcome));
+        } else {
+          throw unexpectedResponse();
+        }
+      } catch (error) {
+        commit(reportExportFailed(state, error));
+      }
+      return state;
+    },
+
+    async confirmReportReplacement() {
+      const pendingExportId = state.reportExportPending?.pendingExportId;
+      if (!pendingExportId || state.reportExportStatus === "replacing") return state;
+      commit(beginReportReplacement(state));
+      try {
+        const outcome = await invokeConfirmReportExport(invoke(), pendingExportId);
+        if (outcome.status !== "exported" || !outcome.fileName) throw unexpectedResponse();
+        commit(reportExportSucceeded(state, outcome));
+      } catch (error) {
+        commit(reportExportFailed(state, error));
+      }
+      return state;
+    },
+
+    async cancelReportReplacement() {
+      const pendingExportId = state.reportExportPending?.pendingExportId;
+      if (!pendingExportId || state.reportExportStatus === "replacing") return state;
+      commit(beginReportExportCancellation(state));
+      try {
+        const outcome = await invokeCancelReportExport(invoke(), pendingExportId);
+        if (outcome.status !== "cancelled") throw unexpectedResponse();
+        commit(reportExportCancelled(state));
       } catch (error) {
         commit(reportExportFailed(state, error));
       }

@@ -28,8 +28,8 @@ use managed_sessions::{
     ManagedSessionsState,
 };
 use open_session::{
-    active_session_report, export_active_session_report, refresh_active_session_report,
-    ActiveSessionState,
+    active_session_report, cancel_report_export, confirm_report_export,
+    export_active_session_report, refresh_active_session_report, ActiveSessionState,
 };
 use rbn_import::import_active_session_rbn;
 use setup::{
@@ -68,6 +68,8 @@ pub fn run() {
             import_managed_session,
             export_managed_session,
             export_active_session_report,
+            confirm_report_export,
+            cancel_report_export,
             active_session_report,
             refresh_active_session_report,
             active_session_conductor,

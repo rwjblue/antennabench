@@ -584,8 +584,15 @@ from the conductor response and the report is refreshed again. Neither path
 implicitly starts or resumes a session. `active_session_report` reads the retained
 presentation, while `refresh_active_session_report` builds and verifies a
 revision-keyed replacement without discarding the prior presentation on error.
-`export_active_session_report` writes exactly that retained standalone HTML with
-create-new semantics. The independent `import_managed_session()` and
+`export_active_session_report` writes exactly that retained standalone HTML.
+New destinations are created directly. An existing regular file produces only
+a bounded display name and opaque one-use confirmation identity for the
+frontend; Rust retains the path, selected report bytes, and presentation
+identity. Confirmation writes and synchronizes a unique sibling temporary file,
+revalidates the destination and presentation, then atomically replaces the old
+file. Cancellation and failed replacement preserve the prior bytes, while
+directories, symbolic links, and other entries remain typed errors. The
+independent `import_managed_session()` and
 `export_managed_session(locatorId)` commands own their native pickers; the
 former returns only managed location context, and the latter returns only the
 verified output name and revision. Neither replaces the active session.

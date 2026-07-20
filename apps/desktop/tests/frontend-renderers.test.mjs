@@ -699,9 +699,28 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   renderReport(e, state, reportDocuments);
   assert.equal(e.reportCompactExportButton.textContent, "Exporting…");
   assert.equal(e.reportFullExportButton.textContent, "Exporting…");
+  state.reportExportStatus = "confirming";
+  state.reportExportPending = {
+    pendingExportId: "opaque-pending-1",
+    fileName: "existing-report.html",
+    revision: 3,
+    format: "full_evidence_html",
+  };
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportReplaceDialog.open, true);
+  assert.equal(e.reportReplaceIdentity.textContent, "existing-report.html");
+  assert.equal(e.reportReplaceCancel.disabled, false);
+  assert.equal(e.reportReplaceConfirm.disabled, false);
+  state.reportExportStatus = "replacing";
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportReplaceCancel.disabled, true);
+  assert.equal(e.reportReplaceConfirm.disabled, true);
+  assert.equal(e.reportReplaceConfirm.textContent, "Replacing…");
   state.reportExportStatus = "error";
+  state.reportExportPending = null;
   state.reportExportError = { message: "cannot export", detail: "destination exists" };
   renderReport(e, state, reportDocuments);
+  assert.equal(e.reportReplaceDialog.open, false);
   assert.equal(e.reportFeedback.dataset.kind, "error");
   assert.equal(e.reportFeedbackDetail.textContent, "destination exists");
 });

@@ -8,8 +8,37 @@ pub(crate) struct ActiveSessionState(pub(super) Mutex<DesktopState>);
 pub(super) struct DesktopState {
     pub(super) active: Option<ActiveSession>,
     pub(super) export_source: Option<PathBuf>,
+    pub(super) pending_report_export: Option<PendingReportExport>,
     pub(super) foreground_busy: bool,
     pub(super) next_presentation_id: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ReportDestinationIdentity {
+    pub(super) length: u64,
+    pub(super) modified_nanos: Option<u128>,
+    #[cfg(unix)]
+    pub(super) device: u64,
+    #[cfg(unix)]
+    pub(super) inode: u64,
+    #[cfg(unix)]
+    pub(super) changed_seconds: i64,
+    #[cfg(unix)]
+    pub(super) changed_nanos: i64,
+    pub(super) content_digest: [u8; 32],
+}
+
+#[derive(Debug)]
+pub(super) struct PendingReportExport {
+    pub(super) pending_export_id: String,
+    pub(super) destination: PathBuf,
+    pub(super) destination_identity: ReportDestinationIdentity,
+    pub(super) file_name: String,
+    pub(super) presentation_id: u64,
+    pub(super) session_id: String,
+    pub(super) revision: Option<u64>,
+    pub(super) format: ReportExportFormat,
+    pub(super) html: String,
 }
 
 pub(super) struct ForegroundGuard<'a>(&'a ActiveSessionState);
@@ -64,6 +93,7 @@ pub(crate) fn reload_active_session(
         ));
     }
     desktop.active = Some(refreshed);
+    desktop.pending_report_export = None;
     Ok(summary)
 }
 
@@ -123,6 +153,7 @@ pub(crate) fn active_session_source(
 }
 
 pub(super) fn assign_presentation_id(state: &mut DesktopState, session: &mut ActiveSession) {
+    state.pending_report_export = None;
     if let Some(presentation) = &mut session.presentation {
         state.next_presentation_id = state.next_presentation_id.saturating_add(1);
         presentation.presentation_id = state.next_presentation_id;

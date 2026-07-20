@@ -59,6 +59,14 @@ export function invokeExportActiveSessionReport(
   return invoke("export_active_session_report", { format, controllerEvidence, operationalHistory });
 }
 
+export function invokeConfirmReportExport(invoke, pendingExportId) {
+  return invoke("confirm_report_export", { pendingExportId });
+}
+
+export function invokeCancelReportExport(invoke, pendingExportId) {
+  return invoke("cancel_report_export", { pendingExportId });
+}
+
 export function invokeImportActiveSessionWsprLive(invoke) {
   return invoke("import_active_session_wspr_live");
 }

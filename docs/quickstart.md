@@ -129,6 +129,12 @@ switch the radio or antenna for this manual run.
       checkpoint-coherent lossless durable record from which reports can be
       regenerated. The row does not need to be opened first.
 
+    A new report filename exports immediately. If either HTML export selects an
+    existing regular file, AntennaBench shows its filename and asks before
+    atomically replacing it. **Cancel** leaves the existing report unchanged;
+    directories, symbolic links, and other non-regular destinations are not
+    replaceable.
+
 For a support request, prefer **Copy support summary** in **Build and operational
 history**. Review the deterministic JSON before pasting it into an issue. It
 omits station identity/grid, bundle names and paths, target identifiers,

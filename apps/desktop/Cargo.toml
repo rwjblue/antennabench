@@ -30,6 +30,7 @@ serde_json.workspace = true
 sha2.workspace = true
 tauri.workspace = true
 tauri-plugin-dialog.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 trash.workspace = true
 uuid.workspace = true
@@ -38,6 +39,3 @@ uuid.workspace = true
 objc2.workspace = true
 objc2-core-location.workspace = true
 objc2-foundation.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true

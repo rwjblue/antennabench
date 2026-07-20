@@ -828,10 +828,13 @@ export function renderReport(elements, state, reportDocuments) {
     reportBundleName, reportRevision, reportSummary, reportControllerOptions,
     reportControllerHandling,
     reportOperationalOptions, reportOperationalHandling,
+    reportReplaceDialog, reportReplaceTitle, reportReplaceDescription,
+    reportReplaceIdentity, reportReplaceError, reportReplaceCancel, reportReplaceConfirm,
   } = elements;
   const hasSession = state.session !== null;
   const hasReport = typeof state.session?.reportHtml === "string";
-  const reportBusy = state.reportStatus === "refreshing" || state.reportExportStatus === "loading";
+  const reportBusy = state.reportStatus === "refreshing"
+    || ["loading", "confirming", "replacing", "cancelling"].includes(state.reportExportStatus);
   reportStatus.textContent = state.reportStatus === "refreshing"
     ? "Refreshing"
     : hasReport
@@ -859,15 +862,52 @@ export function renderReport(elements, state, reportDocuments) {
     reportOperationalOptions.dataset.presentationId = String(state.reportPresentationId);
   }
   reportRefreshButton.textContent = state.reportStatus === "refreshing" ? "Refreshing…" : "Refresh committed snapshot";
-  reportCompactExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export compact summary HTML";
-  reportFullExportButton.textContent = state.reportExportStatus === "loading" ? "Exporting…" : "Export full evidence HTML";
+  const exportAction = state.reportExportStatus === "loading"
+    ? "Exporting…"
+    : state.reportExportStatus === "replacing"
+      ? "Replacing…"
+      : null;
+  reportCompactExportButton.textContent = exportAction ?? "Export compact summary HTML";
+  reportFullExportButton.textContent = exportAction ?? "Export full evidence HTML";
   renderFeedback(reportFeedback, reportFeedbackMessage, reportFeedbackDetail, reportFeedbackModel(state));
+  renderReportReplaceDialog({
+    reportReplaceDialog, reportReplaceTitle, reportReplaceDescription,
+    reportReplaceIdentity, reportReplaceError, reportReplaceCancel, reportReplaceConfirm,
+  }, state);
   renderOperationalHistory(elements, state);
   if (!hasSession) return;
   reportBundleName.textContent = state.session.bundleName;
   reportRevision.textContent = `Revision ${state.session.revision ?? "legacy"} · ${humanizeIdentifier(state.session.lifecycle ?? "static")}`;
   reportSummary.textContent = `${state.session.callsign} · ${state.session.grid} · ${state.session.antennaCount} antennas · ${state.session.slotCount} slots · ${state.session.observationCount} observations`;
   if (hasReport) updateReportFrame(reportFrame, state, reportDocuments);
+}
+
+function renderReportReplaceDialog(elements, state) {
+  const {
+    reportReplaceDialog, reportReplaceTitle, reportReplaceDescription,
+    reportReplaceIdentity, reportReplaceError, reportReplaceCancel, reportReplaceConfirm,
+  } = elements;
+  const pendingExport = state.reportExportPending;
+  if (!pendingExport) {
+    if (reportReplaceDialog.open) reportReplaceDialog.close?.();
+    reportReplaceDialog.removeAttribute("open");
+    return;
+  }
+  reportReplaceTitle.textContent = "Replace this report file?";
+  reportReplaceDescription.textContent = "The existing HTML report will be atomically replaced with the committed report snapshot selected for this export.";
+  reportReplaceIdentity.textContent = pendingExport.fileName;
+  reportReplaceError.hidden = true;
+  reportReplaceError.textContent = "";
+  const busy = ["replacing", "cancelling"].includes(state.reportExportStatus);
+  reportReplaceCancel.disabled = busy;
+  reportReplaceConfirm.disabled = busy;
+  reportReplaceConfirm.textContent = state.reportExportStatus === "replacing"
+    ? "Replacing…"
+    : "Replace file";
+  if (!reportReplaceDialog.open) {
+    if (typeof reportReplaceDialog.showModal === "function") reportReplaceDialog.showModal();
+    else reportReplaceDialog.setAttribute("open", "");
+  }
 }
 
 function renderReopenedHistoricalDiagnostic(elements, state) {
@@ -1251,7 +1291,8 @@ function importFeedbackModel(state) {
 
 function reportFeedbackModel(state) {
   if (state.reportStatus === "refreshing") return { kind: "loading", message: "Building one verified committed snapshot…", detail: "The prior coherent report remains visible until the new revision is verified." };
-  if (state.reportExportStatus === "loading") return { kind: "loading", message: "Exporting the committed HTML snapshot…", detail: "Choose compact summary HTML for printing/lightweight sharing or full evidence HTML for the complete audit report. The destination is created without overwriting an existing file." };
+  if (state.reportExportStatus === "loading") return { kind: "loading", message: "Exporting the committed HTML snapshot…", detail: "New destinations are created directly. Existing regular HTML files require explicit replacement confirmation." };
+  if (state.reportExportStatus === "replacing") return { kind: "loading", message: "Replacing the existing report atomically…", detail: "A synchronized sibling temporary file is replacing the confirmed destination without truncating it in place." };
   if (state.reportExportError) return { kind: "error", ...state.reportExportError };
   if (state.reportError) return { kind: "error", ...state.reportError };
   if (state.reportExportNotice === "cancelled") return { kind: "cancelled", message: "Report export cancelled.", detail: "The visible coherent report was retained." };

@@ -555,6 +555,19 @@
                 <div><strong data-report-feedback-message></strong><p data-report-feedback-detail></p></div>
               </div>
             </div>
+            <dialog class="saved-delete-dialog" data-report-replace-dialog aria-labelledby="report-replace-title" aria-describedby="report-replace-description">
+              <div class="saved-delete-content">
+                <p class="eyebrow">Replace standalone report</p>
+                <h2 id="report-replace-title" data-report-replace-title>Replace this report file?</h2>
+                <p id="report-replace-description" data-report-replace-description>The existing HTML report will be atomically replaced with the committed report snapshot selected for this export.</p>
+                <p class="saved-delete-identity" data-report-replace-identity></p>
+                <p class="saved-row-error" data-report-replace-error role="alert" hidden></p>
+                <div class="saved-delete-actions">
+                  <button type="button" data-report-replace-cancel>Cancel</button>
+                  <button class="danger-action" type="button" data-report-replace-confirm>Replace file</button>
+                </div>
+              </div>
+            </dialog>
           </section>
         </main>
       </div>

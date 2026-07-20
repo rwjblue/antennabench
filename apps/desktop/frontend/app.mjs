@@ -43,6 +43,7 @@ export function mount(root, browserWindow) {
   let countdownAnchorKey = null;
   let noteShortcutInitialized = false;
   let deleteTrigger = null;
+  let reportExportTrigger = null;
   const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const preferredScrollBehavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -156,6 +157,7 @@ export function mount(root, browserWindow) {
     reportRefreshButton,
     reportCompactExportButton, reportFullExportButton, reportControllerHandling,
     reportOperationalHandling, copySupportSummary,
+    reportReplaceDialog, reportReplaceCancel, reportReplaceConfirm,
     reportFeedback,
     reportFeedbackMessage,
     reportFeedbackDetail,
@@ -643,14 +645,64 @@ export function mount(root, browserWindow) {
 
   reportRefreshButton.addEventListener("click", () => controller.refreshReport());
   reportCompactExportButton.addEventListener("click", async () => {
+    reportExportTrigger = reportCompactExportButton;
     await controller.exportReport("compact_summary_html");
+    if (state.reportExportStatus === "confirming") {
+      Promise.resolve().then(() => reportReplaceCancel.focus());
+    } else {
+      reportExportTrigger = null;
+    }
   });
   reportFullExportButton.addEventListener("click", async () => {
+    reportExportTrigger = reportFullExportButton;
     await controller.exportReport(
       "full_evidence_html",
       reportControllerHandling.value,
       reportOperationalHandling.value,
     );
+    if (state.reportExportStatus === "confirming") {
+      Promise.resolve().then(() => reportReplaceCancel.focus());
+    } else {
+      reportExportTrigger = null;
+    }
+  });
+  const cancelReportReplacement = async () => {
+    if (["replacing", "cancelling"].includes(state.reportExportStatus)) return;
+    const trigger = reportExportTrigger;
+    await controller.cancelReportReplacement();
+    if (!state.reportExportPending) {
+      reportExportTrigger = null;
+      trigger?.focus();
+    }
+  };
+  reportReplaceCancel.addEventListener("click", cancelReportReplacement);
+  reportReplaceDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    void cancelReportReplacement();
+  });
+  reportReplaceDialog.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [reportReplaceCancel, reportReplaceConfirm]
+      .filter((button) => !button.disabled);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && rootDocument.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && rootDocument.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  reportReplaceConfirm.addEventListener("click", async () => {
+    if (["replacing", "cancelling"].includes(state.reportExportStatus)) return;
+    const trigger = reportExportTrigger;
+    await controller.confirmReportReplacement();
+    if (!state.reportExportPending) {
+      reportExportTrigger = null;
+      trigger?.focus();
+    }
   });
   copySupportSummary.addEventListener("click", async () => {
     await controller.copySupportSummary();

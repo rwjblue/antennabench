@@ -247,6 +247,20 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
           completeness: "full_detail",
         };
     },
+    export_active_session_report: ({ format }) => ({
+      status: "confirmation_required",
+      pendingExportId: `pending-${format}`,
+      fileName: format === "compact_summary_html" ? "existing-compact.html" : "existing-full.html",
+      revision: 9,
+      format,
+    }),
+    cancel_report_export: { status: "cancelled" },
+    confirm_report_export: {
+      status: "exported",
+      fileName: "existing-full.html",
+      revision: 9,
+      format: "full_evidence_html",
+    },
     active_session_conductor: conductorView({
       lifecycle: "ready",
       phase: "ready",
@@ -346,6 +360,38 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
         && payload.locatorId === "locator-existing"));
       assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-1");
     });
+    elements.reportCompactExportButton.click();
+    await vi.waitFor(() => assert.equal(elements.reportReplaceDialog.open, true));
+    assert.equal(document.activeElement, elements.reportReplaceCancel);
+    assert.equal(elements.reportReplaceIdentity.textContent, "existing-compact.html");
+    elements.reportReplaceConfirm.focus();
+    elements.reportReplaceDialog.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+    }));
+    assert.equal(document.activeElement, elements.reportReplaceCancel, "report modal traps focus");
+    elements.reportReplaceDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    await vi.waitFor(() => {
+      assert.equal(elements.reportReplaceDialog.open, false);
+      assert.equal(document.activeElement, elements.reportCompactExportButton);
+    });
+    assert.ok(calls.some(([command, payload]) => command === "cancel_report_export"
+      && payload.pendingExportId === "pending-compact_summary_html"));
+
+    elements.reportFullExportButton.click();
+    await vi.waitFor(() => assert.equal(elements.reportReplaceDialog.open, true));
+    elements.reportReplaceConfirm.click();
+    elements.reportReplaceConfirm.click();
+    await vi.waitFor(() => {
+      assert.equal(elements.reportReplaceDialog.open, false);
+      assert.equal(document.activeElement, elements.reportFullExportButton);
+      assert.match(elements.reportFeedback.textContent, /existing-full\.html/);
+    });
+    assert.equal(
+      calls.filter(([command]) => command === "confirm_report_export").length,
+      1,
+      "replacement confirmation cannot be submitted twice",
+    );
     elements.navigation.find((button) => button.dataset.workflow === "saved").click();
     await vi.waitFor(() => assert.equal(window.location.hash, "#saved"));
     elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
