@@ -113,6 +113,7 @@ import {
 
 const bridgeUnavailable = () => new Error("The native desktop bridge is unavailable.");
 const unexpectedResponse = () => new Error("The desktop command returned an unexpected response.");
+const WSPR_LIVE_ACQUISITION_WATCHDOG_MS = 60_000;
 
 export function createDesktopController(options = {}) {
   const effects = {
@@ -122,6 +123,8 @@ export function createDesktopController(options = {}) {
     monotonicNow: options.monotonicNow ?? (() => Date.now()),
     setInterval: options.setInterval ?? (() => null),
     clearInterval: options.clearInterval ?? (() => {}),
+    setTimeout: options.setTimeout ?? globalThis.setTimeout,
+    clearTimeout: options.clearTimeout ?? globalThis.clearTimeout,
     onFocus: options.onFocus ?? (() => () => {}),
     onVisibilityChange: options.onVisibilityChange ?? (() => () => {}),
     onHashChange: options.onHashChange ?? (() => () => {}),
@@ -658,8 +661,19 @@ export function createDesktopController(options = {}) {
         return state;
       }
       commit(beginWsprLiveAcquisition(state));
+      let watchdog;
       try {
-        const outcome = await invokeAdvanceSessionWsprLive(invoke(), retry);
+        const timeout = new Promise((_, reject) => {
+          watchdog = effects.setTimeout(() => reject({
+            kind: "resource",
+            message: "WSPR.live collection took too long. Retry when the provider is responsive.",
+            detail: "the 60-second acquisition watchdog expired before the desktop command returned",
+          }), WSPR_LIVE_ACQUISITION_WATCHDOG_MS);
+        });
+        const outcome = await Promise.race([
+          invokeAdvanceSessionWsprLive(invoke(), retry),
+          timeout,
+        ]);
         commit(wsprLiveAcquisitionSucceeded(state, outcome));
         if (["captured", "completed"].includes(outcome.status)) {
           await controller.refreshConductor(false);
@@ -667,6 +681,8 @@ export function createDesktopController(options = {}) {
         }
       } catch (error) {
         commit(wsprLiveAcquisitionFailed(state, error));
+      } finally {
+        effects.clearTimeout(watchdog);
       }
       return state;
     },

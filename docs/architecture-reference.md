@@ -337,6 +337,16 @@ lossless export independent from report eligibility. Hosted upload and archive
 limits remain a separate decision in
 [#11](https://github.com/rwjblue/antennabench/issues/11).
 
+The desktop Active Run read model is deliberately smaller than the durable
+bundle. Activation or recovery creates an in-memory projection containing only
+control-plane state; ordinary conductor, antenna-controller, and WSJT-X polls
+validate `session-state.json` plus stream lengths and never scan accumulating
+evidence. Mutations serialize through the existing foreground/persistence
+boundaries and replace the projection from their committed writer snapshot.
+Automatic WSPR.live collection also has a 60-second frontend watchdog, turning
+an unresponsive provider call into visible retry state instead of leaving the
+run permanently marked as fetching.
+
 ## Schema-V2 Live Persistence
 
 [Decision 0010](decisions/0010-checkpoint-append-only-live-session-mutations.md)

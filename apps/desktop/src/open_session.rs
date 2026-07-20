@@ -67,9 +67,9 @@ pub(crate) use errors::{
     SessionErrorPayload,
 };
 pub(crate) use state::{
-    activate_created_bundle, active_session_source, reload_active_session,
-    with_foreground_operation, with_suspended_foreground_operation,
-    with_waiting_foreground_operation, ActiveSessionState,
+    activate_created_bundle, active_session_live_projection, active_session_source,
+    reload_active_session, update_active_session_live_projection, with_foreground_operation,
+    with_suspended_foreground_operation, with_waiting_foreground_operation, ActiveSessionState,
 };
 
 use commands::bundle_suffix;
@@ -1056,6 +1056,7 @@ mod tests {
         };
         state.0.lock().unwrap().active = Some(ActiveSession {
             source,
+            live_projection: None,
             summary,
             presentation: Some(presentation),
         });

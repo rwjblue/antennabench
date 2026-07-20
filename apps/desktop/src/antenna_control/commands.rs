@@ -248,9 +248,16 @@ pub(super) fn active_controller_view_for(
     controller_state: State<'_, AntennaControllerState>,
 ) -> Result<ActiveControllerView, SessionErrorPayload> {
     let (source, _) = active_session_source(active_state.inner())?;
-    let bundle = BundleStore::new(&source)
-        .read_v3_checkpointed()
-        .map_err(live_error_payload)?;
+    let bundle = active_session_live_projection(active_state.inner())?
+        .filter(|(cached_source, _, _)| cached_source == &source)
+        .map(|(_, _, bundle)| bundle)
+        .ok_or_else(|| {
+            SessionErrorPayload::new(
+                SessionErrorKind::Unsupported,
+                "Open a current live session before using antenna control.",
+                "the active session has no live projection",
+            )
+        })?;
     let catalog = read_catalog(&resolved_app_data_dir(&app)?)?;
     let runtime = controller_state.runtime.lock().map_err(|_| {
         SessionErrorPayload::report_pipeline("antenna-controller state is unavailable")
@@ -521,21 +528,27 @@ pub(crate) fn run_active_session_antenna_controller(
             } else {
                 None
             };
-        let receipt = {
+        let (receipt, projection) = {
             let mut writer = crate::build_context::open_v3_writer_with_hooks(
                 &store,
                 Arc::new(SystemLivePersistenceHooks),
             )
             .map_err(live_error_payload)?;
-            writer
+            let receipt = writer
                 .append_antenna_control(LiveAntennaControlMutationV5 {
                     expected_revision: request.expected_revision,
                     mutation_id: request.action_token.clone(),
                     rig_records,
                     armed_event,
                 })
-                .map_err(live_error_payload)?
+                .map_err(live_error_payload)?;
+            (receipt, writer.snapshot().clone())
         };
+        crate::open_session::update_active_session_live_projection(
+            active_state.inner(),
+            &source,
+            &projection,
+        )?;
         let detail = if !switch_success {
             "Switch did not exit successfully. No verification ran; manual operation remains available."
         } else if verification_success == Some(false) {

@@ -523,6 +523,31 @@ fn verified_mutation(revision: u64, now: DateTime<Utc>) -> LiveAntennaControlMut
 }
 
 #[test]
+fn bounded_checkpoint_control_detects_large_uncommitted_stream_growth() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = BundleStore::new(temp.path().join(format!("bounded{V2_BUNDLE_SUFFIX}")));
+    let mut initial = bundle();
+    BundleStore::refresh_v3_checkpoint(&mut initial).unwrap();
+    store.create_v3_checkpointed(&initial).unwrap();
+
+    assert_eq!(
+        store.read_v3_checkpoint_state().unwrap(),
+        initial.session_state
+    );
+    let adapter_path = store.root().join(&initial.manifest.files.adapter_records);
+    let mut adapter_stream = OpenOptions::new().append(true).open(adapter_path).unwrap();
+    adapter_stream
+        .write_all(&vec![b'x'; 20 * 1024 * 1024])
+        .unwrap();
+    adapter_stream.sync_all().unwrap();
+
+    assert!(matches!(
+        store.read_v3_checkpoint_state(),
+        Err(LivePersistenceError::ExternalModification { .. })
+    ));
+}
+
+#[test]
 fn schema_v5_atomically_commits_command_verified_readiness_and_retries_idempotently() {
     let temp = tempfile::tempdir().unwrap();
     let store = BundleStore::new(temp.path().join(format!("control{V2_BUNDLE_SUFFIX}")));

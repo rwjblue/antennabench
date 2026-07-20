@@ -787,6 +787,39 @@ test("background refresh does not duplicate an in-flight final WSPR.live acquisi
   assert.equal(run.controller.state.session.reportHtml, "<p>ended</p>");
 });
 
+test("a stalled WSPR.live acquisition becomes retryable after a bounded watchdog", async () => {
+  const state = openSessionSucceeded(initialState("run"), session());
+  state.activeWorkflow = "run";
+  state.conductorStatus = "ready";
+  state.conductor = conductor({ phase: "finalizing" });
+  let expire;
+  let cleared;
+  const run = harness({
+    advance_active_session_wspr_live: () => new Promise(() => {}),
+  }, {
+    state,
+    effects: {
+      setTimeout(callback, delay) {
+        assert.equal(delay, 60_000);
+        expire = callback;
+        return "watchdog";
+      },
+      clearTimeout(timer) {
+        cleared = timer;
+      },
+    },
+  });
+
+  const acquisition = run.controller.advanceWsprLive();
+  await new Promise((resolve) => setImmediate(resolve));
+  expire();
+  await acquisition;
+
+  assert.equal(cleared, "watchdog");
+  assert.equal(run.controller.state.wsprLiveAcquisitionStatus, "error");
+  assert.match(run.controller.state.wsprLiveAcquisitionError.detail, /60-second/);
+});
+
 test("report background checks are silent, change-aware, and bounded by lifecycle", async () => {
   const endedState = openSessionSucceeded(initialState("report"), session({
     lifecycle: "ended",

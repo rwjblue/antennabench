@@ -8,8 +8,11 @@ pub(crate) fn active_session_wsjtx_status(
     let (source, _) = active_session_source(active_state.inner())?;
     let now = Utc::now();
     let mut status = wsjtx_state.status_for_source(&source, now);
-    if let Ok(snapshot) = read_wsjtx_snapshot(&BundleStore::new(source)) {
-        project_setup_warnings(&snapshot, &mut status, now);
+    if let Some((cached_source, _, bundle)) = active_session_live_projection(active_state.inner())?
+    {
+        if cached_source == source {
+            project_setup_warnings(&WsjtxSnapshot::V3(bundle), &mut status, now);
+        }
     }
     check_status_ipc(&status)?;
     Ok(status)
@@ -17,6 +20,7 @@ pub(crate) fn active_session_wsjtx_status(
 
 #[tauri::command]
 pub(crate) fn start_active_session_wsjtx(
+    app: AppHandle,
     request: StartWsjtxRequest,
     active_state: State<'_, ActiveSessionState>,
     wsjtx_state: State<'_, WsjtxSessionState>,
@@ -28,6 +32,7 @@ pub(crate) fn start_active_session_wsjtx(
             source.clone(),
             request,
             Arc::new(SystemLivePersistenceHooks),
+            Some(app.clone()),
         )
         .map_err(|payload| {
             crate::operation_diagnostics::persist_wsjtx_start_failure(&source, payload)

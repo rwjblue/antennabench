@@ -137,6 +137,18 @@ uses the ordinary current-revision and idempotent-mutation checks. A real stale
 authority, lifecycle change, validation error, or durable write failure still
 blocks automation and requires operator review.
 
+Active Run keeps a compact Rust-owned projection of the current manifest,
+checkpoint, schedule, operator events, and controller evidence. The five-second
+conductor, controller, and WSJT-X status polls validate the small checkpoint
+document and committed stream lengths, then read that projection; they do not
+reparse adapter, observation, propagation, runtime-context, or diagnostic
+streams. A changed checkpoint or unexpected stream length fails closed instead
+of serving a mixed revision. Full checkpointed reads remain at open, recovery,
+report/export, and explicit integrity boundaries. Successful conductor,
+controller, WSJT-X, and WSPR.live commits refresh the projection from the
+writer's committed snapshot, so evidence growth cannot make routine polling
+starve final acquisition or session completion.
+
 Schema v6 adds checkpointed `runtime-contexts.jsonl` and `diagnostics.jsonl`.
 `append_diagnostic` commits the active/new runtime context before its first
 reference and then one typed diagnostic under the same checkpoint. Exact

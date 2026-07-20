@@ -484,6 +484,32 @@ mod tests {
         state
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn routine_conductor_poll_does_not_reopen_growing_evidence_streams() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().unwrap();
+        let active = ActiveSessionState::default();
+        let created = create_e2e_session(temp.path(), &active);
+        let store = BundleStore::new(&created.path);
+        let bundle = store.read_v3_checkpointed().unwrap();
+        let adapter_path = store.root().join(&bundle.manifest.files.adapter_records);
+        let hooks = Arc::new(TestHooks::new(
+            Utc.with_ymd_and_hms(2026, 7, 15, 20, 0, 20).unwrap(),
+        ));
+        let conductor = ConductorSessionState::default();
+        let initial = read_conductor_with_hooks(&active, &conductor, hooks.clone()).unwrap();
+
+        let original_mode = fs::metadata(&adapter_path).unwrap().permissions().mode();
+        fs::set_permissions(&adapter_path, fs::Permissions::from_mode(0o000)).unwrap();
+        let projected = read_conductor_with_hooks(&active, &conductor, hooks).unwrap();
+        fs::set_permissions(&adapter_path, fs::Permissions::from_mode(original_mode)).unwrap();
+
+        assert_eq!(projected.revision, initial.revision);
+        assert_eq!(projected.session_id, initial.session_id);
+    }
+
     fn snapshot_files(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
         fn collect(root: &Path, current: &Path, files: &mut Vec<(PathBuf, Vec<u8>)>) {
             for entry in fs::read_dir(current).unwrap() {
@@ -1197,7 +1223,7 @@ mod tests {
         assert_eq!(resumed.lifecycle, SessionLifecycleV2::Running);
 
         let wsjtx_at = Utc.with_ymd_and_hms(2026, 7, 15, 20, 3, 55).unwrap();
-        let intake = inject_e2e_wsjtx_sequence(&created.path, wsjtx_at);
+        let intake = inject_e2e_wsjtx_sequence(&active, &created.path, wsjtx_at);
         assert_eq!(intake.adapter_records, 4);
         assert_eq!(intake.observations, 0);
         assert_eq!(intake.gaps, 1);

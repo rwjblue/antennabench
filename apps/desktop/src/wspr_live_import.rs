@@ -386,9 +386,14 @@ pub(crate) fn commit_wspr_live_activity_response(
                     },
                 )
                 .map_err(crate::conductor::live_error_payload)?;
+            let projection = writer.snapshot().clone();
             drop(writer);
             Ok(CommittedWsprLiveActivity {
-                session: reload_active_session(state, bundle_path)?,
+                session: crate::open_session::update_active_session_live_projection(
+                    state,
+                    bundle_path,
+                    &projection,
+                )?,
                 revision: receipt.revision,
             })
         }
@@ -455,9 +460,14 @@ pub(crate) fn record_wspr_live_activity_failure(
                     observations: Vec::new(),
                 })
                 .map_err(crate::conductor::live_error_payload)?;
+            let projection = writer.snapshot().clone();
             drop(writer);
             Ok(CommittedWsprLiveActivity {
-                session: reload_active_session(state, bundle_path)?,
+                session: crate::open_session::update_active_session_live_projection(
+                    state,
+                    bundle_path,
+                    &projection,
+                )?,
                 revision: receipt.revision,
             })
         }
@@ -627,9 +637,14 @@ fn commit_v3_wspr_live_response(
             ));
         }
     };
+    let projection = writer.snapshot().clone();
     drop(writer);
     Ok(CommittedWsprLiveResponse {
-        session: reload_active_session(state, bundle_path)?,
+        session: crate::open_session::update_active_session_live_projection(
+            state,
+            bundle_path,
+            &projection,
+        )?,
         revision: receipt.revision,
         summary: summary.expect("attachment mutation builder runs before append"),
     })

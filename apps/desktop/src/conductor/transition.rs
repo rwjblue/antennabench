@@ -26,8 +26,8 @@ use super::{
     live_error_payload, ConductorSessionState, ConductorTransitionView, TransitionDisposition,
 };
 use crate::open_session::{
-    active_session_source, with_waiting_foreground_operation, ActiveSessionState, SessionErrorKind,
-    SessionErrorPayload,
+    active_session_source, update_active_session_live_projection,
+    with_waiting_foreground_operation, ActiveSessionState, SessionErrorKind, SessionErrorPayload,
 };
 
 const WAIT_POLL: StdDuration = StdDuration::from_millis(100);
@@ -334,6 +334,8 @@ pub(crate) fn persist_continued_readiness(
                 return Err(live_error_payload(error));
             }
         }
+        let committed = store.read_v3_checkpointed().map_err(live_error_payload)?;
+        update_active_session_live_projection(active_state, source, &committed)?;
         Ok(ContinuationOutcome::Continued)
     })
 }

@@ -12,6 +12,8 @@ use antennabench_core::v2::V2_BUNDLE_SUFFIX;
 use antennabench_storage::LivePersistenceError;
 use chrono::{DateTime, Utc};
 
+use crate::open_session::{active_session_live_projection, update_active_session_live_projection};
+
 #[derive(Default)]
 pub(crate) struct ConductorSessionState(Mutex<ConductorRuntime>);
 
@@ -322,7 +324,16 @@ pub(super) fn read_conductor_with_hooks(
                 build_view(bundle_name, &bundle, now, action_token, recovery)
             }
             SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
-                let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
+                let bundle = if recovery.is_none() {
+                    active_session_live_projection(active_state)?
+                        .filter(|(cached_source, _, _)| cached_source == &source)
+                        .map(|(_, _, bundle)| bundle)
+                } else {
+                    None
+                }
+                .map(Ok)
+                .unwrap_or_else(|| store.read_v3_checkpointed().map_err(live_error_payload))?;
+                update_active_session_live_projection(active_state, &source, &bundle)?;
                 register_view_action(
                     conductor_state,
                     &bundle.manifest.session_id,
@@ -360,7 +371,14 @@ pub(super) fn mutate_conductor_with_hooks(
                 mutate_conductor_v2(&store, bundle_name, conductor_state, request, hooks)
             }
             SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
-                mutate_conductor_v3(&store, bundle_name, conductor_state, request, hooks)
+                mutate_conductor_v3(
+                    active_state,
+                    &store,
+                    bundle_name,
+                    conductor_state,
+                    request,
+                    hooks,
+                )
             }
             actual => Err(SessionErrorPayload::new(
                 SessionErrorKind::Unsupported,
@@ -436,6 +454,7 @@ fn mutate_conductor_v2(
 }
 
 fn mutate_conductor_v3(
+    active_state: &ActiveSessionState,
     store: &BundleStore,
     bundle_name: String,
     conductor_state: &ConductorSessionState,
@@ -490,6 +509,7 @@ fn mutate_conductor_v3(
         }
     }
     let bundle = store.read_v3_checkpointed().map_err(live_error_payload)?;
+    update_active_session_live_projection(active_state, store.root(), &bundle)?;
     let now = hooks.now();
     let action_token = hooks.new_id("mutation");
     register_view_action(

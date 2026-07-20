@@ -539,7 +539,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             RevalidatedAcquisition::Discarded { .. } => {
                 let refreshed = read_acquisition_snapshot(&source)?;
                 committed.revision = refreshed.revision();
-                committed.session = reload_active_summary(active_state, &source)?;
+                committed.session = refresh_active_summary(active_state, &source, &refreshed)?;
                 return Ok(captured_outcome(&plan, &response, committed));
             }
         }
@@ -710,11 +710,19 @@ fn revalidate_acquisition_response(
     })
 }
 
-fn reload_active_summary(
+fn refresh_active_summary(
     active_state: &ActiveSessionState,
     source: &Path,
+    snapshot: &AcquisitionSnapshot,
 ) -> Result<OpenedSession, SessionErrorPayload> {
-    crate::open_session::reload_active_session(active_state, source)
+    match snapshot {
+        AcquisitionSnapshot::V2(_) => {
+            crate::open_session::reload_active_session(active_state, source)
+        }
+        AcquisitionSnapshot::V3(bundle) => {
+            crate::open_session::update_active_session_live_projection(active_state, source, bundle)
+        }
+    }
 }
 
 fn captured_outcome(
@@ -999,9 +1007,14 @@ fn end_v3_after_final_capture(
         .map_err(crate::conductor::live_error_payload)?;
     if writer.snapshot().session_state.lifecycle == SessionLifecycleV2::Ended {
         let revision = writer.checkpoint().revision;
+        let projection = writer.snapshot().clone();
         drop(writer);
         return Ok((
-            crate::open_session::reload_active_session(active_state, source)?,
+            crate::open_session::update_active_session_live_projection(
+                active_state,
+                source,
+                &projection,
+            )?,
             revision,
         ));
     }
@@ -1047,9 +1060,14 @@ fn end_v3_after_final_capture(
             event,
         })
         .map_err(crate::conductor::live_error_payload)?;
+    let projection = writer.snapshot().clone();
     drop(writer);
     Ok((
-        crate::open_session::reload_active_session(active_state, source)?,
+        crate::open_session::update_active_session_live_projection(
+            active_state,
+            source,
+            &projection,
+        )?,
         receipt.revision,
     ))
 }

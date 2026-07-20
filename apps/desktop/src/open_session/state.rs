@@ -160,8 +160,85 @@ impl Drop for ForegroundGuard<'_> {
 #[derive(Debug)]
 pub(super) struct ActiveSession {
     pub(super) source: PathBuf,
+    pub(super) live_projection: Option<BundleV3Contents>,
     pub(super) summary: OpenedSession,
     pub(super) presentation: Option<ReportPresentation>,
+}
+
+pub(crate) fn active_session_live_projection(
+    state: &ActiveSessionState,
+) -> Result<Option<(PathBuf, String, BundleV3Contents)>, SessionErrorPayload> {
+    let active = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    let session = active.active.as_ref().ok_or_else(|| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Unsupported,
+            "Create or open a session before using this Active Run control.",
+            "no active session is available",
+        )
+    })?;
+    let projection = session.live_projection.clone().map(|bundle| {
+        (
+            session.source.clone(),
+            session.summary.bundle_name.clone(),
+            bundle,
+        )
+    });
+    drop(active);
+    if let Some((source, _, bundle)) = &projection {
+        let checkpoint = BundleStore::new(source)
+            .read_v3_checkpoint_state()
+            .map_err(|error| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::Resource,
+                    "The Active Run checkpoint is temporarily unavailable.",
+                    error.to_string(),
+                )
+            })?;
+        if checkpoint != bundle.session_state {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Conflict,
+                "The Active Run changed outside the current in-memory projection. Reopen it before continuing.",
+                "session-state.json no longer matches the projected durable checkpoint",
+            ));
+        }
+    }
+    Ok(projection)
+}
+
+pub(crate) fn update_active_session_live_projection(
+    state: &ActiveSessionState,
+    source: &Path,
+    bundle: &BundleV3Contents,
+) -> Result<OpenedSession, SessionErrorPayload> {
+    let mut desktop = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    let session = desktop.active.as_mut().ok_or_else(|| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Unsupported,
+            "Create or open a session before using this Active Run control.",
+            "no active session is available",
+        )
+    })?;
+    if session.source != source || session.summary.session_id != bundle.manifest.session_id {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The active session changed while live evidence was being processed.",
+            "the projection update belongs to a different active session",
+        ));
+    }
+    let unchanged_compact_projection = session.live_projection.as_ref() == Some(bundle);
+    session.summary.revision = Some(bundle.session_state.revision);
+    session.summary.lifecycle = Some(bundle.session_state.lifecycle);
+    if !unchanged_compact_projection {
+        session.summary.observation_count = bundle.observations.len();
+    }
+    session.live_projection = Some(super::projection::compact_live_projection(bundle.clone()));
+    Ok(session.summary.clone())
 }
 
 pub(crate) fn activate_created_bundle(

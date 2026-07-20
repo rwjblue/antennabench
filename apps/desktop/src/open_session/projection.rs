@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) struct LoadedSnapshot {
     pub(super) bundle: BundleContents,
+    pub(super) live_projection: Option<BundleV3Contents>,
     pub(super) adapter_records: Vec<AdapterRecordV2>,
     pub(super) intended_cycle_count: usize,
     pub(super) schema_version: u16,
@@ -42,6 +43,7 @@ pub(super) fn load_snapshot(
         let schema_version = store.schema_version()?;
         let (
             current,
+            live_projection,
             revision,
             lifecycle,
             report_snapshot,
@@ -57,6 +59,7 @@ pub(super) fn load_snapshot(
                 let intended_cycle_count = bundle.schedule.slots.len();
                 (
                     bundle.into_current(),
+                    None,
                     revision,
                     lifecycle,
                     report_snapshot,
@@ -66,6 +69,7 @@ pub(super) fn load_snapshot(
             }
             SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
                 let bundle = store.read_v3_checkpointed()?;
+                let live_projection = compact_live_projection(bundle.clone());
                 let operational_history = present_bundle_diagnostics(schema_version, &bundle);
                 let revision = bundle.session_state.revision;
                 let lifecycle = bundle.session_state.lifecycle;
@@ -77,6 +81,7 @@ pub(super) fn load_snapshot(
                     .max(bundle.schedule.slots.len());
                 (
                     bundle.into_current(),
+                    Some(live_projection),
                     revision,
                     lifecycle,
                     report_snapshot,
@@ -103,6 +108,7 @@ pub(super) fn load_snapshot(
         let bundle = normalize_bundle(current.bundle);
         Ok(LoadedSnapshot {
             bundle,
+            live_projection,
             adapter_records,
             intended_cycle_count,
             schema_version,
@@ -119,6 +125,7 @@ pub(super) fn load_snapshot(
             intended_cycle_count: bundle.schedule.slots.len(),
             schema_version,
             bundle,
+            live_projection: None,
             adapter_records: Vec::new(),
             validation,
             report_snapshot: ReportSnapshotContext::default(),
@@ -759,6 +766,7 @@ pub(super) fn build_active_session(
     let presentation = prepare_presentation(&snapshot).ok();
     ActiveSession {
         source,
+        live_projection: snapshot.live_projection,
         summary: OpenedSession {
             bundle_name,
             session_id: snapshot.bundle.manifest.session_id.clone(),
@@ -775,6 +783,15 @@ pub(super) fn build_active_session(
         },
         presentation,
     }
+}
+
+pub(super) fn compact_live_projection(mut bundle: BundleV3Contents) -> BundleV3Contents {
+    bundle.observations.clear();
+    bundle.adapter_records.clear();
+    bundle.propagation.clear();
+    bundle.runtime_contexts.clear();
+    bundle.diagnostics.clear();
+    bundle
 }
 
 pub(super) fn prepare_presentation(

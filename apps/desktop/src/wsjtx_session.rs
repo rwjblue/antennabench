@@ -13,12 +13,12 @@ use std::{
 use antennabench_core::{
     annotate_bundle_observations,
     v2::{
-        AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, BundleV2Contents,
-        NormalizedRecordKind, NormalizedRecordLink, ObservationRecordV2, SessionLifecycleV2,
+        AdapterDisposition, AdapterInput, AdapterReasonId, AdapterRecordV2, NormalizedRecordKind,
+        NormalizedRecordLink, ObservationRecordV2, SessionLifecycleV2,
     },
-    v3::{project_wspr_run_v3, BundleV3Contents, WsprCycleDirection},
-    Band, BundleContents, ObservationRecord, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3,
-    SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
+    v3::{project_wspr_run_v3, WsprCycleDirection},
+    Band, ObservationRecord, SCHEMA_VERSION_V2, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4,
+    SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_storage::{
     BundleStore, LiveEvidenceMutationV3, LiveMutationMemberV2, LiveMutationV2,
@@ -31,21 +31,23 @@ use antennabench_wsjtx::{
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
     conductor::live_error_payload,
     open_session::{
-        active_session_source, with_foreground_operation, ActiveSessionState, SessionErrorKind,
-        SessionErrorPayload,
+        active_session_live_projection, active_session_source, with_foreground_operation,
+        ActiveSessionState, SessionErrorKind, SessionErrorPayload,
     },
     wsjtx_session_record::record_meta,
 };
 
 mod commands;
+mod snapshot;
 pub(crate) use commands::{
     active_session_wsjtx_status, start_active_session_wsjtx, stop_active_session_wsjtx,
 };
+use snapshot::{read_wsjtx_snapshot, WsjtxSnapshot};
 
 const RECEIVER_READ_TIMEOUT: StdDuration = StdDuration::from_millis(250);
 const HEARTBEAT_STALE_AFTER_SECONDS: i64 = 45;
@@ -149,6 +151,7 @@ pub(crate) struct StartWsjtxRequest {
 }
 
 struct WsjtxOrchestrator {
+    app: Option<AppHandle>,
     store: BundleStore,
     schema_version: u16,
     ingest: LiveWsjtxIngest,
@@ -158,121 +161,12 @@ struct WsjtxOrchestrator {
     hooks: Arc<dyn LivePersistenceHooks>,
 }
 
-enum WsjtxSnapshot {
-    V2(BundleV2Contents),
-    V3(BundleV3Contents),
-}
-
-impl WsjtxSnapshot {
-    fn lifecycle(&self) -> SessionLifecycleV2 {
-        match self {
-            Self::V2(bundle) => bundle.session_state.lifecycle,
-            Self::V3(bundle) => bundle.session_state.lifecycle,
-        }
-    }
-
-    fn session_id(&self) -> &str {
-        match self {
-            Self::V2(bundle) => &bundle.manifest.session_id,
-            Self::V3(bundle) => &bundle.manifest.session_id,
-        }
-    }
-
-    fn revision(&self) -> u64 {
-        match self {
-            Self::V2(bundle) => bundle.session_state.revision,
-            Self::V3(bundle) => bundle.session_state.revision,
-        }
-    }
-
-    fn last_committed_mutation_id(&self) -> Option<&str> {
-        match self {
-            Self::V2(bundle) => bundle.session_state.last_committed_mutation_id.as_deref(),
-            Self::V3(bundle) => bundle.session_state.last_committed_mutation_id.as_deref(),
-        }
-    }
-
-    fn station(&self) -> (&str, &str) {
-        match self {
-            Self::V2(bundle) => (&bundle.station.callsign, &bundle.station.grid),
-            Self::V3(bundle) => (&bundle.station.callsign, &bundle.station.grid),
-        }
-    }
-
-    fn earliest_slot_start(&self) -> Option<DateTime<Utc>> {
-        match self {
-            Self::V2(bundle) => bundle
-                .schedule
-                .slots
-                .iter()
-                .map(|slot| slot.starts_at)
-                .min(),
-            Self::V3(bundle) => bundle
-                .clone()
-                .into_current()
-                .bundle
-                .schedule
-                .slots
-                .iter()
-                .map(|slot| slot.starts_at)
-                .min(),
-        }
-    }
-
-    fn current_bundle(&self, observed_at: DateTime<Utc>) -> BundleContents {
-        match self {
-            Self::V2(bundle) => bundle.clone().into_current().bundle,
-            Self::V3(bundle) => {
-                let receive_intents = bundle
-                    .schedule
-                    .wspr_cycle_intents
-                    .iter()
-                    .filter(|intent| {
-                        intent.direction.is_none()
-                            || intent.direction == Some(WsprCycleDirection::Receive)
-                    })
-                    .map(|intent| intent.intent_id.as_str())
-                    .collect::<std::collections::BTreeSet<_>>();
-                let projection = project_wspr_run_v3(&bundle.schedule, &bundle.events);
-                let attributable = projection
-                    .cycles
-                    .iter()
-                    .filter(|cycle| {
-                        cycle.occupancy_fully_covers_transmission
-                            && cycle.window.transmission_ends_at <= observed_at
-                            && receive_intents.contains(cycle.intent_id.as_str())
-                    })
-                    .map(|cycle| cycle.intent_id.as_str())
-                    .collect::<std::collections::BTreeSet<_>>();
-                let mut current = bundle.clone().into_current().bundle;
-                current
-                    .schedule
-                    .slots
-                    .retain(|slot| attributable.contains(slot.slot_id.as_str()));
-                current
-            }
-        }
-    }
-}
-
 #[derive(Clone)]
 struct PendingWsjtxMutation {
     expected_revision: u64,
     mutation_id: String,
     adapter_records: Vec<AdapterRecordV2>,
     observations: Vec<ObservationRecordV2>,
-}
-
-fn read_wsjtx_snapshot(store: &BundleStore) -> Result<WsjtxSnapshot, LivePersistenceError> {
-    match store.schema_version()? {
-        SCHEMA_VERSION_V2 => store.read_v2_checkpointed().map(WsjtxSnapshot::V2),
-        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
-            store.read_v3_checkpointed().map(WsjtxSnapshot::V3)
-        }
-        actual => {
-            Err(antennabench_storage::BundleStoreError::UnsupportedSchemaVersion { actual }.into())
-        }
-    }
 }
 
 fn setup_warning_target(
@@ -546,6 +440,7 @@ fn start_receiver(
     source: PathBuf,
     request: StartWsjtxRequest,
     hooks: Arc<dyn LivePersistenceHooks>,
+    app: Option<AppHandle>,
 ) -> Result<WsjtxReceiverStatus, SessionErrorPayload> {
     let (bind, expected_client_id) = validate_start_request(request)?;
     let store = BundleStore::new(&source);
@@ -633,6 +528,7 @@ fn start_receiver(
         .name("antennabench-wsjtx".into())
         .spawn(move || {
             let mut orchestrator = WsjtxOrchestrator {
+                app,
                 store,
                 schema_version,
                 ingest,
@@ -1029,6 +925,7 @@ impl WsjtxOrchestrator {
         diagnostic: Option<(&str, String, bool)>,
     ) -> IntakeDecision {
         for _ in 0..3 {
+            let mut committed_projection = None;
             let result = match self.schema_version {
                 SCHEMA_VERSION_V2 => self
                     .store
@@ -1056,12 +953,14 @@ impl WsjtxOrchestrator {
                 SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
                     crate::build_context::open_v3_writer_with_hooks(&self.store, self.hooks.clone())
                         .and_then(|mut writer| {
-                            writer.append_evidence(LiveEvidenceMutationV3 {
+                            let receipt = writer.append_evidence(LiveEvidenceMutationV3 {
                                 expected_revision: mutation.expected_revision,
                                 mutation_id: mutation.mutation_id.clone(),
                                 adapter_records: mutation.adapter_records.clone(),
                                 observations: mutation.observations.clone(),
-                            })
+                            })?;
+                            committed_projection = Some(writer.snapshot().clone());
+                            Ok(receipt)
                         })
                 }
                 actual => Err(
@@ -1071,6 +970,24 @@ impl WsjtxOrchestrator {
             };
             match result {
                 Ok(_) => {
+                    if let (Some(app), Some(bundle)) = (&self.app, committed_projection) {
+                        let active = app.state::<ActiveSessionState>();
+                        if let Err(error) =
+                            crate::open_session::update_active_session_live_projection(
+                                active.inner(),
+                                self.store.root(),
+                                &bundle,
+                            )
+                        {
+                            set_failed(
+                                status,
+                                "wsjtx.projection.update_failed",
+                                error.detail,
+                                false,
+                            );
+                            return IntakeDecision::Stop;
+                        }
+                    }
                     update_status(status, |status| {
                         status.committed_mutations += 1;
                         if let Some((code, message, _)) = &diagnostic {
@@ -1320,6 +1237,7 @@ pub(crate) struct E2eWsjtxResult {
 
 #[cfg(test)]
 pub(crate) fn inject_e2e_wsjtx_sequence(
+    active_state: &ActiveSessionState,
     source: &Path,
     received_at: DateTime<Utc>,
 ) -> E2eWsjtxResult {
@@ -1355,6 +1273,7 @@ pub(crate) fn inject_e2e_wsjtx_sequence(
     limits.udp_rate_burst = 3;
     limits.udp_rate_per_second = 3;
     let mut orchestrator = WsjtxOrchestrator {
+        app: None,
         store: store.clone(),
         schema_version: bundle.manifest.schema_version,
         ingest: LiveWsjtxIngest::new_with_limits(config, limits).expect("bounded live ingest"),
@@ -1402,6 +1321,8 @@ pub(crate) fn inject_e2e_wsjtx_sequence(
         IntakeDecision::Stop
     ));
     let bundle = store.read_v3_checkpointed().expect("ingested checkpoint");
+    crate::open_session::update_active_session_live_projection(active_state, source, &bundle)
+        .expect("refresh active projection after fixture intake");
     E2eWsjtxResult {
         revision: bundle.session_state.revision,
         adapter_records: bundle.adapter_records.len(),
@@ -1774,6 +1695,7 @@ mod tests {
             None => LiveWsjtxIngest::new(config).unwrap(),
         };
         WsjtxOrchestrator {
+            app: None,
             store,
             schema_version: SCHEMA_VERSION_V2,
             ingest,

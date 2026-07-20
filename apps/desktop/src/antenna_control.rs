@@ -37,6 +37,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
+use crate::open_session::active_session_live_projection;
+
 mod automation;
 mod commands;
 mod policy;

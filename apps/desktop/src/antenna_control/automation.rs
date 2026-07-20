@@ -25,8 +25,9 @@ use crate::{
         transition::{persist_continued_readiness, ContinuationOutcome},
     },
     open_session::{
-        active_session_source, with_waiting_foreground_operation, ActiveSessionState,
-        SessionErrorKind, SessionErrorPayload,
+        active_session_source, update_active_session_live_projection,
+        with_waiting_foreground_operation, ActiveSessionState, SessionErrorKind,
+        SessionErrorPayload,
     },
 };
 
@@ -477,6 +478,8 @@ fn persist_attempt(
                 payload,
             );
         }
+        let committed = store.read_v3_checkpointed().map_err(live_error_payload)?;
+        update_active_session_live_projection(active_state, source, &committed)?;
         Ok(())
     })
 }

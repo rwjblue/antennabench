@@ -31,6 +31,7 @@ use crate::{
 
 mod attachments;
 mod checkpoint;
+mod control;
 mod diagnostic;
 mod durability;
 mod error;
@@ -544,27 +545,15 @@ impl BundleStore {
     }
 
     pub fn read_v3_checkpointed(&self) -> Result<BundleV3Contents, LivePersistenceError> {
-        let lock_path = self.root().join(LOCK_FILE);
-        let lock = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(|source| live_io("open snapshot lock", &lock_path, source))?;
-        match lock::try_lock_shared(&lock) {
-            Ok(()) => {}
-            Err(fs::TryLockError::WouldBlock) => return Err(LivePersistenceError::WriterBusy),
-            Err(fs::TryLockError::Error(source)) => {
-                return Err(LivePersistenceError::Capability {
-                    message: format!("shared OS file locking failed: {source}"),
-                });
-            }
-        }
-        let bundle = self.read_v3()?;
-        let paths = self.v2_paths_for_state(&bundle.manifest.files, &bundle.session_state)?;
-        verify_exact_checkpoint(self, &bundle.session_state, &paths)?;
-        Ok(bundle)
+        control::read_v3_checkpointed(self)
+    }
+
+    /// Reads only the durable checkpoint control document for a live v3+ bundle.
+    ///
+    /// Active UI projections use this bounded read to detect revision or checkpoint
+    /// changes without reparsing evidence streams whose size grows for the entire run.
+    pub fn read_v3_checkpoint_state(&self) -> Result<SessionStateV2, LivePersistenceError> {
+        control::read_v3_checkpoint_state(self)
     }
 
     pub(super) fn recover_v3_internal(
