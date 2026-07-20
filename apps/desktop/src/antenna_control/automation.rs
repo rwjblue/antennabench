@@ -22,8 +22,8 @@ use super::{
 use crate::{
     conductor::live_error_payload,
     open_session::{
-        active_session_source, with_foreground_operation, ActiveSessionState, SessionErrorKind,
-        SessionErrorPayload,
+        active_session_source, with_waiting_foreground_operation, ActiveSessionState,
+        SessionErrorKind, SessionErrorPayload,
     },
 };
 
@@ -239,8 +239,9 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
             ));
         }
         let mutation_id = format!("automatic-control-{}", Uuid::new_v4());
+        let active_state = app.state::<ActiveSessionState>();
         let persist = persist_attempt(
-            &app,
+            active_state.inner(),
             &source,
             &intent.intent_id,
             manual_review_required,
@@ -309,7 +310,7 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
 
 #[allow(clippy::too_many_arguments)]
 fn persist_attempt(
-    app: &AppHandle,
+    active_state: &ActiveSessionState,
     source: &std::path::Path,
     intent_id: &str,
     manual_review_required: bool,
@@ -321,9 +322,8 @@ fn persist_attempt(
     mutation_id: String,
     rig_records: Vec<antennabench_core::v3::RigRecordV3>,
 ) -> Result<(), SessionErrorPayload> {
-    let active_state = app.state::<ActiveSessionState>();
-    with_foreground_operation(active_state.inner(), || {
-        let (active_source, _) = active_session_source(active_state.inner())?;
+    with_waiting_foreground_operation(active_state, || {
+        let (active_source, _) = active_session_source(active_state)?;
         if active_source != source {
             return Err(SessionErrorPayload::new(
                 SessionErrorKind::Conflict,
@@ -593,21 +593,32 @@ fn block(app: &AppHandle, generation: u64, intent_id: &str, message: &str, diagn
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, path::PathBuf};
+    use std::{
+        collections::BTreeMap,
+        path::PathBuf,
+        sync::{atomic::AtomicUsize, mpsc},
+        thread,
+        time::Duration,
+    };
 
     use antennabench_core::{
-        v3::OperatorEventPayloadV3,
+        v2::{EventTimeBasisV2, MutationMember, Provenance},
+        v3::{OperatorEventPayloadV3, OperatorEventV3, RecordMetaV3},
         v5::{
             AntennaControlCommandV5, AntennaControlDispositionV5, AntennaControlInvocationV5,
             AntennaControlOutputEncodingV5, AntennaControlOutputV5, AntennaControlRoleV5,
             WsprReadinessBasisV5,
         },
+        RecordSource,
     };
-    use antennabench_storage::BundleStore;
+    use antennabench_storage::{BundleStore, LiveEventMutationV3};
     use chrono::{TimeZone, Utc};
 
     use super::*;
-    use crate::{open_session::ActiveSessionState, setup::create_e2e_session};
+    use crate::{
+        open_session::ActiveSessionState,
+        setup::{create_e2e_controller_session, create_e2e_session},
+    };
 
     fn invocation(
         bundle: &antennabench_core::v3::BundleV3Contents,
@@ -652,6 +663,50 @@ mod tests {
             .read_v3_checkpointed()
             .unwrap();
         (root, bundle)
+    }
+
+    fn running_bundle(
+        root: &std::path::Path,
+        active: &ActiveSessionState,
+        occurred_at: chrono::DateTime<Utc>,
+    ) -> (PathBuf, antennabench_core::v3::BundleV3Contents) {
+        let created = create_e2e_controller_session(root, active);
+        let store = BundleStore::new(&created.path);
+        let mut writer = store.open_v3_writer().unwrap();
+        let snapshot = writer.snapshot().clone();
+        let mutation_id = "automatic-controller-start".to_string();
+        writer
+            .append_event(LiveEventMutationV3 {
+                expected_revision: writer.checkpoint().revision,
+                mutation_id: mutation_id.clone(),
+                event: OperatorEventV3 {
+                    meta: RecordMetaV3 {
+                        schema_version: snapshot.manifest.schema_version,
+                        session_id: snapshot.manifest.session_id,
+                        recorded_at: occurred_at,
+                        provenance: Provenance::from_legacy(
+                            RecordSource::Operator,
+                            env!("CARGO_PKG_VERSION"),
+                        ),
+                        mutation: MutationMember {
+                            mutation_id,
+                            member_index: 0,
+                            member_count: 1,
+                        },
+                        runtime_context_id: None,
+                    },
+                    event_id: "automatic-controller-start-event".into(),
+                    occurred_at,
+                    time_basis: EventTimeBasisV2::ObservedNow,
+                    uncertainty_seconds: None,
+                    slot_id: None,
+                    payload: OperatorEventPayloadV3::SessionStarted { note: None },
+                },
+            })
+            .unwrap();
+        drop(writer);
+        let bundle = store.read_v3_checkpointed().unwrap();
+        (created.path, bundle)
     }
 
     #[test]
@@ -739,6 +794,125 @@ mod tests {
         assert!(summary.successful_switch);
         assert_eq!(summary.successful_verification, Some(true));
         assert!(summary.detail.contains("Awaiting"));
+    }
+
+    #[test]
+    fn captured_attempt_waits_for_admission_and_commits_once_without_rerunning() {
+        let root = tempfile::tempdir().unwrap();
+        let active = ActiveSessionState::default();
+        let completed_at = Utc.with_ymd_and_hms(2026, 7, 18, 1, 0, 1).unwrap();
+        let (path, bundle) = running_bundle(root.path(), &active, completed_at);
+        let intent = bundle.schedule.wspr_cycle_intents[0].clone();
+        let switch_record_id = "contended-switch-record".to_string();
+        let verification_record_id = "contended-verification-record".to_string();
+        let mutation_id = "contended-controller-attempt".to_string();
+        let switch = rig_record(
+            &bundle,
+            switch_record_id.clone(),
+            invocation(
+                &bundle,
+                &intent,
+                AntennaControlRoleV5::Switch,
+                completed_at,
+                AntennaControlDispositionV5::Exit { code: 0 },
+            ),
+        );
+        let verification = rig_record(
+            &bundle,
+            verification_record_id.clone(),
+            invocation(
+                &bundle,
+                &intent,
+                AntennaControlRoleV5::Verification,
+                completed_at + chrono::Duration::milliseconds(25),
+                AntennaControlDispositionV5::Exit { code: 0 },
+            ),
+        );
+        let rig_records = vec![switch, verification];
+        let process_invocations = AtomicUsize::new(0);
+
+        thread::scope(|scope| {
+            let (permit_held_tx, permit_held_rx) = mpsc::channel();
+            let (release_permit_tx, release_permit_rx) = mpsc::channel();
+            let active_for_holder = &active;
+            scope.spawn(move || {
+                crate::open_session::with_foreground_operation(active_for_holder, || {
+                    permit_held_tx.send(()).unwrap();
+                    release_permit_rx.recv().unwrap();
+                    Ok(())
+                })
+                .unwrap();
+            });
+            permit_held_rx.recv().unwrap();
+            let (started_tx, started_rx) = mpsc::channel();
+            let (done_tx, done_rx) = mpsc::channel();
+            let active_for_persist = &active;
+            let path_for_persist = &path;
+            let process_invocations_for_persist = &process_invocations;
+            let intent_id_for_persist = intent.intent_id.clone();
+            let switch_record_id_for_persist = switch_record_id.clone();
+            let verification_record_id_for_persist = verification_record_id.clone();
+            let mutation_id_for_persist = mutation_id.clone();
+            let rig_records_for_persist = rig_records.clone();
+            scope.spawn(move || {
+                process_invocations_for_persist.fetch_add(1, Ordering::SeqCst);
+                started_tx.send(()).unwrap();
+                let result = persist_attempt(
+                    active_for_persist,
+                    path_for_persist,
+                    &intent_id_for_persist,
+                    false,
+                    true,
+                    Some(true),
+                    switch_record_id_for_persist,
+                    Some(verification_record_id_for_persist),
+                    Some(completed_at + chrono::Duration::milliseconds(25)),
+                    mutation_id_for_persist,
+                    rig_records_for_persist,
+                );
+                done_tx.send(result).unwrap();
+            });
+            started_rx.recv().unwrap();
+            assert!(done_rx.recv_timeout(Duration::from_millis(25)).is_err());
+            release_permit_tx.send(()).unwrap();
+            done_rx
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .unwrap();
+        });
+
+        assert_eq!(process_invocations.load(Ordering::SeqCst), 1);
+        persist_attempt(
+            &active,
+            &path,
+            &intent.intent_id,
+            false,
+            true,
+            Some(true),
+            switch_record_id,
+            Some(verification_record_id),
+            Some(completed_at + chrono::Duration::milliseconds(25)),
+            mutation_id.clone(),
+            rig_records,
+        )
+        .unwrap();
+        let committed = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        assert_eq!(
+            committed
+                .rig
+                .iter()
+                .filter(|record| record.meta.mutation.mutation_id == mutation_id)
+                .count(),
+            2
+        );
+        assert_eq!(
+            committed
+                .events
+                .iter()
+                .filter(|event| event.meta.mutation.mutation_id == mutation_id)
+                .count(),
+            1
+        );
     }
 
     #[test]

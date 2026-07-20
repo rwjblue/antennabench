@@ -201,7 +201,7 @@ use antennabench_storage::{
 
 use crate::open_session::{
     active_session_source, check_ipc_payload, storage_error_payload, with_foreground_operation,
-    ActiveSessionState, SessionErrorKind, SessionErrorPayload,
+    with_waiting_foreground_operation, ActiveSessionState, SessionErrorKind, SessionErrorPayload,
 };
 
 use super::view::{build_view, build_view_v3, recovery_view};
@@ -313,7 +313,7 @@ pub(super) fn mutate_conductor_with_hooks(
     request: ConductorMutationRequest,
     hooks: Arc<dyn LivePersistenceHooks>,
 ) -> Result<ConductorView, SessionErrorPayload> {
-    with_foreground_operation(active_state, || {
+    with_waiting_foreground_operation(active_state, || {
         let (source, bundle_name) = active_session_source(active_state)?;
         ensure_live_source(&source)?;
         let store = BundleStore::new(&source);

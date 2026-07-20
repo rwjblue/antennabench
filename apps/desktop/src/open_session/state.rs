@@ -2,7 +2,7 @@ use super::*;
 
 // Centralize active-session mutation and the single foreground-operation exclusion boundary.
 #[derive(Default)]
-pub(crate) struct ActiveSessionState(pub(super) Mutex<DesktopState>);
+pub(crate) struct ActiveSessionState(pub(super) Mutex<DesktopState>, Condvar);
 
 #[derive(Default)]
 pub(super) struct DesktopState {
@@ -61,6 +61,19 @@ impl ActiveSessionState {
         state.foreground_busy = true;
         Ok(ForegroundGuard(self))
     }
+
+    fn wait_for_foreground(&self) -> Result<ForegroundGuard<'_>, SessionErrorPayload> {
+        let mut state = self.0.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+        while state.foreground_busy {
+            state = self.1.wait(state).map_err(|_| {
+                SessionErrorPayload::report_pipeline("active session state is unavailable")
+            })?;
+        }
+        state.foreground_busy = true;
+        Ok(ForegroundGuard(self))
+    }
 }
 
 pub(crate) fn with_foreground_operation<T>(
@@ -69,6 +82,44 @@ pub(crate) fn with_foreground_operation<T>(
 ) -> Result<T, SessionErrorPayload> {
     let _foreground = state.begin_foreground()?;
     operation()
+}
+
+pub(crate) fn with_waiting_foreground_operation<T>(
+    state: &ActiveSessionState,
+    operation: impl FnOnce() -> Result<T, SessionErrorPayload>,
+) -> Result<T, SessionErrorPayload> {
+    let _foreground = state.wait_for_foreground()?;
+    operation()
+}
+
+pub(crate) fn with_suspended_foreground_operation<T>(
+    state: &ActiveSessionState,
+    operation: impl FnOnce() -> T,
+) -> Result<T, SessionErrorPayload> {
+    {
+        let mut desktop = state.0.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+        if !desktop.foreground_busy {
+            return Err(SessionErrorPayload::report_pipeline(
+                "cannot suspend an inactive foreground operation",
+            ));
+        }
+        desktop.foreground_busy = false;
+        state.1.notify_one();
+    }
+    let result = operation();
+    let mut desktop = state
+        .0
+        .lock()
+        .map_err(|_| SessionErrorPayload::report_pipeline("active session state is unavailable"))?;
+    while desktop.foreground_busy {
+        desktop = state.1.wait(desktop).map_err(|_| {
+            SessionErrorPayload::report_pipeline("active session state is unavailable")
+        })?;
+    }
+    desktop.foreground_busy = true;
+    Ok(result)
 }
 
 pub(crate) fn reload_active_session(
@@ -101,6 +152,7 @@ impl Drop for ForegroundGuard<'_> {
     fn drop(&mut self) {
         if let Ok(mut state) = self.0 .0.lock() {
             state.foreground_busy = false;
+            self.0 .1.notify_one();
         }
     }
 }

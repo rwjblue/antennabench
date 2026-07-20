@@ -3,7 +3,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Condvar, Mutex},
     time::UNIX_EPOCH,
 };
 
@@ -68,7 +68,8 @@ pub(crate) use errors::{
 };
 pub(crate) use state::{
     activate_created_bundle, active_session_source, reload_active_session,
-    with_foreground_operation, ActiveSessionState,
+    with_foreground_operation, with_suspended_foreground_operation,
+    with_waiting_foreground_operation, ActiveSessionState,
 };
 
 use commands::bundle_suffix;
@@ -221,7 +222,7 @@ pub(crate) fn export_e2e_snapshots(
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io, path::Path};
+    use std::{fs, io, path::Path, sync::mpsc, thread, time::Duration};
 
     use antennabench_analysis::AnalysisError;
     use antennabench_report::ReportError;
@@ -234,7 +235,8 @@ mod tests {
         export_active_report_with_selection, export_active_report_with_selection_and_disclosure,
         export_active_session_with_selection, export_bundle, open_bundle,
         open_session_with_selection, refresh_active_session_report_for, report_error_payload,
-        suggested_compact_summary_name, suggested_report_name, ActiveSession, ActiveSessionState,
+        suggested_compact_summary_name, suggested_report_name, with_suspended_foreground_operation,
+        with_waiting_foreground_operation, ActiveSession, ActiveSessionState,
         ControllerEvidenceHandling, ExportReportOutcome, ExportSessionOutcome, OpenSessionOutcome,
         OpenedSession, OperationalHistoryHandling, ReportCompleteness, ReportExportFormat,
         ReportPresentation, ReportReplacePort, SessionErrorKind, SessionErrorPayload,
@@ -452,6 +454,39 @@ mod tests {
         assert_eq!(oversized.kind, SessionErrorKind::Resource);
         assert!(oversized.detail.contains("resource.desktop.ipc_bytes"));
         assert!(oversized.detail.contains("report_document"));
+    }
+
+    #[test]
+    fn waiting_and_suspended_foreground_admission_remain_single_flight() {
+        let state = ActiveSessionState::default();
+        let guard = state.begin_foreground().unwrap();
+        thread::scope(|scope| {
+            let (started_tx, started_rx) = mpsc::channel();
+            let (done_tx, done_rx) = mpsc::channel();
+            let state_for_waiter = &state;
+            scope.spawn(move || {
+                started_tx.send(()).unwrap();
+                with_waiting_foreground_operation(state_for_waiter, || {
+                    done_tx.send(()).unwrap();
+                    Ok(())
+                })
+                .unwrap();
+            });
+            started_rx.recv().unwrap();
+            assert!(done_rx.recv_timeout(Duration::from_millis(25)).is_err());
+            drop(guard);
+            done_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        });
+
+        let outer = state.begin_foreground().unwrap();
+        let admitted = with_suspended_foreground_operation(&state, || {
+            with_waiting_foreground_operation(&state, || Ok("operator mutation")).unwrap()
+        })
+        .unwrap();
+        assert_eq!(admitted, "operator mutation");
+        assert!(state.begin_foreground().is_err());
+        drop(outer);
+        assert!(state.begin_foreground().is_ok());
     }
 
     #[test]

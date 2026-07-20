@@ -31,8 +31,8 @@ use antennabench_wsjtx::{
     latest_due_wspr_live_acquisition, plan_wspr_live_acquisitions_for_confirmed_slots,
     AdapterCancellationToken, ReqwestWsprLiveTransport, WsprLiveAcquirer,
     WsprLiveAcquisitionChannel, WsprLiveAcquisitionPlan, WsprLiveConfirmedCycle,
-    WsprLiveHttpTransport, WsprLiveImportConfig, WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS,
-    WSPR_LIVE_QUERY_ENDPOINT,
+    WsprLiveHttpResponse, WsprLiveHttpTransport, WsprLiveImportConfig,
+    WSPR_LIVE_MIN_REQUEST_INTERVAL_SECONDS, WSPR_LIVE_QUERY_ENDPOINT,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -40,13 +40,14 @@ use tauri::State;
 
 use crate::{
     open_session::{
-        active_session_source, with_foreground_operation, ActiveSessionState, OpenedSession,
-        SessionErrorKind, SessionErrorPayload,
+        active_session_source, with_suspended_foreground_operation,
+        with_waiting_foreground_operation, ActiveSessionState, OpenedSession, SessionErrorKind,
+        SessionErrorPayload,
     },
     wsjtx_session::WsjtxSessionState,
     wspr_live_import::{
         commit_wspr_live_activity_response, commit_wspr_live_response,
-        record_wspr_live_activity_failure,
+        record_wspr_live_activity_failure, CommittedWsprLiveResponse,
     },
 };
 
@@ -74,6 +75,13 @@ enum AcquisitionSnapshot {
 }
 
 impl AcquisitionSnapshot {
+    fn revision(&self) -> u64 {
+        match self {
+            Self::V2(bundle) => bundle.session_state.revision,
+            Self::V3(bundle) => bundle.session_state.revision,
+        }
+    }
+
     fn lifecycle(&self) -> SessionLifecycleV2 {
         match self {
             Self::V2(bundle) => bundle.session_state.lifecycle,
@@ -304,7 +312,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
     now: DateTime<Utc>,
     transport: T,
 ) -> Result<WsprLiveAcquisitionOutcome, SessionErrorPayload> {
-    with_foreground_operation(active_state, || {
+    with_waiting_foreground_operation(active_state, || {
         let (source, _) = active_session_source(active_state)?;
         let store = BundleStore::new(&source);
         let schema_version = store
@@ -433,7 +441,10 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             runtime.failure = None;
         }
         let acquirer = WsprLiveAcquirer::new(transport);
-        let response = match acquirer.acquire(&plan, &AdapterCancellationToken::default()) {
+        let requested_revision = snapshot.revision();
+        let response = match with_suspended_foreground_operation(active_state, || {
+            acquirer.acquire(&plan, &AdapterCancellationToken::default())
+        })? {
             Ok(response) => response,
             Err(error) => {
                 let payload = SessionErrorPayload::new(
@@ -453,6 +464,18 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                 return Ok(failed_outcome(&plan, payload));
             }
         };
+        let mut snapshot = match revalidate_acquisition_response(
+            active_state,
+            &source,
+            requested_revision,
+            &plan,
+        )? {
+            RevalidatedAcquisition::Authorized { snapshot, .. } => *snapshot,
+            RevalidatedAcquisition::Discarded { captured_through } => {
+                return Ok(WsprLiveAcquisitionOutcome::Dormant { captured_through });
+            }
+        };
+        let plans;
         let config = WsprLiveImportConfig {
             session_callsign: plan.query.session_callsign.clone(),
             window_start: plan.query.window_start,
@@ -502,9 +525,28 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             }
         };
         let cancellation = AdapterCancellationToken::default();
-        match acquirer.acquire_activity_census(&plan, &cancellation) {
+        let activity_response = with_suspended_foreground_operation(active_state, || {
+            acquirer.acquire_activity_census(&plan, &cancellation)
+        })?;
+        match revalidate_acquisition_response(active_state, &source, snapshot.revision(), &plan)? {
+            RevalidatedAcquisition::Authorized {
+                snapshot: current_snapshot,
+                plans: current_plans,
+            } => {
+                snapshot = *current_snapshot;
+                plans = current_plans;
+            }
+            RevalidatedAcquisition::Discarded { .. } => {
+                let refreshed = read_acquisition_snapshot(&source)?;
+                committed.revision = refreshed.revision();
+                committed.session = reload_active_summary(active_state, &source)?;
+                return Ok(captured_outcome(&plan, &response, committed));
+            }
+        }
+        let mut activity_config = config.clone();
+        activity_config.confirmed_cycles = snapshot.confirmed_cycles();
+        match activity_response {
             Ok(activity_response) => {
-                let mut activity_config = config.clone();
                 activity_config.captured_at = activity_response.received_at;
                 match commit_wspr_live_activity_response(
                     active_state,
@@ -534,7 +576,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                 if let Ok(activity) = record_wspr_live_activity_failure(
                     active_state,
                     &source,
-                    &config,
+                    &activity_config,
                     "wspr-live.activity-census-query-failed",
                     &error.to_string(),
                 ) {
@@ -579,19 +621,119 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                 _ => unreachable!("final capture returns completed or failed"),
             };
         }
-        Ok(WsprLiveAcquisitionOutcome::Captured {
-            session: Box::new(committed.session),
-            revision: committed.revision,
-            completed_slot_id: plan.completed_slot_id,
-            captured_through: plan.query.window_end,
-            checked_at: response.received_at,
-            total: committed.summary.total,
-            accepted: committed.summary.accepted,
-            duplicate: committed.summary.duplicate,
-            conflict: committed.summary.conflict,
-            observations_created: committed.summary.observations_created,
-        })
+        Ok(captured_outcome(&plan, &response, committed))
     })
+}
+
+enum RevalidatedAcquisition {
+    Authorized {
+        snapshot: Box<AcquisitionSnapshot>,
+        plans: Vec<WsprLiveAcquisitionPlan>,
+    },
+    Discarded {
+        captured_through: Option<DateTime<Utc>>,
+    },
+}
+
+fn read_acquisition_snapshot(source: &Path) -> Result<AcquisitionSnapshot, SessionErrorPayload> {
+    let store = BundleStore::new(source);
+    match store
+        .schema_version()
+        .map_err(LivePersistenceError::from)
+        .map_err(crate::conductor::live_error_payload)?
+    {
+        SCHEMA_VERSION_V2 => Ok(AcquisitionSnapshot::V2(
+            store
+                .read_v2_checkpointed()
+                .map_err(crate::conductor::live_error_payload)?,
+        )),
+        SCHEMA_VERSION_V3 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V5 | SCHEMA_VERSION_V6 => {
+            Ok(AcquisitionSnapshot::V3(
+                store
+                    .read_v3_checkpointed()
+                    .map_err(crate::conductor::live_error_payload)?,
+            ))
+        }
+        actual => Err(SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "This session format cannot acquire WSPR.live spots.",
+            format!("unsupported schema version {actual}"),
+        )),
+    }
+}
+
+fn revalidate_acquisition_response(
+    active_state: &ActiveSessionState,
+    source: &Path,
+    requested_revision: u64,
+    plan: &WsprLiveAcquisitionPlan,
+) -> Result<RevalidatedAcquisition, SessionErrorPayload> {
+    let (active_source, _) = active_session_source(active_state)?;
+    if active_source != source {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The active session changed while WSPR.live was responding.",
+            "the response was not applied to a replacement session",
+        ));
+    }
+    let snapshot = read_acquisition_snapshot(source)?;
+    let captured_through = captured_through(&snapshot);
+    if snapshot.lifecycle() != SessionLifecycleV2::Running
+        || !snapshot.wspr_live_acquisition_enabled()
+    {
+        return Ok(RevalidatedAcquisition::Discarded { captured_through });
+    }
+    if snapshot.revision() < requested_revision {
+        return Err(SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The session checkpoint regressed while WSPR.live was responding.",
+            format!(
+                "requested from revision {requested_revision}, current revision {}",
+                snapshot.revision()
+            ),
+        ));
+    }
+    let plans = authorized_plans(&snapshot).map_err(|error| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "The committed session cannot produce a WSPR.live acquisition plan.",
+            error.to_string(),
+        )
+    })?;
+    let plan_is_still_authorized = plans.iter().any(|candidate| candidate == plan);
+    if !plan_is_still_authorized {
+        return Ok(RevalidatedAcquisition::Discarded { captured_through });
+    }
+    Ok(RevalidatedAcquisition::Authorized {
+        snapshot: Box::new(snapshot),
+        plans,
+    })
+}
+
+fn reload_active_summary(
+    active_state: &ActiveSessionState,
+    source: &Path,
+) -> Result<OpenedSession, SessionErrorPayload> {
+    crate::open_session::reload_active_session(active_state, source)
+}
+
+fn captured_outcome(
+    plan: &WsprLiveAcquisitionPlan,
+    response: &WsprLiveHttpResponse,
+    committed: CommittedWsprLiveResponse,
+) -> WsprLiveAcquisitionOutcome {
+    WsprLiveAcquisitionOutcome::Captured {
+        session: Box::new(committed.session),
+        revision: committed.revision,
+        completed_slot_id: plan.completed_slot_id.clone(),
+        captured_through: plan.query.window_end,
+        checked_at: response.received_at,
+        total: committed.summary.total,
+        accepted: committed.summary.accepted,
+        duplicate: committed.summary.duplicate,
+        conflict: committed.summary.conflict,
+        observations_created: committed.summary.observations_created,
+    }
 }
 
 fn finish_final_capture(
@@ -1038,6 +1180,12 @@ mod tests {
         received_at: DateTime<Utc>,
     }
 
+    struct MutatingTransport<F> {
+        calls: Cell<usize>,
+        received_at: DateTime<Utc>,
+        mutate: F,
+    }
+
     impl WsprLiveHttpTransport for &CensusFailingTransport {
         fn get(
             &self,
@@ -1070,6 +1218,26 @@ mod tests {
             } else {
                 response
             }
+        }
+    }
+
+    impl<F: Fn()> WsprLiveHttpTransport for &MutatingTransport<F> {
+        fn get(
+            &self,
+            url: &str,
+            _body_limit: u64,
+            _cancellation: &AdapterCancellationToken,
+        ) -> Result<WsprLiveHttpResponse, WsprLiveAcquisitionError> {
+            let calls = self.calls.get();
+            self.calls.set(calls + 1);
+            if calls == 0 {
+                (self.mutate)();
+            }
+            Ok(if url.contains("uniqExact") {
+                empty_activity_response(self.received_at)
+            } else {
+                empty_response(self.received_at)
+            })
         }
     }
 
@@ -1297,6 +1465,45 @@ mod tests {
         plan
     }
 
+    fn end_session_during_acquisition(path: &Path, occurred_at: DateTime<Utc>) {
+        let store = BundleStore::new(path);
+        let mut writer = store.open_v3_writer().unwrap();
+        let snapshot = writer.snapshot().clone();
+        let mutation_id = "operator-end-during-acquisition".to_string();
+        let event = OperatorEventV3 {
+            meta: RecordMetaV3 {
+                schema_version: snapshot.manifest.schema_version,
+                session_id: snapshot.manifest.session_id,
+                recorded_at: occurred_at,
+                provenance: Provenance::from_legacy(
+                    RecordSource::Operator,
+                    env!("CARGO_PKG_VERSION"),
+                ),
+                mutation: MutationMember {
+                    mutation_id: mutation_id.clone(),
+                    member_index: 0,
+                    member_count: 1,
+                },
+                runtime_context_id: None,
+            },
+            event_id: "operator-end-event-during-acquisition".into(),
+            occurred_at,
+            time_basis: EventTimeBasisV2::ObservedNow,
+            uncertainty_seconds: None,
+            slot_id: None,
+            payload: OperatorEventPayloadV3::SessionEnded {
+                reason: Some("Operator ended the run while public spots were loading.".into()),
+            },
+        };
+        writer
+            .append_event(LiveEventMutationV3 {
+                expected_revision: writer.checkpoint().revision,
+                mutation_id,
+                event,
+            })
+            .unwrap();
+    }
+
     #[test]
     fn final_public_capture_includes_confirmed_receive_and_transmit_cycles() {
         let temp = TempDir::new().unwrap();
@@ -1494,6 +1701,48 @@ mod tests {
         assert_eq!(
             BundleStore::new(&path).read_v3_checkpointed().unwrap(),
             after
+        );
+    }
+
+    #[test]
+    fn operator_end_commits_while_http_waits_and_stale_response_is_discarded() {
+        let temp = TempDir::new().unwrap();
+        let (active, path, now) = running_confirmed_session(temp.path(), true);
+        let before = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        let transport = MutatingTransport {
+            calls: Cell::new(0),
+            received_at: now,
+            mutate: || {
+                crate::open_session::with_waiting_foreground_operation(&active, || {
+                    end_session_during_acquisition(&path, now);
+                    crate::open_session::reload_active_session(&active, &path)?;
+                    Ok(())
+                })
+                .unwrap();
+            },
+        };
+
+        let outcome = advance_with_transport(
+            &active,
+            &WsprLiveAcquisitionState::default(),
+            WsprLiveAcquisitionRequest::default(),
+            now,
+            &transport,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            outcome,
+            WsprLiveAcquisitionOutcome::Dormant { .. }
+        ));
+        assert_eq!(transport.calls.get(), 1);
+        let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        assert_eq!(after.session_state.lifecycle, SessionLifecycleV2::Ended);
+        assert_eq!(after.adapter_records, before.adapter_records);
+        assert_eq!(after.observations, before.observations);
+        assert_eq!(
+            after.session_state.revision,
+            before.session_state.revision + 1
         );
     }
 

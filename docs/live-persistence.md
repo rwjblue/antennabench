@@ -129,7 +129,13 @@ no event; successful command-authorized readiness commits switch, verification,
 and armed event as one ordered mutation. Injected failure before checkpoint
 promotion exposes the prior revision, while failure after promotion exposes
 the complete next revision. Exact retry returns the committed receipt and a
-conflicting mutation-ID reuse fails.
+conflicting mutation-ID reuse fails. Once an automatic switch process has
+completed, its captured records and one stable mutation ID wait for the desktop's
+single foreground permit. Admission contention cannot rerun the process, rewrite
+its exit result as a switch failure, or disarm the association; persistence then
+uses the ordinary current-revision and idempotent-mutation checks. A real stale
+authority, lifecycle change, validation error, or durable write failure still
+blocks automation and requires operator review.
 
 Schema v6 adds checkpointed `runtime-contexts.jsonl` and `diagnostics.jsonl`.
 `append_diagnostic` commits the active/new runtime context before its first

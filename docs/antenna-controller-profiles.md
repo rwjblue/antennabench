@@ -120,6 +120,16 @@ Command success is diagnostic evidence, not proof of the physical antenna state.
 A failed attempt is retained without advancing the schedule or changing antenna
 occupancy. Retry is always explicit.
 
+After a command has completed, AntennaBench retains that captured result while
+waiting for the single desktop mutation permit. A concurrent WSPR.live check or
+other short foreground operation cannot cause the command to run again, turn a
+successful exit into a failure, or disarm the controller merely because
+admission was temporarily busy. The attempt uses one stable mutation identity,
+so recovery from an uncertain persistence acknowledgement cannot duplicate its
+rig records or ready event. Actual process, verification, stale-authority,
+cancellation, lifecycle, and durable persistence failures keep the existing
+blocked, explicit-retry behavior.
+
 Editing a profile creates a new local revision and revokes its current arm until
 you review and attach it again. Interruption, session end, session replacement,
 and application shutdown also revoke the in-memory authority used to start new

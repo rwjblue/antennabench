@@ -266,7 +266,15 @@ modify the bundle.
 The desktop backend retains one source reference, one small summary, and one
 derived report document. A second memory-heavy foreground command receives a
 typed busy result instead of duplicating the bundle and report pipeline.
-Frontend authority remains unchanged.
+Frontend authority remains unchanged. Network wait time is not a foreground
+operation: automatic WSPR.live acquisition takes the single permit to snapshot
+authority, releases it while each bounded HTTP request is in flight, then waits
+to reacquire it before revalidating the active source, lifecycle, checkpoint
+revision, and acquisition plan and committing a still-authorized response.
+Explicit conductor mutations and persistence of an already completed controller
+attempt also wait for that one permit rather than losing the action to transient
+`resource.operation.busy` contention. They remain serialized; this admission
+rule does not increase the foreground-operation limit.
 
 ## Diagnostics
 
