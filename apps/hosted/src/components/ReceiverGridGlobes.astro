@@ -1,0 +1,431 @@
+---
+import receiverSummaryJson from "../../../../docs/assets/why-not-rbn/data/receiver-census-summary.json";
+import receiverRowsCsv from "../../../../tools/why-not-rbn/snapshots/wspr-receivers-by-band.csv?raw";
+import worldGeoJsonRaw from "../../../../tools/why-not-rbn/world-outline-natural-earth.geojson?raw";
+import "../styles/receiver-grid-globes.css";
+
+type BandName = "40m" | "20m" | "15m";
+type Coordinate = [number, number];
+type Ring = Coordinate[];
+type Polygon = Ring[];
+type MultiPolygon = Polygon[];
+
+interface WorldFeature {
+  geometry: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates: Polygon | MultiPolygon;
+  } | null;
+}
+
+interface WorldGeoJson {
+  features: WorldFeature[];
+}
+
+interface ReceiverSummary {
+  wspr_popular_bands: Record<BandName, {
+    windows: {
+      "168": {
+        unique_reporter_calls: number;
+        unique_four_character_grids: number;
+      };
+    };
+  }>;
+}
+
+interface GridCell {
+  grid: string;
+  reporterCount: number;
+  minLatitude: number;
+  maxLatitude: number;
+  minLongitude: number;
+  maxLongitude: number;
+}
+
+interface HemisphereView {
+  key: "americas" | "eastern";
+  label: string;
+  centerLongitude: number;
+  centerLatitude: number;
+  symbolId: string;
+}
+
+interface ProjectedPoint {
+  x: number;
+  y: number;
+  visible: boolean;
+}
+
+interface ProjectedCell {
+  path: string;
+  opacity: string;
+}
+
+const sphere = {
+  centerX: 150,
+  centerY: 150,
+  radius: 141,
+};
+const degreesToRadians = Math.PI / 180;
+const summary = receiverSummaryJson as unknown as ReceiverSummary;
+const world = JSON.parse(worldGeoJsonRaw) as WorldGeoJson;
+const bandDefinitions = [
+  { name: "40m", code: "7" },
+  { name: "20m", code: "14" },
+  { name: "15m", code: "21" },
+] as const satisfies ReadonlyArray<{ name: BandName; code: string }>;
+const bandByCode = new Map(bandDefinitions.map((band) => [band.code, band.name]));
+const hemisphereViews = [
+  {
+    key: "americas",
+    label: "Americas and Atlantic",
+    centerLongitude: -110,
+    centerLatitude: 10,
+    symbolId: "receiver-globe-americas",
+  },
+  {
+    key: "eastern",
+    label: "Europe, Africa, and Asia-Pacific",
+    centerLongitude: 70,
+    centerLatitude: -10,
+    symbolId: "receiver-globe-eastern",
+  },
+] as const satisfies ReadonlyArray<HemisphereView>;
+
+function formatNumber(value: number): string {
+  return value.toLocaleString("en-US");
+}
+
+function fixed(value: number): string {
+  return value.toFixed(2).replace(/\.00$/, "");
+}
+
+function maidenheadBounds(grid: string): Omit<GridCell, "grid" | "reporterCount"> | null {
+  const longitudeField = grid.charAt(0);
+  const latitudeField = grid.charAt(1);
+  if (
+    grid.length < 4 ||
+    longitudeField < "A" || longitudeField > "R" ||
+    latitudeField < "A" || latitudeField > "R" ||
+    !/^\d{2}$/.test(grid.slice(2, 4))
+  ) {
+    return null;
+  }
+
+  const minLongitude = (longitudeField.charCodeAt(0) - 65) * 20 - 180 + Number(grid.charAt(2)) * 2;
+  const minLatitude = (latitudeField.charCodeAt(0) - 65) * 10 - 90 + Number(grid.charAt(3));
+  return {
+    minLatitude,
+    maxLatitude: minLatitude + 1,
+    minLongitude,
+    maxLongitude: minLongitude + 2,
+  };
+}
+
+function project(
+  longitude: number,
+  latitude: number,
+  view: HemisphereView,
+): ProjectedPoint {
+  const lambda = longitude * degreesToRadians;
+  const phi = latitude * degreesToRadians;
+  const lambda0 = view.centerLongitude * degreesToRadians;
+  const phi0 = view.centerLatitude * degreesToRadians;
+  const delta = lambda - lambda0;
+  const cosPhi = Math.cos(phi);
+  const visibility =
+    Math.sin(phi0) * Math.sin(phi) +
+    Math.cos(phi0) * cosPhi * Math.cos(delta);
+  const x = cosPhi * Math.sin(delta);
+  const y =
+    Math.cos(phi0) * Math.sin(phi) -
+    Math.sin(phi0) * cosPhi * Math.cos(delta);
+  return {
+    x: sphere.centerX + x * sphere.radius,
+    y: sphere.centerY - y * sphere.radius,
+    visible: visibility >= 0,
+  };
+}
+
+function linePath(points: Coordinate[], view: HemisphereView): string {
+  const segments: string[] = [];
+  let current: string[] = [];
+  let previousLongitude: number | undefined;
+  for (const [longitude, latitude] of points) {
+    if (previousLongitude !== undefined && Math.abs(longitude - previousLongitude) > 180) {
+      if (current.length > 1) {
+        segments.push(current.join(" "));
+      }
+      current = [];
+    }
+    previousLongitude = longitude;
+    const point = project(longitude, latitude, view);
+    if (point.visible) {
+      current.push(`${current.length === 0 ? "M" : "L"}${fixed(point.x)} ${fixed(point.y)}`);
+      continue;
+    }
+    if (current.length > 1) {
+      segments.push(current.join(" "));
+    }
+    current = [];
+  }
+  if (current.length > 1) {
+    segments.push(current.join(" "));
+  }
+  return segments.join(" ");
+}
+
+function perpendicularDistance(
+  point: Coordinate,
+  start: Coordinate,
+  end: Coordinate,
+): number {
+  const [x, y] = point;
+  const [x1, y1] = start;
+  const [x2, y2] = end;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(x - x1, y - y1);
+  }
+  const numerator = Math.abs(dy * x - dx * y + x2 * y1 - y2 * x1);
+  return numerator / Math.hypot(dx, dy);
+}
+
+function simplifyRing(points: Ring, tolerance = 0.45): Ring {
+  if (points.length <= 3) {
+    return points;
+  }
+  let farthestIndex = 0;
+  let farthestDistance = 0;
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const distance = perpendicularDistance(
+      points[index]!,
+      points[0]!,
+      points[points.length - 1]!,
+    );
+    if (distance > farthestDistance) {
+      farthestDistance = distance;
+      farthestIndex = index;
+    }
+  }
+  if (farthestDistance <= tolerance) {
+    return [points[0]!, points[points.length - 1]!];
+  }
+  const left = simplifyRing(points.slice(0, farthestIndex + 1), tolerance);
+  const right = simplifyRing(points.slice(farthestIndex), tolerance);
+  return [...left.slice(0, -1), ...right];
+}
+
+function worldRings(): Ring[] {
+  const rings: Ring[] = [];
+  for (const feature of world.features) {
+    if (feature.geometry === null) {
+      continue;
+    }
+    if (feature.geometry.type === "Polygon") {
+      rings.push(...(feature.geometry.coordinates as Polygon));
+      continue;
+    }
+    for (const polygon of feature.geometry.coordinates as MultiPolygon) {
+      rings.push(...polygon);
+    }
+  }
+  return rings.map((ring) => simplifyRing(ring));
+}
+
+function graticulePath(view: HemisphereView): string {
+  const paths: string[] = [];
+  for (let latitude = -60; latitude <= 60; latitude += 30) {
+    const points: Coordinate[] = [];
+    for (let longitude = -180; longitude <= 180; longitude += 2) {
+      points.push([longitude, latitude]);
+    }
+    paths.push(linePath(points, view));
+  }
+  for (let longitude = -150; longitude <= 180; longitude += 30) {
+    const points: Coordinate[] = [];
+    for (let latitude = -89; latitude <= 89; latitude += 2) {
+      points.push([longitude, latitude]);
+    }
+    paths.push(linePath(points, view));
+  }
+  return paths.join(" ");
+}
+
+function projectedCell(cell: GridCell, view: HemisphereView): ProjectedCell | null {
+  const centerLongitude = (cell.minLongitude + cell.maxLongitude) / 2;
+  const centerLatitude = (cell.minLatitude + cell.maxLatitude) / 2;
+  const center = project(centerLongitude, centerLatitude, view);
+  if (!center.visible) {
+    return null;
+  }
+
+  const corners = [
+    project(cell.minLongitude, cell.minLatitude, view),
+    project(cell.maxLongitude, cell.minLatitude, view),
+    project(cell.maxLongitude, cell.maxLatitude, view),
+    project(cell.minLongitude, cell.maxLatitude, view),
+  ];
+  let path: string;
+  if (corners.every((corner) => corner.visible)) {
+    const enlargement = 1.35;
+    path = corners
+      .map((corner, index) => {
+        const x = center.x + (corner.x - center.x) * enlargement;
+        const y = center.y + (corner.y - center.y) * enlargement;
+        return `${index === 0 ? "M" : "L"}${fixed(x)} ${fixed(y)}`;
+      })
+      .join(" ");
+    path += " Z";
+  } else {
+    const halfSize = 1.7;
+    path = [
+      `M${fixed(center.x - halfSize)} ${fixed(center.y - halfSize)}`,
+      `H${fixed(center.x + halfSize)}`,
+      `V${fixed(center.y + halfSize)}`,
+      `H${fixed(center.x - halfSize)}`,
+      "Z",
+    ].join(" ");
+  }
+
+  const opacity = Math.min(0.92, 0.42 + Math.log2(cell.reporterCount + 1) * 0.11);
+  return { path, opacity: opacity.toFixed(2) };
+}
+
+const gridReporters = new Map<BandName, Map<string, Set<string>>>(
+  bandDefinitions.map((band) => [band.name, new Map()]),
+);
+for (const row of receiverRowsCsv.trim().split(/\r?\n/).slice(1)) {
+  const columns = row.split(",");
+  const bandName = bandByCode.get(columns[0] ?? "");
+  const reporterCall = columns[1]?.trim().toUpperCase();
+  const grid = columns[2]?.trim().toUpperCase().slice(0, 4);
+  const spots = Number(columns[7] ?? "0");
+  if (bandName === undefined || !reporterCall || !grid || grid.length < 4 || spots <= 0) {
+    continue;
+  }
+  const reporters = gridReporters.get(bandName);
+  if (reporters === undefined) {
+    continue;
+  }
+  const calls = reporters.get(grid) ?? new Set<string>();
+  calls.add(reporterCall);
+  reporters.set(grid, calls);
+}
+
+const simplifiedWorldRings = worldRings();
+const renderedViews = hemisphereViews.map((view) => ({
+  ...view,
+  graticulePath: graticulePath(view),
+  landPath: simplifiedWorldRings.map((ring) => linePath(ring, view)).join(" "),
+}));
+const renderedBands = bandDefinitions.map((band) => {
+  const reportersByGrid = gridReporters.get(band.name);
+  if (reportersByGrid === undefined) {
+    throw new Error(`Missing WSPR receiver data for ${band.name}`);
+  }
+  const cells: GridCell[] = [];
+  const reporterCalls = new Set<string>();
+  for (const [grid, reporters] of reportersByGrid) {
+    const bounds = maidenheadBounds(grid);
+    if (bounds === null) {
+      continue;
+    }
+    for (const reporter of reporters) {
+      reporterCalls.add(reporter);
+    }
+    cells.push({ grid, reporterCount: reporters.size, ...bounds });
+  }
+  const expected = summary.wspr_popular_bands[band.name].windows["168"];
+  if (cells.length !== expected.unique_four_character_grids) {
+    throw new Error(
+      `${band.name} grid map has ${cells.length} cells, expected ${expected.unique_four_character_grids}`,
+    );
+  }
+  if (reporterCalls.size !== expected.unique_reporter_calls) {
+    throw new Error(
+      `${band.name} grid map has ${reporterCalls.size} calls, expected ${expected.unique_reporter_calls}`,
+    );
+  }
+  return {
+    name: band.name,
+    gridCount: cells.length,
+    reporterCount: reporterCalls.size,
+    views: renderedViews.map((view) => ({
+      ...view,
+      cells: cells
+        .map((cell) => projectedCell(cell, view))
+        .filter((cell): cell is ProjectedCell => cell !== null),
+    })),
+  };
+});
+---
+
+<section class="receiver-globe-section" aria-labelledby="receiver-globes-title">
+  <div class="receiver-globe-heading">
+    <div>
+      <p class="eyebrow">Where the WSPR receivers were</p>
+      <h3 id="receiver-globes-title">The receiver footprint changes by band.</h3>
+    </div>
+    <p>
+      Each illuminated cell marks an occupied four-character Maidenhead grid in the
+      seven-day WSPR window. The paired hemispheres show the complete global distribution.
+    </p>
+  </div>
+
+  <svg class="receiver-globe-definitions" width="0" height="0" aria-hidden="true">
+    <defs>
+      <clipPath id="receiver-globe-clip">
+        <circle cx={sphere.centerX} cy={sphere.centerY} r={sphere.radius}></circle>
+      </clipPath>
+      {renderedViews.map((view) => (
+        <symbol id={view.symbolId} viewBox="0 0 300 300">
+          <circle class="receiver-globe-ocean" cx={sphere.centerX} cy={sphere.centerY} r={sphere.radius}></circle>
+          <path class="receiver-globe-graticule" d={view.graticulePath}></path>
+          <path class="receiver-globe-land" d={view.landPath}></path>
+          <circle class="receiver-globe-outline" cx={sphere.centerX} cy={sphere.centerY} r={sphere.radius}></circle>
+        </symbol>
+      ))}
+    </defs>
+  </svg>
+
+  <div class="receiver-globe-grid">
+    {renderedBands.map((band) => (
+      <article class="receiver-globe-card">
+        <header>
+          <div>
+            <span>WSPR band</span>
+            <h4>{band.name}</h4>
+          </div>
+          <p><strong>{formatNumber(band.gridCount)}</strong> occupied grids</p>
+        </header>
+        <div class="receiver-hemisphere-pair">
+          {band.views.map((view) => (
+            <figure>
+              <svg class="receiver-globe" viewBox="0 0 300 300" role="img">
+                <title>{band.name} WSPR receiver grids, {view.label}</title>
+                <desc>
+                  {formatNumber(band.gridCount)} occupied four-character Maidenhead grids and
+                  {` ${formatNumber(band.reporterCount)} distinct reporting calls appeared on ${band.name} during the seven-day window.`}
+                </desc>
+                <use href={`#${view.symbolId}`}></use>
+                <g clip-path="url(#receiver-globe-clip)">
+                  {view.cells.map((cell) => (
+                    <path class="receiver-grid-cell" d={cell.path} fill-opacity={cell.opacity}></path>
+                  ))}
+                </g>
+              </svg>
+              <figcaption>{view.label}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </article>
+    ))}
+  </div>
+
+  <p class="receiver-globe-note">
+    Cell brightness reflects the number of distinct reporting calls in that grid. Cells are
+    slightly enlarged for legibility and show receiver locations, not guaranteed coverage from
+    any transmitter. <a href="https://github.com/rwjblue/antennabench/tree/main/tools/why-not-rbn">Review the snapshot method and source data <span aria-hidden="true">↗</span></a>
+  </p>
+</section>
