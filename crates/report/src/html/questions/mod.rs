@@ -6,8 +6,8 @@ use crate::{
     ReportObservedAntennaProfile, ReportObservedProfileCell, ReportOperatorEvent,
     ReportOperatorEventKind, ReportOverviewLifecycleState, ReportOverviewLimitation,
     ReportOverviewLocationCell, ReportOverviewPathDelta, ReportOverviewReach,
-    ReportOverviewStratum, ReportPathLocationAvailability, ReportRunTimelineRow,
-    ReportStratumAvailability, SamePathSignalAnswerability, SessionReport,
+    ReportOverviewStratum, ReportPathLocationAvailability, ReportQuestionFamily,
+    ReportRunTimelineRow, ReportStratumAvailability, SamePathSignalAnswerability, SessionReport,
 };
 use antennabench_core::AlignedSlotStatus;
 
@@ -37,3 +37,61 @@ pub(super) use paths::{
     render_same_path_stratum,
 };
 pub(super) use quality::render_run_quality_section;
+
+pub(super) fn ordered_question_families(report: &SessionReport) -> Vec<ReportQuestionFamily> {
+    let priority = report
+        .overview
+        .goal_lens
+        .as_ref()
+        .map(|lens| lens.priority.as_slice())
+        .unwrap_or(&[
+            ReportQuestionFamily::SharedPathSignal,
+            ReportQuestionFamily::CommonOpportunityDetection,
+            ReportQuestionFamily::ObservedReach,
+            ReportQuestionFamily::Repeatability,
+            ReportQuestionFamily::GeographicProfile,
+        ]);
+    priority
+        .iter()
+        .copied()
+        .filter(|family| question_family_has_content(report, *family))
+        .collect()
+}
+
+pub(super) fn question_family_is_primary_available(
+    report: &SessionReport,
+    family: ReportQuestionFamily,
+) -> bool {
+    match family {
+        ReportQuestionFamily::SharedPathSignal => {
+            report.overview.answerability.same_path_signal == SamePathSignalAnswerability::Available
+        }
+        ReportQuestionFamily::CommonOpportunityDetection => {
+            report.overview.answerability.paired_detectability
+                == PairedDetectabilityAnswerability::Available
+        }
+        ReportQuestionFamily::ObservedReach => {
+            report.overview.answerability.observed_reach == ObservedReachAnswerability::Available
+        }
+        ReportQuestionFamily::GeographicProfile => {
+            report.overview.answerability.geographic_profile
+                == GeographicProfileAnswerability::Available
+        }
+        ReportQuestionFamily::Repeatability => {
+            report.overview.answerability.repeatability == RepeatabilityAnswerability::Available
+        }
+    }
+}
+
+fn question_family_has_content(report: &SessionReport, family: ReportQuestionFamily) -> bool {
+    question_family_is_primary_available(report, family)
+        || (family == ReportQuestionFamily::Repeatability && !report.coverage_overlap.is_empty())
+}
+
+pub(super) fn is_single_antenna_lens(report: &SessionReport) -> bool {
+    report
+        .overview
+        .goal_lens
+        .as_ref()
+        .is_some_and(|lens| lens.goal == antennabench_core::SessionGoal::SingleAntennaProfiling)
+}

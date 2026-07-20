@@ -46,6 +46,18 @@ fn reports_the_minimal_whole_station_fixture() {
             "subtrahend_label": "A"
           }
         },
+        "goal_lens": {
+          "goal": "general_coverage",
+          "priority": [
+            "shared_path_signal",
+            "common_opportunity_detection",
+            "observed_reach",
+            "geographic_profile",
+            "repeatability"
+          ],
+          "emphasized_distance_bins": [],
+          "practical_meaning": "Prioritizes shared-path signal, common listening opportunities, observed reach, distance and bearing, and repeatability. No universal antenna winner is selected."
+        },
         "lifecycle": {
           "checkpoint_revision": null,
           "state": "not_recorded"
@@ -1298,6 +1310,18 @@ fn reports_only_observations_from_the_wsjtx_hardening_fixture() {
             "subtrahend_label": "A"
           }
         },
+        "goal_lens": {
+          "goal": "general_coverage",
+          "priority": [
+            "shared_path_signal",
+            "common_opportunity_detection",
+            "observed_reach",
+            "geographic_profile",
+            "repeatability"
+          ],
+          "emphasized_distance_bins": [],
+          "practical_meaning": "Prioritizes shared-path signal, common listening opportunities, observed reach, distance and bearing, and repeatability. No universal antenna winner is selected."
+        },
         "lifecycle": {
           "checkpoint_revision": null,
           "state": "not_recorded"
@@ -2421,6 +2445,18 @@ fn reports_the_analysis_rich_whole_station_fixture() {
             "minuend_label": "B",
             "subtrahend_label": "A"
           }
+        },
+        "goal_lens": {
+          "goal": "general_coverage",
+          "priority": [
+            "shared_path_signal",
+            "common_opportunity_detection",
+            "observed_reach",
+            "geographic_profile",
+            "repeatability"
+          ],
+          "emphasized_distance_bins": [],
+          "practical_meaning": "Prioritizes shared-path signal, common listening opportunities, observed reach, distance and bearing, and repeatability. No universal antenna winner is selected."
         },
         "lifecycle": {
           "checkpoint_revision": null,

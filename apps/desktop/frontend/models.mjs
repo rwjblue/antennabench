@@ -36,7 +36,7 @@ export const CONTEXT_HELP = Object.freeze({
   },
   run_plan: {
     title: "Experiment plan",
-    text: "Mode describes what part of the station you are comparing, goal describes the kind of coverage you care about, and band selects the WSPR band. These choices organize the evidence; they do not declare a winner.",
+    text: "Mode describes what part of the station you are comparing, goal describes the question you want the report to prioritize, and band selects the WSPR band: General coverage leads with the broad comparison; DX emphasizes the fixed 3000 km-and-above category; Regional emphasizes near through longer paths; NVIS / local uses under 500 km only as an NVIS-oriented proxy; Weak-signal reliability leads with common opportunities and repetition; Single-antenna profiling uses footprint language. The recorded goal changes presentation order only and does not change evidence or declare a winner.",
   },
   rounds: {
     title: "Rounds and cycles",

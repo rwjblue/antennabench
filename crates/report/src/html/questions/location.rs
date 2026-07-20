@@ -4,15 +4,20 @@ pub(in super::super) fn render_distance_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    render_observed_profile_intro(out);
+    render_observed_profile_intro(out, report);
+    render_goal_distance_focus(out, report);
     render_all_path_profiles(out, report);
     out.push_str("<details class=\"audit-disclosure\"><summary>Review exact observed-path profile rows</summary><div class=\"disclosure-body\">");
     render_observed_profile_audit(out, report);
-    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review shared-path distance and direction context</summary><div class=\"disclosure-body\"><p class=\"muted\">This separate view answers where finite-SNR differences occurred among paths decoded on both antennas.</p>");
-    render_observed_path_context(out, report);
-    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review exact paired-row distance and azimuth detail</summary><div class=\"disclosure-body\">");
-    render_location_views(out, report);
-    out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review derived solar context</summary><div class=\"disclosure-body\">");
+    out.push_str("</div></details>");
+    if !is_single_antenna_lens(report) {
+        out.push_str("<details class=\"audit-disclosure\"><summary>Review shared-path distance and direction context</summary><div class=\"disclosure-body\"><p class=\"muted\">This separate view answers where finite-SNR differences occurred among paths decoded on both antennas.</p>");
+        render_observed_path_context(out, report);
+        out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review exact paired-row distance and azimuth detail</summary><div class=\"disclosure-body\">");
+        render_location_views(out, report);
+        out.push_str("</div></details>");
+    }
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review derived solar context</summary><div class=\"disclosure-body\">");
     render_solar_context(out, report);
     out.push_str("</div></details></section>");
 }
@@ -21,13 +26,28 @@ pub(in super::super) fn render_compact_distance_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    render_observed_profile_intro(out);
+    render_observed_profile_intro(out, report);
+    render_goal_distance_focus(out, report);
     render_all_path_profiles(out, report);
     out.push_str("</section>");
 }
 
-fn render_observed_profile_intro(out: &mut CheckedHtmlWriter<'_>) {
-    out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Observed distance and direction profile</h2><p class=\"notice\">Evidence basis: all usable paths observed for each antenna in eligible blocks, including paths observed on only one antenna. Receiver/transmitter availability may have changed between antenna periods; this describes collected paths and is not a controlled detection comparison. This is not a radiation pattern, propagation model, or causal conclusion about observed or unobserved distances and directions, and it does not rank antennas universally.</p>");
+fn render_observed_profile_intro(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    if is_single_antenna_lens(report) {
+        out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Observed distance and direction profile</h2><p class=\"notice\">Evidence basis: all usable paths recorded for the profiled antenna, kept within each direction, band, mode, evidence-kind, and source group. This describes collected paths, not a radiation pattern, propagation model, or claim about unobserved distances and directions.</p>");
+    } else {
+        out.push_str("<section id=\"distance-direction\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"distance-direction-title\"><h2 id=\"distance-direction-title\">Observed distance and direction profile</h2><p class=\"notice\">Evidence basis: all usable paths observed for each antenna in eligible blocks, including paths observed on only one antenna. Receiver/transmitter availability may have changed between antenna periods; this describes collected paths and is not a controlled detection comparison. This is not a radiation pattern, propagation model, or causal conclusion about observed or unobserved distances and directions, and it does not rank antennas universally.</p>");
+    }
+}
+
+fn render_goal_distance_focus(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let Some(lens) = &report.overview.goal_lens else {
+        return;
+    };
+    if lens.emphasized_distance_bins.is_empty() {
+        return;
+    }
+    write_html!(out, "<p class=\"goal-distance-focus\"><strong>Predeclared goal focus:</strong> {}. Counts for all four fixed categories remain alongside this focus.</p>", lens.emphasized_distance_bins.iter().map(|bin| bin.label()).collect::<Vec<_>>().join("; "));
 }
 
 fn render_all_path_profiles(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {

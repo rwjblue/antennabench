@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 use crate::common_opportunity::build_common_opportunity_maps;
 use crate::complementarity::project_coverage_overlap;
+use crate::goal_lens::project_goal_lens;
 use crate::observed_profile::project_observed_profile;
 use crate::{
     answerability::build_question_answerability, check_cancelled, coverage::build_coverage_maps,
@@ -29,19 +30,16 @@ use crate::{
     ScheduledSlotContext, ScheduledTimeRange, SessionContext, SessionReport, SlotEvidenceCountRow,
     SlotEvidenceSection, StationContext, UsableObservationKindCounts, REPORT_RESOURCE_LIMITS,
 };
-
 pub fn build_report(bundle: &BundleContents) -> Result<SessionReport, ReportError> {
     let validation = validate_bundle_report(bundle);
     build_report_with_validation(bundle, &validation)
 }
-
 pub fn build_report_with_validation(
     bundle: &BundleContents,
     validation: &BundleValidationReport,
 ) -> Result<SessionReport, ReportError> {
     build_report_with_snapshot(bundle, validation, ReportSnapshotContext::default())
 }
-
 pub fn build_report_with_snapshot(
     bundle: &BundleContents,
     validation: &BundleValidationReport,
@@ -161,17 +159,14 @@ fn build_report_with_resources_and_snapshot_and_activity(
         &coverage_overlap,
         &snapshot,
     );
-    // The question-first views retain every path median, rather than sampling
-    // them in the renderer. Count those rows up front so a bounded overview is
-    // complete or explicitly rejected, never silently partial.
-    // Each stratum retains its headline, matched-path geographic cells, and
-    // both per-antenna all-path profiles plus distance composition.
+    // Count complete, unsampled question-first rows before choosing detail.
     let required_overview_rows = crate::resource_rows::required_overview_row_count(
         &summary,
         &coverage_maps,
         &common_opportunity_maps,
         &coverage_overlap,
         &snapshot,
+        bundle.schedule.goal,
     );
     if required_overview_rows as u64 > limits.rows {
         return Err(report_resource_error(
@@ -321,6 +316,7 @@ fn build_overview(
             observed_directions,
             delta_orientation: comparison.delta_orientation.clone(),
         },
+        goal_lens: Some(project_goal_lens(context.goal)),
         lifecycle: ReportOverviewLifecycle {
             checkpoint_revision: snapshot.checkpoint_revision,
             state: snapshot

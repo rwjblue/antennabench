@@ -5,6 +5,7 @@ mod complementarity;
 mod coverage;
 mod distance;
 mod geography;
+mod goal_lens;
 mod html;
 mod model;
 mod observed_profile;

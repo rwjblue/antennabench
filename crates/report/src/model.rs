@@ -247,6 +247,8 @@ pub struct ReportReceiverDetectionFrequency {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReportOverview {
     pub scope: ReportOverviewScope,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_lens: Option<ReportGoalLens>,
     pub lifecycle: ReportOverviewLifecycle,
     /// Availability is projected separately for each operator question. The
     /// legacy comparison availability below remains the compatibility view for
@@ -264,6 +266,7 @@ impl Default for ReportOverview {
     fn default() -> Self {
         Self {
             scope: ReportOverviewScope::default(),
+            goal_lens: None,
             lifecycle: ReportOverviewLifecycle::default(),
             answerability: ReportQuestionAnswerability::default(),
             comparison_availability: ComparisonAvailability::NotApplicable,
@@ -272,6 +275,26 @@ impl Default for ReportOverview {
             limitations: Vec::new(),
         }
     }
+}
+
+/// Presentation-only metadata derived from the goal recorded before the run.
+/// It may change report order and emphasis, but never analysis facts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportGoalLens {
+    pub goal: SessionGoal,
+    pub priority: Vec<ReportQuestionFamily>,
+    pub emphasized_distance_bins: Vec<ReportDistanceBin>,
+    pub practical_meaning: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportQuestionFamily {
+    SharedPathSignal,
+    CommonOpportunityDetection,
+    ObservedReach,
+    GeographicProfile,
+    Repeatability,
 }
 
 /// Renderer-neutral availability for the distinct questions a report may

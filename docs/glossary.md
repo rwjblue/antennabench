@@ -156,6 +156,43 @@ Evidence coverage describes the amount of usable observations and contributing
 cycle evidence in the session. It is not an antenna-quality grade and does not
 show that one antenna differs from another.
 
+## Goal Lens
+
+A goal lens is the presentation priority derived from the session goal recorded
+before the run. It can reorder available report questions and mark fixed
+distance categories for emphasis. It cannot change evidence, calculations,
+thresholds, comparison groups, or conclusion rules, and it cannot hide another
+available result.
+
+## Near / Local Proxy
+
+Near / local proxy is the fixed distance category from 0 km to less than 500
+km. It is useful as a prespecified local or NVIS-oriented view, but distance
+alone does not establish NVIS or any other propagation mode.
+
+## Regional
+
+Regional is the fixed distance category from 500 km to less than 1500 km. It
+describes a practical operating scale, not a propagation-mode classification.
+
+## Longer Path
+
+Longer path is the fixed distance category from 1500 km to less than 3000 km.
+The term describes distance only; it does not assert long-path-around-the-globe
+propagation.
+
+## DX-Oriented
+
+DX-oriented is the fixed distance category at 3000 km and above. It is a stable
+report category, not a universal DX award definition or a claim that every
+path used one propagation mode.
+
+## NVIS-Oriented Proxy
+
+NVIS-oriented proxy is permitted wording for the near / local category when the
+NVIS / local goal was recorded before the run. It never claims that Near
+Vertical Incidence Skywave propagation was measured.
+
 ## SNR
 
 SNR is the reported signal-to-noise ratio in decibels (dB). A missing SNR is not

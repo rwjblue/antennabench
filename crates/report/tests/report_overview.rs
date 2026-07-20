@@ -427,7 +427,7 @@ fn overview_rows_are_part_of_the_required_bounded_projection() {
         ReportError::Resource(ref error)
             if error.diagnostic.code == "resource.report.rows"
                 && error.diagnostic.role == "required_overview_rows"
-                && error.diagnostic.observed == Some(56)
+                && error.diagnostic.observed == Some(61)
     ));
 }
 

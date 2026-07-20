@@ -45,6 +45,28 @@ and recorded session state. Check these before interpreting any number. A
 correct calculation for the wrong setup is still the wrong answer to your
 question.
 
+### The Predeclared Goal Is A Presentation Lens
+
+The goal recorded in the reviewed plan appears beside the summary with a short
+description of its lens. It changes only the order of available question
+families and any distance categories marked as a prespecified focus. Full and
+compact reports use the same lens metadata. The goal does not change evidence,
+calculations, thresholds, comparison groups, or conclusion rules, and every
+other available family and distance category remains accessible.
+
+- **General coverage** prioritizes shared-path signal, common listening
+  opportunities, observed reach, distance and bearing, and repeatability.
+- **DX** prioritizes distance and bearing with the fixed 3000 km-and-above
+  DX-oriented category, while retaining nearer evidence.
+- **Regional** prioritizes the near, regional, and longer-path categories plus
+  observed bearing and repeatability.
+- **NVIS / local** prioritizes the under-500-km near / local proxy. This is an
+  NVIS-oriented proxy only; distance does not establish NVIS propagation.
+- **Weak-signal reliability** prioritizes one-sided common-opportunity outcomes
+  and repeated path support without inventing a decoder-floor SNR.
+- **Single-antenna profiling** uses footprint and repetition language;
+  comparative signal and detection questions do not apply.
+
 ### Availability Is Per Question
 
 One run can answer some questions and not others. The report therefore keeps
@@ -67,7 +89,7 @@ An unavailable family is summarized once in the headline disclosure instead
 of receiving a full empty primary panel. Full and compact reports consume the
 same typed availability facts, and primary navigation contains only question
 families with usable evidence. Shared-path signal remains the first comparison
-result whenever it is available.
+result only for lenses that give it first priority.
 
 ### Detection And Signal Are Different Estimands
 

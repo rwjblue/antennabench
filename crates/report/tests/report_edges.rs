@@ -28,7 +28,10 @@ fn report_rows_fall_back_to_a_complete_unsampled_overview() {
             .map(|panel| panel.cells.len() + panel.polar_cells.len())
             .sum::<usize>()
         + full.overview.timeline.len()
-        + full.snapshot.operator_events.len();
+        + full.snapshot.operator_events.len()
+        + full.overview.goal_lens.as_ref().map_or(0, |lens| {
+            lens.priority.len() + lens.emphasized_distance_bins.len()
+        });
     let overview = build_report_with_resources(
         &bundle,
         &validation,

@@ -1,9 +1,8 @@
 use std::fmt::Write as _;
 
 use crate::{
-    check_cancelled, GeographicProfileAnswerability, ObservedReachAnswerability,
-    PairedDetectabilityAnswerability, ReportCancellationToken, ReportError, ReportResourceLimits,
-    ReportResourceStage, SamePathSignalAnswerability, SessionReport, REPORT_RESOURCE_LIMITS,
+    check_cancelled, ReportCancellationToken, ReportError, ReportQuestionFamily,
+    ReportResourceLimits, ReportResourceStage, SessionReport, REPORT_RESOURCE_LIMITS,
 };
 
 macro_rules! write_html {
@@ -26,10 +25,10 @@ pub use compact::{render_compact_summary_html, render_compact_summary_html_with_
 use audit::render_audit_appendix;
 use geometry::render_geometry_styles;
 use questions::{
-    render_answer_first_overview, render_coverage_map_section, render_distance_section,
-    render_how_to_read, render_overlap_repeatability_section, render_question_navigation,
-    render_reach_section, render_reporter_activity_section, render_run_quality_section,
-    render_same_path_section,
+    is_single_antenna_lens, ordered_question_families, render_answer_first_overview,
+    render_coverage_map_section, render_distance_section, render_how_to_read,
+    render_overlap_repeatability_section, render_question_navigation, render_reach_section,
+    render_reporter_activity_section, render_run_quality_section, render_same_path_section,
 };
 use shared::{escape_html, CheckedHtmlWriter};
 use styles::{COVERAGE_STYLES, STYLES};
@@ -140,26 +139,21 @@ fn render_standalone_html_document(
         escape_html(&report.overview.scope.session_id)
     );
     render_question_navigation(&mut out, report, true);
-    render_how_to_read(&mut out);
+    render_how_to_read(&mut out, report);
     render_answer_first_overview(&mut out, report);
-    if report.overview.answerability.same_path_signal == SamePathSignalAnswerability::Available {
-        render_same_path_section(&mut out, report);
-    }
-    if report.overview.answerability.paired_detectability
-        == PairedDetectabilityAnswerability::Available
-    {
-        render_reporter_activity_section(&mut out, report);
-        render_coverage_map_section(&mut out, report);
-    }
-    if report.overview.answerability.observed_reach == ObservedReachAnswerability::Available {
-        render_reach_section(&mut out, report);
-    }
-    if !report.coverage_overlap.is_empty() {
-        render_overlap_repeatability_section(&mut out, report);
-    }
-    if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
-    {
-        render_distance_section(&mut out, report);
+    for family in ordered_question_families(report) {
+        match family {
+            ReportQuestionFamily::SharedPathSignal => render_same_path_section(&mut out, report),
+            ReportQuestionFamily::CommonOpportunityDetection => {
+                render_reporter_activity_section(&mut out, report);
+                render_coverage_map_section(&mut out, report);
+            }
+            ReportQuestionFamily::ObservedReach => render_reach_section(&mut out, report),
+            ReportQuestionFamily::GeographicProfile => render_distance_section(&mut out, report),
+            ReportQuestionFamily::Repeatability => {
+                render_overlap_repeatability_section(&mut out, report)
+            }
+        }
     }
     render_run_quality_section(&mut out, report);
     render_audit_appendix(&mut out, report, options.controller_evidence);
@@ -172,6 +166,10 @@ fn render_standalone_html_document(
         );
     }
 
-    out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
+    if is_single_antenna_lens(report) {
+        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This profiling report describes only recorded evidence from the named antenna.</p></main></body></html>");
+    } else {
+        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
+    }
     out.finish().map_err(ReportError::from)
 }

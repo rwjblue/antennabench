@@ -550,16 +550,16 @@ try {
         ? [
             "what-run-show",
             "reach-unique-paths",
-            "coverage-overlap",
             "distance-direction",
+            "coverage-overlap",
             "run-quality",
             "audit-appendix",
           ]
         : [
             "what-run-show",
             "reach-unique-paths",
-            "coverage-overlap",
             "distance-direction",
+            "coverage-overlap",
             "run-quality",
           ],
     );

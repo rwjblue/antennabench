@@ -209,7 +209,7 @@ pub(super) fn comparison_availability_label(value: ComparisonAvailability) -> &'
 pub(super) fn comparison_availability_text(value: ComparisonAvailability) -> &'static str {
     match value {
         ComparisonAvailability::NotApplicable => {
-            "Single-antenna profiling does not create an A/B comparison."
+            "Comparative signal and detection questions do not apply to single-antenna profiling."
         }
         ComparisonAvailability::UnsupportedComparisonShape => {
             "A paired comparison requires exactly two scheduled antenna labels."

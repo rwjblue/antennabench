@@ -1,4 +1,5 @@
 use antennabench_analysis::AnalysisSummary;
+use antennabench_core::SessionGoal;
 
 use crate::{
     common_opportunity, complementarity, ReportCommonOpportunityMapGroup, ReportCoverageMapGroup,
@@ -11,6 +12,7 @@ pub(crate) fn required_overview_row_count(
     common_opportunity_maps: &[ReportCommonOpportunityMapGroup],
     coverage_overlap: &[ReportCoverageOverlapGroup],
     snapshot: &ReportSnapshotContext,
+    goal: SessionGoal,
 ) -> usize {
     summary.eligibility.exclusions.len()
         + summary.comparison.strata.len() * 41
@@ -28,4 +30,8 @@ pub(crate) fn required_overview_row_count(
         + complementarity::overview_row_count(coverage_overlap)
         + summary.slots.len()
         + snapshot.operator_events.len()
+        + {
+            let lens = crate::goal_lens::project_goal_lens(goal);
+            lens.priority.len() + lens.emphasized_distance_bins.len()
+        }
 }

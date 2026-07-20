@@ -139,6 +139,9 @@ The predeclared session goal selects only a presentation lens. The fixed lens
 contract may reorder available question families and emphasize prespecified
 distance categories, but it does not change facts, estimands, thresholds,
 strata, or conclusion rules, and it leaves contrary evidence accessible.
+Rust projects the typed priority order, emphasized categories, and practical
+meaning once into the report model; full and compact renderers consume that
+same metadata rather than interpreting the goal independently.
 NVIS/local wording always calls near distance a proxy; single-antenna profiling
 uses no A/B conclusions. See [Decision
 0027](decisions/0027-use-predeclared-goal-lenses-and-one-distance-taxonomy.md).

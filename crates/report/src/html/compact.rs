@@ -1,20 +1,19 @@
 use std::fmt::Write as _;
 
 use crate::{
-    check_cancelled, GeographicProfileAnswerability, ObservedReachAnswerability,
-    PairedDetectabilityAnswerability, ReportAcquisitionWorkflowStatus, ReportCancellationToken,
-    ReportCompleteness, ReportError, ReportProviderCompleteness, ReportResourceLimits,
-    ReportResourceStage, SamePathSignalAnswerability, SessionReport, REPORT_RESOURCE_LIMITS,
+    check_cancelled, ReportAcquisitionWorkflowStatus, ReportCancellationToken, ReportCompleteness,
+    ReportError, ReportProviderCompleteness, ReportQuestionFamily, ReportResourceLimits,
+    ReportResourceStage, SessionReport, REPORT_RESOURCE_LIMITS,
 };
 
 use super::{
     geometry::render_geometry_styles,
     questions::{
-        overview_lifecycle_label, render_answer_first_overview_with_reference,
-        render_compact_coverage_map_section, render_compact_distance_section,
-        render_compact_overlap_repeatability_section, render_how_to_read,
-        render_question_navigation, render_reach_bar, render_reporter_activity_section,
-        render_same_path_stratum,
+        is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
+        render_answer_first_overview_with_reference, render_compact_coverage_map_section,
+        render_compact_distance_section, render_compact_overlap_repeatability_section,
+        render_how_to_read, render_question_navigation, render_reach_bar,
+        render_reporter_activity_section, render_same_path_stratum,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
@@ -79,38 +78,43 @@ pub fn render_compact_summary_html_with_resources(
         escape_html(&report.overview.scope.session_id)
     );
     render_question_navigation(&mut out, report, false);
-    render_how_to_read(&mut out);
+    render_how_to_read(&mut out, report);
     render_answer_first_overview_with_reference(
         &mut out,
         report,
         "the full evidence report and session bundle",
     );
-    if report.overview.answerability.same_path_signal == SamePathSignalAnswerability::Available {
-        out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Shared-path signal</h2>");
-        render_compact_same_path_view(&mut out, report);
-        out.push_str("</section>");
-    }
-    if report.overview.answerability.paired_detectability
-        == PairedDetectabilityAnswerability::Available
-    {
-        render_reporter_activity_section(&mut out, report);
-        render_compact_coverage_map_section(&mut out, report);
-    }
-    if report.overview.answerability.observed_reach == ObservedReachAnswerability::Available {
-        out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2>");
-        render_compact_reach_view(&mut out, report);
-        out.push_str("</section>");
-    }
-    if !report.coverage_overlap.is_empty() {
-        render_compact_overlap_repeatability_section(&mut out, report);
-    }
-    if report.overview.answerability.geographic_profile == GeographicProfileAnswerability::Available
-    {
-        render_compact_distance_section(&mut out, report);
+    for family in ordered_question_families(report) {
+        match family {
+            ReportQuestionFamily::SharedPathSignal => {
+                out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Shared-path signal</h2>");
+                render_compact_same_path_view(&mut out, report);
+                out.push_str("</section>");
+            }
+            ReportQuestionFamily::CommonOpportunityDetection => {
+                render_reporter_activity_section(&mut out, report);
+                render_compact_coverage_map_section(&mut out, report);
+            }
+            ReportQuestionFamily::ObservedReach => {
+                out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2>");
+                render_compact_reach_view(&mut out, report);
+                out.push_str("</section>");
+            }
+            ReportQuestionFamily::GeographicProfile => {
+                render_compact_distance_section(&mut out, report)
+            }
+            ReportQuestionFamily::Repeatability => {
+                render_compact_overlap_repeatability_section(&mut out, report)
+            }
+        }
     }
     render_compact_run_quality(&mut out, report);
     render_compact_reference(&mut out, report);
-    out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This compact summary is descriptive and does not select an antenna winner.</p></main></body></html>");
+    if is_single_antenna_lens(report) {
+        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This compact profiling summary describes only recorded evidence from the named antenna.</p></main></body></html>");
+    } else {
+        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This compact summary is descriptive and does not select an antenna winner.</p></main></body></html>");
+    }
     out.finish().map_err(ReportError::from)
 }
 

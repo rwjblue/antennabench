@@ -9,7 +9,7 @@ use antennabench_core::{
         AntennaControlDispositionV5, AntennaControlOutputEncodingV5, AntennaControlOutputV5,
         AntennaControlRoleV5,
     },
-    AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource,
+    AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
 };
 use antennabench_report::{
     build_report, render_compact_summary_html, render_standalone_html,
@@ -801,7 +801,7 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
     for (availability, expected) in [
         (
             ComparisonAvailability::NotApplicable,
-            "This session profiled one antenna, so there is no A/B comparison to show.",
+            "This session profiles one antenna. Comparative signal and detection questions do not apply; review its recorded footprint and repetition evidence when available.",
         ),
         (
             ComparisonAvailability::UnsupportedComparisonShape,
@@ -1075,9 +1075,106 @@ fn renders_answer_first_order_unavailable_states_and_visible_limitations() {
     assert!(html.find("2 recorded acquisition gaps").unwrap() < first_details);
     assert!(html.contains("Delta orientation:</strong> unavailable"));
     assert!(html.contains("No comparison groups are available for this run."));
-    assert!(html.contains("A/B comparison: not established for single-antenna profiling."));
+    assert!(html.contains("Comparative questions: not applicable to single-antenna profiling."));
     assert!(!html.contains("Winner:"));
     assert!(!html.contains("antenna gain"));
+}
+
+#[test]
+fn goal_lenses_reorder_the_same_facts_in_full_and_compact_reports() {
+    let general = paired_report_for_goal(true, SessionGoal::GeneralCoverage);
+    let dx = paired_report_for_goal(true, SessionGoal::Dx);
+    let weak_signal = paired_report_for_goal(true, SessionGoal::WeakSignalReliability);
+
+    for candidate in [&dx, &weak_signal] {
+        assert_eq!(candidate.evidence, general.evidence);
+        assert_eq!(candidate.comparison, general.comparison);
+        assert_eq!(candidate.reporter_activity, general.reporter_activity);
+        assert_eq!(candidate.coverage_maps, general.coverage_maps);
+        assert_eq!(
+            candidate.common_opportunity_maps,
+            general.common_opportunity_maps
+        );
+        assert_eq!(candidate.coverage_overlap, general.coverage_overlap);
+        assert_eq!(candidate.solar_context, general.solar_context);
+        assert_eq!(candidate.chart_data, general.chart_data);
+        assert_eq!(
+            candidate.overview.answerability,
+            general.overview.answerability
+        );
+        assert_eq!(candidate.overview.strata, general.overview.strata);
+    }
+
+    for compact in [false, true] {
+        let render = |report: &SessionReport| {
+            if compact {
+                render_compact_summary_html(report)
+            } else {
+                render_standalone_html(report)
+            }
+        };
+        let general_html = render(&general).unwrap();
+        let dx_html = render(&dx).unwrap();
+        let general_positions = section_positions(
+            &general_html,
+            &[
+                "same-path-signal",
+                "reach-unique-paths",
+                "distance-direction",
+                "coverage-overlap",
+            ],
+        );
+        let dx_positions = section_positions(
+            &dx_html,
+            &[
+                "distance-direction",
+                "same-path-signal",
+                "coverage-overlap",
+                "reach-unique-paths",
+            ],
+        );
+        assert!(general_positions.is_sorted());
+        assert!(dx_positions.is_sorted());
+        for section in [
+            "same-path-signal",
+            "reach-unique-paths",
+            "distance-direction",
+            "coverage-overlap",
+        ] {
+            assert!(general_html.contains(&format!("id=\"{section}\"")));
+            assert!(dx_html.contains(&format!("id=\"{section}\"")));
+        }
+        assert!(dx_html.contains("DX-oriented (3000 km and above)"));
+        assert!(dx_html.contains("Every other available distance category remains visible"));
+    }
+}
+
+#[test]
+fn nvis_and_single_profile_wording_stays_within_the_predeclared_contract() {
+    let nvis = paired_report_for_goal(true, SessionGoal::NvisLocal);
+    for html in [
+        render_standalone_html(&nvis).unwrap(),
+        render_compact_summary_html(&nvis).unwrap(),
+    ] {
+        assert!(html.contains("NVIS-oriented distance proxy"));
+        assert!(html.contains("Distance does not establish NVIS propagation"));
+        for bin in ReportDistanceBin::ALL {
+            assert!(html.contains(bin.label()));
+        }
+    }
+
+    let single = single_antenna_report();
+    for html in [
+        render_standalone_html(&single).unwrap(),
+        render_compact_summary_html(&single).unwrap(),
+    ] {
+        assert!(html.contains("This session profiles one antenna."));
+        assert!(html.contains("Comparative signal and detection questions do not apply"));
+        assert!(!html.contains("A/B"));
+        assert!(!html.contains("antenna winner"));
+        assert!(!html.contains("id=\"same-path-signal\""));
+        assert!(!html.contains("id=\"reporter-activity\""));
+    }
 }
 
 #[test]
@@ -1559,12 +1656,17 @@ fn canonical_report() -> SessionReport {
 }
 
 fn paired_report(balanced_order: bool) -> SessionReport {
+    paired_report_for_goal(balanced_order, SessionGoal::GeneralCoverage)
+}
+
+fn paired_report_for_goal(balanced_order: bool, goal: SessionGoal) -> SessionReport {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
     let mut bundle = BundleStore::new(fixture)
         .read_normalized_validated()
         .expect("minimal sample should be valid");
     bundle.events.clear();
+    bundle.schedule.goal = goal;
     if balanced_order {
         bundle.schedule.slots[2].antenna_label = "B".to_string();
         bundle.schedule.slots[3].antenna_label = "A".to_string();
@@ -1596,4 +1698,31 @@ fn paired_report(balanced_order: bool) -> SessionReport {
     .collect();
     let bundle = normalize_bundle(bundle);
     build_report(&bundle).expect("paired sample should build a report")
+}
+
+fn single_antenna_report() -> SessionReport {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/session-bundles/minimal-whole-station.session.wsprabundle");
+    let mut bundle = BundleStore::new(fixture)
+        .read_normalized_validated()
+        .expect("minimal sample should be valid");
+    bundle.events.clear();
+    bundle.schedule.mode = ExperimentMode::SingleAntennaProfiling;
+    bundle.schedule.goal = SessionGoal::SingleAntennaProfiling;
+    bundle.antennas.antennas.truncate(1);
+    let label = bundle.antennas.antennas[0].label.clone();
+    for slot in &mut bundle.schedule.slots {
+        slot.antenna_label.clone_from(&label);
+    }
+    let bundle = normalize_bundle(bundle);
+    build_report(&bundle).expect("single-antenna sample should build a report")
+}
+
+fn section_positions(html: &str, ids: &[&str]) -> Vec<usize> {
+    ids.iter()
+        .map(|id| {
+            html.find(&format!("<section id=\"{id}\""))
+                .unwrap_or_else(|| panic!("missing section {id}"))
+        })
+        .collect()
 }
