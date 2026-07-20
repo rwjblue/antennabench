@@ -1,27 +1,49 @@
 # Agent-ready work handoff — 2026-07-19
 
 This handoff records the requested linear pass through #202, #207, #208, and
-#199, followed by the shared geographic foundation split from #203. No changes
-were pushed, no pull request was opened, and no issue was closed.
+#199, followed by the shared geographic foundation split from #203 and the
+#213 → #202 → #203 dependency chain. The implementation commits through #203
+are present on `main`; no pull request was opened and no issue was closed by
+the agent.
+
+## #213 — Make activity census rows band-specific
+
+- **Status:** Implemented and left open/in progress for owner review.
+- **Delivered:** WSPR.live activity census queries, persistence, and durable
+  record identity now include the typed band. Rows are keyed by
+  `(cycle_time, band, reporter)`, so downstream analysis can form an honest
+  per-band active-reporter population. Existing bandless rows are treated as
+  unsupported rather than guessed or migrated; preserving prior local-only
+  test data was explicitly not required.
+- **jj change / commit:** `rlworpslwwwr` —
+  `feat(wsjtx): key activity census rows by band (#213)`.
+- **Verification:** Focused WSPR.live adapter and persistence tests passed; the
+  complete `mise run ci` passed before the main bookmark was advanced.
+- **Documentation:** Updated the activity-census contract to describe the
+  band-qualified durable row shape and unsupported bandless data.
+- **Follow-up:** Owner review and normal publication/closure flow only.
 
 ## #202 — Add census-conditioned hearing rates
 
-- **Status:** Blocked on a product/data-contract decision; the issue is labeled
-  `needs-decision`.
-- **Delivered:** Completed the issue/dependency review and identified the
-  binding mismatch: persisted census rows are keyed by `(cycle_time, reporter)`
-  without a band, while the required analysis filters and grouping require a
-  band-specific active-reporter population. Implementing either a guessed band
-  or a cross-band denominator would change the approved meaning.
-- **Decision record:** Posted the blocker and concrete owner choices at
-  https://github.com/rwjblue/antennabench/issues/202#issuecomment-5017446681.
-- **jj change / commit:** None; no code or documentation changed for this item.
-- **Verification:** Reviewed the full issue, dependency contract, persisted
-  census shape, and requested hearing-rate grouping before stopping.
-- **Documentation:** None.
-- **Follow-up:** The owner must select the band-binding model. #203 remains
-  blocked on #202. Per the queue instructions, no #203 design note was posted
-  because #202 did not complete.
+- **Status:** Implemented after the owner selected band-qualified census rows
+  and #213 supplied that prerequisite; left open/in progress for owner review.
+- **Delivered:** The analysis crate joins band-qualified census records to
+  attributed observations without pooling strata or imputing activity. Reports
+  expose per-cycle active/heard counts and rates, paired active-in-both rates,
+  and explicit complete/partial/truncated/unknown coverage. Bandless or absent
+  census evidence stays coverage-unknown rather than becoming zero. Desktop
+  report loading preserves the adapter records needed for this derivation.
+- **Decision record:** Initial blocker and owner choices are recorded at
+  https://github.com/rwjblue/antennabench/issues/202#issuecomment-5017446681;
+  #213 implements the selected band-binding model.
+- **jj change / commit:** `qmlmuuqqyllo` —
+  `feat(report): condition hearing rates on active reporters (#202)`.
+- **Verification:** Focused three-cycle field-shape, truncation, and absence
+  tests passed; the complete `mise run ci` passed before the main bookmark was
+  advanced.
+- **Documentation:** Updated `docs/reading-your-report.md` with denominator,
+  pairing, coverage, and missingness semantics.
+- **Follow-up:** Owner review and normal publication/closure flow only.
 
 ## #207 — Label same-path comparison chart sides
 
@@ -98,7 +120,30 @@ were pushed, no pull request was opened, and no issue was closed.
 - **Documentation:** Added Natural Earth source, public-domain terms, source
   blob, quantization, exact checked-in size, and hard-cap details to
   `docs/attribution.md`.
-- **Follow-up:** #203 and the companion directionality figures should consume
-  these helpers and asset. #203 implementation still waits for the #202 owner
-  decision and its remaining design-note confirmation; this foundation does
-  not relax either gate.
+- **Follow-up:** #203 now consumes these helpers and asset. Companion
+  directionality figures can reuse the same foundation.
+
+## #203 — Add three-state receiver coverage maps
+
+- **Status:** Implemented after #213, #202, and #211 satisfied its data and
+  geometry prerequisites; left open/in progress for owner review.
+- **Delivered:** Full reports render side-by-side antenna coverage with a
+  script-free grid/polar toggle, grid view by default, and grid view in print.
+  Four-character cells distinguish heard, active-not-heard, and no active
+  coverage while retaining exact six-character reporter grids for audit.
+  Station-centered polar views and compact 8 × 4 square-root distance/azimuth
+  cells use the shared geographic foundation; unmapped reporters and bounded
+  detail are disclosed rather than dropped silently. The hosted Why WSPR
+  reference implementation, desktop stylesheet mirrors, and canonical sample
+  were refreshed to the same production contract.
+- **Design record:** The final production palette and 46,306-byte compiled
+  coastline confirmation are recorded at
+  https://github.com/rwjblue/antennabench/issues/203#issuecomment-5018031630.
+- **jj change / commit:** `qvwvmukyquqw` —
+  `feat(report): map active-receiver coverage (#203)`.
+- **Verification:** Focused report and field-shape suites, hosted contracts,
+  desktop real-browser CSP/style checks, and the complete `mise run ci` passed
+  before the main bookmark was advanced.
+- **Documentation:** Updated `docs/reading-your-report.md` for coverage-state,
+  map-view, compact-cell, missing-grid, and audit semantics.
+- **Follow-up:** Owner review and normal publication/closure flow only.
