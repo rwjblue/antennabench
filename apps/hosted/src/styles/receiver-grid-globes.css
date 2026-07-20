@@ -1,0 +1,217 @@
+.receiver-globe-section {
+  padding: clamp(2rem, 5vw, 3.8rem);
+  margin: clamp(3rem, 6vw, 5rem) 0 1.25rem;
+  border-radius: 1.25rem;
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 16% 15%, rgb(112 197 184 / 14%), transparent 22rem),
+    linear-gradient(150deg, #153c3a, #0b2323 72%);
+  box-shadow: var(--shadow);
+}
+
+.receiver-globe-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(280px, 0.55fr);
+  align-items: end;
+  gap: clamp(2rem, 6vw, 5rem);
+  margin-bottom: clamp(2rem, 4vw, 3.2rem);
+}
+
+.receiver-globe-heading .eyebrow {
+  color: var(--teal-bright);
+}
+
+.receiver-globe-heading h3 {
+  max-width: 660px;
+  margin-bottom: 0;
+  font-size: clamp(2rem, 4vw, 3.35rem);
+}
+
+.receiver-globe-heading > p {
+  margin-bottom: 0.25rem;
+  color: #c8d8d4;
+  font-size: 0.92rem;
+}
+
+.receiver-globe-definitions {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.receiver-globe-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.receiver-globe-card {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid rgb(247 241 223 / 14%);
+  border-radius: 0.9rem;
+  background: rgb(247 241 223 / 5%);
+}
+
+.receiver-globe-card > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0.2rem 0.9rem;
+  border-bottom: 1px solid rgb(247 241 223 / 13%);
+}
+
+.receiver-globe-card header span {
+  display: block;
+  color: var(--teal-bright);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.receiver-globe-card h4 {
+  margin: 0.15rem 0 0;
+  font-size: 2rem;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.receiver-globe-card header p {
+  margin-bottom: 0;
+  color: #c8d8d4;
+  font-size: 0.68rem;
+  text-align: right;
+}
+
+.receiver-globe-card header strong {
+  display: block;
+  color: var(--amber);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1.08rem;
+  line-height: 1.1;
+}
+
+.receiver-hemisphere-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin-top: 0.9rem;
+}
+
+.receiver-hemisphere-pair figure {
+  min-width: 0;
+  margin: 0;
+}
+
+.receiver-globe {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.receiver-globe-ocean {
+  fill: rgb(112 197 184 / 7%);
+}
+
+.receiver-globe-graticule {
+  fill: none;
+  stroke: rgb(247 241 223 / 11%);
+  stroke-width: 0.7;
+}
+
+.receiver-globe-land {
+  fill: none;
+  stroke: rgb(247 241 223 / 55%);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.05;
+}
+
+.receiver-globe-outline {
+  fill: none;
+  stroke: rgb(247 241 223 / 38%);
+  stroke-width: 1.5;
+}
+
+.receiver-grid-cell {
+  fill: var(--teal-bright);
+  stroke: rgb(213 241 235 / 70%);
+  stroke-width: 0.22;
+}
+
+.receiver-hemisphere-pair figcaption {
+  min-height: 2.1em;
+  margin-top: 0.15rem;
+  color: #9eb3ae;
+  font-size: 0.58rem;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.receiver-globe-note {
+  padding-top: 1rem;
+  margin: 1rem 0 0;
+  border-top: 1px solid rgb(247 241 223 / 13%);
+  color: #9eb3ae;
+  font-size: 0.72rem;
+}
+
+.receiver-globe-note a {
+  color: var(--teal-bright);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.receiver-globe-note a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+@media (max-width: 1060px) {
+  .receiver-globe-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .receiver-globe-card:last-child {
+    grid-column: 1 / -1;
+    width: min(560px, 100%);
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .receiver-globe-section {
+    padding: 1.25rem;
+    margin-inline: -0.15rem;
+  }
+
+  .receiver-globe-heading,
+  .receiver-globe-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .receiver-globe-card:last-child {
+    grid-column: auto;
+    width: auto;
+  }
+
+  .receiver-globe-heading {
+    gap: 1rem;
+  }
+}
+
+@media print {
+  .receiver-globe-section {
+    color: #000;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .receiver-grid-cell {
+    fill: #1f756c;
+  }
+}

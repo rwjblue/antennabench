@@ -174,9 +174,10 @@ invariant(home.includes('href="/why-wspr/"'), "Home page is missing the WSPR and
 
 const whyWspr = readFileSync(join(outputRoot, "why-wspr", "index.html"), "utf8");
 for (const networkChoiceContract of [
-  "Why WSPR is the default",
+  "Why AntennaBench starts with WSPR",
   "four-character Maidenhead grids",
-  "Use both networks, in sequence.",
+  "Use WSPR to understand the setup",
+  "Confirm the live result with RBN",
   "A missing spot is still not a zero.",
 ]) {
   invariant(
@@ -184,6 +185,20 @@ for (const networkChoiceContract of [
     `WSPR and RBN explanation is missing its content contract: ${networkChoiceContract}`,
   );
 }
+const whyWsprMain = whyWspr.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1];
+invariant(whyWsprMain !== undefined, "WSPR and RBN explanation is missing its main content");
+invariant(!whyWsprMain.includes("—"), "WSPR and RBN article contains an em dash");
+invariant(
+  !whyWspr.includes("The snapshot is bounded, checked in, and reproducible."),
+  "WSPR and RBN explanation still contains the removed generic reproducibility section",
+);
+const receiverGlobes = whyWspr.match(/class="receiver-globe"/g)?.length ?? 0;
+invariant(receiverGlobes === 6, `Expected six receiver hemispheres, found ${receiverGlobes}`);
+const occupiedGridCells = whyWspr.match(/class="receiver-grid-cell"/g)?.length ?? 0;
+invariant(
+  occupiedGridCells >= 1400,
+  `Expected the receiver globe to render the checked-in occupied grids, found ${occupiedGridCells}`,
+);
 
 const stylesheet = outputFiles
   .filter((path) => path.endsWith(".css"))
