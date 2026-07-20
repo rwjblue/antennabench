@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Fast Rust validation loop: formatting, lints, and tests"
+
+set -euo pipefail
+
+# Serial on purpose: all three are cargo-side, so parallel dependencies would
+# only queue on the target-directory build lock, and fmt failing first is the
+# cheapest exit.
+mise run fmt
+mise run lint
+mise run test

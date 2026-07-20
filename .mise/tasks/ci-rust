@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Serial cargo lane for ci: check, desktop e2e, report browser"
+#MISE hide=true
+
+set -euo pipefail
+
+# Cargo invocations serialize on the target-directory build lock, so running
+# them as one ordered lane avoids minutes of silent lock waiting while the
+# node-side ci tasks run in parallel.
+mise run check
+mise run desktop:e2e
+mise run desktop:report-browser

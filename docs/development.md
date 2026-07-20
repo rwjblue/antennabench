@@ -37,6 +37,7 @@ Windows, but macOS is the supported environment for interactive desktop work.
 ## Common Commands
 
 ```bash
+mise run check               # fast Rust loop: formatting, Clippy, tests
 mise run desktop:test        # focused desktop and frontend tests
 mise run desktop:e2e         # unattended setup-to-export workflow
 mise run desktop:report-browser # real-browser embedded report style/CSP check

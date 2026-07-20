@@ -143,10 +143,12 @@ require the explicit owner action in
 Before declaring Rust behavior complete, run:
 
 ```bash
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+mise run check
 ```
+
+`mise run check` runs the canonical formatting, Clippy, and workspace test
+commands with the same flags CI uses, so local runs and CI share warm build
+artifacts instead of compiling parallel flag-variant artifact sets.
 
 `mise run ci` additionally runs toolchain, workflow-input, exception-expiry,
 license, source, wildcard, and duplicate policy. It deliberately does not make

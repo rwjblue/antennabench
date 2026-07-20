@@ -68,9 +68,14 @@ When explicitly handed a GitHub issue:
 
 ## Validation
 
-- Before declaring Rust changes complete, run:
-  - `cargo fmt --check`
-  - `cargo clippy --all-targets -- -D warnings`
-  - `cargo test`
+- Match verification to the change; run the full gate only before landing:
+  - Rust changes: `mise run check` (formatting, Clippy, workspace tests)
+  - Desktop frontend changes: `mise run desktop:frontend-test`
+  - Hosted site changes: `mise run hosted:test`
+  - Embedded report HTML/CSS changes: also `mise run desktop:report-browser`
+  - Before declaring an issue complete or landing work: `mise run ci`
+- Use the mise tasks rather than ad-hoc cargo flag combinations: every distinct
+  flag set compiles a separate artifact universe under `target/`, so matching
+  the task flags keeps rebuilds warm across agent sessions.
 - For documentation-only changes, inspect the rendered intent and verify the
   working-copy diff is limited to the requested files.
