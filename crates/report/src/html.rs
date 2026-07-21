@@ -147,13 +147,13 @@ fn render_standalone_html_document(
     render_answer_first_overview(&mut out, report);
     for family in ordered_question_families(report) {
         match family {
-            ReportQuestionFamily::SharedPathSignal => render_same_path_section(&mut out, report),
+            ReportQuestionFamily::SharedPathSignal => render_same_path_section(&mut out, report)?,
             ReportQuestionFamily::CommonOpportunityDetection => {
                 render_reporter_activity_section(&mut out, report);
                 render_coverage_map_section(&mut out, report);
             }
-            ReportQuestionFamily::ObservedReach => render_reach_section(&mut out, report),
-            ReportQuestionFamily::GeographicProfile => render_distance_section(&mut out, report),
+            ReportQuestionFamily::ObservedReach => render_reach_section(&mut out, report)?,
+            ReportQuestionFamily::GeographicProfile => render_distance_section(&mut out, report)?,
             ReportQuestionFamily::Repeatability => {
                 render_overlap_repeatability_section(&mut out, report)
             }

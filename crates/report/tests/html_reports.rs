@@ -319,7 +319,7 @@ fn renders_revision_lifecycle_and_recorded_adapter_gap_disclosures() {
     assert!(html.contains("wspr-live / wsprnet-spots-mirror"));
     assert!(html.contains("half-open window"));
     assert!(html.contains("Lifecycle and interruption history"));
-    assert!(html.contains("recovered &lt;without inventing evidence&gt;"));
+    assert!(html.contains("recovered &#60;without inventing evidence&#62;"));
 }
 
 #[test]
@@ -521,9 +521,9 @@ fn renders_readiness_basis_and_bounded_command_diagnostics() {
     assert!(html.contains("Continued readiness"));
     assert!(html.contains("Antenna-control command attempts"));
     assert!(html.contains("Transmit-focused"));
-    assert!(html.contains("switch &lt;profile&gt;"));
+    assert!(html.contains("switch &#60;profile&#62;"));
     assert!(html.contains("truncated=true"));
-    assert!(html.contains("[1]=&quot;relay-a&quot;"));
+    assert!(html.contains("[1]=&#34;relay-a&#34;"));
 
     let explicit_complete = render_standalone_html_with_options(
         &report,
@@ -564,7 +564,7 @@ fn renders_readiness_basis_and_bounded_command_diagnostics() {
         "verify-record",
         "Verification",
         "intent-1",
-        "switch &lt;profile&gt;",
+        "switch &#60;profile&#62;",
         "revision-7",
         "Exit code 0",
         "0 ms elapsed",
@@ -703,15 +703,16 @@ fn renders_distinct_escaped_antenna_labels_without_mutating_report_data() {
         assert!(!html.contains(right_label));
     }
     assert!(full.contains(
-        "<th scope=\"col\">&lt;Vertical &amp; 1&gt; usable</th><th scope=\"col\">Loop &gt; Beam usable</th>"
+        "<th scope=\"col\">&#60;Vertical &#38; 1&#62; usable</th><th scope=\"col\">Loop &#62; Beam usable</th>"
     ));
-    assert!(full
-        .contains("<th scope=\"col\">Unmatched — &lt;Vertical &amp; 1&gt; / Loop &gt; Beam</th>"));
+    assert!(full.contains(
+        "<th scope=\"col\">Unmatched — &#60;Vertical &#38; 1&#62; / Loop &#62; Beam</th>"
+    ));
     for expected in [
-        "Unmatched — &lt;Vertical &amp; 1&gt;",
-        "Missing SNR — Loop &gt; Beam",
-        "&lt;Vertical &amp; 1&gt; then Loop &gt; Beam",
-        "Loop &gt; Beam then &lt;Vertical &amp; 1&gt;",
+        "Unmatched — &#60;Vertical &#38; 1&#62;",
+        "Missing SNR — Loop &#62; Beam",
+        "&#60;Vertical &#38; 1&#62; then Loop &#62; Beam",
+        "Loop &#62; Beam then &#60;Vertical &#38; 1&#62;",
     ] {
         assert!(
             full.contains(expected),

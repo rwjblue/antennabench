@@ -8,7 +8,13 @@ pub(super) struct OperationalHistoryView<'a> {
     pub(super) summary: &'a str,
 }
 mod audit;
+mod comparison;
 mod evidence;
+mod location_audit;
+mod snapshot;
 
 pub(super) use audit::*;
+pub(super) use comparison::*;
 pub(super) use evidence::*;
+pub(super) use location_audit::*;
+pub(super) use snapshot::*;

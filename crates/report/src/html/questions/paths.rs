@@ -6,25 +6,27 @@ use std::collections::BTreeMap;
 pub(in super::super) fn render_same_path_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-) {
+) -> Result<(), ReportError> {
     out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Shared-path signal</h2><p class=\"muted\">Evidence basis: finite-SNR reports for the same remote path in both cycles of an eligible block, kept within each separate comparison group.</p>");
     render_same_path_view(out, report);
     out.push_str("<details class=\"audit-disclosure\"><summary>Review same-path signal detail</summary><div class=\"disclosure-body\">");
-    render_comparison_diagnostics(out, report);
-    render_paired_differences(out, report);
-    render_paired_snr_time(out, report);
-    render_stratum_summaries(out, report);
+    render_comparison_diagnostics(out, report)?;
+    render_paired_differences(out, report)?;
+    render_paired_snr_time(out, report)?;
+    render_stratum_summaries(out, report)?;
     out.push_str("</div></details></section>");
+    Ok(())
 }
 pub(in super::super) fn render_reach_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-) {
+) -> Result<(), ReportError> {
     out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2><p class=\"muted\">Evidence basis: unique observed finite-SNR remote paths by antenna within each separate comparison group.</p>");
     render_reach_view(out, report);
     out.push_str("<details class=\"audit-disclosure\"><summary>Review path overlap and missingness</summary><div class=\"disclosure-body\">");
-    render_overlap(out, report);
+    render_overlap(out, report)?;
     out.push_str("</div></details></section>");
+    Ok(())
 }
 pub(in super::super) fn render_same_path_view(
     out: &mut CheckedHtmlWriter<'_>,

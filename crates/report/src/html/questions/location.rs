@@ -4,7 +4,7 @@ use super::*;
 pub(in super::super) fn render_distance_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-) {
+) -> Result<(), ReportError> {
     render_observed_profile_intro(out, report);
     render_goal_distance_focus(out, report);
     render_all_path_profiles(out, report);
@@ -15,12 +15,13 @@ pub(in super::super) fn render_distance_section(
         out.push_str("<details class=\"audit-disclosure\"><summary>Review shared-path distance and direction context</summary><div class=\"disclosure-body\"><p class=\"muted\">This separate view answers where finite-SNR differences occurred among paths decoded on both antennas.</p>");
         render_observed_path_context(out, report);
         out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review exact paired-row distance and azimuth detail</summary><div class=\"disclosure-body\">");
-        render_location_views(out, report);
+        render_location_views(out, report)?;
         out.push_str("</div></details>");
     }
     out.push_str("<details class=\"audit-disclosure\"><summary>Review derived solar context</summary><div class=\"disclosure-body\">");
-    render_solar_context(out, report);
+    render_solar_context(out, report)?;
     out.push_str("</div></details></section>");
+    Ok(())
 }
 
 pub(in super::super) fn render_compact_observed_footprint_section(

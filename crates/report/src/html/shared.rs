@@ -108,10 +108,6 @@ pub(super) fn fact(out: &mut CheckedHtmlWriter<'_>, label: &str, value: &str) {
     );
 }
 
-pub(super) fn detail(out: &mut CheckedHtmlWriter<'_>, label: &str, value: &str) {
-    write_html!(out, "<dt>{}</dt><dd>{}</dd>", label, escape_html(value));
-}
-
 pub(super) fn optional_join(values: &[String]) -> String {
     if values.is_empty() {
         not_recorded()
