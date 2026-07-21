@@ -7,6 +7,7 @@ pub(in super::super) fn render_question_navigation(
     include_audit: bool,
 ) {
     out.push_str("<nav class=\"question-nav\" aria-label=\"Report questions\"><ul><li><a href=\"#what-run-show\">What did the run show?</a></li>");
+    let mut observed_footprint_linked = false;
     for family in ordered_question_families(report) {
         if !question_family_is_primary_available(report, family) {
             continue;
@@ -14,9 +15,29 @@ pub(in super::super) fn render_question_navigation(
         match family {
             crate::ReportQuestionFamily::SharedPathSignal => out.push_str("<li><a href=\"#same-path-signal\">Shared-path signal</a></li>"),
             crate::ReportQuestionFamily::CommonOpportunityDetection => out.push_str("<li><a href=\"#reporter-activity\">Detection among receivers active in both cycles</a></li><li><a href=\"#coverage-map\">Active-receiver coverage map</a></li>"),
-            crate::ReportQuestionFamily::ObservedReach => out.push_str("<li><a href=\"#reach-unique-paths\">Observed reach</a></li>"),
-            crate::ReportQuestionFamily::GeographicProfile => out.push_str("<li><a href=\"#distance-direction\">Observed distance and direction profile</a></li>"),
-            crate::ReportQuestionFamily::Repeatability => out.push_str("<li><a href=\"#coverage-overlap\">Coverage overlap and repeatability</a></li>"),
+            crate::ReportQuestionFamily::ObservedReach => {
+                if include_audit {
+                    out.push_str("<li><a href=\"#reach-unique-paths\">Observed reach</a></li>");
+                } else if !observed_footprint_linked {
+                    out.push_str("<li><a href=\"#observed-footprint\">Observed footprint</a></li>");
+                    observed_footprint_linked = true;
+                }
+            }
+            crate::ReportQuestionFamily::GeographicProfile => {
+                if include_audit {
+                    out.push_str("<li><a href=\"#distance-direction\">Observed distance and direction profile</a></li>");
+                } else if !observed_footprint_linked {
+                    out.push_str("<li><a href=\"#observed-footprint\">Observed footprint</a></li>");
+                    observed_footprint_linked = true;
+                }
+            }
+            crate::ReportQuestionFamily::Repeatability => {
+                if include_audit {
+                    out.push_str("<li><a href=\"#coverage-overlap\">Coverage overlap and repeatability</a></li>");
+                } else {
+                    out.push_str("<li><a href=\"#coverage-overlap\">Observed-path repeatability</a></li>");
+                }
+            }
         }
     }
     out.push_str("<li><a href=\"#run-quality\">Run quality</a></li>");
@@ -28,23 +49,38 @@ pub(in super::super) fn render_question_navigation(
 pub(in super::super) fn render_how_to_read(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
+    compact: bool,
 ) {
-    if is_single_antenna_lens(report) {
-        out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing public report is missing evidence, never a zero-strength signal.</li><li>This profiling report describes the recorded antenna’s observed footprint and repetition; it does not infer unobserved coverage.</li><li>Direction, band, mode, evidence kind, and source remain separate.</li><li>Distance categories describe great-circle distance and do not establish a propagation mode.</li></ul></aside>");
+    let (prefix, suffix) = if compact {
+        (
+            "<details class=\"panel reading-guide\"><summary>How to read this report</summary><div class=\"reading-guide-body\">",
+            "</div></details>",
+        )
     } else {
-        out.push_str("<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2><ul><li>A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.</li><li>A block is a back-to-back pair of cycles, one per antenna.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul></aside>");
+        (
+            "<aside class=\"panel reading-guide\" aria-labelledby=\"reading-guide-title\"><h2 id=\"reading-guide-title\">How to read this report</h2>",
+            "</aside>",
+        )
+    };
+    out.push_str(prefix);
+    if is_single_antenna_lens(report) {
+        out.push_str("<ul><li>A missing public report is missing evidence, never a zero-strength signal.</li><li>This profiling report describes the recorded antenna’s observed footprint and repetition; it does not infer unobserved coverage.</li><li>Direction, band, mode, evidence kind, and source remain separate.</li><li>Distance categories describe great-circle distance and do not establish a propagation mode.</li></ul>");
+    } else {
+        out.push_str("<ul><li>A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.</li><li>This report describes evidence; it does not select a winner or prove one antenna is better.</li><li>Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.</li><li>A block is a back-to-back pair of cycles, one per antenna.</li><li>Alternating antennas reduces but does not eliminate time and propagation effects.</li></ul>");
     }
+    out.push_str(suffix);
 }
 pub(in super::super) fn render_answer_first_overview(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    render_answer_first_overview_with_reference(out, report, "the audit appendix");
+    render_answer_first_overview_with_reference(out, report, "the audit appendix", false);
 }
 pub(in super::super) fn render_answer_first_overview_with_reference(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
     audit_reference: &str,
+    compact: bool,
 ) {
     let overview = &report.overview;
     let scope = &overview.scope;
@@ -87,19 +123,32 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     out.push_str("<section id=\"what-run-show\" class=\"panel overview\" tabindex=\"-1\" aria-labelledby=\"what-run-show-title\"><p class=\"eyebrow\">Answer first</p><h2 id=\"what-run-show-title\">What did the run show?</h2>");
     render_answerability_headline(out, report);
     render_plain_language_answer(out, report);
+    render_headline_metrics(out, report);
     write_html!(
         out,
-        "<p class=\"scope-line\">Station <strong>{}</strong> at <strong>{}</strong>; goal: <strong>{}</strong>.</p>",
+        "<div class=\"scope-line\">Station <strong>{}</strong> at <strong>{}</strong>; goal: <strong>{}</strong>",
         escape_html(&scope.station.callsign),
         escape_html(&scope.station.grid),
         scope.goal.map(session_goal).unwrap_or("Not recorded"),
     );
     if let Some(lens) = &overview.goal_lens {
-        write_html!(out, "<aside class=\"goal-lens\" aria-label=\"Predeclared goal lens\"><p><strong>{} lens:</strong> {}</p>", session_goal(lens.goal), escape_html(&lens.practical_meaning));
-        if !lens.emphasized_distance_bins.is_empty() {
-            write_html!(out, "<p class=\"muted\"><strong>Prespecified distance focus:</strong> {}. Every other available distance category remains visible.</p>", lens.emphasized_distance_bins.iter().map(|bin| bin.label()).collect::<Vec<_>>().join("; "));
+        if compact {
+            write_html!(out, " <details class=\"goal-help\"><summary aria-label=\"About the recorded {} goal lens\">i</summary><div class=\"goal-help-popover\"><strong>{} lens</strong><p>{}</p>", session_goal(lens.goal), session_goal(lens.goal), escape_html(&lens.practical_meaning));
+            if !lens.emphasized_distance_bins.is_empty() {
+                write_html!(out, "<p><strong>Prespecified distance focus:</strong> {}. Every other available distance category remains visible.</p>", lens.emphasized_distance_bins.iter().map(|bin| bin.label()).collect::<Vec<_>>().join("; "));
+            }
+            out.push_str("<p>The goal changes presentation priority only; evidence and calculations are unchanged.</p></div></details>");
         }
-        out.push_str("<p class=\"muted\">The recorded goal changes presentation priority only; evidence, calculations, thresholds, and conclusions are unchanged.</p></aside>");
+        out.push_str(".</div>");
+        if !compact {
+            write_html!(out, "<aside class=\"goal-lens\" aria-label=\"Predeclared goal lens\"><p><strong>{} lens:</strong> {}</p>", session_goal(lens.goal), escape_html(&lens.practical_meaning));
+            if !lens.emphasized_distance_bins.is_empty() {
+                write_html!(out, "<p class=\"muted\"><strong>Prespecified distance focus:</strong> {}. Every other available distance category remains visible.</p>", lens.emphasized_distance_bins.iter().map(|bin| bin.label()).collect::<Vec<_>>().join("; "));
+            }
+            out.push_str("<p class=\"muted\">The recorded goal changes presentation priority only; evidence, calculations, thresholds, and conclusions are unchanged.</p></aside>");
+        }
+    } else {
+        out.push_str(".</div>");
     }
     out.push_str("<dl class=\"facts headline-facts\">");
     fact(out, "Antennas", &antennas);
@@ -117,14 +166,18 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
         None if is_single_antenna_lens(report) => out.push_str("<p class=\"orientation\"><strong>Signal-difference orientation:</strong> not applicable to this single-antenna profiling run.</p>"),
         None => out.push_str("<p class=\"orientation\"><strong>Delta orientation:</strong> unavailable because this run does not provide a two-label paired orientation.</p>"),
     }
-    if overview
-        .strata
-        .iter()
-        .any(|row| matches!(row.path_delta, ReportOverviewPathDelta::Available { .. }))
+    if !compact
+        && overview
+            .strata
+            .iter()
+            .any(|row| matches!(row.path_delta, ReportOverviewPathDelta::Available { .. }))
     {
         out.push_str("<p class=\"muted delta-scale\"><strong>For scale:</strong> a 3 dB difference is the same change as doubling transmit power. Individual WSPR reports are whole-dB values that vary cycle to cycle.</p>");
     }
 
+    if compact {
+        out.push_str("<details class=\"audit-disclosure overview-group-disclosure\"><summary>Review exact per-group headline evidence</summary><div class=\"disclosure-body\">");
+    }
     out.push_str("<div class=\"table-wrap\"><table class=\"overview-table\"><caption>Descriptive result by comparison group</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">Path delta</th><th scope=\"col\">Paths / matched pairs</th><th scope=\"col\">Blocks <small>(back-to-back cycle pairs, one cycle per antenna)</small></th><th scope=\"col\">Coverage</th></tr></thead><tbody>");
     if overview.strata.is_empty() {
         out.push_str("<tr><td data-label=\"Comparison group\" colspan=\"5\">No comparison groups are available for this run.</td></tr>");
@@ -172,7 +225,11 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
             write_html!(out, "<tr class=\"collapsed-empty-strata\"><td data-label=\"Comparison group\">No path delta in {}: {}</td><td data-label=\"Path delta\">Not available</td><td data-label=\"Paths / matched pairs\">Kept separate</td><td data-label=\"Blocks\">Kept separate</td><td data-label=\"Coverage\">Unavailable</td></tr>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable));
         }
     }
-    out.push_str("</tbody></table></div><div class=\"overview-support\"><section aria-labelledby=\"supported-title\"><h3 id=\"supported-title\">Supported by this run</h3><ul>");
+    out.push_str("</tbody></table></div>");
+    if compact {
+        out.push_str("</div></details>");
+    }
+    out.push_str("<div class=\"overview-support\"><section aria-labelledby=\"supported-title\"><h3 id=\"supported-title\">Supported by this run</h3><ul>");
     write_html!(
         out,
         "<li>The recorded comparison state is <strong>{}</strong>.</li>",
@@ -226,7 +283,10 @@ fn render_answerability_headline(out: &mut CheckedHtmlWriter<'_>, report: &Sessi
         .filter(|family| question_family_is_primary_available(report, *family))
         .map(question_family_label)
         .collect::<Vec<_>>();
-    let answered = if answered.is_empty() {
+    let applicable_count = if is_single_antenna_lens(report) { 3 } else { 5 };
+    let answered = if answered.len() == applicable_count {
+        format!("All {applicable_count} applicable question families have usable evidence.")
+    } else if answered.is_empty() {
         "None of the five report question families has usable evidence yet.".to_string()
     } else {
         format!("Answered by this run: {}.", answered.join("; "))
@@ -252,20 +312,52 @@ fn question_family_label(family: crate::ReportQuestionFamily) -> &'static str {
 
 fn render_answerability_disclosure(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let answerability = &report.overview.answerability;
-    out.push_str("<details class=\"answerability-disclosure\"><summary>Question availability and limits</summary><dl class=\"facts answerability-facts\">");
+    out.push_str("<details class=\"audit-disclosure answerability-disclosure\"><summary>Question availability and limits</summary><dl class=\"facts answerability-facts disclosure-body\">");
     answerability_fact(
         out,
         "Shared-path signal",
+        if answerability.same_path_signal == SamePathSignalAnswerability::Available {
+            "Available"
+        } else {
+            "Unavailable"
+        },
         same_path_answerability_text(answerability.same_path_signal),
     );
+    let paired_status =
+        if answerability.paired_detectability == PairedDetectabilityAnswerability::Available {
+            if report
+                .reporter_activity
+                .joint_summaries
+                .iter()
+                .any(|summary| {
+                    matches!(
+                        summary.coverage,
+                        antennabench_analysis::ReporterActivityCoverage::Partial
+                            | antennabench_analysis::ReporterActivityCoverage::Truncated
+                    )
+                })
+            {
+                "Limited"
+            } else {
+                "Available"
+            }
+        } else {
+            "Unavailable"
+        };
     answerability_fact(
         out,
         "Detection among receivers active in both cycles",
+        paired_status,
         paired_detectability_answerability_text(answerability.paired_detectability),
     );
     answerability_fact(
         out,
         "Observed reach",
+        if answerability.observed_reach == ObservedReachAnswerability::Available {
+            "Available"
+        } else {
+            "Unavailable"
+        },
         match answerability.observed_reach {
             ObservedReachAnswerability::Available => "Available from unique observed paths",
             ObservedReachAnswerability::NoUsablePaths => "No usable paths",
@@ -274,6 +366,11 @@ fn render_answerability_disclosure(out: &mut CheckedHtmlWriter<'_>, report: &Ses
     answerability_fact(
         out,
         "Observed distance and direction profile",
+        if answerability.geographic_profile == GeographicProfileAnswerability::Available {
+            "Available"
+        } else {
+            "Unavailable"
+        },
         match answerability.geographic_profile {
             GeographicProfileAnswerability::Available => "Available from located observed paths",
             GeographicProfileAnswerability::NoLocatedPaths => "No located paths",
@@ -282,6 +379,11 @@ fn render_answerability_disclosure(out: &mut CheckedHtmlWriter<'_>, report: &Ses
     answerability_fact(
         out,
         "Repeatability across blocks",
+        if answerability.repeatability == RepeatabilityAnswerability::Available {
+            "Available"
+        } else {
+            "Limited"
+        },
         match answerability.repeatability {
             RepeatabilityAnswerability::Available => "Available across repeated eligible blocks",
             RepeatabilityAnswerability::InsufficientRepetition => "Insufficient repetition",
@@ -290,11 +392,18 @@ fn render_answerability_disclosure(out: &mut CheckedHtmlWriter<'_>, report: &Ses
     out.push_str("</dl></details>");
 }
 
-fn answerability_fact(out: &mut CheckedHtmlWriter<'_>, question: &str, availability: &str) {
+fn answerability_fact(
+    out: &mut CheckedHtmlWriter<'_>,
+    question: &str,
+    status: &str,
+    availability: &str,
+) {
     write_html!(
         out,
-        "<div><dt>{}</dt><dd>{}</dd></div>",
+        "<div class=\"fact availability-row\"><dt>{}</dt><dd><strong class=\"badge availability-status status-{}\">{}</strong><br><span>{}</span></dd></div>",
         escape_html(question),
+        status.to_ascii_lowercase(),
+        status,
         escape_html(availability)
     );
 }
@@ -338,6 +447,195 @@ fn render_plain_language_answer(out: &mut CheckedHtmlWriter<'_>, report: &Sessio
         plain_language_answer(report)
     );
 }
+
+#[derive(Clone)]
+struct HeadlineEvidence {
+    family: crate::ReportQuestionFamily,
+    label: &'static str,
+    value: String,
+    detail: String,
+    clause: String,
+    direction: i8,
+}
+
+fn render_headline_metrics(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+    let groups = report
+        .overview
+        .strata
+        .iter()
+        .filter_map(|row| {
+            let facts = prioritized_headline_evidence(report, row);
+            (!facts.is_empty()).then_some((row, facts))
+        })
+        .collect::<Vec<_>>();
+    for (index, (row, facts)) in groups.iter().enumerate() {
+        if groups.len() > 1 {
+            write_html!(
+                out,
+                "<h3 class=\"headline-group-title\" id=\"headline-group-{index}\">{}</h3>",
+                comparison_stratum(&row.stratum)
+            );
+            write_html!(
+                out,
+                "<p class=\"headline-group-answer\">{}</p>",
+                descriptive_group_sentence(report, row, false)
+            );
+        }
+        out.push_str("<dl class=\"facts answer-metrics\">");
+        for fact in facts {
+            write_html!(
+                out,
+                "<div class=\"fact\"><dt>{}</dt><dd>{}<br><small class=\"muted\">{}</small></dd></div>",
+                fact.label,
+                fact.value,
+                fact.detail
+            );
+        }
+        out.push_str("</dl>");
+    }
+}
+
+fn prioritized_headline_evidence(
+    report: &SessionReport,
+    row: &ReportOverviewStratum,
+) -> Vec<HeadlineEvidence> {
+    let (left_label, right_label) = report_antenna_labels(report);
+    let mut facts = Vec::new();
+    if let ReportOverviewPathDelta::Available {
+        median_path_delta_right_minus_left_db: median,
+        ..
+    } = row.path_delta
+    {
+        let stronger = if median > 0.0 {
+            right_label.as_str()
+        } else if median < 0.0 {
+            left_label.as_str()
+        } else {
+            "neither antenna"
+        };
+        let clause = if median == 0.0 {
+            format!(
+                "a 0 dB shared-path median across {} path{}",
+                row.unique_path_count,
+                plural_suffix(row.unique_path_count)
+            )
+        } else {
+            format!(
+                "a {} dB median across {} shared path{}",
+                format_signed(median),
+                row.unique_path_count,
+                plural_suffix(row.unique_path_count)
+            )
+        };
+        facts.push(HeadlineEvidence {
+            family: crate::ReportQuestionFamily::SharedPathSignal,
+            label: "Shared-path signal",
+            value: format!("{} dB median", format_signed(median)),
+            detail: format!(
+                "{} shared path{} · {stronger} stronger at the median",
+                row.unique_path_count,
+                plural_suffix(row.unique_path_count)
+            ),
+            clause,
+            direction: median.total_cmp(&0.0) as i8,
+        });
+    }
+    if let Some(summary) = report
+        .reporter_activity
+        .joint_summaries
+        .iter()
+        .find(|summary| summary.stratum == row.stratum)
+        .filter(|summary| {
+            summary.coverage.is_known()
+                && summary.receiver_block_opportunity_count > 0
+                && summary.left_detection_rate.is_some()
+                && summary.right_detection_rate.is_some()
+        })
+    {
+        let left_rate = summary.left_detection_rate.expect("filtered rate");
+        let right_rate = summary.right_detection_rate.expect("filtered rate");
+        let (first_rate, second_rate, first_label, second_label) = if right_rate >= left_rate {
+            (
+                right_rate,
+                left_rate,
+                right_label.as_str(),
+                left_label.as_str(),
+            )
+        } else {
+            (
+                left_rate,
+                right_rate,
+                left_label.as_str(),
+                right_label.as_str(),
+            )
+        };
+        facts.push(HeadlineEvidence {
+            family: crate::ReportQuestionFamily::CommonOpportunityDetection,
+            label: "Same active receivers",
+            value: format!("{:.1}% vs {:.1}%", first_rate * 100.0, second_rate * 100.0),
+            detail: format!(
+                "{first_label} / {second_label} · {} opportunities",
+                summary.receiver_block_opportunity_count
+            ),
+            clause: format!(
+                "{:.1}% versus {:.1}% detection among {} common-active receiver opportunities",
+                first_rate * 100.0,
+                second_rate * 100.0,
+                summary.receiver_block_opportunity_count
+            ),
+            direction: right_rate.total_cmp(&left_rate) as i8,
+        });
+    }
+    let left_paths = row.reach.left_only_unique_path_count + row.reach.both_unique_path_count;
+    let right_paths = row.reach.right_only_unique_path_count + row.reach.both_unique_path_count;
+    if left_paths > 0 || right_paths > 0 {
+        let (first_count, second_count, first_label, second_label) = if right_paths >= left_paths {
+            (
+                right_paths,
+                left_paths,
+                right_label.as_str(),
+                left_label.as_str(),
+            )
+        } else {
+            (
+                left_paths,
+                right_paths,
+                left_label.as_str(),
+                right_label.as_str(),
+            )
+        };
+        facts.push(HeadlineEvidence {
+            family: crate::ReportQuestionFamily::ObservedReach,
+            label: "Observed footprint",
+            value: format!("{first_count} vs {second_count} paths"),
+            detail: format!("{first_label} / {second_label} · uncontrolled observations"),
+            clause: format!("{first_count} versus {second_count} unique observed paths"),
+            direction: right_paths.cmp(&left_paths) as i8,
+        });
+    }
+    let default_priority = [
+        crate::ReportQuestionFamily::SharedPathSignal,
+        crate::ReportQuestionFamily::CommonOpportunityDetection,
+        crate::ReportQuestionFamily::ObservedReach,
+    ];
+    let priority = report
+        .overview
+        .goal_lens
+        .as_ref()
+        .map(|lens| lens.priority.as_slice())
+        .unwrap_or(&default_priority);
+    let mut ordered = Vec::new();
+    for family in priority {
+        if let Some(fact) = facts.iter().find(|fact| fact.family == *family) {
+            ordered.push(fact.clone());
+        }
+        if ordered.len() == 3 {
+            break;
+        }
+    }
+    ordered
+}
+
 fn plain_language_answer(report: &SessionReport) -> String {
     let overview = &report.overview;
     let mut sentences = match overview.comparison_availability {
@@ -354,11 +652,19 @@ fn plain_language_answer(report: &SessionReport) -> String {
                 .to_string(),
             "To make a future run answerable, complete more repetitions.".to_string(),
         ],
+        antennabench_analysis::ComparisonAvailability::NoMatchedPaths
+            if overview
+                .strata
+                .iter()
+                .any(|row| !prioritized_headline_evidence(report, row).is_empty()) =>
+        {
+            descriptive_group_sentences(report)
+        }
         antennabench_analysis::ComparisonAvailability::NoMatchedPaths => {
             no_matched_path_sentences(report)
         }
         antennabench_analysis::ComparisonAvailability::DescriptivePairsAvailable => {
-            descriptive_group_sentences(overview)
+            descriptive_group_sentences(report)
         }
     };
     if matches!(
@@ -449,62 +755,74 @@ fn no_matched_path_sentences(report: &SessionReport) -> Vec<String> {
     );
     sentences
 }
-fn descriptive_group_sentences(overview: &crate::ReportOverview) -> Vec<String> {
-    let orientation = overview.scope.delta_orientation.as_ref();
-    let mut sentences = overview
+fn descriptive_group_sentences(report: &SessionReport) -> Vec<String> {
+    let overview = &report.overview;
+    let supported_group_count = overview
         .strata
         .iter()
-        .filter_map(|row| {
-            let ReportOverviewPathDelta::Available {
-                median_path_delta_right_minus_left_db,
-                ..
-            } = row.path_delta
-            else {
-                return None;
-            };
-            let station_count = row.unique_path_count;
-            let stations = if station_count == 1 {
-                "station"
-            } else {
-                "stations"
-            };
-            let group = comparison_stratum(&row.stratum);
-            if median_path_delta_right_minus_left_db == 0.0 {
-                return Some(format!(
-                    "{station_count} {stations} heard both antennas on {group}; the typical (median) difference was 0 dB, with no signed difference at the median."
-                ));
-            }
-            match orientation {
-                Some(orientation) => {
-                    let (left_label, right_label) = orientation_antenna_labels(orientation);
-                    let stronger_label = if median_path_delta_right_minus_left_db > 0.0 {
-                        right_label
-                    } else {
-                        left_label
-                    };
-                    Some(format!(
-                        "{station_count} {stations} heard both antennas on {group}; the typical (median) difference was {} dB, with {stronger_label} stronger.",
-                        format_number(median_path_delta_right_minus_left_db.abs())
-                    ))
-                }
-                None => Some(format!(
-                    "{station_count} {stations} heard both antennas on {group}; the typical median signed difference was {} dB.",
-                    format_signed(median_path_delta_right_minus_left_db)
-                )),
-            }
-        })
+        .filter(|row| !prioritized_headline_evidence(report, row).is_empty())
+        .count();
+    if supported_group_count > 1 {
+        return vec![format!(
+            "Headline evidence is shown separately for {supported_group_count} comparison groups below and is not pooled. Each conclusion describes this session, not a universal antenna ranking."
+        )];
+    }
+    let sentences = overview
+        .strata
+        .iter()
+        .filter(|row| !prioritized_headline_evidence(report, row).is_empty())
+        .map(|row| descriptive_group_sentence(report, row, true))
         .collect::<Vec<_>>();
     if sentences.is_empty() {
-        sentences.push(
+        vec![
             "Matched comparisons are available; review the per-group table for their descriptive results."
                 .to_string(),
-        );
+        ]
     } else {
-        sentences.push(
-            "See the per-group table for the observed spread in each comparison group.".to_string(),
-        );
+        sentences
     }
-    sentences
+}
+
+fn descriptive_group_sentence(
+    report: &SessionReport,
+    row: &ReportOverviewStratum,
+    include_group: bool,
+) -> String {
+    let overview = &report.overview;
+    let goal = overview
+        .scope
+        .goal
+        .map(session_goal)
+        .unwrap_or("comparison");
+    let (left_label, right_label) = report_antenna_labels(report);
+    let facts = prioritized_headline_evidence(report, row);
+    let nonzero = facts
+        .iter()
+        .map(|fact| fact.direction)
+        .filter(|direction| *direction != 0)
+        .collect::<Vec<_>>();
+    let assessment = if nonzero.is_empty() {
+        "the available headline measures were tied".to_string()
+    } else if nonzero.iter().all(|direction| *direction > 0) {
+        format!("{right_label} produced stronger recorded results")
+    } else if nonzero.iter().all(|direction| *direction < 0) {
+        format!("{left_label} produced stronger recorded results")
+    } else {
+        "the available headline measures were mixed".to_string()
+    };
+    let group = if include_group {
+        format!(" in {}", comparison_stratum(&row.stratum))
+    } else {
+        String::new()
+    };
+    format!(
+        "For this {goal} run{group}, {assessment}: {}. These results describe this session, not a universal antenna ranking.",
+        facts
+            .iter()
+            .map(|fact| fact.clause.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 fn no_public_wspr_spots(overview: &crate::ReportOverview) -> bool {
     let public_wspr_groups = overview.strata.iter().filter(|row| {
