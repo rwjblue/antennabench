@@ -110,9 +110,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
         document.assert_no_navigation_target(unavailable_anchor);
     }
     document.assert_present("details.audit-disclosure");
-    assert!(first.contains(
-        "details:not([open]) > :not(summary) {\n    display: none !important;"
-    ));
+    assert!(first.contains("details:not([open]) > :not(summary) {\n    display: none !important;"));
     assert!(first.contains("break-after: page"));
 }
 
@@ -186,9 +184,7 @@ fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
     assert!(first.contains("Content-Security-Policy"));
     assert!(first.contains("default-src 'none'"));
     assert!(first.contains(".compact-summary .overview {\n    break-after: auto;"));
-    assert!(first.contains(
-        ".compact-summary .question-section {\n    break-before: auto;"
-    ));
+    assert!(first.contains(".compact-summary .question-section {\n    break-before: auto;"));
     assert!(!first.contains("<script"));
     assert!(!first.contains("http://"));
     assert!(!first.contains("https://"));
