@@ -139,7 +139,7 @@ fn operational_history_requires_explicit_full_report_inclusion_and_is_escaped() 
 }
 
 #[test]
-fn compact_summary_reuses_full_report_facts_without_audit_detail() {
+fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail() {
     let mut report = paired_report(true);
     report.snapshot.checkpoint_revision = Some(27);
     report
@@ -233,6 +233,10 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
         "Derived solar context",
         "Matched-pair difference data",
     ] {
+        assert!(
+            full.contains(omitted),
+            "full-report fixture did not exercise restricted value {omitted}"
+        );
         assert!(!first.contains(omitted), "compact output leaked {omitted}");
     }
 }

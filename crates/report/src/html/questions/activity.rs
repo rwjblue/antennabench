@@ -25,7 +25,10 @@ pub(in super::super) fn render_reporter_activity_section(
 }
 
 fn activity_view(report: &SessionReport) -> ReporterActivityView {
-    let (left_label, right_label) = labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     ReporterActivityView {
         no_activity: report.reporter_activity.cycle_rates.is_empty(),
         groups: report
@@ -61,7 +64,7 @@ fn activity_view(report: &SessionReport) -> ReporterActivityView {
                 .collect();
                 ActivityGroupView {
                     index,
-                    label: stratum(&row.stratum),
+                    label: comparison_group_label(&row.stratum),
                     coverage: coverage_text(row.coverage),
                     known_blocks: row.known_coverage_block_count,
                     eligible_blocks: row.eligible_block_count,
@@ -77,7 +80,7 @@ fn activity_view(report: &SessionReport) -> ReporterActivityView {
             .joint_summaries
             .iter()
             .map(|row| ActivityJointSummaryRowView {
-                group: stratum(&row.stratum),
+                group: comparison_group_label(&row.stratum),
                 unique_receivers: row.unique_active_receiver_count,
                 eligible_blocks: row.eligible_block_count,
                 left_then_right: row.left_then_right_block_count,
@@ -98,7 +101,7 @@ fn activity_view(report: &SessionReport) -> ReporterActivityView {
             .paired_rates
             .iter()
             .map(|row| ActivityPairedRowView {
-                group: stratum(&row.stratum),
+                group: comparison_group_label(&row.stratum),
                 block: row.block_index + 1,
                 order: labeled_comparison_order(row.order, &left_label, &right_label),
                 left_slot: row.left_slot_id.clone(),
@@ -128,7 +131,7 @@ fn activity_view(report: &SessionReport) -> ReporterActivityView {
             .cycle_rates
             .iter()
             .map(|row| ActivityCycleRowView {
-                group: stratum(&row.stratum),
+                group: comparison_group_label(&row.stratum),
                 antenna: row.antenna_label.clone(),
                 starts: timestamp(row.cycle_starts_at),
                 slot: row.slot_id.clone(),
@@ -146,7 +149,7 @@ fn activity_view(report: &SessionReport) -> ReporterActivityView {
             .paired_rates
             .iter()
             .flat_map(|row| {
-                let group = stratum(&row.stratum);
+                let group = comparison_group_label(&row.stratum);
                 let left_label = left_label.clone();
                 let right_label = right_label.clone();
                 row.receivers
@@ -243,32 +246,6 @@ fn detection_rate_view(
             },
         ],
     }
-}
-
-fn labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".into()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".into()),
-    )
-}
-
-fn stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
 }
 
 fn aggregate_rate_text(rate: Option<f64>) -> String {

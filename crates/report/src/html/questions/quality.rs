@@ -42,7 +42,10 @@ pub(in super::super) fn render_run_quality_section(
 }
 
 fn quality_view(report: &SessionReport) -> QualityView {
-    let (left_label, right_label) = labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     QualityView {
         no_strata: report.overview.strata.is_empty(),
         comparison_state: comparison_availability_label(report.overview.comparison_availability),
@@ -52,7 +55,7 @@ fn quality_view(report: &SessionReport) -> QualityView {
             .strata
             .iter()
             .map(|row| AnswerabilityRowView {
-                group: stratum(&row.stratum),
+                group: comparison_group_label(&row.stratum),
                 availability: match row.availability {
                     ReportStratumAvailability::DescriptivePairsAvailable => {
                         "Answerable — matched pairs available"
@@ -284,32 +287,6 @@ fn acquisition_view(report: &SessionReport) -> AcquisitionQualityView {
                 .into(),
         }
     }
-}
-
-fn labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".into()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".into()),
-    )
-}
-
-fn stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
 }
 
 pub(in super::super) fn timeline_compact_state(

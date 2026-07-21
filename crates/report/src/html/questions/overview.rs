@@ -201,7 +201,7 @@ fn overview_view(report: &SessionReport, audit_reference: &str, compact: bool) -
                 median_path_delta_right_minus_left_db,
                 maximum_delta_right_minus_left_db,
             } => Some(OverviewResultRowView {
-                group: raw_comparison_stratum(&row.stratum),
+                group: comparison_group_label(&row.stratum),
                 delta: format!(
                     "{} to {} dB; median across paths {} dB",
                     format_signed(minimum_delta_right_minus_left_db),
@@ -226,7 +226,7 @@ fn overview_view(report: &SessionReport, audit_reference: &str, compact: bool) -
             comparison_groups_label(unavailable.len()),
             unavailable
                 .iter()
-                .map(|row| raw_comparison_stratum(&row.stratum))
+                .map(|row| comparison_group_label(&row.stratum))
                 .collect::<Vec<_>>()
                 .join("; ")
         )
@@ -482,7 +482,7 @@ fn headline_groups(report: &SessionReport) -> Vec<HeadlineGroupView> {
         .enumerate()
         .map(|(index, (row, facts))| HeadlineGroupView {
             index,
-            title: multiple.then(|| raw_comparison_stratum(&row.stratum)),
+            title: multiple.then(|| comparison_group_label(&row.stratum)),
             answer: multiple.then(|| descriptive_group_sentence(report, row, false)),
             facts: facts
                 .into_iter()
@@ -500,7 +500,10 @@ fn prioritized_headline_evidence(
     report: &SessionReport,
     row: &ReportOverviewStratum,
 ) -> Vec<HeadlineEvidence> {
-    let (left_label, right_label) = raw_report_antenna_labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     let mut facts = Vec::new();
     if let ReportOverviewPathDelta::Available {
         median_path_delta_right_minus_left_db: median,
@@ -684,7 +687,10 @@ fn plain_language_answer(report: &SessionReport) -> String {
 fn no_matched_path_sentences(report: &SessionReport) -> Vec<String> {
     let overview = &report.overview;
     let usable_count = report.evidence.overall.observation_counts.usable;
-    let (left_label, right_label) = raw_report_antenna_labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     let reach_rows = overview
         .strata
         .iter()
@@ -735,7 +741,7 @@ fn no_matched_path_sentences(report: &SessionReport) -> Vec<String> {
     sentences.extend(reach_rows.into_iter().map(|row| {
         format!(
             "On {}: {} {left_label}-only, {} shared, and {} {right_label}-only unique path{}.",
-            raw_comparison_stratum(&row.stratum),
+            comparison_group_label(&row.stratum),
             row.reach.left_only_unique_path_count,
             row.reach.both_unique_path_count,
             row.reach.right_only_unique_path_count,
@@ -795,7 +801,10 @@ fn descriptive_group_sentence(
         .goal
         .map(session_goal)
         .unwrap_or("comparison");
-    let (left_label, right_label) = raw_report_antenna_labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     let facts = prioritized_headline_evidence(report, row);
     let nonzero = facts
         .iter()
@@ -812,7 +821,7 @@ fn descriptive_group_sentence(
         "the available headline measures were mixed".to_string()
     };
     let group = if include_group {
-        format!(" in {}", raw_comparison_stratum(&row.stratum))
+        format!(" in {}", comparison_group_label(&row.stratum))
     } else {
         String::new()
     };
@@ -857,7 +866,10 @@ pub(in super::super) fn overview_limitation_text(
     value: ReportOverviewLimitation,
     report: &SessionReport,
 ) -> String {
-    let (left_label, right_label) = raw_report_antenna_labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     match value {
         ReportOverviewLimitation::ComparisonNotApplicable => {
             "Comparative questions: not applicable to single-antenna profiling.".into()
@@ -923,30 +935,4 @@ fn acquisition_notices(report: &SessionReport, audit_reference: &str) -> Vec<Not
         });
     }
     notices
-}
-
-fn raw_report_antenna_labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".to_string()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".to_string()),
-    )
-}
-
-fn raw_comparison_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
 }

@@ -44,7 +44,10 @@ pub(in super::super) fn render_compact_coverage_map_section(
 }
 
 fn coverage_view(report: &SessionReport, compact: bool) -> CoverageView {
-    let (left_label, right_label) = labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     let legacy_groups = if compact {
         Vec::new()
     } else {
@@ -119,7 +122,7 @@ fn common_group_view(
         .collect();
     CommonCoverageGroupView {
         index,
-        label: stratum(&group.stratum),
+        label: comparison_group_label(&group.stratum),
         receivers: group.unique_common_active_receiver_count,
         opportunities: group.receiver_block_opportunity_count,
         located_opportunities: group.located_receiver_block_opportunity_count,
@@ -343,7 +346,7 @@ fn legacy_group_view(
 ) -> LegacyCoverageGroupView {
     LegacyCoverageGroupView {
         index,
-        label: stratum(&group.stratum),
+        label: comparison_group_label(&group.stratum),
         panels: group
             .panels
             .iter()
@@ -434,32 +437,6 @@ fn common_polar_cell(
         cell.bearing_sector == ReportAzimuthSector::ALL[sector as usize]
             && cell.distance_bin == ReportDistanceBin::ALL[ring as usize]
     })
-}
-
-fn labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".into()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".into()),
-    )
-}
-
-fn stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
 }
 
 fn percent(value: f64) -> String {

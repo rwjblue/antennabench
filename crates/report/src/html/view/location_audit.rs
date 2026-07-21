@@ -6,33 +6,7 @@ use antennabench_analysis::{
     SolarLightState, SolarPositionResult,
 };
 
-use super::super::{geometry::geometry_class, shared::*};
-
-fn labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".into()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".into()),
-    )
-}
-
-fn stratum(value: &ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
-}
+use super::super::{geometry::geometry_class, presentation::*, shared::*};
 
 fn location_available(row: &PairedObservationRow) -> bool {
     row_grid(row).is_some() && row_distance(row).is_some() && row_azimuth(row).is_some()
@@ -139,7 +113,10 @@ pub(in crate::html) struct LocationViewsView {
 
 impl LocationViewsView {
     pub(in crate::html) fn new(report: &SessionReport) -> Self {
-        let (left_label, right_label) = labels(report);
+        let AntennaLabels {
+            left: left_label,
+            right: right_label,
+        } = antenna_labels(report);
         let mut strata = Vec::<ComparisonStratum>::new();
         for row in &report.comparison.paired_rows {
             if !strata.contains(&row.stratum) {
@@ -190,7 +167,7 @@ impl LocationViewsView {
                         .fold(1.0_f64, f64::max);
                     LocationStratumView {
                         index,
-                        label: stratum(group),
+                        label: comparison_group_label(group),
                         paired_rows: source.len(),
                         unique_paths: unique_paths.len(),
                         located_paths: located_paths.len(),
@@ -208,7 +185,7 @@ impl LocationViewsView {
                                 let distance = row_distance(row).filter(|_| available);
                                 let azimuth = row_azimuth(row).filter(|_| available);
                                 LocationRowView {
-                                    stratum: stratum(&row.stratum),
+                                    stratum: comparison_group_label(&row.stratum),
                                     remote_path: row.remote_path.clone(),
                                     block: row.block_index + 1,
                                     order: labeled_comparison_order(
@@ -280,7 +257,7 @@ pub(in crate::html) struct SolarContextView {
 
 impl SolarContextView {
     pub(in crate::html) fn new(report: &SessionReport) -> Self {
-        let (left, right) = labels(report);
+        let AntennaLabels { left, right } = antenna_labels(report);
         let mut rows = Vec::new();
         for row in &report.solar_context.rows {
             for (side, observation) in [(&left, &row.left), (&right, &row.right)] {
@@ -315,7 +292,7 @@ impl SolarContextView {
                         ),
                     };
                     rows.push(SolarRowView {
-                        stratum: stratum(&row.stratum),
+                        stratum: comparison_group_label(&row.stratum),
                         remote_path: row.remote_path.clone(),
                         block: row.block_index + 1,
                         antenna: side.clone(),
