@@ -422,13 +422,28 @@ export function createReportDocumentUrls(browserWindow = globalThis) {
         compact ? "report-compact.css" : "report.css",
         browserWindow.location.href,
       ).href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-      const styleStart = reportHtml.indexOf("<style>");
-      const styleEnd = reportHtml.indexOf("</style>", styleStart);
+      const cspMarker = "data-antennabench-report-csp";
+      const markerStart = reportHtml.indexOf(cspMarker);
+      const cspStart = reportHtml.lastIndexOf("<meta", markerStart);
+      const cspEnd = reportHtml.indexOf(">", markerStart);
+      if (markerStart === -1 || cspStart === -1 || cspEnd === -1) {
+        throw new Error("The report document is missing its standalone CSP marker.");
+      }
+      const styleDirective = /style-src 'sha256-[A-Za-z0-9+/]+={0,2}'/u;
+      const cspMeta = reportHtml.slice(cspStart, cspEnd + 1);
+      if (!styleDirective.test(cspMeta)) {
+        throw new Error("The report document CSP is missing its exact stylesheet hash.");
+      }
+      const embeddedCspMeta = cspMeta.replace(styleDirective, "style-src 'self'");
+      const reportWithEmbeddedCsp = reportHtml.slice(0, cspStart)
+        + embeddedCspMeta
+        + reportHtml.slice(cspEnd + 1);
+      const styleStart = reportWithEmbeddedCsp.indexOf("<style>");
+      const styleEnd = reportWithEmbeddedCsp.indexOf("</style>", styleStart);
       if (styleStart === -1 || styleEnd === -1) {
         throw new Error("The report document is missing its standalone stylesheet.");
       }
-      const embeddedHtml = `${reportHtml.slice(0, styleStart)}<link rel="stylesheet" href="${stylesheetUrl}">${reportHtml.slice(styleEnd + 8)}`
-        .replace("style-src 'unsafe-inline'", "style-src 'self'");
+      const embeddedHtml = `${reportWithEmbeddedCsp.slice(0, styleStart)}<link rel="stylesheet" href="${stylesheetUrl}">${reportWithEmbeddedCsp.slice(styleEnd + 8)}`;
       const document = new browserWindow.Blob([embeddedHtml], {
         type: "text/html;charset=utf-8",
       });

@@ -63,6 +63,11 @@ fn report_templates_preserve_automatic_escaping() {
             "{} introduces executable script markup",
             template.display()
         );
+        assert!(
+            !source.contains(" style="),
+            "{} introduces an inline style attribute",
+            template.display()
+        );
         let relative = template
             .strip_prefix(manifest.join("templates"))
             .expect("template lives below crate template root")

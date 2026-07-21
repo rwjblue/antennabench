@@ -30,6 +30,7 @@ pub(super) use quality::*;
 #[template(path = "report/document_start.html")]
 pub(super) struct DocumentStartTemplate<'a> {
     pub(super) title: &'a str,
+    pub(super) style_source: &'a str,
 }
 
 #[derive(Template)]

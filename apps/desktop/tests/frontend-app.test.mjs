@@ -144,7 +144,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     bundleName: "headless.session.antennabundle",
     lifecycle: "running",
     schemaVersion: 4,
-    reportHtml: "<!doctype html><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>body{color:#172033}</style><p>headless report</p>",
+    reportHtml: "<!doctype html><meta data-antennabench-report-csp http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'\"><style>body{color:#172033}</style><p>headless report</p>",
     revision: 1,
   };
   let managedOpenAttempts = 0;

@@ -540,7 +540,8 @@ represented through the current element or platform ports; one such defect is
 evidence for a focused decision, not automatic permission to add WebDriver or
 a desktop production dependency. The blocked embedded-report stylesheet was
 such a boundary defect, so `desktop:report-browser` now renders generated full
-and compact reports in a real browser under the exact desktop CSP. It verifies
+and compact reports in a real browser under both their standalone meta CSP and
+the exact desktop CSP. It verifies exact inline hashes retain standalone styles,
 the sandboxed blob frame has no scripts or top-navigation authority, byte-checks
 the generated same-origin stylesheet assets against renderer output, activates native
 fragment links and their focusable targets, and asserts meaningful typography,

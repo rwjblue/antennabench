@@ -196,6 +196,12 @@ const server = createServer((request, response) => {
     `);
     return;
   }
+  if (url.pathname === "/standalone-full" || url.pathname === "/standalone-compact") {
+    const mode = url.pathname.endsWith("compact") ? "compact" : "full";
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(reports[mode]);
+    return;
+  }
   if (url.pathname === "/full" || url.pathname === "/compact") {
     response.writeHead(200, {
       "content-security-policy": csp,
@@ -494,6 +500,39 @@ try {
 
   await browser(["set", "viewport", "1200", "900"]);
   for (const mode of ["full", "compact"]) {
+    const standaloneUrl = `http://127.0.0.1:${port}/standalone-${mode}`;
+    await browser(["open", standaloneUrl], { json: true });
+    await browser(["wait", ".panel"]);
+    const standalone = (await browser(["eval", `(() => {
+      const ratio = (selector, dimension) => {
+        const element = document.querySelector(selector);
+        const track = element.parentElement;
+        const value = dimension === "left"
+          ? Number.parseFloat(getComputedStyle(element).left)
+          : element.getBoundingClientRect().width;
+        return value / track.getBoundingClientRect().width;
+      };
+      const style = (selector) => getComputedStyle(document.querySelector(selector));
+      return {
+        scripts: document.scripts.length,
+        inlineStyles: document.querySelectorAll("[style]").length,
+        bodyBackground: style("body").backgroundColor,
+        panelBackground: style(".panel").backgroundColor,
+        heroDisplay: style(".hero").display,
+        negative: ratio('[data-geometry="negative"]', "left"),
+        proportionalWidth: ratio('[data-geometry="proportional-width"]', "width"),
+      };
+    })()`], { json: true })).result;
+    assert.equal(standalone.scripts, 0);
+    assert.equal(standalone.inlineStyles, 0);
+    assert.equal(standalone.bodyBackground, "rgb(245, 247, 251)");
+    assert.equal(standalone.panelBackground, "rgb(255, 255, 255)");
+    assert.equal(standalone.heroDisplay, mode === "compact" ? "block" : "grid");
+    assert.ok(Math.abs(standalone.negative - 0.2) < 0.01);
+    assert.ok(Math.abs(standalone.proportionalWidth - 0.25) < 0.01);
+  }
+
+  for (const mode of ["full", "compact"]) {
     const pageUrl = `http://127.0.0.1:${port}/${mode}`;
     await browser(["open", pageUrl], { json: true });
     await browser(["wait", "body[data-report-loaded='true']"]);
@@ -685,7 +724,7 @@ try {
     await browser(["set", "viewport", "1200", "900"]);
   }
   process.stdout.write(
-    `Embedded ${basename(fullPath)} and ${basename(compactPath)} retained report CSS under the desktop CSP.\n`,
+    `Standalone and embedded ${basename(fullPath)} and ${basename(compactPath)} retained report CSS under exact CSP boundaries.\n`,
   );
 } finally {
   await browser(["close"]);

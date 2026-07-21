@@ -198,6 +198,12 @@ explicit full/compact order. Standalone reports inline that complete assembly;
 the desktop packages deterministic generated mirrors and performs no runtime
 stylesheet lookup.
 
+Each standalone document computes a CSP SHA-256 source from the exact stylesheet
+bytes emitted by that assembly and rejects inline style attributes with
+`style-src-attr 'none'`. This hash authorizes one exact inline stylesheet; it is
+not a file-integrity signature, authenticity proof, report signature, or
+Subresource Integrity for the desktop assets.
+
 Comparison availability precedes overlap and missingness, slot data-quality,
 paired-difference, SNR-over-time, stratum-summary, and distance/azimuth
 path-context detail. Geographic views consume the already
@@ -659,7 +665,9 @@ replaces the standalone inline style element with a checked-in same-origin
 report stylesheet generated from the same canonical Rust assembly; a
 deterministic update/check command and browser regression byte-compare that
 asset with the trusted renderer output. The shell therefore keeps
-`style-src 'self'` and adds `blob:` only to `frame-src`.
+`style-src 'self'` and adds `blob:` only to `frame-src`. A stable marker scopes
+the embedded-copy rewrite to the report CSP's generated SHA-256 style directive;
+unrelated policy text is not rewritten.
 Exported reports retain their inline stylesheet, restrictive report-local CSP,
 and fully self-contained standalone behavior. Superseded blob URLs are revoked
 when a new presentation is installed or the desktop controller is disposed.
