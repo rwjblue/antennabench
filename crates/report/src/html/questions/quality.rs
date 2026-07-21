@@ -4,7 +4,7 @@ use crate::ReportAcquisitionWorkflowStatus;
 pub(in super::super) fn render_run_quality_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-) {
+) -> Result<(), ReportError> {
     out.push_str("<section id=\"run-quality\" class=\"question-section\" tabindex=\"-1\" aria-labelledby=\"run-quality-title\"><div class=\"panel\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">Availability is reported from typed evidence states and raw counts. It is not a run-quality score or a strength grade.</p>");
     render_answerability(out, report);
     out.push_str("</div><div class=\"panel\"><h2>Planned versus actual</h2><p class=\"muted\">Symbols, words, and border styles distinguish state without relying on color. Open a row for exact times, readiness, attribution, counts, notes, and corrections.</p>");
@@ -12,16 +12,17 @@ pub(in super::super) fn render_run_quality_section(
     render_run_timeline(out, report);
     out.push_str("</div>");
     render_acquisition_summary(out, report);
-    render_exclusion_summary(out, report);
-    render_notices(out, &report.notices);
-    render_eligibility(out, report);
+    render_exclusion_summary(out, report)?;
+    render_notices(out, &report.notices)?;
+    render_eligibility(out, report)?;
     out.push_str("<div class=\"panel\"><details class=\"audit-disclosure\"><summary>Review overall, antenna, and band evidence accounting</summary><div class=\"disclosure-body\">");
-    render_overall(out, report);
-    render_antenna_section(out, report);
-    render_band_section(out, report);
+    render_overall(out, report)?;
+    render_antenna_section(out, report)?;
+    render_band_section(out, report)?;
     out.push_str("</div></details><details class=\"audit-disclosure\"><summary>Review per-slot evidence accounting</summary><div class=\"disclosure-body\">");
-    render_slot_section(out, report);
+    render_slot_section(out, report)?;
     out.push_str("</div></details></div></section>");
+    Ok(())
 }
 pub(in super::super) fn render_answerability(
     out: &mut CheckedHtmlWriter<'_>,
@@ -283,7 +284,7 @@ pub(in super::super) fn render_acquisition_summary(
 pub(in super::super) fn render_exclusion_summary(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-) {
+) -> Result<(), ReportError> {
     out.push_str("<section class=\"panel\" aria-labelledby=\"exclusion-summary-title\"><h2 id=\"exclusion-summary-title\">Exclusion summary</h2><p class=\"notice\">Affected evidence is excluded only from calculations that require it. Unrelated valid evidence remains usable.</p>");
     if report.evidence.overall.exclusions.is_empty() {
         out.push_str("<p class=\"empty\">No observation exclusions are recorded.</p>");
@@ -301,8 +302,9 @@ pub(in super::super) fn render_exclusion_summary(
     }
     if !report.exclusion_records.is_empty() {
         out.push_str("<details class=\"audit-disclosure\"><summary>Review exact excluded observation records</summary><div class=\"disclosure-body\">");
-        render_exclusion_records(out, report);
+        render_exclusion_records(out, report)?;
         out.push_str("</div></details>");
     }
     out.push_str("</section>");
+    Ok(())
 }

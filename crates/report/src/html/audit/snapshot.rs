@@ -421,7 +421,10 @@ pub(in super::super) fn render_schedule_table(
     }
     out.push_str("</tbody></table></div>");
 }
-pub(in super::super) fn render_overall(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+pub(in super::super) fn render_overall(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) -> Result<(), crate::ReportError> {
     out.push_str("<section class=\"panel\" aria-labelledby=\"evidence-title\"><h2 id=\"evidence-title\">Evidence overview</h2>");
     write_html!(
         out,
@@ -429,6 +432,7 @@ pub(in super::super) fn render_overall(out: &mut CheckedHtmlWriter<'_>, report: 
 <p class=\"muted\">Coverage reflects usable observations and contributing slots; it is not evidence that one antenna is better.</p>",
         evidence_coverage(report.evidence.evidence_quality)
     );
-    evidence_summary(out, &report.evidence.overall);
+    evidence_summary(out, &report.evidence.overall)?;
     out.push_str("</section>");
+    Ok(())
 }

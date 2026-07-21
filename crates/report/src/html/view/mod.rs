@@ -7,3 +7,8 @@ pub(super) struct FullHeaderView<'a> {
 pub(super) struct OperationalHistoryView<'a> {
     pub(super) summary: &'a str,
 }
+mod audit;
+mod evidence;
+
+pub(super) use audit::*;
+pub(super) use evidence::*;

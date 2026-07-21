@@ -1,5 +1,3 @@
-use std::fmt::Write as _;
-
 use crate::{
     check_cancelled, ReportCancellationToken, ReportError, ReportQuestionFamily,
     ReportResourceLimits, ReportResourceStage, SessionReport, REPORT_RESOURCE_LIMITS,
@@ -161,8 +159,8 @@ fn render_standalone_html_document(
             }
         }
     }
-    render_run_quality_section(&mut out, report);
-    render_audit_appendix(&mut out, report, options.controller_evidence);
+    render_run_quality_section(&mut out, report)?;
+    render_audit_appendix(&mut out, report, options.controller_evidence)?;
 
     if let Some(summary) = operational_history {
         render_template(

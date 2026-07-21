@@ -6,6 +6,12 @@ use crate::ReportError;
 
 use super::{shared::CheckedHtmlWriter, view::OperationalHistoryView};
 
+mod audit;
+mod evidence;
+
+pub(super) use audit::*;
+pub(super) use evidence::*;
+
 #[derive(Template)]
 #[template(path = "report/full_header.html")]
 pub(super) struct FullHeaderTemplate<'a> {
