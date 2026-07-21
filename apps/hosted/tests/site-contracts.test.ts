@@ -12,7 +12,7 @@ describe("public project site contracts", () => {
       ...packageJson.dependencies,
       ...packageJson.devDependencies,
     };
-    expect(dependencies.astro).toBe("7.1.1");
+    expect(dependencies.astro).toBe("7.1.2");
     expect(dependencies).not.toHaveProperty("react");
     expect(dependencies).not.toHaveProperty("react-dom");
 
