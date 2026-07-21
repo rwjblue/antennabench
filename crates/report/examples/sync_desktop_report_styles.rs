@@ -20,10 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         None => false,
         Some("--check") => true,
         Some(_) => {
-            return Err(io::Error::other(
-                "usage: sync_desktop_report_styles [--check]",
-            )
-            .into());
+            return Err(io::Error::other("usage: sync_desktop_report_styles [--check]").into());
         }
     };
     let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");

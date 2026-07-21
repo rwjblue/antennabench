@@ -33,7 +33,8 @@ mod tests {
         let cancellation = ReportCancellationToken::default();
         let mut out = CheckedHtmlWriter::new(REPORT_RESOURCE_LIMITS.html_bytes, &cancellation);
         write_stylesheet(&mut out, variant);
-        out.finish().expect("stylesheet fits report resource limits")
+        out.finish()
+            .expect("stylesheet fits report resource limits")
     }
 
     #[test]
@@ -64,7 +65,10 @@ mod tests {
             assert!(!css.contains('\r'), "{name} must use LF line endings");
             assert!(css.ends_with('\n'), "{name} must end with LF");
             assert!(!css.contains("@import"), "{name} must not import CSS");
-            assert!(!css.contains("url("), "{name} must not load external assets");
+            assert!(
+                !css.contains("url("),
+                "{name} must not load external assets"
+            );
         }
     }
 }

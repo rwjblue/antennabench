@@ -14,8 +14,7 @@ pub(super) fn write_geometry_styles(write: &mut impl FnMut(&str)) {
         let tenth = step % 10;
         let mut rule = String::with_capacity(24);
         if tenth == 0 {
-            write!(rule, ".g{step}{{--g:{whole}%}}")
-                .expect("writing CSS to a string cannot fail");
+            write!(rule, ".g{step}{{--g:{whole}%}}").expect("writing CSS to a string cannot fail");
         } else {
             write!(rule, ".g{step}{{--g:{whole}.{tenth}%}}")
                 .expect("writing CSS to a string cannot fail");
