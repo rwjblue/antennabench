@@ -11,7 +11,8 @@ fn command_output(program: &str, arguments: &[&str]) -> Option<String> {
 }
 
 fn embed_windows_manifest_for_tests() {
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
+    if std::env::var("ANTENNABENCH_WINDOWS_TEST_MANIFEST").as_deref() != Ok("1")
+        || std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
         || std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc")
     {
         return;
@@ -37,6 +38,7 @@ fn main() {
         "ANTENNABENCH_TARGET_TRIPLE",
         "ANTENNABENCH_BUILD_ARCHITECTURE",
         "SOURCE_DATE_EPOCH",
+        "ANTENNABENCH_WINDOWS_TEST_MANIFEST",
     ] {
         println!("cargo:rerun-if-env-changed={name}");
     }
