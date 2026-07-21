@@ -27,6 +27,7 @@ const samples = [
   },
 ];
 const check = process.argv.slice(2).includes("--check");
+let stale = false;
 const temporaryDirectory = check
   ? mkdtempSync(join(tmpdir(), "antennabench-hosted-sample-"))
   : undefined;
@@ -63,15 +64,39 @@ try {
       const generated = readFileSync(output);
       const committed = readFileSync(committedOutput);
       if (!generated.equals(committed)) {
-        throw new Error(
-          `${sample.relativeOutput} is stale; run \`npm run site:sample --workspace @antennabench/hosted\``,
-        );
+        stale = true;
+        const limit = Math.min(generated.length, committed.length);
+        let first = 0;
+        while (first < limit && generated[first] === committed[first]) first += 1;
+        let generatedEnd = generated.length;
+        let committedEnd = committed.length;
+        while (
+          generatedEnd > first
+          && committedEnd > first
+          && generated[generatedEnd - 1] === committed[committedEnd - 1]
+        ) {
+          generatedEnd -= 1;
+          committedEnd -= 1;
+        }
+        console.error(JSON.stringify({
+          sample: sample.relativeOutput,
+          generatedLength: generated.length,
+          committedLength: committed.length,
+          first,
+          generatedEnd,
+          committedEnd,
+          generated: generated.subarray(Math.max(0, first - 120), Math.min(generated.length, generatedEnd + 120)).toString("base64"),
+          committed: committed.subarray(Math.max(0, first - 120), Math.min(committed.length, committedEnd + 120)).toString("base64"),
+        }));
       }
     } else {
       process.stdout.write(result.stdout);
     }
   }
   if (check) {
+    if (stale) {
+      throw new Error("Hosted samples are stale; run the repository sample generator");
+    }
     console.log("Hosted samples match the trusted Rust renderer");
   }
 } finally {
