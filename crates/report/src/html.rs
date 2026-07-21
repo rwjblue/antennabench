@@ -155,7 +155,7 @@ fn render_standalone_html_document(
             ReportQuestionFamily::ObservedReach => render_reach_section(&mut out, report)?,
             ReportQuestionFamily::GeographicProfile => render_distance_section(&mut out, report)?,
             ReportQuestionFamily::Repeatability => {
-                render_overlap_repeatability_section(&mut out, report)
+                render_overlap_repeatability_section(&mut out, report)?
             }
         }
     }

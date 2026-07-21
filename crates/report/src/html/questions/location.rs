@@ -93,7 +93,7 @@ pub(in super::super) fn render_compact_observed_footprint_section(
     if !unavailable.is_empty() {
         write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable observed footprint in {} of {} comparison groups: {}. Missing path or location evidence is not rendered as zero.</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable));
     }
-    render_compact_repeatability_disclosure(out, report);
+    render_compact_repeatability_disclosure(out, report)?;
     out.push_str("<details class=\"audit-disclosure\"><summary>Review exact unique observed-path rows</summary><div class=\"disclosure-body\">");
     render_observed_profile_audit(out, report);
     out.push_str("</div></details></section>");
