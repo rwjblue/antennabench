@@ -142,9 +142,9 @@ fn render_standalone_html_document(
             },
         },
     )?;
-    render_question_navigation(&mut out, report, true);
-    render_how_to_read(&mut out, report, false);
-    render_answer_first_overview(&mut out, report);
+    render_question_navigation(&mut out, report, true)?;
+    render_how_to_read(&mut out, report, false)?;
+    render_answer_first_overview(&mut out, report)?;
     for family in ordered_question_families(report) {
         match family {
             ReportQuestionFamily::SharedPathSignal => render_same_path_section(&mut out, report)?,

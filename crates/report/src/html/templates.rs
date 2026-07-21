@@ -8,9 +8,11 @@ use super::{shared::CheckedHtmlWriter, view::OperationalHistoryView};
 
 mod audit;
 mod evidence;
+mod overview;
 
 pub(super) use audit::*;
 pub(super) use evidence::*;
+pub(super) use overview::*;
 
 #[derive(Template)]
 #[template(path = "report/full_header.html")]

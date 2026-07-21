@@ -16,6 +16,7 @@ use super::{
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
+    templates::{render_template, CompactHeaderTemplate},
 };
 
 /// Renders a concise, deterministic, standalone HTML summary from the same
@@ -65,25 +66,21 @@ pub fn render_compact_summary_html_with_resources(
     } else {
         "compact-summary"
     };
-    write_html!(
-        out,
-        "</style></head><body><main class=\"{}\"><a class=\"skip-link\" href=\"#what-run-show\">Skip to summary findings</a>",
-        compact_main_class,
-    );
-    write_html!(
-        out,
-        "<header class=\"hero\"><p class=\"eyebrow\">AntennaBench compact local share summary</p>\
-<h1>Compact session summary</h1><p class=\"muted\">Not the full audit report · Session <code>{}</code></p></header>",
-        escape_html(&report.overview.scope.session_id)
-    );
-    render_question_navigation(&mut out, report, false);
-    render_how_to_read(&mut out, report, true);
+    render_template(
+        &mut out,
+        &CompactHeaderTemplate {
+            main_class: compact_main_class,
+            session_id: &report.overview.scope.session_id,
+        },
+    )?;
+    render_question_navigation(&mut out, report, false)?;
+    render_how_to_read(&mut out, report, true)?;
     render_answer_first_overview_with_reference(
         &mut out,
         report,
         "the full evidence report and session bundle",
         true,
-    );
+    )?;
     let mut rendered_observed_footprint = false;
     for family in ordered_question_families(report) {
         match family {
