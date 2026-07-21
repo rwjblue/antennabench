@@ -1,1 +1,46 @@
-<h3>Comparison-group descriptive summaries</h3>{% if view.rows.is_empty() %}<p class="empty">No comparison groups are available.</p>{% else %}<div class="table-wrap"><table><caption>Comparison-group summary data</caption><thead><tr><th scope="col">Comparison group</th><th scope="col">Matched pairs</th><th scope="col">Paths</th><th scope="col">Blocks</th><th scope="col">{{ view.left_label }} → {{ view.right_label }}</th><th scope="col">{{ view.right_label }} → {{ view.left_label }}</th><th scope="col">Unmatched — {{ view.left_label }} / {{ view.right_label }}</th><th scope="col">Missing SNR — {{ view.left_label }} / {{ view.right_label }}</th><th scope="col">Duplicates</th><th scope="col">Conflicts</th><th scope="col">Observed range</th><th scope="col">Median across paths</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.stratum }}</td><td>{{ row.pairs }}</td><td>{{ row.paths }}</td><td>{{ row.blocks }}</td><td>{{ row.left_right }}</td><td>{{ row.right_left }}</td><td>{{ row.unmatched_left }} / {{ row.unmatched_right }}</td><td>{{ row.missing_left }} / {{ row.missing_right }}</td><td>{{ row.duplicates }}</td><td>{{ row.conflicts }}</td><td>{{ row.range }}</td><td>{{ row.median }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h3>Comparison-group descriptive summaries</h3>
+{% if view.rows.is_empty() %}
+  <p class="empty">No comparison groups are available.</p>
+{% else %}
+  <div class="table-wrap">
+    <table>
+      <caption>
+        Comparison-group summary data
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Comparison group</th>
+          <th scope="col">Matched pairs</th>
+          <th scope="col">Paths</th>
+          <th scope="col">Blocks</th>
+          <th scope="col">{{ view.left_label }} → {{ view.right_label }}</th>
+          <th scope="col">{{ view.right_label }} → {{ view.left_label }}</th>
+          <th scope="col">Unmatched — {{ view.left_label }} / {{ view.right_label }}</th>
+          <th scope="col">Missing SNR — {{ view.left_label }} / {{ view.right_label }}</th>
+          <th scope="col">Duplicates</th>
+          <th scope="col">Conflicts</th>
+          <th scope="col">Observed range</th>
+          <th scope="col">Median across paths</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in view.rows %}
+          <tr>
+            <td>{{ row.stratum }}</td>
+            <td>{{ row.pairs }}</td>
+            <td>{{ row.paths }}</td>
+            <td>{{ row.blocks }}</td>
+            <td>{{ row.left_right }}</td>
+            <td>{{ row.right_left }}</td>
+            <td>{{ row.unmatched_left }} / {{ row.unmatched_right }}</td>
+            <td>{{ row.missing_left }} / {{ row.missing_right }}</td>
+            <td>{{ row.duplicates }}</td>
+            <td>{{ row.conflicts }}</td>
+            <td>{{ row.range }}</td>
+            <td>{{ row.median }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

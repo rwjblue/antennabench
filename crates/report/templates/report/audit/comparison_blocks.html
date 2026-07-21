@@ -1,1 +1,38 @@
-<h3>Comparison block inventory</h3>{% if rows.is_empty() %}<p class="empty">No comparison block rows are available.</p>{% else %}<div class="table-wrap"><table><caption>Exact adjacent same-band block construction</caption><thead><tr><th scope="col">Block</th><th scope="col">Band</th><th scope="col">First slot</th><th scope="col">First actual / status</th><th scope="col">Second slot</th><th scope="col">Second actual / status</th><th scope="col">Order</th><th scope="col">Eligibility</th></tr></thead><tbody>{% for row in rows %}<tr><td>{{ row.block }}</td><td>{{ row.band }}</td><td>{{ row.first_slot }}</td><td>{{ row.first_actual_status }}</td><td>{{ row.second_slot }}</td><td>{{ row.second_actual_status }}</td><td>{{ row.order }}</td><td>{{ row.eligibility }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h3>Comparison block inventory</h3>
+{% if rows.is_empty() %}
+  <p class="empty">No comparison block rows are available.</p>
+{% else %}
+  <div class="table-wrap">
+    <table>
+      <caption>
+        Exact adjacent same-band block construction
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Block</th>
+          <th scope="col">Band</th>
+          <th scope="col">First slot</th>
+          <th scope="col">First actual / status</th>
+          <th scope="col">Second slot</th>
+          <th scope="col">Second actual / status</th>
+          <th scope="col">Order</th>
+          <th scope="col">Eligibility</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.block }}</td>
+            <td>{{ row.band }}</td>
+            <td>{{ row.first_slot }}</td>
+            <td>{{ row.first_actual_status }}</td>
+            <td>{{ row.second_slot }}</td>
+            <td>{{ row.second_actual_status }}</td>
+            <td>{{ row.order }}</td>
+            <td>{{ row.eligibility }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

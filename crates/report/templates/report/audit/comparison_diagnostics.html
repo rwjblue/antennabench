@@ -1,1 +1,11 @@
-<h3>Coverage and data-quality counts</h3><dl class="stat-grid">{% for stat in stats %}<div class="stat"><dt>{{ stat.label }}</dt><dd>{{ stat.value }}</dd></div>{% endfor %}</dl>
+<h3>Coverage and data-quality counts</h3>
+<dl class="stat-grid">
+  {% for stat in stats %}
+    <div class="stat">
+      <dt>{{ stat.label }}</dt>
+      <dd>
+        {{ stat.value }}
+      </dd>
+    </div>
+  {% endfor %}
+</dl>

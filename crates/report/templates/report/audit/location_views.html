@@ -1,1 +1,171 @@
-<h3>Distance and azimuth path context</h3><p class="notice">Distance and azimuth describe only the remote paths observed in these matched pairs. Missing location stays visible, and geographic concentration limits how broadly these paths represent other distances or directions.</p>{% if view.strata.is_empty() %}<p class="empty">No matched pairs are available for location views.</p>{% else %}{% for group in view.strata %}<section aria-labelledby="location-stratum-{{ group.index }}"><h4 id="location-stratum-{{ group.index }}">{{ group.label }}</h4><dl class="stat-grid"><div class="stat"><dt>Paired rows in stratum</dt><dd>{{ group.paired_rows }}</dd></div><div class="stat"><dt>Unique paths in stratum</dt><dd>{{ group.unique_paths }}</dd></div><div class="stat"><dt>Unique paths with location</dt><dd>{{ group.located_paths }}</dd></div><div class="stat"><dt>Location-unavailable rows</dt><dd>{{ group.unavailable_rows }}</dd></div><div class="stat"><dt>Most populated 45° display sector</dt><dd>{{ group.populated_sector }}</dd></div></dl><h4>Observed distance</h4><div class="comparison-chart" aria-hidden="true">{% for row in group.rows %}<div class="comparison-row"><span class="chart-label">{{ row.remote_path }}</span>{% if row.distance.is_some() %}<span class="bar-track"><span class="location-fill geometry-width {{ row.distance_class }}"></span></span><span>{{ row.distance.as_ref().unwrap() }} km</span>{% else %}<span class="empty">Location unavailable</span><span>—</span>{% endif %}</div>{% endfor %}</div><div class="table-wrap"><table><caption>Observed distance path-context data</caption><thead><tr><th scope="col">Stratum</th><th scope="col">Remote path</th><th scope="col">Block</th><th scope="col">Order</th><th scope="col">{{ view.left_label }} SNR</th><th scope="col">{{ view.right_label }} SNR</th><th scope="col">Signed delta</th><th scope="col">{{ view.left_label }} grid</th><th scope="col">{{ view.right_label }} grid</th><th scope="col">{{ view.left_label }} distance</th><th scope="col">{{ view.right_label }} distance</th><th scope="col">Availability</th><th scope="col">{{ view.left_label }} time</th><th scope="col">{{ view.right_label }} time</th></tr></thead><tbody>{% for row in group.rows %}<tr><td>{{ row.stratum }}</td><td>{{ row.remote_path }}</td><td>{{ row.block }}</td><td>{{ row.order }}</td><td>{{ row.left_snr }} dB</td><td>{{ row.right_snr }} dB</td><td>{{ row.delta }} dB</td><td>{{ row.left_grid }}</td><td>{{ row.right_grid }}</td><td>{{ row.left_distance }}</td><td>{{ row.right_distance }}</td><td>{{ row.availability }}</td><td>{{ row.left_time }}</td><td>{{ row.right_time }}</td></tr>{% endfor %}</tbody></table></div><h4>Observed azimuth</h4><div class="comparison-chart" aria-hidden="true">{% for row in group.rows %}<div class="comparison-row"><span class="chart-label">{{ row.remote_path }}</span>{% if row.azimuth.is_some() %}<span class="azimuth-track"><span class="azimuth-marker geometry-left {{ row.azimuth_class }}"></span></span><span>{{ row.azimuth.as_ref().unwrap() }}°</span>{% else %}<span class="empty">Location unavailable</span><span>—</span>{% endif %}</div>{% endfor %}</div><div class="table-wrap"><table><caption>Observed azimuth path-context data</caption><thead><tr><th scope="col">Stratum</th><th scope="col">Remote path</th><th scope="col">Block</th><th scope="col">Order</th><th scope="col">{{ view.left_label }} SNR</th><th scope="col">{{ view.right_label }} SNR</th><th scope="col">Signed delta</th><th scope="col">{{ view.left_label }} grid</th><th scope="col">{{ view.right_label }} grid</th><th scope="col">{{ view.left_label }} azimuth</th><th scope="col">{{ view.right_label }} azimuth</th><th scope="col">Display sector</th><th scope="col">Availability</th><th scope="col">{{ view.left_label }} time</th><th scope="col">{{ view.right_label }} time</th></tr></thead><tbody>{% for row in group.rows %}<tr><td>{{ row.stratum }}</td><td>{{ row.remote_path }}</td><td>{{ row.block }}</td><td>{{ row.order }}</td><td>{{ row.left_snr }} dB</td><td>{{ row.right_snr }} dB</td><td>{{ row.delta }} dB</td><td>{{ row.left_grid }}</td><td>{{ row.right_grid }}</td><td>{{ row.left_azimuth }}</td><td>{{ row.right_azimuth }}</td><td>{{ row.sector }}</td><td>{{ row.availability }}</td><td>{{ row.left_time }}</td><td>{{ row.right_time }}</td></tr>{% endfor %}</tbody></table></div></section>{% endfor %}{% endif %}
+<h3>Distance and azimuth path context</h3>
+<p class="notice">
+  Distance and azimuth describe only the remote paths observed in these matched pairs. Missing location stays visible, and geographic concentration limits how broadly these paths represent other distances or directions.
+</p>
+{% if view.strata.is_empty() %}
+  <p class="empty">No matched pairs are available for location views.</p>
+{% else %}
+  {% for group in view.strata %}
+    <section aria-labelledby="location-stratum-{{ group.index }}">
+      <h4 id="location-stratum-{{ group.index }}">{{ group.label }}</h4>
+      <dl class="stat-grid">
+        <div class="stat">
+          <dt>Paired rows in stratum</dt>
+          <dd>
+            {{ group.paired_rows }}
+          </dd>
+        </div>
+        <div class="stat">
+          <dt>Unique paths in stratum</dt>
+          <dd>
+            {{ group.unique_paths }}
+          </dd>
+        </div>
+        <div class="stat">
+          <dt>Unique paths with location</dt>
+          <dd>
+            {{ group.located_paths }}
+          </dd>
+        </div>
+        <div class="stat">
+          <dt>Location-unavailable rows</dt>
+          <dd>
+            {{ group.unavailable_rows }}
+          </dd>
+        </div>
+        <div class="stat">
+          <dt>Most populated 45° display sector</dt>
+          <dd>
+            {{ group.populated_sector }}
+          </dd>
+        </div>
+      </dl>
+      <h4>Observed distance</h4>
+      <div class="comparison-chart" aria-hidden="true">
+        {% for row in group.rows %}
+          <div class="comparison-row">
+            <span class="chart-label">{{ row.remote_path }}</span>
+            {% if row.distance.is_some() %}
+              <span class="bar-track">
+                <span class="location-fill geometry-width {{ row.distance_class }}"></span>
+              </span>
+              <span>{{ row.distance.as_ref().unwrap() }} km</span>
+            {% else %}
+              <span class="empty">Location unavailable</span>
+              <span>—</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption>
+            Observed distance path-context data
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Stratum</th>
+              <th scope="col">Remote path</th>
+              <th scope="col">Block</th>
+              <th scope="col">Order</th>
+              <th scope="col">{{ view.left_label }} SNR</th>
+              <th scope="col">{{ view.right_label }} SNR</th>
+              <th scope="col">Signed delta</th>
+              <th scope="col">{{ view.left_label }} grid</th>
+              <th scope="col">{{ view.right_label }} grid</th>
+              <th scope="col">{{ view.left_label }} distance</th>
+              <th scope="col">{{ view.right_label }} distance</th>
+              <th scope="col">Availability</th>
+              <th scope="col">{{ view.left_label }} time</th>
+              <th scope="col">{{ view.right_label }} time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in group.rows %}
+              <tr>
+                <td>{{ row.stratum }}</td>
+                <td>{{ row.remote_path }}</td>
+                <td>{{ row.block }}</td>
+                <td>{{ row.order }}</td>
+                <td>{{ row.left_snr }} dB</td>
+                <td>{{ row.right_snr }} dB</td>
+                <td>{{ row.delta }} dB</td>
+                <td>{{ row.left_grid }}</td>
+                <td>{{ row.right_grid }}</td>
+                <td>{{ row.left_distance }}</td>
+                <td>{{ row.right_distance }}</td>
+                <td>{{ row.availability }}</td>
+                <td>{{ row.left_time }}</td>
+                <td>{{ row.right_time }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h4>Observed azimuth</h4>
+      <div class="comparison-chart" aria-hidden="true">
+        {% for row in group.rows %}
+          <div class="comparison-row">
+            <span class="chart-label">{{ row.remote_path }}</span>
+            {% if row.azimuth.is_some() %}
+              <span class="azimuth-track">
+                <span class="azimuth-marker geometry-left {{ row.azimuth_class }}"></span>
+              </span>
+              <span>{{ row.azimuth.as_ref().unwrap() }}°</span>
+            {% else %}
+              <span class="empty">Location unavailable</span>
+              <span>—</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption>
+            Observed azimuth path-context data
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Stratum</th>
+              <th scope="col">Remote path</th>
+              <th scope="col">Block</th>
+              <th scope="col">Order</th>
+              <th scope="col">{{ view.left_label }} SNR</th>
+              <th scope="col">{{ view.right_label }} SNR</th>
+              <th scope="col">Signed delta</th>
+              <th scope="col">{{ view.left_label }} grid</th>
+              <th scope="col">{{ view.right_label }} grid</th>
+              <th scope="col">{{ view.left_label }} azimuth</th>
+              <th scope="col">{{ view.right_label }} azimuth</th>
+              <th scope="col">Display sector</th>
+              <th scope="col">Availability</th>
+              <th scope="col">{{ view.left_label }} time</th>
+              <th scope="col">{{ view.right_label }} time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in group.rows %}
+              <tr>
+                <td>{{ row.stratum }}</td>
+                <td>{{ row.remote_path }}</td>
+                <td>{{ row.block }}</td>
+                <td>{{ row.order }}</td>
+                <td>{{ row.left_snr }} dB</td>
+                <td>{{ row.right_snr }} dB</td>
+                <td>{{ row.delta }} dB</td>
+                <td>{{ row.left_grid }}</td>
+                <td>{{ row.right_grid }}</td>
+                <td>{{ row.left_azimuth }}</td>
+                <td>{{ row.right_azimuth }}</td>
+                <td>{{ row.sector }}</td>
+                <td>{{ row.availability }}</td>
+                <td>{{ row.left_time }}</td>
+                <td>{{ row.right_time }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endfor %}
+{% endif %}

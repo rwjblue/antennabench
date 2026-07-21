@@ -305,6 +305,21 @@ Report markup tests choose the narrowest assertion that owns the behavior:
   indentation and equivalent HTML serialization are not generally byte-level
   compatibility promises.
 
+Format compiled report templates with `mise run report:template-format`; use
+`mise run report:template-format-check` for the non-mutating check that CI also
+runs. The repository pins `askama_fmt` through Mise, and its root configuration
+is authoritative. Editor format-on-save integration is optional convenience and
+must invoke the repository tool and configuration rather than a separate
+formatter or version.
+
+The formatter scope is exactly
+`crates/report/templates/report/**/*.html`. Keep ignore policy narrow: a future
+ignore must name the unsupported Askama construct and add focused semantic and
+rendered-text coverage before it is accepted. There are currently no formatter
+ignores. Treat source indentation and rendered whitespace separately; add
+explicit Askama whitespace-control markers only where a rendered-text assertion
+shows that inline flow requires them.
+
 The run-quality state matrix additionally pins ordinary, late, unknown-
 occupancy, missed, bad, corrected, interrupted/resumed, abandoned,
 command-verified, explicit acquisition-gap, malformed/conflict/duplicate, and

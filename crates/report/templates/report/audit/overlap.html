@@ -1,1 +1,64 @@
-<h3>Path overlap and missingness</h3>{% if view.rows.is_empty() %}<p class="empty">No path-level overlap rows are available.</p>{% else %}<div class="legend"><span><i class="swatch left"></i>{{ view.left_label }} usable</span><span><i class="swatch right"></i>{{ view.right_label }} usable</span></div><div class="comparison-chart" aria-hidden="true">{% for row in view.rows %}<div class="comparison-row"><span class="chart-label">{{ row.remote_path }} · {{ row.stratum }}</span><span class="bar-track"><span class="bar left geometry-width {{ row.left_class }}"></span><span class="bar right geometry-width {{ row.right_class }}"></span></span><span>{{ row.left }} / {{ row.right }}</span></div>{% endfor %}</div><div class="table-wrap"><table><caption>Path overlap and missingness data</caption><thead><tr><th scope="col">Comparison group</th><th scope="col">Remote path</th><th scope="col">{{ view.left_label }} usable</th><th scope="col">{{ view.right_label }} usable</th><th scope="col">Matched</th><th scope="col">Unmatched — {{ view.left_label }}</th><th scope="col">Unmatched — {{ view.right_label }}</th><th scope="col">Missing SNR — {{ view.left_label }}</th><th scope="col">Missing SNR — {{ view.right_label }}</th><th scope="col">Duplicates</th><th scope="col">Conflicts</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.stratum }}</td><td>{{ row.remote_path }}</td><td>{{ row.left }}</td><td>{{ row.right }}</td><td>{{ row.paired }}</td><td>{{ row.unmatched_left }}</td><td>{{ row.unmatched_right }}</td><td>{{ row.missing_left }}</td><td>{{ row.missing_right }}</td><td>{{ row.duplicates }}</td><td>{{ row.conflicts }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h3>Path overlap and missingness</h3>
+{% if view.rows.is_empty() %}
+  <p class="empty">No path-level overlap rows are available.</p>
+{% else %}
+  <div class="legend">
+    <span>
+      <i class="swatch left"></i>{{ view.left_label }} usable
+    </span>
+    <span>
+      <i class="swatch right"></i>{{ view.right_label }} usable
+    </span>
+  </div>
+  <div class="comparison-chart" aria-hidden="true">
+    {% for row in view.rows %}
+      <div class="comparison-row">
+        <span class="chart-label">{{ row.remote_path }} · {{ row.stratum }}</span>
+        <span class="bar-track">
+          <span class="bar left geometry-width {{ row.left_class }}"></span>
+          <span class="bar right geometry-width {{ row.right_class }}"></span>
+        </span>
+        <span>{{ row.left }} / {{ row.right }}</span>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>
+        Path overlap and missingness data
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Comparison group</th>
+          <th scope="col">Remote path</th>
+          <th scope="col">{{ view.left_label }} usable</th>
+          <th scope="col">{{ view.right_label }} usable</th>
+          <th scope="col">Matched</th>
+          <th scope="col">Unmatched — {{ view.left_label }}</th>
+          <th scope="col">Unmatched — {{ view.right_label }}</th>
+          <th scope="col">Missing SNR — {{ view.left_label }}</th>
+          <th scope="col">Missing SNR — {{ view.right_label }}</th>
+          <th scope="col">Duplicates</th>
+          <th scope="col">Conflicts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in view.rows %}
+          <tr>
+            <td>{{ row.stratum }}</td>
+            <td>{{ row.remote_path }}</td>
+            <td>{{ row.left }}</td>
+            <td>{{ row.right }}</td>
+            <td>{{ row.paired }}</td>
+            <td>{{ row.unmatched_left }}</td>
+            <td>{{ row.unmatched_right }}</td>
+            <td>{{ row.missing_left }}</td>
+            <td>{{ row.missing_right }}</td>
+            <td>{{ row.duplicates }}</td>
+            <td>{{ row.conflicts }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

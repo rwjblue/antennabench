@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use scraper::{ElementRef, Html, Selector};
 
 /// Parsed final report output used by semantic integration tests.
@@ -26,6 +28,14 @@ impl ReportDocument {
         assert!(
             self.select(selector).next().is_none(),
             "expected report selector `{selector}` to be absent"
+        );
+    }
+
+    pub(crate) fn assert_count(&self, selector: &str, expected: usize) {
+        let actual = self.select(selector).count();
+        assert_eq!(
+            actual, expected,
+            "unexpected match count for report selector `{selector}`"
         );
     }
 
@@ -155,6 +165,43 @@ impl ReportDocument {
         );
     }
 
+    pub(crate) fn assert_table_row_contains<S: AsRef<str> + std::fmt::Debug>(
+        &self,
+        caption: &str,
+        expected_cells: &[S],
+    ) {
+        let table_selector = parse_selector("table");
+        let caption_selector = parse_selector("caption");
+        let row_selector = parse_selector("tbody tr");
+        let cell_selector = parse_selector("td");
+        let table = self
+            .document
+            .select(&table_selector)
+            .find(|table| {
+                table
+                    .select(&caption_selector)
+                    .next()
+                    .is_some_and(|node| rendered_text(node) == caption)
+            })
+            .unwrap_or_else(|| panic!("expected table caption `{caption}`"));
+        let found = table.select(&row_selector).any(|row| {
+            let cells = row
+                .select(&cell_selector)
+                .map(rendered_text)
+                .collect::<Vec<_>>();
+            cells.windows(expected_cells.len()).any(|window| {
+                window
+                    .iter()
+                    .zip(expected_cells)
+                    .all(|(actual, expected)| actual == expected.as_ref())
+            })
+        });
+        assert!(
+            found,
+            "expected table `{caption}` to contain adjacent cells {expected_cells:?}"
+        );
+    }
+
     /// Assert ordinary HTML-flow text after applying browser-style whitespace
     /// collapsing. A missing separator remains observable (`labelvalue` does
     /// not compare equal to `label value`), as do punctuation and optional
@@ -165,6 +212,22 @@ impl ReportDocument {
             rendered_text(element),
             expected,
             "unexpected rendered text for `{selector}`"
+        );
+    }
+
+    pub(crate) fn assert_any_rendered_text(&self, selector: &str, expected: &str) {
+        let actual = self.select(selector).map(rendered_text).collect::<Vec<_>>();
+        assert!(
+            actual.iter().any(|text| text == expected),
+            "expected a `{selector}` element with rendered text `{expected}`, found {actual:?}"
+        );
+    }
+
+    pub(crate) fn assert_rendered_word_count_below(&self, selector: &str, limit: usize) {
+        let actual = rendered_text(self.one(selector)).split_whitespace().count();
+        assert!(
+            actual < limit,
+            "expected rendered text for `{selector}` to contain fewer than {limit} words, found {actual}"
         );
     }
 

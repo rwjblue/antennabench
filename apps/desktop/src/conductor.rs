@@ -1344,10 +1344,13 @@ mod tests {
         assert!(exported.presentation_id > 0);
         assert!(exported.report_path.exists());
         assert!(exported.compact_summary_path.exists());
-        assert!(exported.report_html.contains(&format!(
-            "<dt>Checkpoint revision</dt><dd>{}</dd>",
-            ended.revision
-        )));
+        let document = scraper::Html::parse_document(&exported.report_html);
+        let fact_selector = scraper::Selector::parse(".fact").unwrap();
+        assert!(document.select(&fact_selector).any(|fact| {
+            let rendered_text = fact.text().collect::<String>();
+            rendered_text.contains("Checkpoint revision")
+                && rendered_text.contains(&ended.revision.to_string())
+        }));
         assert!(exported.report_html.contains("Ended / final"));
         assert!(exported
             .report_html

@@ -1,1 +1,69 @@
-<section class="panel" aria-labelledby="context-title"><h2 id="context-title">Session context</h2><dl class="facts">{% for fact in view.facts %}<div class="fact"><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>{% endfor %}</dl><h3>Antennas</h3>{% if view.antennas.is_empty() %}<p class="empty">No antennas are present in this report.</p>{% else %}<div class="antenna-grid">{% for antenna in view.antennas %}<article class="antenna-card"><h3>{{ antenna.label }}</h3><dl>{% for detail in antenna.details %}<dt>{{ detail.label }}</dt><dd>{{ detail.value }}</dd>{% endfor %}</dl></article>{% endfor %}</div>{% endif %}<h3>Schedule overview</h3>{% if view.schedule.is_empty() %}<p class="empty">No scheduled slots are available.</p>{% else %}<div class="table-wrap"><table><caption>Planned slots</caption><thead><tr><th scope="col">Sequence</th><th scope="col">Slot</th><th scope="col">Band</th><th scope="col">Antenna</th><th scope="col">Starts</th><th scope="col">Ends</th><th scope="col">Guard</th></tr></thead><tbody>{% for row in view.schedule %}<tr><td>{{ row.sequence }}</td><td>{{ row.slot_id }}</td><td>{{ row.band }}</td><td>{{ row.antenna }}</td><td>{{ row.starts_at }}</td><td>{{ row.ends_at }}</td><td>{{ row.guard_seconds }} s</td></tr>{% endfor %}</tbody></table></div>{% endif %}</section>
+<section class="panel" aria-labelledby="context-title">
+  <h2 id="context-title">Session context</h2>
+  <dl class="facts">
+    {% for fact in view.facts %}
+      <div class="fact">
+        <dt>{{ fact.label }}</dt>
+        <dd>
+          {{ fact.value }}
+        </dd>
+      </div>
+    {% endfor %}
+  </dl>
+  <h3>Antennas</h3>
+  {% if view.antennas.is_empty() %}
+    <p class="empty">No antennas are present in this report.</p>
+  {% else %}
+    <div class="antenna-grid">
+      {% for antenna in view.antennas %}
+        <article class="antenna-card">
+          <h3>{{ antenna.label }}</h3>
+          <dl>
+            {% for detail in antenna.details %}
+              <dt>{{ detail.label }}</dt>
+              <dd>
+                {{ detail.value }}
+              </dd>
+            {% endfor %}
+          </dl>
+        </article>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <h3>Schedule overview</h3>
+  {% if view.schedule.is_empty() %}
+    <p class="empty">No scheduled slots are available.</p>
+  {% else %}
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Planned slots
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Sequence</th>
+            <th scope="col">Slot</th>
+            <th scope="col">Band</th>
+            <th scope="col">Antenna</th>
+            <th scope="col">Starts</th>
+            <th scope="col">Ends</th>
+            <th scope="col">Guard</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.schedule %}
+            <tr>
+              <td>{{ row.sequence }}</td>
+              <td>{{ row.slot_id }}</td>
+              <td>{{ row.band }}</td>
+              <td>{{ row.antenna }}</td>
+              <td>{{ row.starts_at }}</td>
+              <td>{{ row.ends_at }}</td>
+              <td>{{ row.guard_seconds }} s</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
