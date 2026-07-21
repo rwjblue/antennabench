@@ -26,5 +26,8 @@
     "fsevents@2.3.3": true,
     "sharp@0.34.5": true,
     "workerd@1.20260710.1": true
+  },
+  "devDependencies": {
+    "prettier": "3.9.6"
   }
 }

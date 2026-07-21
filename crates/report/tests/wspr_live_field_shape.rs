@@ -502,7 +502,7 @@ fn paired_rate_heatmap_states_are_distinct_and_keyboard_accessible() {
     );
     assert!(compact.contains("Rate unavailable; not zero detection"));
     assert!(compact.contains("no located common-opportunity cell"));
-    assert!(compact.contains("@media(max-width:760px)"));
+    assert!(compact.contains("@media (max-width: 760px)"));
     assert!(compact.contains("@media print"));
 }
 

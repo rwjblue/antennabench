@@ -110,8 +110,8 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
         document.assert_no_navigation_target(unavailable_anchor);
     }
     document.assert_present("details.audit-disclosure");
-    assert!(first.contains("details:not([open])>:not(summary){display:none!important}"));
-    assert!(first.contains("break-after:page"));
+    assert!(first.contains("details:not([open]) > :not(summary) {\n    display: none !important;"));
+    assert!(first.contains("break-after: page"));
 }
 
 #[test]
@@ -183,8 +183,8 @@ fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
     assert!(first.contains("Not the full audit report"));
     assert!(first.contains("Content-Security-Policy"));
     assert!(first.contains("default-src 'none'"));
-    assert!(first.contains(".compact-summary .overview{break-after:auto}"));
-    assert!(first.contains(".compact-summary .question-section{break-before:auto}"));
+    assert!(first.contains(".compact-summary .overview {\n    break-after: auto;"));
+    assert!(first.contains(".compact-summary .question-section {\n    break-before: auto;"));
     assert!(!first.contains("<script"));
     assert!(!first.contains("http://"));
     assert!(!first.contains("https://"));
@@ -1381,7 +1381,7 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     assert!(html.contains("A-only and B-only paths remain visible"));
     document.assert_present("#reach-unique-paths table > caption");
     assert!(html.contains("class=\"coverage-polar path-distribution-chart\""));
-    assert!(html.contains("@media(max-width:620px)"));
+    assert!(html.contains("@media (max-width: 620px)"));
     assert!(html.contains("@media print"));
 
     let compact = render_compact_summary_html(&report).unwrap();
@@ -1764,7 +1764,7 @@ fn run_quality_state_matrix_has_exact_accessible_audit_equivalents() {
         html.matches("<details class=\"state-corrected\">").count(),
         1
     );
-    assert!(html.contains("@media print{.answerability-table{display:block}"));
+    assert!(html.contains("@media print {\n  .answerability-table {\n    display: block;"));
 }
 
 fn plain_language_answer_from(html: &str) -> &str {

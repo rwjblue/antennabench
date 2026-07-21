@@ -18,7 +18,6 @@ mod view;
 pub use compact::{render_compact_summary_html, render_compact_summary_html_with_resources};
 
 use audit::render_audit_appendix;
-use geometry::render_geometry_styles;
 use questions::{
     is_single_antenna_lens, ordered_question_families, render_answer_first_overview,
     render_coverage_map_section, render_distance_section, render_how_to_read,
@@ -26,10 +25,10 @@ use questions::{
     render_reporter_activity_section, render_run_quality_section, render_same_path_section,
 };
 use shared::CheckedHtmlWriter;
-use styles::{COVERAGE_STYLES, STYLES};
+use styles::{write_stylesheet, StylesheetVariant};
 use templates::{
-    render_template, DocumentEndTemplate, DocumentStartTemplate, FullHeaderTemplate,
-    OperationalHistoryTemplate,
+    render_template, BodyStartTemplate, DocumentEndTemplate, DocumentStartTemplate,
+    FullHeaderTemplate, OperationalHistoryTemplate,
 };
 use view::{FullHeaderView, OperationalHistoryView};
 
@@ -126,9 +125,8 @@ fn render_standalone_html_document(
             title: "AntennaBench session report",
         },
     )?;
-    out.push_str(STYLES);
-    render_geometry_styles(&mut out);
-    out.push_str(COVERAGE_STYLES);
+    write_stylesheet(&mut out, StylesheetVariant::Full);
+    render_template(&mut out, &BodyStartTemplate { main_class: "" })?;
 
     render_template(
         &mut out,

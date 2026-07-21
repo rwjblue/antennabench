@@ -41,6 +41,8 @@ mise run check               # fast Rust loop: formatting, Clippy, tests
 mise run desktop:test        # focused desktop and frontend tests
 mise run desktop:e2e         # unattended setup-to-export workflow
 mise run desktop:report-browser # real-browser embedded report style/CSP check
+mise run report:css-format-check # canonical authored report CSS formatting
+mise run desktop:report-style-check # generated desktop stylesheet byte check
 mise run desktop:build       # debug app build without packaging
 mise run hosted:test         # public site plus optional hosted foundation
 mise run desktop:frontend-coverage

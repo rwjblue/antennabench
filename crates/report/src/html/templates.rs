@@ -33,6 +33,12 @@ pub(super) struct DocumentStartTemplate<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "report/body_start.html")]
+pub(super) struct BodyStartTemplate<'a> {
+    pub(super) main_class: &'a str,
+}
+
+#[derive(Template)]
 #[template(path = "report/document_end.html")]
 pub(super) struct DocumentEndTemplate {
     pub(super) compact: bool,
