@@ -665,7 +665,7 @@ fn escapes_every_untrusted_report_string() {
     assert!(!html.contains("<script>"));
     assert!(!html.contains("</script>"));
     assert!(
-        html.contains("&quot;&gt;&lt;script&gt;alert(&#39;x&#39;) &amp; imported&lt;/script&gt;")
+        html.contains("&#34;&#62;&#60;script&#62;alert(&#39;x&#39;) &#38; imported&#60;/script&#62;")
     );
 }
 
@@ -697,8 +697,8 @@ fn renders_distinct_escaped_antenna_labels_without_mutating_report_data() {
         assert!(html.contains(
             "Positive values mean Loop &#62; Beam was stronger; negative values mean &#60;Vertical &#38; 1&#62; was stronger."
         ));
-        assert!(html.contains("&lt;Vertical &amp; 1&gt; only"));
-        assert!(html.contains("Loop &gt; Beam only"));
+        assert!(html.contains("&#60;Vertical &#38; 1&#62; only"));
+        assert!(html.contains("Loop &#62; Beam only"));
         assert!(!html.contains(left_label));
         assert!(!html.contains(right_label));
     }
