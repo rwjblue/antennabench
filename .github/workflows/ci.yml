@@ -99,6 +99,25 @@ jobs:
       - name: Run portable workspace tests
         run: mise run test
 
+      - name: Diagnose Windows desktop test loader
+        if: failure() && matrix.name == 'Windows'
+        run: |
+          exe="$(find target/debug/deps -maxdepth 1 -type f -name 'antennabench_desktop_lib-*.exe' -print -quit)"
+          test -n "$exe"
+          echo "Desktop test executable: $exe"
+          echo "::group::PE imports"
+          llvm-readobj --coff-imports "$exe" || llvm-objdump --private-headers "$exe"
+          echo "::endgroup::"
+          echo "::group::Nearby native libraries"
+          find target/debug -maxdepth 2 -type f -iname '*.dll' -print
+          echo "::endgroup::"
+          echo "::group::Loader diagnostic tools and DLL search"
+          where.exe dumpbin.exe || true
+          where.exe cdb.exe || true
+          where.exe gflags.exe || true
+          where.exe WebView2Loader.dll || true
+          echo "::endgroup::"
+
       - name: Run frontend state tests
         run: mise run desktop:frontend-test
 
