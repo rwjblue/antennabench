@@ -62,7 +62,7 @@ fn group_view(
 ) -> OverlapGroupView {
     OverlapGroupView {
         index,
-        label: stratum(&group.stratum),
+        label: comparison_group_label(&group.stratum),
         observed: group
             .observed
             .as_ref()
@@ -180,17 +180,6 @@ fn common_view(common: &crate::ReportOpportunityComplementarity) -> OpportunityO
             })
             .collect(),
     }
-}
-
-fn stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
 }
 
 fn order_label(order: antennabench_analysis::ComparisonOrder) -> &'static str {

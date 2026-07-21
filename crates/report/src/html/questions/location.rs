@@ -12,7 +12,6 @@ use crate::html::{
         LocationPathAuditView, ObservedPathAuditRowView, ObservedPathAuditView,
         PathContextGroupView, PathContextView, ProfileBarChartView, ProfileBarRowView,
         ProfileDistributionRowView, ProfileDistributionView, ProfileTotalView, ProfileView,
-        ReachBarView, ReachSegmentView,
     },
 };
 
@@ -78,7 +77,7 @@ fn geography_view(report: &SessionReport) -> GeographyView {
             };
             FullProfileGroupView {
                 index,
-                label: raw_comparison_stratum(&stratum.stratum),
+                label: comparison_group_label(&stratum.stratum),
                 dominant_summary,
                 profile: profile_view(profile, false),
             }
@@ -108,7 +107,7 @@ fn compact_footprint_view(report: &SessionReport) -> CompactFootprintView {
         .enumerate()
         .map(|(index, stratum)| CompactFootprintGroupView {
             index,
-            label: raw_comparison_stratum(&stratum.stratum),
+            label: comparison_group_label(&stratum.stratum),
             reach: footprint_reach_view(report, &stratum.reach),
             profile: profile_view(&stratum.observed_profile, true),
         })
@@ -201,8 +200,8 @@ fn profile_view(profile: &crate::ReportOverviewObservedProfile, compact: bool) -
             .collect(),
         left_label,
         right_label,
-        distributions: vec![distance_distribution.clone(), azimuth_distribution.clone()],
-        bar_charts: vec![distance_bars.clone(), azimuth_bars.clone()],
+        distributions: vec![distance_distribution, azimuth_distribution],
+        bar_charts: vec![distance_bars, azimuth_bars],
         composition: profile
             .distance_composition
             .iter()
@@ -335,34 +334,20 @@ fn strict_dominant_distance(profile: &ReportObservedAntennaProfile) -> Option<Re
 }
 
 fn footprint_reach_view(report: &SessionReport, reach: &ReportOverviewReach) -> FootprintReachView {
-    let (left_label, right_label) = raw_antenna_labels(report);
-    let left_total = reach.left_only_unique_path_count + reach.both_unique_path_count;
-    let right_total = reach.right_only_unique_path_count + reach.both_unique_path_count;
-    let counts = [
-        (reach.left_only_unique_path_count, "left"),
-        (reach.both_unique_path_count, "both"),
-        (reach.right_only_unique_path_count, "right"),
-    ];
-    let total = counts.iter().map(|(count, _)| count).sum::<usize>().max(1) as f64;
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
+    let presentation = reach_presentation(reach, "reach-bar");
     FootprintReachView {
         left_label,
         right_label,
-        left_only: reach.left_only_unique_path_count,
-        both: reach.both_unique_path_count,
-        right_only: reach.right_only_unique_path_count,
-        left_total,
-        right_total,
-        bar: ReachBarView {
-            class: "reach-bar".to_string(),
-            segments: counts
-                .into_iter()
-                .filter(|(count, _)| *count > 0)
-                .map(|(count, side)| ReachSegmentView {
-                    side,
-                    geometry_class: geometry_class(count as f64 / total * 100.0),
-                })
-                .collect(),
-        },
+        left_only: presentation.left_only,
+        both: presentation.both,
+        right_only: presentation.right_only,
+        left_total: presentation.left_total,
+        right_total: presentation.right_total,
+        bar: presentation.bar,
     }
 }
 
@@ -407,7 +392,7 @@ fn observed_path_audit_rows(report: &SessionReport) -> Vec<ObservedPathAuditRowV
                     },
                 );
                 ObservedPathAuditRowView {
-                    group: raw_comparison_stratum(&profile.stratum),
+                    group: comparison_group_label(&profile.stratum),
                     antenna: profile.antenna_label.clone(),
                     remote_path: path.remote_path.clone(),
                     location,
@@ -506,7 +491,7 @@ fn path_context_group_view(index: usize, stratum: &ReportOverviewStratum) -> Pat
     );
     PathContextGroupView {
         index,
-        label: raw_comparison_stratum(&stratum.stratum),
+        label: comparison_group_label(&stratum.stratum),
         located,
         located_suffix: plural_suffix(located),
         unavailable: context.missing_location_path_count + context.inconsistent_location_path_count,
@@ -567,37 +552,11 @@ fn unavailable_location_counts(rows: &[&ReportOverviewStratum]) -> (usize, usize
     )
 }
 
-fn raw_antenna_labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".into()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".into()),
-    )
-}
-
 fn raw_comparison_strata_list(rows: &[&ReportOverviewStratum]) -> String {
     rows.iter()
-        .map(|row| raw_comparison_stratum(&row.stratum))
+        .map(|row| comparison_group_label(&row.stratum))
         .collect::<Vec<_>>()
         .join("; ")
-}
-
-fn raw_comparison_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
 }
 
 pub(in super::super) fn located_path_count(

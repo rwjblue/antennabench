@@ -1,33 +1,7 @@
 use crate::SessionReport;
-use antennabench_analysis::{ComparisonSide, ComparisonStratum};
+use antennabench_analysis::ComparisonSide;
 
-use super::super::{geometry::geometry_class, shared::*};
-
-fn labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".into()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".into()),
-    )
-}
-
-fn stratum(value: &ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
-}
+use super::super::{geometry::geometry_class, presentation::*, shared::*};
 
 #[derive(Debug, Clone)]
 pub(in crate::html) struct StatView {
@@ -37,7 +11,7 @@ pub(in crate::html) struct StatView {
 
 pub(in crate::html) fn comparison_diagnostic_stats(report: &SessionReport) -> Vec<StatView> {
     let d = report.comparison.diagnostics;
-    let (left, right) = labels(report);
+    let AntennaLabels { left, right } = antenna_labels(report);
     vec![
         ("Blocks".into(), d.block_count),
         ("Eligible blocks".into(), d.eligible_block_count),
@@ -101,7 +75,10 @@ pub(in crate::html) struct OverlapView {
 
 impl OverlapView {
     pub(in crate::html) fn new(report: &SessionReport) -> Self {
-        let (left_label, right_label) = labels(report);
+        let AntennaLabels {
+            left: left_label,
+            right: right_label,
+        } = antenna_labels(report);
         Self {
             left_label,
             right_label,
@@ -112,7 +89,7 @@ impl OverlapView {
                 .map(|row| {
                     let total = (row.left_finite_count + row.right_finite_count).max(1) as f64;
                     OverlapRowView {
-                        stratum: stratum(&row.stratum),
+                        stratum: comparison_group_label(&row.stratum),
                         remote_path: row.remote_path.clone(),
                         left: row.left_finite_count,
                         right: row.right_finite_count,
@@ -161,7 +138,7 @@ pub(in crate::html) struct TimelineView {
 
 impl TimelineView {
     pub(in crate::html) fn new(report: &SessionReport) -> Self {
-        let (left, right) = labels(report);
+        let AntennaLabels { left, right } = antenna_labels(report);
         Self {
             rows: report
                 .comparison
@@ -222,7 +199,7 @@ pub(in crate::html) struct ComparisonBlockView {
 }
 
 pub(in crate::html) fn comparison_blocks(report: &SessionReport) -> Vec<ComparisonBlockView> {
-    let (left, right) = labels(report);
+    let AntennaLabels { left, right } = antenna_labels(report);
     report
         .comparison
         .blocks
@@ -304,7 +281,10 @@ pub(in crate::html) struct PairedRowsView {
 
 impl PairedRowsView {
     pub(in crate::html) fn new(report: &SessionReport) -> Self {
-        let (left_label, right_label) = labels(report);
+        let AntennaLabels {
+            left: left_label,
+            right: right_label,
+        } = antenna_labels(report);
         let rows = &report.comparison.paired_rows;
         let max_abs = rows
             .iter()
@@ -332,7 +312,7 @@ impl PairedRowsView {
                         50.0
                     };
                     PairedRowView {
-                        stratum: stratum(&row.stratum),
+                        stratum: comparison_group_label(&row.stratum),
                         remote_path: row.remote_path.clone(),
                         block: row.block_index + 1,
                         order: labeled_comparison_order(row.order, &left_label, &right_label),
@@ -386,7 +366,10 @@ pub(in crate::html) struct StratumSummariesView {
 
 impl StratumSummariesView {
     pub(in crate::html) fn new(report: &SessionReport) -> Self {
-        let (left_label, right_label) = labels(report);
+        let AntennaLabels {
+            left: left_label,
+            right: right_label,
+        } = antenna_labels(report);
         Self {
             left_label,
             right_label,
@@ -395,7 +378,7 @@ impl StratumSummariesView {
                 .strata
                 .iter()
                 .map(|row| StratumSummaryRowView {
-                    stratum: stratum(&row.stratum),
+                    stratum: comparison_group_label(&row.stratum),
                     pairs: row.paired_row_count,
                     paths: row.unique_path_count,
                     blocks: row.contributing_block_count,

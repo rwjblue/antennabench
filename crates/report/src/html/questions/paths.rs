@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use super::super::geometry::geometry_class;
 use super::*;
 use crate::{
     html::{
@@ -11,7 +10,7 @@ use crate::{
         },
         view::{
             ExactPathView, PathDistributionView, PathDotView, PathStratumView, PathTickView,
-            ReachBarView, ReachRowView, ReachSegmentView, ReachView, SamePathView,
+            ReachRowView, ReachView, SamePathView,
         },
     },
     ReportOverviewPathMedianDelta,
@@ -71,7 +70,10 @@ fn same_path_view(report: &SessionReport, compact: bool) -> SamePathView {
             unavailable: None,
         };
     }
-    let (left_label, right_label) = raw_labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     let orientation = report.overview.scope.delta_orientation.as_ref();
     let available = report
         .overview
@@ -170,7 +172,7 @@ fn path_stratum_view(
         None
     };
     PathStratumView {
-        label: raw_stratum(&row.stratum),
+        label: comparison_group_label(&row.stratum),
         matched_paths,
         path_suffix: plural_suffix(matched_paths),
         matched_pairs: row.paired_row_count,
@@ -315,7 +317,10 @@ fn path_x(value: f64, maximum_absolute: f64) -> f64 {
 }
 
 fn reach_view(report: &SessionReport) -> ReachView {
-    let (left_label, right_label) = raw_labels(report);
+    let AntennaLabels {
+        left: left_label,
+        right: right_label,
+    } = antenna_labels(report);
     let (available, unavailable): (Vec<_>, Vec<_>) =
         report.overview.strata.iter().partition(|row| {
             row.reach.left_only_unique_path_count
@@ -327,23 +332,21 @@ fn reach_view(report: &SessionReport) -> ReachView {
         .into_iter()
         .map(|row| {
             let reach = &row.reach;
-            let universe = reach.left_only_unique_path_count
-                + reach.both_unique_path_count
-                + reach.right_only_unique_path_count;
+            let presentation = reach_presentation(reach, "reach-bar");
             ReachRowView {
-                label: raw_stratum(&row.stratum),
-                left_only: reach.left_only_unique_path_count,
-                both: reach.both_unique_path_count,
-                right_only: reach.right_only_unique_path_count,
-                left_total: reach.left_only_unique_path_count + reach.both_unique_path_count,
-                right_total: reach.right_only_unique_path_count + reach.both_unique_path_count,
-                universe,
-                universe_suffix: plural_suffix(universe),
+                label: comparison_group_label(&row.stratum),
+                left_only: presentation.left_only,
+                both: presentation.both,
+                right_only: presentation.right_only,
+                left_total: presentation.left_total,
+                right_total: presentation.right_total,
+                universe: presentation.universe,
+                universe_suffix: plural_suffix(presentation.universe),
                 missing_left: row.missing_snr_left_count,
                 missing_right: row.missing_snr_right_count,
                 duplicates: row.exact_duplicate_count,
                 conflicts: row.conflicting_duplicate_group_count,
-                bar: reach_bar_view(reach, "reach-bar"),
+                bar: presentation.bar,
             }
         })
         .collect();
@@ -365,45 +368,10 @@ fn reach_view(report: &SessionReport) -> ReachView {
     }
 }
 
-fn reach_bar_view(reach: &ReportOverviewReach, class: &str) -> ReachBarView {
-    let counts = [
-        (reach.left_only_unique_path_count, "left"),
-        (reach.both_unique_path_count, "both"),
-        (reach.right_only_unique_path_count, "right"),
-    ];
-    let total = counts.iter().map(|(count, _)| count).sum::<usize>().max(1) as f64;
-    ReachBarView {
-        class: class.to_string(),
-        segments: counts
-            .into_iter()
-            .filter(|(count, _)| *count > 0)
-            .map(|(count, side)| ReachSegmentView {
-                side,
-                geometry_class: geometry_class(count as f64 / total * 100.0),
-            })
-            .collect(),
-    }
-}
-
 fn missing_snr_totals(rows: &[&ReportOverviewStratum]) -> (usize, usize) {
     (
         rows.iter().map(|row| row.missing_snr_left_count).sum(),
         rows.iter().map(|row| row.missing_snr_right_count).sum(),
-    )
-}
-
-fn raw_labels(report: &SessionReport) -> (String, String) {
-    (
-        report
-            .comparison
-            .left_label
-            .clone()
-            .unwrap_or_else(|| "Left".into()),
-        report
-            .comparison
-            .right_label
-            .clone()
-            .unwrap_or_else(|| "Right".into()),
     )
 }
 
@@ -416,20 +384,9 @@ fn raw_orientation_labels(
     )
 }
 
-fn raw_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        value.mode.as_str(),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
-}
-
 fn raw_strata_list(rows: &[&ReportOverviewStratum]) -> String {
     rows.iter()
-        .map(|row| raw_stratum(&row.stratum))
+        .map(|row| comparison_group_label(&row.stratum))
         .collect::<Vec<_>>()
         .join("; ")
 }

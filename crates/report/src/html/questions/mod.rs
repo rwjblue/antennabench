@@ -10,7 +10,7 @@ use crate::{
 };
 use antennabench_core::AlignedSlotStatus;
 
-use super::{audit::*, evidence::*, shared::*};
+use super::{audit::*, evidence::*, presentation::*, shared::*};
 
 mod activity;
 mod coverage;
