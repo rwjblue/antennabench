@@ -1,5 +1,3 @@
-use std::fmt::Write as _;
-
 use crate::{
     check_cancelled, ReportAcquisitionWorkflowStatus, ReportCancellationToken, ReportCompleteness,
     ReportError, ReportProviderCompleteness, ReportQuestionFamily, ReportResourceLimits,
@@ -17,9 +15,10 @@ use super::{
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
     templates::{
-        render_template, CompactHeaderTemplate, CompactSamePathEndTemplate,
-        CompactSamePathStartTemplate,
+        render_template, CompactHeaderTemplate, CompactQualityTemplate, CompactReferenceTemplate,
+        CompactSamePathEndTemplate, CompactSamePathStartTemplate,
     },
+    view::{CompactQualityView, CompactReferenceView},
 };
 
 /// Renders a concise, deterministic, standalone HTML summary from the same
@@ -116,8 +115,8 @@ pub fn render_compact_summary_html_with_resources(
             }
         }
     }
-    render_compact_run_quality(&mut out, report);
-    render_compact_reference(&mut out, report);
+    render_compact_run_quality(&mut out, report)?;
+    render_compact_reference(&mut out, report)?;
     if is_single_antenna_lens(report) {
         out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This compact profiling summary describes only recorded evidence from the named antenna.</p></main></body></html>");
     } else {
@@ -126,7 +125,10 @@ pub fn render_compact_summary_html_with_resources(
     out.finish().map_err(ReportError::from)
 }
 
-pub(super) fn render_compact_run_quality(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+pub(super) fn render_compact_run_quality(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) -> Result<(), ReportError> {
     let overall = &report.evidence.overall;
     let availability = comparison_availability_label(report.overview.comparison_availability);
     let lifecycle = overview_lifecycle_label(report.overview.lifecycle.state);
@@ -154,20 +156,37 @@ pub(super) fn render_compact_run_quality(out: &mut CheckedHtmlWriter<'_>, report
             ) => "Collection completed; provider completeness is unsupported".to_string(),
         }
     };
-    out.push_str("<section id=\"run-quality\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"run-quality-title\"><h2 id=\"run-quality-title\">Run quality and answerability</h2><p class=\"muted\">These are typed availability and count facts.</p><div class=\"run-summary\">");
-    write_html!(out, "<div><span>Comparison state</span><strong>{availability}</strong></div><div><span>Session state</span><strong>{lifecycle}</strong></div><div><span>Usable / excluded</span><strong>{} / {}</strong></div><div><span>Acquisition</span><strong>{}</strong></div>", overall.observation_counts.usable, overall.observation_counts.excluded, escape_html(&acquisition));
-    out.push_str("</div>");
-    if report.completeness == ReportCompleteness::BoundedOverview {
-        out.push_str("<p class=\"notice\"><strong>Bounded overview:</strong> detailed report families were intentionally omitted by the resource policy; no rows were sampled. Use the full evidence report and lossless session bundle for available audit detail.</p>");
-    }
-    out.push_str("<p class=\"muted compact-omission\">This compact summary intentionally omits unmatched-path, missing-SNR, exclusion, duplicate, conflict, timeline, lifecycle-history, controller-output, import, solar, and raw-observation audit rows. The full evidence report and lossless session bundle retain that complete audit evidence; no rows are sampled here.</p></section>");
+    render_template(
+        out,
+        &CompactQualityTemplate {
+            view: CompactQualityView {
+                comparison_state: availability,
+                lifecycle,
+                usable: overall.observation_counts.usable,
+                excluded: overall.observation_counts.excluded,
+                acquisition,
+                bounded: report.completeness == ReportCompleteness::BoundedOverview,
+            },
+        },
+    )
 }
 
-pub(super) fn render_compact_reference(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+pub(super) fn render_compact_reference(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) -> Result<(), ReportError> {
     let revision = report
         .snapshot
         .checkpoint_revision
         .or(report.overview.lifecycle.checkpoint_revision)
         .map_or_else(not_recorded, |value| value.to_string());
-    write_html!(out, "<section class=\"panel compact-reference\" aria-labelledby=\"source-reference-title\"><h2 id=\"source-reference-title\">Source reference</h2><p>Full evidence report and lossless session bundle: session <code>{}</code>, committed revision <strong>{}</strong>.</p><p class=\"muted\">Use those authoritative local outputs for the complete audit appendix and durable session evidence.</p></section>", escape_html(&report.overview.scope.session_id), escape_html(&revision));
+    render_template(
+        out,
+        &CompactReferenceTemplate {
+            view: CompactReferenceView {
+                session_id: report.overview.scope.session_id.clone(),
+                revision,
+            },
+        },
+    )
 }

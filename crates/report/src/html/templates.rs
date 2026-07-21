@@ -12,6 +12,7 @@ mod coverage;
 mod evidence;
 mod overview;
 mod paths;
+mod quality;
 
 pub(super) use activity::*;
 pub(super) use audit::*;
@@ -19,6 +20,7 @@ pub(super) use coverage::*;
 pub(super) use evidence::*;
 pub(super) use overview::*;
 pub(super) use paths::*;
+pub(super) use quality::*;
 
 #[derive(Template)]
 #[template(path = "report/full_header.html")]

@@ -247,7 +247,7 @@ fn compact_summary_escapes_unavailable_and_bounded_reports() {
     unavailable.overview.scope.station.callsign = "<call>".into();
     unavailable.overview.strata.clear();
     let unavailable_html = render_compact_summary_html(&unavailable).unwrap();
-    assert!(unavailable_html.contains("&lt;compact &amp; session&gt;"));
+    assert!(unavailable_html.contains("&#60;compact &#38; session&#62;"));
     assert!(unavailable_html.contains("No comparison groups are available"));
     assert!(!unavailable_html.contains("<compact & session>"));
 

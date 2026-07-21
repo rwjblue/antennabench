@@ -15,6 +15,7 @@ mod evidence;
 mod location_audit;
 mod overview;
 mod paths;
+mod quality;
 mod snapshot;
 
 pub(super) use activity::*;
@@ -25,4 +26,5 @@ pub(super) use evidence::*;
 pub(super) use location_audit::*;
 pub(super) use overview::*;
 pub(super) use paths::*;
+pub(super) use quality::*;
 pub(super) use snapshot::*;

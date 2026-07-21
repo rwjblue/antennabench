@@ -1,4 +1,4 @@
-use std::fmt::{self, Write};
+use std::fmt;
 
 use crate::{
     report_resource_error, ReportCancellationToken, ReportDetailFamily, ReportImportedEvidence,
@@ -97,15 +97,6 @@ impl fmt::Write for CheckedHtmlWriter<'_> {
         self.push_str(value);
         Ok(())
     }
-}
-
-pub(super) fn fact(out: &mut CheckedHtmlWriter<'_>, label: &str, value: &str) {
-    write_html!(
-        out,
-        "<div class=\"fact\"><dt>{}</dt><dd>{}</dd></div>",
-        label,
-        escape_html(value)
-    );
 }
 
 pub(super) fn optional_join(values: &[String]) -> String {
