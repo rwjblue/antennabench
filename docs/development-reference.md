@@ -285,6 +285,26 @@ The Askama architecture test also enumerates every report template and rejects
 uncompiled template files, escaping overrides, script markup, legacy
 `write_html!` or manual escaping, and direct writes outside the checked
 sink/static-CSS/generated-geometry allowlist.
+
+Report markup tests choose the narrowest assertion that owns the behavior:
+
+- Use a semantic selector assertion for stable structure such as sections,
+  anchors, headings, `aria-labelledby` targets, disclosure boundaries, table
+  captions and headers, and full-versus-compact inclusion policy.
+- Use a rendered-text assertion when inline elements, interpolation,
+  punctuation, or conditional Askama blocks could join or separate visible
+  words. The helper applies ordinary HTML whitespace collapsing but preserves
+  whether a separator exists; it does not trim words together.
+- Use a focused inline fragment snapshot when a small, self-contained markup
+  shape is itself the contract and selectors alone would hide important
+  nesting. Do not snapshot a whole report or large section.
+- Use a browser assertion for behavior that depends on CSP, native fragment
+  navigation, focus, layout, stylesheet extraction, or computed style.
+- Use an exact-byte assertion only where bytes are the contract, including
+  repeated-render determinism and N-1/N/N+1 resource boundaries. Source
+  indentation and equivalent HTML serialization are not generally byte-level
+  compatibility promises.
+
 The run-quality state matrix additionally pins ordinary, late, unknown-
 occupancy, missed, bad, corrected, interrupted/resumed, abandoned,
 command-verified, explicit acquisition-gap, malformed/conflict/duplicate, and
