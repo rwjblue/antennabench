@@ -21,9 +21,9 @@ fn embed_windows_manifest_for_tests() {
         .expect("desktop crate directory")
         .join("windows-app-manifest.xml");
     println!("cargo:rerun-if-changed={}", manifest.display());
-    println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+    println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
     println!(
-        "cargo:rustc-link-arg=/MANIFESTINPUT:{}",
+        "cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}",
         manifest.to_str().expect("UTF-8 Windows manifest path")
     );
 }
