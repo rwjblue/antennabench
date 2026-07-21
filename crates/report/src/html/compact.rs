@@ -11,9 +11,8 @@ use super::{
     questions::{
         is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
         render_answer_first_overview_with_reference, render_compact_coverage_map_section,
-        render_compact_observed_footprint_section, render_compact_overlap_repeatability_section,
-        render_how_to_read, render_question_navigation, render_reporter_activity_section,
-        render_same_path_stratum,
+        render_compact_observed_footprint_section, render_how_to_read, render_question_navigation,
+        render_reporter_activity_section, render_same_path_stratum,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
@@ -110,7 +109,10 @@ pub fn render_compact_summary_html_with_resources(
                 }
             }
             ReportQuestionFamily::Repeatability => {
-                render_compact_overlap_repeatability_section(&mut out, report)
+                if !rendered_observed_footprint {
+                    render_compact_observed_footprint_section(&mut out, report);
+                    rendered_observed_footprint = true;
+                }
             }
         }
     }
@@ -189,7 +191,7 @@ pub(super) fn render_compact_same_path_view(
     if let Some(orientation) = orientation {
         write_html!(out, "<p class=\"orientation\"><strong>Signed values:</strong> Positive values mean {} was stronger; negative values mean {} was stronger. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label));
     }
-    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. The purple marker is the group median and the purple span is the middle half.</p>");
+    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale.</p>");
     for row in available {
         render_same_path_stratum(out, row, orientation);
     }

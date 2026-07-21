@@ -582,7 +582,6 @@ try {
         : [
             "what-run-show",
             "observed-footprint",
-            "coverage-overlap",
             "run-quality",
           ],
     );

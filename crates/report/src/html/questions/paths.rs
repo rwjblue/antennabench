@@ -1,5 +1,6 @@
 use super::super::geometry::geometry_class;
 use super::*;
+use crate::ReportOverviewPathMedianDelta;
 use std::collections::BTreeMap;
 
 pub(in super::super) fn render_same_path_section(
@@ -62,7 +63,7 @@ pub(in super::super) fn render_same_path_view(
     if let Some(orientation) = orientation {
         write_html!(out, "<p class=\"orientation\"><strong>Signed values:</strong> Positive values mean {} was stronger; negative values mean {} was stronger. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label));
     }
-    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. The purple marker is the group median and the purple span is the middle half. A 0 dB dot is retained as a true zero.</p>");
+    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale; a 0 dB dot is retained as a true zero.</p>");
     for row in available {
         render_same_path_stratum(out, row, orientation);
     }
@@ -121,12 +122,16 @@ pub(in super::super) fn render_same_path_stratum(
     let (negative_label, positive_label) = orientation
         .map(orientation_antenna_labels)
         .unwrap_or_else(|| ("Negative side".into(), "Positive side".into()));
-    let mut values = row
-        .path_median_deltas
+    let mut paths = row.path_median_deltas.iter().collect::<Vec<_>>();
+    paths.sort_by(|left, right| {
+        left.median_delta_right_minus_left_db
+            .total_cmp(&right.median_delta_right_minus_left_db)
+            .then_with(|| left.remote_path.cmp(&right.remote_path))
+    });
+    let values = paths
         .iter()
         .map(|path| path.median_delta_right_minus_left_db)
         .collect::<Vec<_>>();
-    values.sort_by(f64::total_cmp);
     let first_quartile = interpolated_quantile(&values, 0.25);
     let third_quartile = interpolated_quantile(&values, 0.75);
     let negative_count = values.iter().filter(|value| **value < 0.0).count();
@@ -136,12 +141,9 @@ pub(in super::super) fn render_same_path_stratum(
     write_html!(out, "<div class=\"path-distribution\"><dl class=\"facts path-distribution-summary\"><div class=\"fact\"><dt>{} stronger</dt><dd>{}</dd></div><div class=\"fact\"><dt>Tied at 0 dB</dt><dd>{}</dd></div><div class=\"fact\"><dt>{} stronger</dt><dd>{}</dd></div><div class=\"fact\"><dt>Group median</dt><dd>{} dB</dd></div><div class=\"fact\"><dt>Middle half</dt><dd>{} to {} dB</dd></div></dl>", negative_label, negative_count, tied_count, positive_label, positive_count, format_signed(median), format_signed(first_quartile), format_signed(third_quartile));
     render_path_distribution_svg(
         out,
-        &values,
+        &paths,
         PathDistributionScale {
-            maximum_absolute: max_abs,
-            median,
-            first_quartile,
-            third_quartile,
+            maximum_absolute: path_axis_limit(max_abs),
         },
         &negative_label,
         &positive_label,
@@ -167,14 +169,11 @@ pub(in super::super) fn render_same_path_stratum(
 #[derive(Clone, Copy)]
 struct PathDistributionScale {
     maximum_absolute: f64,
-    median: f64,
-    first_quartile: f64,
-    third_quartile: f64,
 }
 
 fn render_path_distribution_svg(
     out: &mut CheckedHtmlWriter<'_>,
-    values: &[f64],
+    paths: &[&ReportOverviewPathMedianDelta],
     scale: PathDistributionScale,
     negative_label: &str,
     positive_label: &str,
@@ -184,7 +183,8 @@ fn render_path_distribution_svg(
     const BASELINE: f64 = 156.0;
     let x = |value: f64| LEFT + delta_position(value, scale.maximum_absolute) / 100.0 * WIDTH;
     let mut stack_sizes = BTreeMap::<i64, usize>::new();
-    for value in values {
+    for path in paths {
+        let value = path.median_delta_right_minus_left_db;
         *stack_sizes
             .entry((value * 1_000.0).round() as i64)
             .or_default() += 1;
@@ -194,24 +194,61 @@ fn render_path_distribution_svg(
     let radius = (vertical_step * 0.38).clamp(2.2, 4.2);
     let mut stack_offsets = BTreeMap::<i64, usize>::new();
 
-    write_html!(out, "<svg class=\"coverage-polar path-distribution-chart\" viewBox=\"0 0 720 205\" role=\"img\" aria-label=\"Distribution of {} signed path-median SNR differences. Negative values favor {}; positive values favor {}.\"><rect width=\"720\" height=\"205\" rx=\"8\" fill=\"#f5f7fb\"/>", values.len(), escape_html(negative_label), escape_html(positive_label));
-    out.push_str("<line class=\"path-distribution-axis\" x1=\"44\" y1=\"160\" x2=\"676\" y2=\"160\" stroke=\"#5c667a\"/><line class=\"path-distribution-zero\" x1=\"360\" y1=\"38\" x2=\"360\" y2=\"166\" stroke=\"#172033\" stroke-width=\"1.5\"/>");
-    write_html!(out, "<line class=\"path-distribution-iqr\" x1=\"{:.2}\" y1=\"28\" x2=\"{:.2}\" y2=\"28\" stroke=\"#6d4c9a\" stroke-width=\"7\" stroke-linecap=\"round\"/><line class=\"path-distribution-median\" x1=\"{:.2}\" y1=\"18\" x2=\"{:.2}\" y2=\"42\" stroke=\"#6d4c9a\" stroke-width=\"3\"/>", x(scale.first_quartile), x(scale.third_quartile), x(scale.median), x(scale.median));
-    for value in values {
-        let bucket = (*value * 1_000.0).round() as i64;
+    write_html!(out, "<svg class=\"coverage-polar path-distribution-chart\" viewBox=\"0 0 720 220\" role=\"img\" aria-label=\"Distribution of {} signed path-median SNR differences. Negative values favor {}; positive values favor {}.\"><rect width=\"720\" height=\"220\" rx=\"8\" fill=\"#f5f7fb\"/>", paths.len(), escape_html(negative_label), escape_html(positive_label));
+    out.push_str("<line class=\"path-distribution-axis\" x1=\"44\" y1=\"160\" x2=\"676\" y2=\"160\" stroke=\"#5c667a\"/>");
+    let tick_step = path_axis_tick_step(scale.maximum_absolute);
+    let tick_count = (scale.maximum_absolute / tick_step).round() as i32;
+    for tick in -tick_count..=tick_count {
+        let value = tick as f64 * tick_step;
+        let tick_x = x(value);
+        let label = if tick == 0 {
+            "0".to_string()
+        } else {
+            format_signed(value)
+        };
+        write_html!(out, "<line class=\"path-distribution-tick\" x1=\"{tick_x:.2}\" y1=\"156\" x2=\"{tick_x:.2}\" y2=\"166\" stroke=\"#5c667a\"/><text class=\"path-distribution-tick-label\" x=\"{tick_x:.2}\" y=\"178\" fill=\"#5c667a\" font-size=\"10\" text-anchor=\"middle\">{label}</text>");
+    }
+    write_html!(out, "<text class=\"path-distribution-unit\" x=\"684\" y=\"178\" fill=\"#5c667a\" font-size=\"10\">dB</text>");
+    for path in paths {
+        let value = path.median_delta_right_minus_left_db;
+        let bucket = (value * 1_000.0).round() as i64;
         let level = stack_offsets.entry(bucket).or_default();
         let y = BASELINE - (*level as f64 + 0.5) * vertical_step;
         *level += 1;
-        let (class, fill) = if *value < 0.0 {
+        let (class, fill) = if value < 0.0 {
             ("path-dot-negative", "#315da8")
-        } else if *value > 0.0 {
+        } else if value > 0.0 {
             ("path-dot-positive", "#b35c00")
         } else {
             ("path-dot-zero", "#5c667a")
         };
-        write_html!(out, "<circle class=\"path-distribution-dot {class}\" cx=\"{:.2}\" cy=\"{y:.2}\" r=\"{radius:.2}\" fill=\"{fill}\" stroke=\"#fff\"/>", x(*value));
+        let detail = format!(
+            "{}: {} dB median across {} matched pair{}",
+            path.remote_path,
+            format_signed(value),
+            path.paired_row_count,
+            plural_suffix(path.paired_row_count)
+        );
+        write_html!(out, "<g class=\"path-distribution-dot-group\" tabindex=\"0\" role=\"img\" aria-label=\"{}\"><title>{}</title><circle class=\"path-distribution-dot {class}\" cx=\"{:.2}\" cy=\"{y:.2}\" r=\"{radius:.2}\" fill=\"{fill}\" stroke=\"#fff\"/></g>", escape_html(&detail), escape_html(&detail), x(value));
     }
-    write_html!(out, "<text class=\"path-distribution-label path-distribution-label-negative\" x=\"44\" y=\"186\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\">{} stronger</text><text class=\"path-distribution-label\" x=\"360\" y=\"186\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\" text-anchor=\"middle\">0 dB</text><text class=\"path-distribution-label path-distribution-label-positive\" x=\"676\" y=\"186\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\" text-anchor=\"end\">{} stronger</text></svg>", escape_html(negative_label), escape_html(positive_label));
+    write_html!(out, "<text class=\"path-distribution-label path-distribution-label-negative\" x=\"44\" y=\"207\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\">{} stronger</text><text class=\"path-distribution-label path-distribution-label-positive\" x=\"676\" y=\"207\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\" text-anchor=\"end\">{} stronger</text></svg>", escape_html(negative_label), escape_html(positive_label));
+}
+
+fn path_axis_limit(maximum_absolute: f64) -> f64 {
+    let step = path_axis_tick_step(maximum_absolute);
+    (maximum_absolute / step).ceil().max(1.0) * step
+}
+
+fn path_axis_tick_step(maximum_absolute: f64) -> f64 {
+    let raw = (maximum_absolute / 4.0).max(f64::MIN_POSITIVE);
+    let magnitude = 10_f64.powf(raw.log10().floor());
+    for multiplier in [1.0, 2.0, 5.0, 10.0] {
+        let candidate = multiplier * magnitude;
+        if candidate >= raw {
+            return candidate;
+        }
+    }
+    magnitude * 10.0
 }
 
 fn interpolated_quantile(sorted: &[f64], probability: f64) -> f64 {

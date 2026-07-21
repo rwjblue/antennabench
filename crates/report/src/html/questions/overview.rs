@@ -34,8 +34,9 @@ pub(in super::super) fn render_question_navigation(
             crate::ReportQuestionFamily::Repeatability => {
                 if include_audit {
                     out.push_str("<li><a href=\"#coverage-overlap\">Coverage overlap and repeatability</a></li>");
-                } else {
-                    out.push_str("<li><a href=\"#coverage-overlap\">Observed-path repeatability</a></li>");
+                } else if !observed_footprint_linked {
+                    out.push_str("<li><a href=\"#observed-footprint\">Observed footprint</a></li>");
+                    observed_footprint_linked = true;
                 }
             }
         }

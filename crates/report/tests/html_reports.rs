@@ -1141,8 +1141,8 @@ fn goal_lenses_reorder_the_same_facts_in_full_and_compact_reports() {
         let dx_html = render(&dx).unwrap();
         let (general_sections, dx_sections): (&[&str], &[&str]) = if compact {
             (
-                &["same-path-signal", "observed-footprint", "coverage-overlap"],
-                &["observed-footprint", "same-path-signal", "coverage-overlap"],
+                &["same-path-signal", "observed-footprint"],
+                &["observed-footprint", "same-path-signal"],
             )
         } else {
             (
@@ -1284,20 +1284,24 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
         html.contains("Positive values mean Antenna &amp; positive with another deliberately long label was stronger; negative values mean Antenna &lt;negative&gt; with a deliberately long operator label was stronger.")
     );
     assert_eq!(
-        html.matches("<circle class=\"path-distribution-dot")
+        html.matches("class=\"path-distribution-dot-group\"")
             .count(),
         3
     );
     for class in ["path-dot-negative", "path-dot-zero", "path-dot-positive"] {
         assert!(html.contains(class), "missing {class} distribution state");
     }
-    assert!(html.contains("viewBox=\"0 0 720 205\""));
-    assert!(html.contains("class=\"path-distribution-iqr\""));
-    assert!(html.contains("class=\"path-distribution-median\""));
+    assert!(html.contains("viewBox=\"0 0 720 220\""));
+    assert!(html.contains("class=\"path-distribution-tick\""));
+    assert!(html.contains("class=\"path-distribution-tick-label\""));
+    assert!(html.contains("K3NEGATIVE: -3 dB median across"));
+    assert!(html.contains("tabindex=\"0\" role=\"img\" aria-label=\"K3NEGATIVE:"));
+    assert!(!html.contains("class=\"path-distribution-iqr\""));
+    assert!(!html.contains("class=\"path-distribution-median\""));
     assert!(html.contains("<dt>Tied at 0 dB</dt><dd>1</dd>"));
     assert!(html.contains("<dt>Middle half</dt>"));
     assert!(!html.contains(" style=\""));
-    assert!(html.contains("A 0 dB dot is retained as a true zero"));
+    assert!(html.contains("a 0 dB dot is retained as a true zero"));
     assert!(html.contains("<caption>One path-median signed SNR delta per remote path"));
     assert!(html.contains("<details class=\"audit-disclosure path-detail-disclosure\"><summary>Review exact remote paths and matched-pair counts"));
     assert!(html.contains("See which paths contributed, how many matched pairs support each path median, and the exact delta behind each dot."));
@@ -1312,7 +1316,7 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     let compact = render_compact_summary_html(&report).unwrap();
     assert_eq!(
         compact
-            .matches("<circle class=\"path-distribution-dot")
+            .matches("class=\"path-distribution-dot-group\"")
             .count(),
         3
     );
@@ -1518,7 +1522,7 @@ fn renders_all_path_profiles_in_full_and_compact_without_overclaiming() {
         "Observed unique paths by direction",
         "Paired bars share one scale",
         "Unlike common-active receiver detection",
-        "Review exact observed-footprint counts and location quality",
+        "Review observed distance and direction profile",
         "Review exact unique observed-path rows",
     ] {
         assert!(
@@ -1526,8 +1530,18 @@ fn renders_all_path_profiles_in_full_and_compact_without_overclaiming() {
             "missing compact footprint: {expected}"
         );
     }
+    let profile_disclosure = compact
+        .find("<summary>Review observed distance and direction profile</summary>")
+        .expect("observed profile is disclosed");
+    assert!(
+        profile_disclosure
+            < compact
+                .find("Observed unique paths by distance")
+                .expect("distance profile remains available")
+    );
     assert!(!compact.contains("Observed complementarity"));
-    assert!(compact.contains("Observed-path repeatability"));
+    assert!(!compact.contains("<h2 id=\"coverage-overlap-title\">"));
+    assert!(compact.contains("Review whether observed paths repeated across blocks"));
     assert!(full.contains("Exact unique observed-path records"));
     assert!(full.contains("Review shared-path distance and direction context"));
     assert!(compact.contains("Exact unique observed-path records"));

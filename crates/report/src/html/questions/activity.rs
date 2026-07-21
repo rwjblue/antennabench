@@ -8,7 +8,7 @@ pub(in super::super) fn render_reporter_activity_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"reporter-activity\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reporter-activity-title\"><h2 id=\"reporter-activity-title\">Which antenna was heard more often by the same active receivers?</h2><p>Only receivers known to be listening during both antenna cycles enter this comparison. Within that population, no report is below-threshold evidence; a receiver absent from the census remains missing evidence, never a non-detection.</p><p class=\"muted\">Receiver-block opportunities are repeated descriptive observations: the same receiver can contribute again in another eligible block. They are not independent inferential samples, and comparison groups remain separate.</p>");
+    out.push_str("<section id=\"reporter-activity\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reporter-activity-title\"><h2 id=\"reporter-activity-title\">Which antenna was heard more often by the same active receivers?</h2><p>This section asks a narrower question than raw path counts: when a receiver was confirmed active during both back-to-back antenna cycles, which antenna’s transmission did it report? Each receiver-block is one shared opportunity, so both antenna rates use the same listening population.</p><p class=\"muted\">If an active receiver reported neither transmission, both are recorded as non-detections for that opportunity. Receivers absent from the activity census are excluded as missing evidence, never counted as misses. The same receiver can contribute another descriptive opportunity in a later block; these are not independent inferential samples, and comparison groups remain separate.</p>");
     if report.reporter_activity.cycle_rates.is_empty() {
         out.push_str("<p class=\"empty\"><strong>Coverage unknown:</strong> no band-qualified reporter-activity analysis is available. Missing census evidence is not zero activity and does not mean that no station was listening.</p></section>");
         return;
@@ -81,7 +81,32 @@ fn render_detection_rates(
     let right_heard = row.heard_both_count + row.right_only_count;
     let left_rate = row.left_detection_rate.expect("known aggregate rate");
     let right_rate = row.right_detection_rate.expect("known aggregate rate");
-    write_html!(out, "<div class=\"antenna-grid detection-rate-grid\"><div class=\"antenna-card detection-rate-card left\"><strong class=\"detection-antenna\">{}</strong><p><strong>{:.1}%</strong><br>{} heard of {} opportunities</p><span class=\"bar-track detection-rate-track\" aria-hidden=\"true\"><i class=\"bar left geometry-width {}\"></i></span></div><div class=\"antenna-card detection-rate-card right\"><strong class=\"detection-antenna\">{}</strong><p><strong>{:.1}%</strong><br>{} heard of {} opportunities</p><span class=\"bar-track detection-rate-track\" aria-hidden=\"true\"><i class=\"bar right geometry-width {}\"></i></span></div></div>", left_label, left_rate * 100.0, left_heard, denominator, geometry_class(left_rate * 100.0), right_label, right_rate * 100.0, right_heard, denominator, geometry_class(right_rate * 100.0));
+    let (higher_label, higher_heard, higher_rate, lower_label, lower_heard, lower_rate) =
+        if right_rate >= left_rate {
+            (
+                right_label,
+                right_heard,
+                right_rate,
+                left_label,
+                left_heard,
+                left_rate,
+            )
+        } else {
+            (
+                left_label,
+                left_heard,
+                left_rate,
+                right_label,
+                right_heard,
+                right_rate,
+            )
+        };
+    if higher_rate == lower_rate {
+        write_html!(out, "<p class=\"activity-takeaway\"><strong>In these {} shared opportunities, both antennas had the same detection rate:</strong> {} and {} were each reported {:.1}% of the time. Heard by both contributes to both antenna rates.</p>", denominator, escape_html(left_label), escape_html(right_label), higher_rate * 100.0);
+    } else {
+        write_html!(out, "<p class=\"activity-takeaway\"><strong>In these {} shared opportunities, {} was reported more often:</strong> {} of {} ({:.1}%) versus {} with {} of {} ({:.1}%), a {:.1} percentage-point difference. Heard by both contributes to both antenna rates.</p>", denominator, escape_html(higher_label), higher_heard, denominator, higher_rate * 100.0, escape_html(lower_label), lower_heard, denominator, lower_rate * 100.0, (higher_rate - lower_rate) * 100.0);
+    }
+    write_html!(out, "<div class=\"chart detection-rate-chart\" aria-label=\"Detection rates among the same active receiver opportunities\"><div class=\"chart-row detection-rate-row\"><span class=\"chart-label\"><strong>{}</strong><br><small>{} of {} opportunities</small></span><span class=\"bar-track detection-rate-track\" aria-hidden=\"true\"><i class=\"bar left geometry-width {}\"></i></span><strong>{:.1}%</strong></div><div class=\"chart-row detection-rate-row\"><span class=\"chart-label\"><strong>{}</strong><br><small>{} of {} opportunities</small></span><span class=\"bar-track detection-rate-track\" aria-hidden=\"true\"><i class=\"bar right geometry-width {}\"></i></span><strong>{:.1}%</strong></div><div class=\"detection-rate-axis\" aria-hidden=\"true\"><span>0%</span><span>50%</span><span>100%</span></div></div>", left_label, left_heard, denominator, geometry_class(left_rate * 100.0), left_rate * 100.0, right_label, right_heard, denominator, geometry_class(right_rate * 100.0), right_rate * 100.0);
 }
 
 fn render_outcome_strip(

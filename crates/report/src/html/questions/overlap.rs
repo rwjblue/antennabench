@@ -11,18 +11,25 @@ pub(in super::super) fn render_overlap_repeatability_section(
     render_section(out, report, true);
 }
 
-pub(in super::super) fn render_compact_overlap_repeatability_section(
+pub(in super::super) fn render_compact_repeatability_disclosure(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"coverage-overlap\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"coverage-overlap-title\"><h2 id=\"coverage-overlap-title\">Observed-path repeatability</h2><p class=\"muted\">Block support asks whether a unique observed path reappeared in another eligible block. It remains descriptive and is separate from both observed-footprint overlap and common-active receiver detection.</p>");
+    if !report
+        .coverage_overlap
+        .iter()
+        .any(|group| group.observed.is_some())
+    {
+        return;
+    }
+    out.push_str("<details class=\"audit-disclosure repeatability-disclosure\"><summary>Review whether observed paths repeated across blocks</summary><div class=\"disclosure-body\"><p class=\"muted\">Block support asks whether a unique observed path reappeared in another eligible block. It is supporting context, not a separate coverage score, reliability probability, or controlled comparison.</p>");
     let mut rendered = false;
     for (index, group) in report.coverage_overlap.iter().enumerate() {
         let Some(observed) = &group.observed else {
             continue;
         };
         rendered = true;
-        write_html!(out, "<article class=\"coverage-overlap-group\" aria-labelledby=\"repeatability-group-{index}\"><h3 id=\"repeatability-group-{index}\">{}</h3>", comparison_stratum(&group.stratum));
+        write_html!(out, "<article class=\"coverage-overlap-group\" aria-labelledby=\"repeatability-group-{index}\"><h4 id=\"repeatability-group-{index}\">{}</h4>", comparison_stratum(&group.stratum));
         if observed.eligible_block_count < 2 {
             write_html!(out, "<p class=\"empty\"><strong>Repeatability limited:</strong> only {} eligible block{} was available. Multi-block repetition cannot be established from a single block.</p>", observed.eligible_block_count, plural_suffix(observed.eligible_block_count));
         }
@@ -32,12 +39,8 @@ pub(in super::super) fn render_compact_overlap_repeatability_section(
         }
         out.push_str("</div></article>");
     }
-    if !rendered {
-        out.push_str(
-            "<p class=\"empty\">No observed-path block-support evidence is available.</p>",
-        );
-    }
-    out.push_str("<p class=\"muted\">Repeated block support is not an inferential uncertainty statement, reliability probability, or universal antenna ranking.</p></section>");
+    debug_assert!(rendered);
+    out.push_str("</div></details>");
 }
 
 fn render_section(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport, include_audit: bool) {

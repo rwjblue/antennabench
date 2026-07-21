@@ -5,7 +5,7 @@ use crate::{
     great_circle_position, natural_earth_coastline, station_coordinates_from_grid,
     AzimuthalEquidistantProjection, ReportCommonOpportunityCell, ReportCommonOpportunityMapGroup,
     ReportCommonOpportunityPolarCell, ReportCoverageMapGroup, ReportCoveragePanel,
-    ReportCoverageState, SquareRootPolarFrame, EARTH_ANTIPODE_DISTANCE_KM,
+    ReportCoverageState, EARTH_ANTIPODE_DISTANCE_KM,
 };
 use antennabench_analysis::ComparisonSide;
 
@@ -15,12 +15,12 @@ pub(in super::super) fn render_coverage_map_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"coverage-map\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"coverage-map-title\"><h2 id=\"coverage-map-title\">Common-opportunity detection by distance and bearing</h2><p class=\"muted\">Evidence basis: detection outcome, conditional on the receiver being active during both antenna cycles. This common listening-opportunity denominator is separate from the all-path observed distance and direction profile. Colors divide receiver-block opportunities into first-antenna only, both, second-antenna only, and heard neither.</p>");
+    out.push_str("<section id=\"coverage-map\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"coverage-map-title\"><h2 id=\"coverage-map-title\">Common-opportunity detection by distance and bearing</h2><p>These maps reuse the common-active listening opportunities from the preceding comparison and group them by receiver location. Each antenna has a separate map; every supported cell shows its detection rate and heard/opportunity count.</p><p class=\"muted\">Rows retain the four fixed distance categories and columns retain the eight bearing sectors. The rows are categorical—not a proportional geographic radius—and this controlled comparison remains separate from the all-path observed distance and direction profile.</p>");
     if report.common_opportunity_maps.is_empty() {
         out.push_str("<p class=\"empty\"><strong>Coverage unknown:</strong> no band-qualified common-active receiver population is available. Missing census evidence is not shown as no detection.</p></section>");
         return;
     }
-    render_difference_legend(out, report);
+    render_rate_legend(out, report);
     for (index, group) in report.common_opportunity_maps.iter().enumerate() {
         render_common_group(out, report, group, index, true);
     }
@@ -39,21 +39,21 @@ pub(in super::super) fn render_compact_coverage_map_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    out.push_str("<section id=\"coverage-map\" class=\"panel question-section compact-coverage\" tabindex=\"-1\" aria-labelledby=\"coverage-map-title\"><h2 id=\"coverage-map-title\">Common-opportunity detection shape</h2><p class=\"muted\">Eight bearing sectors × four distance categories, conditioned on receivers active during both cycles. This is not the all-path observed profile.</p>");
+    out.push_str("<section id=\"coverage-map\" class=\"panel question-section compact-coverage\" tabindex=\"-1\" aria-labelledby=\"coverage-map-title\"><h2 id=\"coverage-map-title\">Common-opportunity detection by distance and bearing</h2><p>This uses the same shared listening opportunities as the section above, now grouped by each active receiver’s location. Each antenna gets its own detection-rate map so its heard count is read against the same eligible denominator in every cell.</p><p class=\"muted\">Rows retain the four fixed distance categories and columns retain the eight bearing sectors. The rows are categorical—not a proportional geographic radius—and this controlled comparison remains separate from the all-path observed footprint.</p>");
     if report.common_opportunity_maps.is_empty() {
         out.push_str("<p class=\"empty\"><strong>Coverage unknown:</strong> no band-qualified common-active receiver population is available. Missing census evidence is not shown as no detection.</p></section>");
         return;
     }
-    render_difference_legend(out, report);
+    render_rate_legend(out, report);
     for (index, group) in report.common_opportunity_maps.iter().enumerate() {
         render_common_group(out, report, group, index, false);
     }
     out.push_str("</section>");
 }
 
-fn render_difference_legend(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
+fn render_rate_legend(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
     let (left, right) = report_antenna_labels(report);
-    write_html!(out, "<div class=\"notice difference-legend\" aria-label=\"Signed detection-rate difference legend\"><strong>Detection-rate difference (percentage points)</strong><div class=\"common-opportunity-legend\"><span><svg width=\"13\" height=\"13\" aria-hidden=\"true\"><rect width=\"13\" height=\"13\" rx=\"2\" fill=\"#315da8\"/></svg>{} higher (−)</span><span><svg width=\"13\" height=\"13\" aria-hidden=\"true\"><rect width=\"13\" height=\"13\" rx=\"2\" fill=\"#9db5df\"/></svg>−15</span><span><svg width=\"13\" height=\"13\" aria-hidden=\"true\"><rect width=\"13\" height=\"13\" rx=\"2\" fill=\"#d9dde5\"/></svg>Similar / 0</span><span><svg width=\"13\" height=\"13\" aria-hidden=\"true\"><rect width=\"13\" height=\"13\" rx=\"2\" fill=\"#e6b181\"/></svg>+15</span><span><svg width=\"13\" height=\"13\" aria-hidden=\"true\"><rect width=\"13\" height=\"13\" rx=\"2\" fill=\"#b35c00\"/></svg>{} higher (+)</span></div><small>Dashed outline: low support (&lt;5 opportunities) · hatched: zero opportunities · dotted: unavailable</small></div>", left, right);
+    write_html!(out, "<div class=\"notice common-opportunity-rate-legend\" aria-label=\"Per-antenna detection-rate map legend\"><strong>How to read the two maps</strong><p>Darker <span class=\"left-rate-word\">blue</span> means a higher {} detection rate; darker <span class=\"right-rate-word\">orange</span> means a higher {} detection rate. Every supported cell prints its percentage and heard/opportunity count.</p><small>Dashed outline: low support (&lt;5 opportunities) · hatched: zero opportunities · dotted: unavailable. Missing evidence is never zero.</small></div>", left, right);
 }
 
 fn render_common_group(
@@ -69,8 +69,8 @@ fn render_common_group(
         return;
     }
     render_common_findings(out, report, group);
-    render_common_polar(out, report, group, index);
-    write_html!(out, "<details class=\"audit-disclosure polar-data-disclosure\"><summary>Show exact polar-cell data</summary><div class=\"disclosure-body\">");
+    render_common_rate_maps(out, report, group, index);
+    write_html!(out, "<details class=\"audit-disclosure polar-data-disclosure\"><summary>Show exact distance and bearing data</summary><div class=\"disclosure-body\">");
     render_common_polar_numbers(out, group);
     render_common_marginals(out, group);
     out.push_str("</div></details>");
@@ -116,160 +116,125 @@ fn render_common_findings(
     }
 }
 
-fn render_common_polar(
+fn render_common_rate_maps(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
     group: &ReportCommonOpportunityMapGroup,
-    _index: usize,
+    index: usize,
 ) {
-    let left_label = report
-        .comparison
-        .left_label
-        .as_deref()
-        .unwrap_or("Left")
-        .to_string();
-    let right_label = report
-        .comparison
-        .right_label
-        .as_deref()
-        .unwrap_or("Right")
-        .to_string();
-    write_html!(out, "<figure class=\"coverage-panel common-opportunity-polar\"><figcaption><strong>Station-centered signed detection-rate difference</strong><span>{} located · {} location unavailable</span></figcaption><svg class=\"coverage-polar-cells\" viewBox=\"-108 -108 216 216\" role=\"img\" aria-label=\"Common-opportunity signed detection-rate difference by bearing and distance\"><defs><pattern id=\"polar-zero-opportunities\" width=\"6\" height=\"6\" patternUnits=\"userSpaceOnUse\" patternTransform=\"rotate(45)\"><rect width=\"6\" height=\"6\" fill=\"#f5f7fb\"/><line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"6\" stroke=\"#5c667a\" stroke-width=\"1.5\"/></pattern></defs>", group.located_receiver_block_opportunity_count, group.location_unavailable_receiver_block_opportunity_count);
-    let edges = ReportDistanceBin::GEOMETRY_OUTER_EDGES_KM;
-    let frame = SquareRootPolarFrame::new(edges[3]).unwrap();
-    let radii = edges.map(|edge| frame.radius(edge).unwrap() * 100.0);
-    for sector in 0..8u8 {
-        for ring in 0..4u8 {
-            let cell = common_polar_cell(group, sector, ring);
-            let inner = if ring == 0 {
-                0.0
-            } else {
-                radii[ring as usize - 1]
-            };
-            let path = annular_sector_path(inner, radii[ring as usize], sector);
-            let (class, label, tooltip) = polar_cell_presentation(
-                cell.map(|value| &value.facts),
+    let (left_label, right_label) = report_antenna_labels(report);
+    write_html!(out, "<div class=\"common-opportunity-rate-maps\" aria-label=\"Separate antenna detection-rate maps; {} located opportunities and {} with location unavailable\">", group.located_receiver_block_opportunity_count, group.location_unavailable_receiver_block_opportunity_count);
+    render_common_rate_map(out, group, index, ComparisonSide::Left, &left_label);
+    render_common_rate_map(out, group, index, ComparisonSide::Right, &right_label);
+    out.push_str("</div>");
+}
+
+fn render_common_rate_map(
+    out: &mut CheckedHtmlWriter<'_>,
+    group: &ReportCommonOpportunityMapGroup,
+    group_index: usize,
+    side: ComparisonSide,
+    antenna_label: &str,
+) {
+    let side_class = match side {
+        ComparisonSide::Left => "left",
+        ComparisonSide::Right => "right",
+    };
+    write_html!(out, "<figure class=\"coverage-panel common-opportunity-rate-panel {side_class}\"><figcaption><strong>{}</strong><span>Detection rate among common-active opportunities</span></figcaption><div class=\"common-opportunity-rate-scroll\"><table class=\"common-opportunity-rate-map\"><caption class=\"visually-hidden\">{} detection rate by distance and bearing for comparison group {}</caption><thead><tr><th scope=\"col\">Distance</th>", escape_html(antenna_label), escape_html(antenna_label), group_index + 1);
+    for sector in SECTOR_LABELS {
+        write_html!(out, "<th scope=\"col\">{sector}</th>");
+    }
+    out.push_str("</tr></thead><tbody>");
+    for ring in 0..4u8 {
+        write_html!(out, "<tr><th scope=\"row\">{}</th>", ring_label(ring));
+        for sector in 0..8u8 {
+            let cell = common_polar_cell(group, sector, ring).map(|value| &value.facts);
+            let presentation = rate_cell_presentation(
+                cell,
+                side,
                 SECTOR_LABELS[sector as usize],
                 ring_label(ring),
-                &left_label,
-                &right_label,
+                antenna_label,
                 group.coverage,
             );
-            let fill = polar_cell_fill(&class);
-            let dash = if class.contains("low-support") {
-                " stroke-dasharray=\"3 2\""
-            } else if class.contains("difference-unavailable") {
-                " stroke-dasharray=\"1 2\""
-            } else {
-                ""
-            };
-            write_html!(out, "<g class=\"coverage-polar-cell-group\" tabindex=\"0\" role=\"img\" aria-label=\"{}\"><title>{} · {} · {}</title><path class=\"coverage-polar-cell {class}\" d=\"{path}\" fill=\"{fill}\"{dash}/></g>", escape_html(&label), escape_html(&tooltip[0]), escape_html(&tooltip[1]), escape_html(&tooltip[2]));
+            write_html!(out, "<td class=\"common-opportunity-rate-cell {side_class} {}\" tabindex=\"0\" aria-label=\"{}\" title=\"{}\"><strong>{}</strong><small>{}</small></td>", presentation.class, escape_html(&presentation.label), escape_html(&presentation.label), presentation.rate_text, presentation.count_text);
         }
+        out.push_str("</tr>");
     }
-    for (index, radius) in radii.iter().enumerate() {
-        let inner = if index == 0 { 0.0 } else { radii[index - 1] };
-        let midpoint = (inner + radius) / 2.0;
-        write_html!(
-            out,
-            "<text class=\"coverage-ring-label\" x=\"3\" y=\"{:.2}\">{}</text>",
-            -midpoint + 2.0,
-            index + 1
-        );
-    }
-    out.push_str("<circle class=\"coverage-station\" r=\"2.2\"/><text class=\"coverage-cardinal\" x=\"0\" y=\"-101\">N</text><text class=\"coverage-cardinal\" x=\"102\" y=\"3\">E</text><text class=\"coverage-cardinal\" x=\"0\" y=\"106\">S</text><text class=\"coverage-cardinal\" x=\"-102\" y=\"3\">W</text></svg><ol class=\"polar-ring-key\"><li>Near / local &lt;500 km</li><li>Regional 500–1499 km</li><li>Longer path 1500–2999 km</li><li>DX-oriented 3000+ km</li></ol></figure>");
+    out.push_str("</tbody></table></div></figure>");
 }
 
-fn polar_cell_fill(class: &str) -> &'static str {
-    if class.contains("difference-zero-opportunities") {
-        "url(#polar-zero-opportunities)"
-    } else if class.contains("difference-unavailable") {
-        "var(--coverage-land)"
-    } else if class.contains("difference-left-strong") {
-        "#315da8"
-    } else if class.contains("difference-left-moderate") {
-        "#9db5df"
-    } else if class.contains("difference-right-strong") {
-        "#b35c00"
-    } else if class.contains("difference-right-moderate") {
-        "#e6b181"
-    } else {
-        "#d9dde5"
-    }
+struct RateCellPresentation {
+    class: String,
+    label: String,
+    rate_text: String,
+    count_text: String,
 }
 
-fn polar_cell_presentation(
+fn rate_cell_presentation(
     cell: Option<&ReportCommonOpportunityCell<ReportDistanceBin>>,
+    side: ComparisonSide,
     sector: &str,
     distance: &str,
-    left_label: &str,
-    right_label: &str,
+    antenna_label: &str,
     group_coverage: antennabench_analysis::ReporterActivityCoverage,
-) -> (String, String, [String; 3]) {
+) -> RateCellPresentation {
     let Some(cell) = cell else {
-        let label =
-            format!("{sector}, {distance}: unavailable; no located common-opportunity cell");
-        return (
-            "difference-unavailable".to_string(),
-            label,
-            [
-                format!("{sector} · {distance}"),
-                "Unavailable cell".to_string(),
-                "No located common-opportunity evidence".to_string(),
-            ],
+        let label = format!(
+            "{antenna_label}, {sector}, {distance}: unavailable; no located common-opportunity cell"
         );
+        return RateCellPresentation {
+            class: "rate-unavailable".to_string(),
+            label,
+            rate_text: "—".to_string(),
+            count_text: "no cell".to_string(),
+        };
     };
     let opportunities = cell.receiver_block_opportunity_count;
     if opportunities == 0 {
         let label = format!(
-            "{sector}, {distance}: zero common opportunities; rates not available; {}",
+            "{antenna_label}, {sector}, {distance}: zero common opportunities; Rate unavailable; not zero detection; {}",
             coverage_text(cell.coverage)
         );
-        return (
-            "difference-zero-opportunities".to_string(),
+        return RateCellPresentation {
+            class: "zero-opportunities".to_string(),
             label,
-            [
-                format!("{sector} · {distance}"),
-                "0 common opportunities".to_string(),
-                "Rates unavailable; not zero detection".to_string(),
-            ],
-        );
+            rate_text: "n/a".to_string(),
+            count_text: "0 opp".to_string(),
+        };
     }
-    let (Some(left_rate), Some(right_rate)) = (cell.left_detection_rate, cell.right_detection_rate)
-    else {
+    let (rate, heard) = match side {
+        ComparisonSide::Left => (cell.left_detection_rate, cell.left_heard_count),
+        ComparisonSide::Right => (cell.right_detection_rate, cell.right_heard_count),
+    };
+    let Some(rate) = rate else {
         let label = format!(
-            "{sector}, {distance}: rates unavailable with {opportunities} opportunities; {}",
+            "{antenna_label}, {sector}, {distance}: Rate unavailable with {opportunities} opportunities; not zero detection; {}",
             coverage_text(group_coverage)
         );
-        return (
-            "difference-unavailable".to_string(),
+        return RateCellPresentation {
+            class: "rate-unavailable".to_string(),
             label,
-            [
-                format!("{sector} · {distance}"),
-                format!("{opportunities} opportunities; rates unavailable"),
-                coverage_text(group_coverage).to_string(),
-            ],
-        );
+            rate_text: "n/a".to_string(),
+            count_text: format!("{opportunities} opp"),
+        };
     };
-    let difference = (right_rate - left_rate) * 100.0;
-    let magnitude = difference.abs();
-    let tone = if difference == 0.0 {
-        "difference-neutral"
-    } else if difference < 0.0 && magnitude > 15.0 {
-        "difference-left-strong"
-    } else if difference < 0.0 {
-        "difference-left-moderate"
-    } else if magnitude > 15.0 {
-        "difference-right-strong"
+    let tone = if rate == 0.0 {
+        "rate-zero"
+    } else if rate <= 0.1 {
+        "rate-low"
+    } else if rate <= 0.25 {
+        "rate-medium"
+    } else if rate <= 0.5 {
+        "rate-high"
     } else {
-        "difference-right-moderate"
+        "rate-very-high"
     };
     let support = if opportunities < 5 {
         " low-support"
     } else {
         ""
     };
-    let left_heard = cell.left_heard_count;
-    let right_heard = cell.right_heard_count;
     let qualification = if opportunities < 5 {
         format!(
             "Low support: {opportunities} opportunities; {}",
@@ -281,23 +246,20 @@ fn polar_cell_presentation(
             coverage_text(cell.coverage)
         )
     };
-    let label = format!("{sector}, {distance}: {left_label} {left_heard} of {opportunities}, {:.1}%; {right_label} {right_heard} of {opportunities}, {:.1}%; signed difference {:+.1} percentage points; {qualification}", left_rate * 100.0, right_rate * 100.0, difference);
-    (
-        format!("{tone}{support}"),
+    let label = format!("{antenna_label}, {sector}, {distance}: {heard} heard of {opportunities}, {:.1}% detection; {qualification}", rate * 100.0);
+    RateCellPresentation {
+        class: format!("{tone}{support}"),
         label,
-        [
-            format!("{sector} · {distance}"),
-            format!("{left_label} {:.1}% ({left_heard}/{opportunities}) · {right_label} {:.1}% ({right_heard}/{opportunities})", left_rate * 100.0, right_rate * 100.0),
-            format!("Difference {difference:+.1} pp · {qualification}"),
-        ],
-    )
+        rate_text: format!("{:.0}%", rate * 100.0),
+        count_text: format!("{heard}/{opportunities}"),
+    }
 }
 
 fn render_common_polar_numbers(
     out: &mut CheckedHtmlWriter<'_>,
     group: &ReportCommonOpportunityMapGroup,
 ) {
-    out.push_str("<div class=\"table-wrap coverage-numbers\"><table><caption>Common-opportunity polar cells (accessible equivalent)</caption><thead><tr><th scope=\"col\">Sector</th><th scope=\"col\">Distance</th><th scope=\"col\">Unique receivers</th><th scope=\"col\">Opportunities</th><th scope=\"col\">Both</th><th scope=\"col\">First only</th><th scope=\"col\">Second only</th><th scope=\"col\">Neither</th><th scope=\"col\">Detection rate — first / second</th><th scope=\"col\">Coverage</th></tr></thead><tbody>");
+    out.push_str("<div class=\"table-wrap coverage-numbers\"><table><caption>Common-opportunity distance and bearing cells</caption><thead><tr><th scope=\"col\">Sector</th><th scope=\"col\">Distance</th><th scope=\"col\">Unique receivers</th><th scope=\"col\">Opportunities</th><th scope=\"col\">Both</th><th scope=\"col\">First only</th><th scope=\"col\">Second only</th><th scope=\"col\">Neither</th><th scope=\"col\">Detection rate — first / second</th><th scope=\"col\">Coverage</th></tr></thead><tbody>");
     for sector in 0..8u8 {
         for ring in 0..4u8 {
             let cell = common_polar_cell(group, sector, ring).map(|cell| &cell.facts);
@@ -326,7 +288,7 @@ fn render_common_block_audit(
     out: &mut CheckedHtmlWriter<'_>,
     group: &ReportCommonOpportunityMapGroup,
 ) {
-    out.push_str("<details class=\"audit-disclosure\"><summary>Review per-block geographic outcome audit</summary><div class=\"table-wrap\"><table><caption>Common-opportunity geographic blocks</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Order / slots</th><th scope=\"col\">Coverage</th><th scope=\"col\">Common active</th><th scope=\"col\">Located / unavailable</th><th scope=\"col\">Populated polar cells</th></tr></thead><tbody>");
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review per-block geographic outcome audit</summary><div class=\"table-wrap\"><table><caption>Common-opportunity geographic blocks</caption><thead><tr><th scope=\"col\">Block</th><th scope=\"col\">Order / slots</th><th scope=\"col\">Coverage</th><th scope=\"col\">Common active</th><th scope=\"col\">Located / unavailable</th><th scope=\"col\">Populated distance × bearing cells</th></tr></thead><tbody>");
     for block in &group.blocks {
         write_html!(out, "<tr><td>{}</td><td>{}<br><span class=\"muted\">{} / {}</span></td><td>{}</td><td>{}</td><td>{} / {}</td><td>{}</td></tr>", block.block_index + 1, comparison_order(block.order), escape_html(&block.left_slot_id), escape_html(&block.right_slot_id), coverage_text(block.coverage), block.common_active_receiver_count, block.located_receiver_count, block.location_unavailable_receiver_count, block.polar_cells.len());
     }
@@ -479,28 +441,6 @@ fn render_panel_numbers(out: &mut CheckedHtmlWriter<'_>, group: &ReportCoverageM
         );
     }
     out.push_str("</tbody></table></div>");
-}
-
-fn annular_sector_path(inner: f64, outer: f64, sector: u8) -> String {
-    let start = -22.5 + f64::from(sector) * 45.0;
-    let end = start + 45.0;
-    let outer_start = polar_xy(outer, start);
-    let outer_end = polar_xy(outer, end);
-    if inner == 0.0 {
-        format!(
-            "M0 0 L{:.3} {:.3} A{outer:.3} {outer:.3} 0 0 1 {:.3} {:.3} Z",
-            outer_start.0, outer_start.1, outer_end.0, outer_end.1
-        )
-    } else {
-        let inner_start = polar_xy(inner, start);
-        let inner_end = polar_xy(inner, end);
-        format!("M{:.3} {:.3} L{:.3} {:.3} A{outer:.3} {outer:.3} 0 0 1 {:.3} {:.3} L{:.3} {:.3} A{inner:.3} {inner:.3} 0 0 0 {:.3} {:.3} Z", inner_start.0, inner_start.1, outer_start.0, outer_start.1, outer_end.0, outer_end.1, inner_end.0, inner_end.1, inner_start.0, inner_start.1)
-    }
-}
-
-fn polar_xy(radius: f64, bearing_degrees: f64) -> (f64, f64) {
-    let bearing = bearing_degrees.to_radians();
-    (radius * bearing.sin(), -radius * bearing.cos())
 }
 
 fn equirectangular_coastline_path() -> String {

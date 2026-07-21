@@ -50,6 +50,7 @@ pub(in super::super) fn render_compact_observed_footprint_section(
         write_html!(out, "<article class=\"antenna-card footprint-group\" aria-labelledby=\"footprint-group-{index}\"><h3 id=\"footprint-group-{index}\">{}</h3>", comparison_stratum(&stratum.stratum));
         render_footprint_overlap(out, report, stratum);
         let profile = &stratum.observed_profile;
+        out.push_str("<details class=\"audit-disclosure footprint-profile-disclosure\"><summary>Review observed distance and direction profile</summary><div class=\"disclosure-body\"><p class=\"muted\">These all-path counts are retained for geographic context, but stay secondary to the controlled common-active detection maps above.</p>");
         render_profile_bar_chart(
             out,
             "Observed unique paths by distance",
@@ -69,7 +70,6 @@ pub(in super::super) fn render_compact_observed_footprint_section(
         if profile.composition_location_unavailable_count > 0 {
             write_html!(out, "<p class=\"muted\">{} unique path{} could not enter distance composition because location was missing, inconsistent, or differed between antenna records.</p>", profile.composition_location_unavailable_count, plural_suffix(profile.composition_location_unavailable_count));
         }
-        out.push_str("<details class=\"audit-disclosure\"><summary>Review exact observed-footprint counts and location quality</summary><div class=\"disclosure-body\">");
         render_profile_totals(out, profile.left.as_ref(), profile.right.as_ref());
         render_profile_distribution(
             out,
@@ -92,6 +92,7 @@ pub(in super::super) fn render_compact_observed_footprint_section(
     if !unavailable.is_empty() {
         write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable observed footprint in {} of {} comparison groups: {}. Missing path or location evidence is not rendered as zero.</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable));
     }
+    render_compact_repeatability_disclosure(out, report);
     out.push_str("<details class=\"audit-disclosure\"><summary>Review exact unique observed-path rows</summary><div class=\"disclosure-body\">");
     render_observed_profile_audit(out, report);
     out.push_str("</div></details></section>");
