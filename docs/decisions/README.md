@@ -49,6 +49,12 @@ historical references, not tutorials or work trackers; start with the
   Modules](0024-use-version-owned-core-schema-modules.md)
 - [0025: Use Checkpointed Runtime Contexts And Operational
   Diagnostics](0025-use-checkpointed-runtime-contexts-and-operational-diagnostics.md)
+- [0026: Condition Detection On Common Active
+  Receivers](0026-condition-detection-on-common-active-receivers.md)
+- [0027: Use Predeclared Goal Lenses And One Distance
+  Taxonomy](0027-use-predeclared-goal-lenses-and-one-distance-taxonomy.md)
+- [0028: Use Compile-Time Askama Templates For Report
+  HTML](0028-use-compile-time-askama-templates-for-report-html.md)
 
 Two records use number 0014 because they were accepted concurrently. Their
 filenames and links remain unchanged to preserve history; future decisions
