@@ -23,7 +23,9 @@ use antennabench_report::{
     ReportWsprReadinessBasis, SamePathSignalAnswerability, SessionReport, StandaloneHtmlOptions,
 };
 use antennabench_storage::BundleStore;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Duration;
+use sha2::{Digest, Sha256};
 
 mod support;
 
@@ -114,6 +116,58 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
         "details:not([open]) > :not(summary) {\n    display: none !important;"
     ));
     assert!(first.contains("break-after: page"));
+}
+
+#[test]
+fn standalone_styles_are_authorized_by_their_exact_csp_hashes() {
+    let report = canonical_report();
+    let full = render_standalone_html(&report).unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+    let mut sources = Vec::new();
+
+    for (variant, html) in [("full", &full), ("compact", &compact)] {
+        let style = inline_stylesheet(html);
+        let source = independent_style_source(style.as_bytes());
+        assert!(
+            html.contains(&format!("style-src '{source}'")),
+            "{variant} report CSP does not authorize its exact stylesheet"
+        );
+        assert!(
+            html.contains("data-antennabench-report-csp"),
+            "{variant} report is missing its stable CSP marker"
+        );
+        assert!(html.contains("style-src-attr 'none'"));
+        assert!(!html.contains("'unsafe-inline'"));
+        assert!(!html.contains(" style="));
+
+        let mut mutated = style.as_bytes().to_vec();
+        mutated[0] ^= 1;
+        assert_ne!(
+            independent_style_source(&mutated),
+            source,
+            "{variant} report CSP hash accepted a one-byte stylesheet mutation"
+        );
+        sources.push(source);
+    }
+
+    assert_ne!(
+        sources[0], sources[1],
+        "full and compact stylesheet hashes must differ"
+    );
+}
+
+fn inline_stylesheet(html: &str) -> &str {
+    let start = html.find("<style>").expect("rendered style start") + "<style>".len();
+    let end = html[start..]
+        .find("</style>")
+        .map(|offset| start + offset)
+        .expect("rendered style end");
+    &html[start..end]
+}
+
+fn independent_style_source(css: &[u8]) -> String {
+    let digest = Sha256::digest(css);
+    format!("sha256-{}", STANDARD.encode(digest))
 }
 
 #[test]

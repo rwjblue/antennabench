@@ -1,3 +1,6 @@
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use sha2::{Digest, Sha256};
+
 use super::{geometry::write_geometry_styles, shared::CheckedHtmlWriter};
 
 const REPORT_CSS: &str = include_str!("../../styles/report.css");
@@ -12,29 +15,38 @@ pub(super) enum StylesheetVariant {
     Compact,
 }
 
-pub(super) fn write_stylesheet(out: &mut CheckedHtmlWriter<'_>, variant: StylesheetVariant) {
-    out.push_str(REPORT_CSS);
-    write_geometry_styles(&mut |css| out.push_str(css));
-    out.push_str(MODULE_SEPARATOR);
-    out.push_str(COVERAGE_CSS);
+pub(super) fn write_stylesheet(variant: StylesheetVariant, write: &mut impl FnMut(&str)) {
+    write(REPORT_CSS);
+    write_geometry_styles(write);
+    write(MODULE_SEPARATOR);
+    write(COVERAGE_CSS);
     if variant == StylesheetVariant::Compact {
-        out.push_str(COMPACT_CSS);
-        out.push_str(COMPACT_SMALL_PRINT_CSS);
+        write(COMPACT_CSS);
+        write(COMPACT_SMALL_PRINT_CSS);
     }
+}
+
+pub(super) fn write_stylesheet_to_html(
+    out: &mut CheckedHtmlWriter<'_>,
+    variant: StylesheetVariant,
+) {
+    write_stylesheet(variant, &mut |css| out.push_str(css));
+}
+
+pub(super) fn stylesheet_csp_source(variant: StylesheetVariant) -> String {
+    let mut digest = Sha256::new();
+    write_stylesheet(variant, &mut |css| digest.update(css.as_bytes()));
+    format!("sha256-{}", STANDARD.encode(digest.finalize()))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{ReportCancellationToken, REPORT_RESOURCE_LIMITS};
-
     use super::*;
 
     fn render_stylesheet(variant: StylesheetVariant) -> String {
-        let cancellation = ReportCancellationToken::default();
-        let mut out = CheckedHtmlWriter::new(REPORT_RESOURCE_LIMITS.html_bytes, &cancellation);
-        write_stylesheet(&mut out, variant);
-        out.finish()
-            .expect("stylesheet fits report resource limits")
+        let mut out = String::new();
+        write_stylesheet(variant, &mut |css| out.push_str(css));
+        out
     }
 
     #[test]

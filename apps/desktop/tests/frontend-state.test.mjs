@@ -51,6 +51,7 @@ import {
   WORKFLOWS,
   conductorActionAvailable,
   createCountdownAnchor,
+  createReportDocumentUrls,
   createWorkflowScrollMemory,
   formatActiveRunTime,
   focusSetupOutcome,
@@ -200,6 +201,53 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     "state.mjs",
     "styles.css",
   ]);
+});
+
+test("embedded reports narrowly replace the standalone style hash with same-origin CSS", () => {
+  const blobs = [];
+  class TestUrl extends URL {
+    static createObjectURL() {
+      return `blob:report-${blobs.length}`;
+    }
+
+    static revokeObjectURL() {}
+  }
+  class TestBlob {
+    constructor(parts, options) {
+      this.parts = parts;
+      this.options = options;
+      blobs.push(this);
+    }
+  }
+  const browserWindow = {
+    Blob: TestBlob,
+    URL: TestUrl,
+    location: { href: "https://app.local/index.html" },
+  };
+  const documents = createReportDocumentUrls(browserWindow);
+  const csp = `<meta data-antennabench-report-csp http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'; base-uri 'none'; form-action 'none'">`;
+
+  documents.create(`<!doctype html>${csp}<style>body{color:black}</style><main></main>`);
+  documents.create(`<!doctype html>${csp}<style>body{color:black}</style><main class="compact-summary"></main>`);
+
+  assert.equal(blobs.length, 2);
+  for (const [index, expectedStylesheet] of ["report.css", "report-compact.css"].entries()) {
+    const html = blobs[index].parts.join("");
+    assert.match(html, new RegExp(`href="https://app\\.local/${expectedStylesheet}"`));
+    assert.match(html, /style-src 'self'/u);
+    assert.match(html, /style-src-attr 'none'/u);
+    assert.doesNotMatch(html, /style-src 'sha256-/u);
+    assert.doesNotMatch(html, /<style>/u);
+  }
+
+  assert.throws(
+    () => documents.create("<style>body{color:black}</style><main></main>"),
+    /missing its standalone CSP marker/u,
+  );
+  assert.throws(
+    () => documents.create(`${csp.replace("sha256-YWJjZA==", "self")}<style></style><main></main>`),
+    /missing its exact stylesheet hash/u,
+  );
 });
 
 test("the shell starts in saved sessions", () => {

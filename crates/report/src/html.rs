@@ -25,7 +25,7 @@ use questions::{
     render_reporter_activity_section, render_run_quality_section, render_same_path_section,
 };
 use shared::CheckedHtmlWriter;
-use styles::{write_stylesheet, StylesheetVariant};
+use styles::{stylesheet_csp_source, write_stylesheet_to_html, StylesheetVariant};
 use templates::{
     render_template, BodyStartTemplate, DocumentEndTemplate, DocumentStartTemplate,
     FullHeaderTemplate, OperationalHistoryTemplate,
@@ -119,13 +119,16 @@ fn render_standalone_html_document(
 ) -> Result<String, ReportError> {
     check_cancelled(cancellation, ReportResourceStage::Render, "standalone_html")?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
+    let stylesheet_variant = StylesheetVariant::Full;
+    let style_source = stylesheet_csp_source(stylesheet_variant);
     render_template(
         &mut out,
         &DocumentStartTemplate {
             title: "AntennaBench session report",
+            style_source: &style_source,
         },
     )?;
-    write_stylesheet(&mut out, StylesheetVariant::Full);
+    write_stylesheet_to_html(&mut out, stylesheet_variant);
     render_template(&mut out, &BodyStartTemplate { main_class: "" })?;
 
     render_template(

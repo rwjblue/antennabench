@@ -12,7 +12,7 @@ use super::{
         render_reporter_activity_section, render_same_path_view,
     },
     shared::*,
-    styles::{write_stylesheet, StylesheetVariant},
+    styles::{stylesheet_csp_source, write_stylesheet_to_html, StylesheetVariant},
     templates::{
         render_template, BodyStartTemplate, CompactHeaderTemplate, CompactQualityTemplate,
         CompactReferenceTemplate, CompactSamePathEndTemplate, CompactSamePathStartTemplate,
@@ -43,10 +43,13 @@ pub fn render_compact_summary_html_with_resources(
         "compact_summary_html",
     )?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
+    let stylesheet_variant = StylesheetVariant::Compact;
+    let style_source = stylesheet_csp_source(stylesheet_variant);
     render_template(
         &mut out,
         &DocumentStartTemplate {
             title: "AntennaBench compact share summary",
+            style_source: &style_source,
         },
     )?;
     let compact_main_class = if report.overview.strata.len() <= 2
@@ -62,7 +65,7 @@ pub fn render_compact_summary_html_with_resources(
     } else {
         "compact-summary"
     };
-    write_stylesheet(&mut out, StylesheetVariant::Compact);
+    write_stylesheet_to_html(&mut out, stylesheet_variant);
     render_template(
         &mut out,
         &BodyStartTemplate {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # -*- mode: sh; sh-shell: bash; -*-
-#MISE description="Verify embedded full and compact report styles in a real browser CSP boundary"
+#MISE description="Verify standalone and embedded report styles in real browser CSP boundaries"
 
 set -euo pipefail
 
