@@ -116,7 +116,7 @@ fn operational_history_requires_explicit_full_report_inclusion_and_is_escaped() 
     assert!(included.contains("Operational support history"));
     assert!(included.contains("Explicitly included at export"));
     assert!(included.contains("resource.jsonl_line_bytes"));
-    assert!(included.contains("&lt;/pre&gt;&lt;script&gt;alert(1)&lt;/script&gt;"));
+    assert!(included.contains("&#60;/pre&#62;&#60;script&#62;alert(1)&#60;/script&#62;"));
     assert!(!included.contains("<script>alert(1)</script>"));
 }
 

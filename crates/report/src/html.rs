@@ -19,6 +19,8 @@ mod geometry;
 mod questions;
 mod shared;
 mod styles;
+mod templates;
+mod view;
 
 pub use compact::{render_compact_summary_html, render_compact_summary_html_with_resources};
 
@@ -30,8 +32,10 @@ use questions::{
     render_overlap_repeatability_section, render_question_navigation, render_reach_section,
     render_reporter_activity_section, render_run_quality_section, render_same_path_section,
 };
-use shared::{escape_html, CheckedHtmlWriter};
+use shared::CheckedHtmlWriter;
 use styles::{COVERAGE_STYLES, STYLES};
+use templates::{render_template, FullHeaderTemplate, OperationalHistoryTemplate};
+use view::{FullHeaderView, OperationalHistoryView};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -132,12 +136,14 @@ fn render_standalone_html_document(
     out.push_str(COVERAGE_STYLES);
     out.push_str("</style></head><body><main><a class=\"skip-link\" href=\"#what-run-show\">Skip to report findings</a>");
 
-    write_html!(
-        out,
-        "<header class=\"hero\"><p class=\"eyebrow\">AntennaBench local report</p>\
-<h1>Session evidence report</h1><p class=\"muted\">Session <code>{}</code></p></header>",
-        escape_html(&report.overview.scope.session_id)
-    );
+    render_template(
+        &mut out,
+        &FullHeaderTemplate {
+            view: FullHeaderView {
+                session_id: &report.overview.scope.session_id,
+            },
+        },
+    )?;
     render_question_navigation(&mut out, report, true);
     render_how_to_read(&mut out, report, false);
     render_answer_first_overview(&mut out, report);
@@ -159,11 +165,12 @@ fn render_standalone_html_document(
     render_audit_appendix(&mut out, report, options.controller_evidence);
 
     if let Some(summary) = operational_history {
-        write_html!(
-            out,
-            "<section class=\"panel\" aria-labelledby=\"operational-history-title\"><h2 id=\"operational-history-title\">Operational support history</h2><p class=\"notice\"><strong>Explicitly included at export:</strong> This bounded, redacted support view is operational metadata, not experiment evidence or a scientific conclusion. The lossless bundle may contain additional approved operational records.</p><pre>{}</pre></section>",
-            escape_html(summary)
-        );
+        render_template(
+            &mut out,
+            &OperationalHistoryTemplate {
+                view: OperationalHistoryView { summary },
+            },
+        )?;
     }
 
     if is_single_antenna_lens(report) {

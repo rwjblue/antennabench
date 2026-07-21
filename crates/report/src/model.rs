@@ -1063,4 +1063,6 @@ pub enum ReportError {
     Resource(#[from] ReportResourceError),
     #[error("report model serialization failed: {message}")]
     Serialization { message: String },
+    #[error("report template rendering failed: {message}")]
+    TemplateRendering { message: String },
 }

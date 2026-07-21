@@ -70,6 +70,10 @@ impl<'a> CheckedHtmlWriter<'a> {
         self.output.push_str(value);
     }
 
+    pub(super) fn failure(&self) -> Option<&crate::ReportResourceError> {
+        self.failure.as_ref()
+    }
+
     pub(super) fn finish(self) -> Result<String, crate::ReportResourceError> {
         if let Some(failure) = self.failure {
             Err(failure)
