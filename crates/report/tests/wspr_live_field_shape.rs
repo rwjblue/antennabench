@@ -173,13 +173,13 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
                 .iter()
                 .any(|cell| cell.state == antennabench_report::ReportCoverageState::ActiveNotHeard)
     }));
-    for html in [
-        render_standalone_html(&report).expect("full report should render"),
-        render_compact_summary_html(&report).expect("compact report should render"),
-    ] {
+    let full = render_standalone_html(&report).expect("full report should render");
+    let compact = render_compact_summary_html(&report).expect("compact report should render");
+    for html in [&full, &compact] {
         assert!(!html.contains("0 usable"));
         assert!(!html.contains("No matched paths"));
-        assert!(html.contains("Detection among receivers active in both cycles"));
+        assert!(html.contains("Which antenna was heard more often by the same active receivers?"));
+        assert!(html.contains("Only receivers known to be listening during both antenna cycles"));
         assert!(html.contains("145 / 200 (72.5%)"));
         assert!(html.contains("43 / 180 (23.9%)"));
         assert!(html.contains("Joint detection outcomes by separate comparison group"));
@@ -191,14 +191,8 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(html.contains("Common-opportunity detection"));
         assert!(html.contains("Heard neither"));
         assert!(html.contains("Common-opportunity polar cells (accessible equivalent)"));
-        assert!(html.contains("Coverage overlap and repeatability"));
-        assert!(html.contains("Observed complementarity"));
-        assert!(html.contains("Opportunity-conditioned complementarity"));
-        assert!(html
-            .contains("Using both antennas produced <strong>155</strong> unique observed paths"));
-        assert!(html.contains("<td>112</td><td>33</td><td>10</td><td>155</td>"));
         assert!(html.contains("Repeatability limited:"));
-        assert!(html.contains("descriptive, not an inferential uncertainty statement"));
+        assert!(html.contains("not an inferential uncertainty statement"));
         assert!(html
             .contains("Location unavailable: 1 unique receivers / 1 receiver-block opportunities"));
         assert!(
@@ -218,7 +212,16 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(!html.contains("3–8 Mm"));
         assert!(!html.contains("<script"));
     }
-    let full = render_standalone_html(&report).unwrap();
+    assert!(full.contains("Coverage overlap and repeatability"));
+    assert!(full.contains("Observed complementarity"));
+    assert!(full.contains("Opportunity-conditioned complementarity"));
+    assert!(
+        full.contains("Using both antennas produced <strong>155</strong> unique observed paths")
+    );
+    assert!(full.contains("<td>112</td><td>33</td><td>10</td><td>155</td>"));
+    assert!(compact.contains("Observed footprint"));
+    assert!(compact.contains("Observed-path repeatability"));
+    assert!(!compact.contains("Observed complementarity"));
     assert_common_visual_has_accessible_rows(&full, common);
     assert!(full.contains("activity-summary-field-shape"));
     assert!(full.contains("activity-first-000"));
@@ -226,11 +229,24 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert!(full.contains("coverage-grid-view"));
     assert!(full.contains("coverage-polar-view"));
     assert!(full.contains("@media print"));
-    let compact = render_compact_summary_html(&report).unwrap();
     assert_common_visual_has_accessible_rows(&compact, common);
     assert!(compact.contains("coverage-polar-cells"));
     assert!(compact.contains("Common-opportunity polar cells (accessible equivalent)"));
     assert!(!compact.contains("<svg class=\"coverage-world\""));
+    assert!(compact.contains("For this General coverage run"));
+    assert!(compact.contains("detection among 180 common-active receiver opportunities"));
+    assert!(compact.contains("unique observed paths"));
+    assert!(
+        compact.contains("These results describe this session, not a universal antenna ranking.")
+    );
+    assert_eq!(
+        compact
+            .matches("<dl class=\"facts answer-metrics\">")
+            .count(),
+        1
+    );
+    assert!(compact.contains("<details class=\"goal-help\">"));
+    assert!(compact.contains("Question availability and limits"));
 }
 
 fn assert_common_visual_has_accessible_rows(html: &str, group: &ReportCommonOpportunityMapGroup) {
@@ -251,13 +267,18 @@ fn assert_common_visual_has_accessible_rows(html: &str, group: &ReportCommonOppo
             let sector_label = sector_labels[sector_index];
             let distance_label = distance.label();
             assert!(html.contains(&format!(
-                "{sector_label}, {distance_label}: {opportunities} opportunities; {both} both, {left_only} first only, {right_only} second only, {neither} neither"
-            )));
-            assert!(html.contains(&format!(
                 "<tr><td>{sector_label}</td><td>{distance_label}</td><td>{unique}</td><td>{opportunities}</td><td>{both}</td><td>{left_only}</td><td>{right_only}</td><td>{neither}</td>"
             )));
         }
     }
+    assert_eq!(
+        html.matches("class=\"coverage-polar-cell-group\"").count(),
+        32
+    );
+    assert!(html.contains("tabindex=\"0\" role=\"img\" aria-label="));
+    assert!(html.contains("<title>"));
+    assert!(html.contains("Show exact polar-cell data"));
+    assert!(!html.contains("<linearGradient"));
 }
 
 #[test]
@@ -341,12 +362,14 @@ fn zero_matched_paths_still_render_useful_common_opportunity_geography() {
     ] {
         assert!(html.contains("No same-path SNR comparison: no matched paths"));
         assert!(html.contains("Common-opportunity detection"));
-        assert!(html.contains("Near / local proxy (under 500 km): 145 versus 0 detections"));
-        assert!(html.contains("DX-oriented (3000 km and above): 0 versus 10 detections"));
-        assert!(html.contains("session-scoped detection counts"));
-        assert!(html.contains("Coverage overlap and repeatability"));
-        assert!(html.contains("<td>145</td><td>0</td><td>10</td><td>155</td>"));
+        assert!(html.contains("Most pronounced recorded cell"));
+        assert!(html.contains("session-scoped common-opportunity evidence"));
+        assert!(html.contains("signed detection-rate difference"));
     }
+    let compact = render_compact_summary_html(&report).unwrap();
+    assert!(compact.contains("Observed footprint"));
+    assert!(compact.contains("<strong>145</strong><small>"));
+    assert!(compact.contains("<strong>10</strong><small>"));
 }
 
 #[test]
@@ -379,6 +402,56 @@ fn truncated_census_caveat_qualifies_each_cycle_and_paired_rate() {
         .iter()
         .all(|group| group.coverage == antennabench_analysis::ReporterActivityCoverage::Truncated));
     assert!(compact.contains("Truncated census — capture limit may reduce the denominator"));
+}
+
+#[test]
+fn polar_difference_states_are_distinct_and_keyboard_accessible() {
+    let durable = field_shape_fixture();
+    let current = durable.into_current();
+    let mut report = build_report_with_snapshot_and_activity(
+        &current.bundle,
+        &validate_bundle_report(&current.bundle),
+        &current.adapter_records,
+        ReportSnapshotContext::default(),
+    )
+    .unwrap();
+    let cells = &mut report.common_opportunity_maps[0].polar_cells;
+    cells[0].facts.receiver_block_opportunity_count = 10;
+    cells[0].facts.left_heard_count = 4;
+    cells[0].facts.right_heard_count = 4;
+    cells[0].facts.left_detection_rate = Some(0.4);
+    cells[0].facts.right_detection_rate = Some(0.4);
+    cells[1].facts.receiver_block_opportunity_count = 0;
+    cells[1].facts.left_heard_count = 0;
+    cells[1].facts.right_heard_count = 0;
+    cells[1].facts.left_detection_rate = None;
+    cells[1].facts.right_detection_rate = None;
+    cells[2].facts.receiver_block_opportunity_count = 3;
+    cells[2].facts.left_heard_count = 1;
+    cells[2].facts.right_heard_count = 2;
+    cells[2].facts.left_detection_rate = Some(1.0 / 3.0);
+    cells[2].facts.right_detection_rate = Some(2.0 / 3.0);
+
+    let compact = render_compact_summary_html(&report).unwrap();
+    for state in [
+        "difference-neutral",
+        "difference-zero-opportunities",
+        "low-support",
+        "difference-unavailable",
+    ] {
+        assert!(compact.contains(state), "missing polar state: {state}");
+    }
+    assert_eq!(
+        compact
+            .matches("class=\"coverage-polar-cell-group\"")
+            .count(),
+        32
+    );
+    assert_eq!(compact.matches("tabindex=\"0\" role=\"img\"").count(), 32);
+    assert!(compact.contains("Rates unavailable; not zero detection"));
+    assert!(compact.contains("no located common-opportunity cell"));
+    assert!(compact.contains("@media(max-width:760px)"));
+    assert!(compact.contains("@media print"));
 }
 
 fn field_shape_fixture() -> BundleV3Contents {

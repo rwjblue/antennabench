@@ -581,8 +581,7 @@ try {
           ]
         : [
             "what-run-show",
-            "reach-unique-paths",
-            "distance-direction",
+            "observed-footprint",
             "coverage-overlap",
             "run-quality",
           ],

@@ -213,15 +213,18 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
 #[test]
 fn consolidates_standing_caveats_in_one_shared_reading_panel() {
     let report = paired_report(true);
-    for html in [
-        render_standalone_html(&report).unwrap(),
-        render_compact_summary_html(&report).unwrap(),
-    ] {
-        assert_eq!(html.matches("id=\"reading-guide-title\"").count(), 1);
-        assert!(
-            html.find("id=\"reading-guide-title\"").unwrap()
-                < html.find("id=\"what-run-show-title\"").unwrap()
-        );
+    let full = render_standalone_html(&report).unwrap();
+    let compact = render_compact_summary_html(&report).unwrap();
+    assert_eq!(full.matches("id=\"reading-guide-title\"").count(), 1);
+    assert!(
+        full.find("id=\"reading-guide-title\"").unwrap()
+            < full.find("id=\"what-run-show-title\"").unwrap()
+    );
+    assert!(compact.contains(
+        "<details class=\"panel reading-guide\"><summary>How to read this report</summary>"
+    ));
+    assert!(!compact.contains("<details class=\"panel reading-guide\" open"));
+    for html in [&full, &compact] {
         for caveat in [
             "A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.",
             "This report describes evidence; it does not select a winner or prove one antenna is better.",
@@ -820,7 +823,7 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
         ),
         (
             ComparisonAvailability::NoMatchedPaths,
-            "Both A and B produced usable path evidence.",
+            "For this General coverage run",
         ),
     ] {
         let mut report = paired_report(false);
@@ -834,7 +837,8 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
             let answer = plain_language_answer_from(&html);
             assert!(answer.contains(expected), "missing headline for {availability:?}");
             if availability == ComparisonAvailability::NoMatchedPaths {
-                assert!(answer.contains("No same-path signal delta can be computed"));
+                assert!(answer.contains("unique observed paths"));
+                assert!(answer.contains("not a universal antenna ranking"));
             }
             for forbidden in ["winner", "significant", "better antenna", "confidence"] {
                 assert!(
@@ -851,15 +855,17 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
         render_compact_summary_html(&report).unwrap(),
     ] {
         let answer = plain_language_answer_from(&html);
-        assert!(answer.contains(
-            "2 stations heard both antennas on TX path · 20 m · WSPR · Local decode · WSJT-X log"
-        ));
-        assert!(answer.contains("the typical (median) difference was 1.5 dB, with B stronger."));
-        assert!(answer.contains("See the per-group table for the observed spread"));
-        assert!(html.contains(
-            "For scale:</strong> a 3 dB difference is the same change as doubling transmit power. Individual WSPR reports are whole-dB values that vary cycle to cycle."
-        ));
+        assert!(answer.contains("For this General coverage run"));
+        assert!(answer.contains("a +1.5 dB median across 2 shared paths"));
+        assert!(answer
+            .contains("These results describe this session, not a universal antenna ranking."));
     }
+    assert!(render_standalone_html(&report)
+        .unwrap()
+        .contains("For scale:</strong> a 3 dB difference"));
+    assert!(!render_compact_summary_html(&report)
+        .unwrap()
+        .contains("For scale:</strong> a 3 dB difference"));
 }
 
 #[test]
@@ -886,22 +892,33 @@ fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_compact_
         assert!(!html.contains("id=\"same-path-signal\""));
         assert!(!html.contains("href=\"#same-path-signal\""));
     }
-    assert!(full_answer.starts_with("Both Vertical and Inverted V produced usable path evidence."));
-    for expected in [
-        "On TX path · 40 m · WSPR · Public report · WSPRnet: 1 Vertical-only, 0 shared, and 1 Inverted V-only unique paths.",
-        "On TX path · 40 m · WSPR · Imported spot · Imported file: 0 Vertical-only, 0 shared, and 2 Inverted V-only unique paths.",
-        "On TX path · 20 m · WSPR · Public report · WSPRnet: 2 Vertical-only, 0 shared, and 2 Inverted V-only unique paths.",
-        "On TX path · 20 m · WSPR · Imported spot · Imported file: 0 Vertical-only, 0 shared, and 1 Inverted V-only unique path.",
-        "On RX path · 40 m · WSPR · Local decode · WSJT-X UDP (direct/local): 1 Vertical-only, 0 shared, and 0 Inverted V-only unique path.",
-        "On RX path · 40 m · WSPR · Local decode · WSJT-X log: 1 Vertical-only, 0 shared, and 1 Inverted V-only unique paths.",
-        "On RX path · 20 m · WSPR · Local decode · WSJT-X UDP (direct/local): 1 Vertical-only, 0 shared, and 0 Inverted V-only unique path.",
-        "On RX path · 20 m · WSPR · Local decode · WSJT-X log: 1 Vertical-only, 0 shared, and 0 Inverted V-only unique path.",
-    ] {
-        assert!(full_answer.contains(expected), "missing reach fact: {expected}");
+    assert!(full_answer.starts_with("Headline evidence is shown separately for "));
+    assert!(full_answer.contains("comparison groups below and is not pooled"));
+    assert_eq!(
+        full_answer
+            .matches("not a universal antenna ranking")
+            .count(),
+        1
+    );
+    let supported_group_count = report
+        .overview
+        .strata
+        .iter()
+        .filter(|row| {
+            row.reach.left_only_unique_path_count
+                + row.reach.both_unique_path_count
+                + row.reach.right_only_unique_path_count
+                > 0
+        })
+        .count();
+    for html in [&full, &compact] {
+        assert_eq!(
+            html.matches("class=\"headline-group-answer\"").count(),
+            supported_group_count
+        );
+        assert!(html.contains("1 versus 1 unique observed paths"));
+        assert!(html.contains("2 versus 0 unique observed paths"));
     }
-    assert!(full_answer.contains(
-        "No same-path signal delta can be computed because no remote path had usable finite-SNR reports for both antennas within the same eligible block and comparison group."
-    ));
     for prohibited in [
         "winner",
         "superiority",
@@ -960,8 +977,8 @@ fn zero_median_headline_stays_descriptive_without_implying_equivalence() {
     let html = render_standalone_html(&report).unwrap();
     let answer = plain_language_answer_from(&html);
 
-    assert!(answer.contains("the typical (median) difference was 0 dB"));
-    assert!(answer.contains("no signed difference at the median"));
+    assert!(answer.contains("a 0 dB shared-path median across 2 paths"));
+    assert!(answer.contains("available headline measures were tied"));
     for prohibited in ["equivalent", "too close", "winner", "better antenna"] {
         assert!(!answer.to_ascii_lowercase().contains(prohibited));
     }
@@ -1122,32 +1139,32 @@ fn goal_lenses_reorder_the_same_facts_in_full_and_compact_reports() {
         };
         let general_html = render(&general).unwrap();
         let dx_html = render(&dx).unwrap();
-        let general_positions = section_positions(
-            &general_html,
-            &[
-                "same-path-signal",
-                "reach-unique-paths",
-                "distance-direction",
-                "coverage-overlap",
-            ],
-        );
-        let dx_positions = section_positions(
-            &dx_html,
-            &[
-                "distance-direction",
-                "same-path-signal",
-                "coverage-overlap",
-                "reach-unique-paths",
-            ],
-        );
+        let (general_sections, dx_sections): (&[&str], &[&str]) = if compact {
+            (
+                &["same-path-signal", "observed-footprint", "coverage-overlap"],
+                &["observed-footprint", "same-path-signal", "coverage-overlap"],
+            )
+        } else {
+            (
+                &[
+                    "same-path-signal",
+                    "reach-unique-paths",
+                    "distance-direction",
+                    "coverage-overlap",
+                ],
+                &[
+                    "distance-direction",
+                    "same-path-signal",
+                    "coverage-overlap",
+                    "reach-unique-paths",
+                ],
+            )
+        };
+        let general_positions = section_positions(&general_html, general_sections);
+        let dx_positions = section_positions(&dx_html, dx_sections);
         assert!(general_positions.is_sorted());
         assert!(dx_positions.is_sorted());
-        for section in [
-            "same-path-signal",
-            "reach-unique-paths",
-            "distance-direction",
-            "coverage-overlap",
-        ] {
+        for section in general_sections {
             assert!(general_html.contains(&format!("id=\"{section}\"")));
             assert!(dx_html.contains(&format!("id=\"{section}\"")));
         }
@@ -1266,23 +1283,19 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     assert!(
         html.contains("Positive values mean Antenna &amp; positive with another deliberately long label was stronger; negative values mean Antenna &lt;negative&gt; with a deliberately long operator label was stronger.")
     );
-    assert!(html.contains("<strong class=\"path-strip-side path-strip-side-negative\">Antenna &lt;negative&gt; with a deliberately long operator label</strong><span class=\"path-strip-axis-zero\">0 dB</span><strong class=\"path-strip-side path-strip-side-positive\">Antenna &amp; positive with another deliberately long label</strong>"));
     assert_eq!(
-        html.matches("<span class=\"path-strip-dot geometry-left")
+        html.matches("<circle class=\"path-distribution-dot")
             .count(),
         3
     );
-    assert_eq!(
-        html.matches("<span class=\"path-strip-median geometry-left")
-            .count(),
-        1
-    );
-    for class in ["g0", "g500", "g1000"] {
-        assert!(
-            html.contains(&format!("path-strip-dot geometry-left {class}")),
-            "missing {class} negative/zero/positive geometry"
-        );
+    for class in ["path-dot-negative", "path-dot-zero", "path-dot-positive"] {
+        assert!(html.contains(class), "missing {class} distribution state");
     }
+    assert!(html.contains("viewBox=\"0 0 720 205\""));
+    assert!(html.contains("class=\"path-distribution-iqr\""));
+    assert!(html.contains("class=\"path-distribution-median\""));
+    assert!(html.contains("<dt>Tied at 0 dB</dt><dd>1</dd>"));
+    assert!(html.contains("<dt>Middle half</dt>"));
     assert!(!html.contains(" style=\""));
     assert!(html.contains("A 0 dB dot is retained as a true zero"));
     assert!(html.contains("<caption>One path-median signed SNR delta per remote path"));
@@ -1292,11 +1305,17 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     assert!(html.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
     assert!(html.contains("A-only and B-only paths remain visible"));
     assert!(html.contains("<caption>Unique remote-path reach counts"));
-    assert!(html.contains(".path-strip-row{grid-template-columns:1fr}"));
+    assert!(html.contains("class=\"coverage-polar path-distribution-chart\""));
+    assert!(html.contains("@media(max-width:620px)"));
     assert!(html.contains("@media print"));
 
     let compact = render_compact_summary_html(&report).unwrap();
-    assert!(compact.contains("path-strip-side-negative"));
+    assert_eq!(
+        compact
+            .matches("<circle class=\"path-distribution-dot")
+            .count(),
+        3
+    );
     assert!(compact.contains("Review exact remote paths and matched-pair counts"));
     assert!(compact.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
 }
@@ -1364,6 +1383,7 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
     empty_stratum.paired_row_count = 0;
     empty_stratum.contributing_block_count = 0;
     empty_stratum.reach = Default::default();
+    empty_stratum.observed_profile = Default::default();
     empty_stratum.location_context.paths.clear();
     empty_stratum.location_context.missing_location_path_count = 0;
     empty_stratum
@@ -1372,7 +1392,12 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
     mixed_report.overview.strata.push(empty_stratum);
 
     let mixed_html = render_standalone_html(&mixed_report).unwrap();
-    assert_eq!(mixed_html.matches("<div class=\"path-strip\"").count(), 1);
+    assert_eq!(
+        mixed_html
+            .matches("<div class=\"path-distribution\"")
+            .count(),
+        1
+    );
     assert_eq!(mixed_html.matches("<div class=\"reach-strip\"").count(), 1);
     assert_eq!(
         mixed_html
@@ -1389,7 +1414,7 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
     let compact_html = render_compact_summary_html(&mixed_report).unwrap();
     assert!(compact_html.contains("No path delta in 1 comparison group"));
     assert!(compact_html.contains("No usable same-path path-median delta in 1 of 2"));
-    assert!(compact_html.contains("No usable reach evidence in 1 comparison group"));
+    assert!(compact_html.contains("No usable observed footprint in 1 of 2 comparison groups"));
     assert!(compact_html.contains("never combined"));
 }
 
@@ -1477,21 +1502,35 @@ fn renders_all_path_profiles_in_full_and_compact_without_overclaiming() {
     let full = render_standalone_html(&report).unwrap();
     let compact = render_compact_summary_html(&report).unwrap();
 
-    for html in [&full, &compact] {
-        assert!(html.contains("Observed distance and direction profile"));
-        assert!(html.contains("Side-by-side observed distance distribution"));
-        assert!(html.contains("Side-by-side observed azimuth distribution"));
-        assert!(html.contains("Observed-path composition within each distance category"));
-        assert!(html.contains("Receiver/transmitter availability may have changed"));
-        assert!(html.contains("not a controlled detection comparison"));
-        assert!(html.contains("not a radiation pattern"));
-        assert!(html.contains("Near / local distance is a practical proxy only"));
-        assert!(!html.contains("measured NVIS"));
-        assert!(!html.contains("universal advantage"));
+    assert!(full.contains("Observed distance and direction profile"));
+    assert!(full.contains("Side-by-side observed distance distribution"));
+    assert!(full.contains("Side-by-side observed azimuth distribution"));
+    assert!(full.contains("Observed-path composition within each distance category"));
+    assert!(full.contains("Receiver/transmitter availability may have changed"));
+    assert!(full.contains("not a controlled detection comparison"));
+    assert!(full.contains("not a radiation pattern"));
+    assert!(full.contains("Near / local distance is a practical proxy only"));
+    assert!(!full.contains("measured NVIS"));
+    assert!(!full.contains("universal advantage"));
+    for expected in [
+        "Observed footprint",
+        "Observed unique paths by distance",
+        "Observed unique paths by direction",
+        "Paired bars share one scale",
+        "Unlike common-active receiver detection",
+        "Review exact observed-footprint counts and location quality",
+        "Review exact unique observed-path rows",
+    ] {
+        assert!(
+            compact.contains(expected),
+            "missing compact footprint: {expected}"
+        );
     }
+    assert!(!compact.contains("Observed complementarity"));
+    assert!(compact.contains("Observed-path repeatability"));
     assert!(full.contains("Exact unique observed-path records"));
     assert!(full.contains("Review shared-path distance and direction context"));
-    assert!(!compact.contains("Exact unique observed-path records"));
+    assert!(compact.contains("Exact unique observed-path records"));
     assert!(!compact.contains("Review exact paired-row distance"));
 }
 
