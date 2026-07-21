@@ -22,10 +22,10 @@
     "types:check": "npm run check --workspace @antennabench/hosted"
   },
   "allowScripts": {
-    "esbuild@0.28.1": true,
-    "fsevents@2.3.3": true,
-    "sharp@0.34.5": true,
-    "workerd@1.20260710.1": true
+    "esbuild": true,
+    "fsevents": true,
+    "sharp": true,
+    "workerd": true
   },
   "devDependencies": {
     "prettier": "3.9.6"

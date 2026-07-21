@@ -92,6 +92,25 @@ export function validateDependabotText(text, source = ".github/dependabot.yml") 
   return errors;
 }
 
+export function validateNpmConfigText(text, source = ".npmrc") {
+  const settings = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    settings.set(trimmed.slice(0, separator).trim(), trimmed.slice(separator + 1).trim());
+  }
+  const errors = [];
+  if (settings.get("save-exact") !== "true") {
+    errors.push(`${source}: npm must save exact dependency versions`);
+  }
+  if (settings.get("strict-allow-scripts") !== "true") {
+    errors.push(`${source}: unreviewed dependency install scripts must fail closed`);
+  }
+  return errors;
+}
+
 export function validateNpmWorkspace(manifests, lockfiles, lock) {
   const errors = [];
   const expectedWorkspaces = ["apps/desktop", "apps/hosted"];
@@ -100,6 +119,16 @@ export function validateNpmWorkspace(manifests, lockfiles, lock) {
   if (root.private !== true) errors.push("package.json: root npm workspace must be private");
   if (JSON.stringify(root.workspaces) !== JSON.stringify(expectedWorkspaces)) {
     errors.push("package.json: npm workspaces must explicitly contain apps/desktop and apps/hosted");
+  }
+  for (const [name, allowed] of Object.entries(root.allowScripts ?? {})) {
+    if (name.lastIndexOf("@") > 0) {
+      errors.push(
+        `package.json: allowScripts.${name} must approve a package without duplicating its version`,
+      );
+    }
+    if (typeof allowed !== "boolean") {
+      errors.push(`package.json: allowScripts.${name} must be an explicit boolean`);
+    }
   }
   if (lockfiles.length !== 1 || lockfiles[0] !== "package-lock.json") {
     errors.push("npm workspace must have exactly one root package-lock.json and no nested lockfiles");
@@ -259,6 +288,13 @@ export function validateRepository(root) {
   const dependabotPath = path.join(root, ".github", "dependabot.yml");
   const dependabot = fs.readFileSync(dependabotPath, "utf8");
   errors.push(...validateDependabotText(dependabot));
+
+  const npmConfigPath = path.join(root, ".npmrc");
+  if (fs.existsSync(npmConfigPath)) {
+    errors.push(...validateNpmConfigText(fs.readFileSync(npmConfigPath, "utf8")));
+  } else {
+    errors.push(".npmrc: exact-save npm configuration is missing");
+  }
 
   const dependencyReviewPath = path.join(workflowRoot, "dependency-review.yml");
   const dependencyReview = fs.readFileSync(dependencyReviewPath, "utf8");

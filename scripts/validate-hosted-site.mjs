@@ -277,7 +277,7 @@ const allDependencies = {
   ...hostedPackage.dependencies,
   ...hostedPackage.devDependencies,
 };
-invariant(allDependencies.astro === "7.1.2", "Astro must remain exactly pinned");
+invariant(typeof allDependencies.astro === "string", "Astro must remain installed");
 invariant(
   Object.keys(allDependencies).every((name) => name !== "react" && name !== "react-dom"),
   "React is reserved for the later authenticated application",

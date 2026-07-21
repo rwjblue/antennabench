@@ -6,6 +6,7 @@ import {
   validateDependencyReviewText,
   validateHostedSiteDeployWorkflowText,
   validateManifestCoverage,
+  validateNpmConfigText,
   validateNpmWorkspace,
   validateReleaseWorkflowText,
   validateRepository,
@@ -103,6 +104,30 @@ test("npm policy requires exact workspace pins, one root lock, and lock agreemen
     ...manifests,
     "apps/desktop/package.json": { devDependencies: { vitest: "^4.1.10" } },
   }, ["package-lock.json"], lock).length);
+  assert.ok(
+    validateNpmWorkspace({
+      ...manifests,
+      "package.json": {
+        ...manifests["package.json"],
+        allowScripts: { "workerd@1.2.3": true },
+      },
+    }, ["package-lock.json"], lock).some((error) => error.includes("without duplicating")),
+  );
+});
+
+test("npm configuration preserves exact pins during automated updates", () => {
+  const valid = "save-exact=true\nstrict-allow-scripts=true\n";
+  assert.deepEqual(validateNpmConfigText(valid), []);
+  assert.match(
+    validateNpmConfigText(valid.replace("save-exact=true", "save-exact=false"))[0],
+    /save exact/,
+  );
+  assert.match(
+    validateNpmConfigText(
+      valid.replace("strict-allow-scripts=true", "strict-allow-scripts=false"),
+    )[0],
+    /fail closed/,
+  );
 });
 
 test("dependency review is pull-request-only and blocks moderate additions", () => {

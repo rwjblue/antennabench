@@ -13,3 +13,4 @@ coverage/
 .wrangler/
 /apps/hosted/dist/
 /apps/hosted/.astro/
+/apps/hosted/worker-configuration.d.ts
