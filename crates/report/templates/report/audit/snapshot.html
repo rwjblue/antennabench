@@ -1,1 +1,163 @@
-<section class="panel" aria-labelledby="snapshot-title"><h2 id="snapshot-title">Committed session snapshot</h2><dl class="facts">{% for fact in view.facts %}<div class="fact"><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>{% endfor %}</dl>{% if !view.lifecycle_rows.is_empty() %}<div class="table-wrap"><table><caption>Lifecycle and interruption history</caption><thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Detail</th></tr></thead><tbody>{% for row in view.lifecycle_rows %}<tr><td>{{ row.event }}</td><td>{{ row.time }}</td><td>{{ row.detail }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}{% if !view.operator_rows.is_empty() %}<div class="table-wrap"><table><caption>Complete operator note and correction history</caption><thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Recorded slot</th><th scope="col">Affected slot</th><th scope="col">Kind</th><th scope="col">Detail</th><th scope="col">Correction</th></tr></thead><tbody>{% for row in view.operator_rows %}<tr><td><code>{{ row.event_id }}</code></td><td>{{ row.time }}</td><td>{{ row.recorded_slot }}</td><td>{{ row.affected_slot }}</td><td>{{ row.kind }}</td><td>{{ row.detail }}</td><td>{{ row.correction }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}{% if !view.cycle_rows.is_empty() %}<div class="table-wrap"><table><caption>Intended WSPR order and observed antenna use</caption><thead><tr><th scope="col">Sequence</th><th scope="col">Band</th><th scope="col">Direction</th><th scope="col">Intended antenna</th><th scope="col">Observed antenna</th><th scope="col">Readiness basis</th><th scope="col">Ready</th><th scope="col">Period start</th><th scope="col">Period end</th><th scope="col">Attribution</th></tr></thead><tbody>{% for row in view.cycle_rows %}<tr><td>{{ row.sequence }}</td><td>{{ row.band }}</td><td>{{ row.direction }}</td><td>{{ row.planned }}</td><td>{{ row.actual }}</td><td>{{ row.readiness }}</td><td>{{ row.ready_at }}</td><td>{{ row.starts_at }}</td><td>{{ row.ends_at }}</td><td>{{ row.attribution }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}{% if !view.controller_attempts.is_empty() %}<div class="table-wrap"><table><caption>{% if view.controller_omitted %}Antenna-control command attempts with command details omitted at export{% else %}Antenna-control command attempts{% endif %}</caption><thead><tr><th scope="col">Record</th><th scope="col">Role</th><th scope="col">Intent / target / mode</th><th scope="col">Controller</th><th scope="col">Resolved invocation</th>{% if view.controller_omitted %}<th scope="col">Timing</th>{% endif %}<th scope="col">Outcome</th><th scope="col">Stdout</th><th scope="col">Stderr</th></tr></thead><tbody>{% for row in view.controller_attempts %}<tr><td><code>{{ row.record_id }}</code></td><td>{{ row.role }}</td><td><code>{{ row.intent_id }}</code><br>{{ row.antenna }} → {{ row.target }}<br>{{ row.mode }}</td><td>{{ row.controller_name }} / {{ row.controller_revision }}</td><td>{% if view.controller_omitted %}Program: {{ row.program }}<br>Arguments: {{ row.arguments }}{% else %}<code>{{ row.program }}</code><br>{{ row.arguments }}{% endif %}</td>{% if view.controller_omitted %}<td>{{ row.timing }}</td>{% endif %}<td>{{ row.outcome }}</td><td>{{ row.stdout }}</td><td>{{ row.stderr }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}</section>
+<section class="panel" aria-labelledby="snapshot-title">
+  <h2 id="snapshot-title">Committed session snapshot</h2>
+  <dl class="facts">
+    {% for fact in view.facts %}
+      <div class="fact">
+        <dt>{{ fact.label }}</dt>
+        <dd>
+          {{ fact.value }}
+        </dd>
+      </div>
+    {% endfor %}
+  </dl>
+  {% if !view.lifecycle_rows.is_empty() %}
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Lifecycle and interruption history
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Event</th>
+            <th scope="col">Time</th>
+            <th scope="col">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.lifecycle_rows %}
+            <tr>
+              <td>{{ row.event }}</td>
+              <td>{{ row.time }}</td>
+              <td>{{ row.detail }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if !view.operator_rows.is_empty() %}
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Complete operator note and correction history
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Event</th>
+            <th scope="col">Time</th>
+            <th scope="col">Recorded slot</th>
+            <th scope="col">Affected slot</th>
+            <th scope="col">Kind</th>
+            <th scope="col">Detail</th>
+            <th scope="col">Correction</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.operator_rows %}
+            <tr>
+              <td>
+                <code>{{ row.event_id }}</code>
+              </td>
+              <td>{{ row.time }}</td>
+              <td>{{ row.recorded_slot }}</td>
+              <td>{{ row.affected_slot }}</td>
+              <td>{{ row.kind }}</td>
+              <td>{{ row.detail }}</td>
+              <td>{{ row.correction }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if !view.cycle_rows.is_empty() %}
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Intended WSPR order and observed antenna use
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Sequence</th>
+            <th scope="col">Band</th>
+            <th scope="col">Direction</th>
+            <th scope="col">Intended antenna</th>
+            <th scope="col">Observed antenna</th>
+            <th scope="col">Readiness basis</th>
+            <th scope="col">Ready</th>
+            <th scope="col">Period start</th>
+            <th scope="col">Period end</th>
+            <th scope="col">Attribution</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.cycle_rows %}
+            <tr>
+              <td>{{ row.sequence }}</td>
+              <td>{{ row.band }}</td>
+              <td>{{ row.direction }}</td>
+              <td>{{ row.planned }}</td>
+              <td>{{ row.actual }}</td>
+              <td>{{ row.readiness }}</td>
+              <td>{{ row.ready_at }}</td>
+              <td>{{ row.starts_at }}</td>
+              <td>{{ row.ends_at }}</td>
+              <td>{{ row.attribution }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if !view.controller_attempts.is_empty() %}
+    <div class="table-wrap">
+      <table>
+        <caption>
+          {% if view.controller_omitted %}
+            Antenna-control command attempts with command details omitted at export
+          {% else %}
+            Antenna-control command attempts
+          {% endif %}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Record</th>
+            <th scope="col">Role</th>
+            <th scope="col">Intent / target / mode</th>
+            <th scope="col">Controller</th>
+            <th scope="col">Resolved invocation</th>
+            {% if view.controller_omitted %}<th scope="col">Timing</th>{% endif %}
+            <th scope="col">Outcome</th>
+            <th scope="col">Stdout</th>
+            <th scope="col">Stderr</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.controller_attempts %}
+            <tr>
+              <td>
+                <code>{{ row.record_id }}</code>
+              </td>
+              <td>{{ row.role }}</td>
+              <td>
+                <code>{{ row.intent_id }}</code><br>{{ row.antenna }} → {{ row.target }}<br>{{ row.mode }}
+              </td>
+              <td>{{ row.controller_name }} / {{ row.controller_revision }}</td>
+              <td>
+                {% if view.controller_omitted %}
+                  Program: {{ row.program }}<br>Arguments: {{ row.arguments }}
+                {% else %}
+                  <code>{{ row.program }}</code><br>{{ row.arguments }}
+                {% endif %}
+              </td>
+              {% if view.controller_omitted %}<td>{{ row.timing }}</td>{% endif %}
+              <td>{{ row.outcome }}</td>
+              <td>{{ row.stdout }}</td>
+              <td>{{ row.stderr }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>

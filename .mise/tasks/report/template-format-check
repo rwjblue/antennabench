@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Check compiled Askama report template formatting"
+
+set -euo pipefail
+
+askama_fmt --check 'crates/report/templates/report/**/*.html'

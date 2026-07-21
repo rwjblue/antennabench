@@ -1,1 +1,104 @@
-<section class="panel" aria-labelledby="slot-title"><h2 id="slot-title">Slot evidence</h2><h3>Slot usable and excluded counts</h3>{% if view.chart_rows.is_empty() %}<p class="empty">No chart rows are available.</p>{% else %}<div class="legend"><span><i class="swatch usable"></i>Usable</span><span><i class="swatch excluded"></i>Excluded</span></div><div class="chart" aria-hidden="true">{% for row in view.chart_rows %}<div class="chart-row"><span class="chart-label">{{ row.chart.label }}</span><span class="bar-track"><span class="bar usable geometry-width {{ row.chart.usable_class }}"></span><span class="bar excluded geometry-width {{ row.chart.excluded_class }}"></span></span><span class="chart-value">{{ row.chart.usable }} / {{ row.chart.excluded }}</span></div>{% endfor %}</div><div class="table-wrap"><table><caption>Slot evidence chart data</caption><thead><tr><th scope="col">Sequence</th><th scope="col">Slot</th><th scope="col">Band</th><th scope="col">Planned</th><th scope="col">Actual</th><th scope="col">Status</th><th scope="col">Total</th><th scope="col">Usable</th><th scope="col">Excluded</th></tr></thead><tbody>{% for row in view.chart_rows %}<tr><td>{{ row.sequence }}</td><td>{{ row.slot_id }}</td><td>{{ row.band }}</td><td>{{ row.planned }}</td><td>{{ row.actual }}</td><td>{{ row.status }}</td><td>{{ row.chart.total }}</td><td>{{ row.chart.usable }}</td><td>{{ row.chart.excluded }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}{% if view.evidence_rows.is_empty() %}<p class="empty">No per-slot evidence is available.</p>{% else %}<div class="table-wrap"><table><caption>Evidence details by slot</caption><thead><tr><th scope="col">Sequence</th><th scope="col">Slot</th><th scope="col">Band</th><th scope="col">Planned / actual</th><th scope="col">Status</th><th scope="col">Window / usable start</th><th scope="col">Switch audit</th><th scope="col">Counts</th><th scope="col">Exclusions</th><th scope="col">SNR</th></tr></thead><tbody>{% for row in view.evidence_rows %}<tr><td>{{ row.sequence }}</td><td>{{ row.slot_id }}</td><td>{{ row.band }}</td><td>{{ row.planned }} / {{ row.actual }}</td><td>{{ row.status }}</td><td>{{ row.starts_at }} – {{ row.ends_at }}; usable {{ row.usable_start }}</td><td>{{ row.switch }}</td><td>{{ row.counts }}</td><td>{{ row.exclusions }}</td><td>{{ row.snr }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}</section>
+<section class="panel" aria-labelledby="slot-title">
+  <h2 id="slot-title">Slot evidence</h2>
+  <h3>Slot usable and excluded counts</h3>
+  {% if view.chart_rows.is_empty() %}
+    <p class="empty">No chart rows are available.</p>
+  {% else %}
+    <div class="legend">
+      <span>
+        <i class="swatch usable"></i>Usable
+      </span>
+      <span>
+        <i class="swatch excluded"></i>Excluded
+      </span>
+    </div>
+    <div class="chart" aria-hidden="true">
+      {% for row in view.chart_rows %}
+        <div class="chart-row">
+          <span class="chart-label">{{ row.chart.label }}</span>
+          <span class="bar-track">
+            <span class="bar usable geometry-width {{ row.chart.usable_class }}"></span>
+            <span class="bar excluded geometry-width {{ row.chart.excluded_class }}"></span>
+          </span>
+          <span class="chart-value">{{ row.chart.usable }} / {{ row.chart.excluded }}</span>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Slot evidence chart data
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Sequence</th>
+            <th scope="col">Slot</th>
+            <th scope="col">Band</th>
+            <th scope="col">Planned</th>
+            <th scope="col">Actual</th>
+            <th scope="col">Status</th>
+            <th scope="col">Total</th>
+            <th scope="col">Usable</th>
+            <th scope="col">Excluded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.chart_rows %}
+            <tr>
+              <td>{{ row.sequence }}</td>
+              <td>{{ row.slot_id }}</td>
+              <td>{{ row.band }}</td>
+              <td>{{ row.planned }}</td>
+              <td>{{ row.actual }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.chart.total }}</td>
+              <td>{{ row.chart.usable }}</td>
+              <td>{{ row.chart.excluded }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if view.evidence_rows.is_empty() %}
+    <p class="empty">No per-slot evidence is available.</p>
+  {% else %}
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Evidence details by slot
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Sequence</th>
+            <th scope="col">Slot</th>
+            <th scope="col">Band</th>
+            <th scope="col">Planned / actual</th>
+            <th scope="col">Status</th>
+            <th scope="col">Window / usable start</th>
+            <th scope="col">Switch audit</th>
+            <th scope="col">Counts</th>
+            <th scope="col">Exclusions</th>
+            <th scope="col">SNR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.evidence_rows %}
+            <tr>
+              <td>{{ row.sequence }}</td>
+              <td>{{ row.slot_id }}</td>
+              <td>{{ row.band }}</td>
+              <td>{{ row.planned }} / {{ row.actual }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.starts_at }} – {{ row.ends_at }}; usable {{ row.usable_start }}</td>
+              <td>{{ row.switch }}</td>
+              <td>{{ row.counts }}</td>
+              <td>{{ row.exclusions }}</td>
+              <td>{{ row.snr }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>

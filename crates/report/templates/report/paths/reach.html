@@ -1,1 +1,69 @@
-<p class="muted">Counts are unique remote paths with usable signal reports within each comparison group. “Heard by both” supplies the path universe for same-path analysis; {{ view.left_label }}-only and {{ view.right_label }}-only paths remain visible.</p>{% if view.no_groups %}<p class="empty">No comparison group has path-reach evidence available.</p>{% else %}{% for row in view.rows %}<h3>{{ row.label }}</h3><div class="reach-strip" aria-hidden="true"><div class="reach-cells"><span><strong>{{ row.left_only }}</strong><small><span class="swatch left"></span>{{ view.left_label }} only</small></span><span><strong>{{ row.both }}</strong><small><span class="swatch both"></span>heard by both</small></span><span><strong>{{ row.right_only }}</strong><small><span class="swatch right"></span>{{ view.right_label }} only</small></span></div><span class="{{ row.bar.class }}" aria-hidden="true">{% for segment in row.bar.segments %}<span class="reach-seg {{ segment.side }} {{ segment.geometry_class }}"></span>{% endfor %}</span></div><p class="muted reach-note">Segment widths are proportional to unique-path counts. {{ view.left_label }} heard {{ row.left_total }} of {{ row.universe }} unique path{{ row.universe_suffix }}; {{ view.right_label }} heard {{ row.right_total }}.</p><div class="table-wrap"><table><caption>Unique remote-path reach counts for {{ row.label }}.</caption><thead><tr><th scope="col">{{ view.left_label }} only</th><th scope="col">Heard by both</th><th scope="col">{{ view.right_label }} only</th><th scope="col">Missing SNR — {{ view.left_label }}</th><th scope="col">Missing SNR — {{ view.right_label }}</th><th scope="col">Duplicates</th><th scope="col">Conflicts</th></tr></thead><tbody><tr><td>{{ row.left_only }}</td><td>{{ row.both }}</td><td>{{ row.right_only }}</td><td>{{ row.missing_left }}</td><td>{{ row.missing_right }}</td><td>{{ row.duplicates }}</td><td>{{ row.conflicts }}</td></tr></tbody></table></div>{% endfor %}{% if view.unavailable.is_some() %}<p class="empty collapsed-empty-strata">{{ view.unavailable.as_ref().unwrap() }}</p>{% endif %}{% endif %}
+<p class="muted">
+  Counts are unique remote paths with usable signal reports within each comparison group. “Heard by both” supplies the path universe for same-path analysis; {{ view.left_label }}-only and {{ view.right_label }}-only paths remain visible.
+</p>
+{% if view.no_groups %}
+  <p class="empty">No comparison group has path-reach evidence available.</p>
+{% else %}
+  {% for row in view.rows %}
+    <h3>{{ row.label }}</h3>
+    <div class="reach-strip" aria-hidden="true">
+      <div class="reach-cells">
+        <span>
+          <strong>{{ row.left_only }}</strong><small>
+          <span class="swatch left"></span>
+          {{ view.left_label }} only</small>
+        </span>
+        <span>
+          <strong>{{ row.both }}</strong><small>
+          <span class="swatch both"></span>
+          heard by both</small>
+        </span>
+        <span>
+          <strong>{{ row.right_only }}</strong><small>
+          <span class="swatch right"></span>
+          {{ view.right_label }} only</small>
+        </span>
+      </div>
+      <span class="{{ row.bar.class }}" aria-hidden="true">
+        {% for segment in row.bar.segments %}
+          <span class="reach-seg {{ segment.side }} {{ segment.geometry_class }}"></span>
+        {% endfor %}
+      </span>
+    </div>
+    <p class="muted reach-note">
+      Segment widths are proportional to unique-path counts. {{ view.left_label }} heard {{ row.left_total }} of {{ row.universe }} unique path{{ row.universe_suffix }}; {{ view.right_label }} heard {{ row.right_total }}.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Unique remote-path reach counts for {{ row.label }}.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ view.left_label }} only</th>
+            <th scope="col">Heard by both</th>
+            <th scope="col">{{ view.right_label }} only</th>
+            <th scope="col">Missing SNR — {{ view.left_label }}</th>
+            <th scope="col">Missing SNR — {{ view.right_label }}</th>
+            <th scope="col">Duplicates</th>
+            <th scope="col">Conflicts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{{ row.left_only }}</td>
+            <td>{{ row.both }}</td>
+            <td>{{ row.right_only }}</td>
+            <td>{{ row.missing_left }}</td>
+            <td>{{ row.missing_right }}</td>
+            <td>{{ row.duplicates }}</td>
+            <td>{{ row.conflicts }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+  {% if view.unavailable.is_some() %}
+    <p class="empty collapsed-empty-strata">{{ view.unavailable.as_ref().unwrap() }}</p>
+  {% endif %}
+{% endif %}

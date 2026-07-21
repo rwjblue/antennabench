@@ -1,1 +1,275 @@
-<section id="distance-direction" class="panel question-section" tabindex="-1" aria-labelledby="distance-direction-title"><h2 id="distance-direction-title">Observed distance and direction profile</h2>{% if view.single_antenna %}<p class="notice">Evidence basis: all usable paths recorded for the profiled antenna, kept within each direction, band, mode, evidence-kind, and source group. This describes collected paths, not a radiation pattern, propagation model, or claim about unobserved distances and directions.</p>{% else %}<p class="notice">Evidence basis: all usable paths observed for each antenna in eligible blocks, including paths observed on only one antenna. Receiver/transmitter availability may have changed between antenna periods; this describes collected paths and is not a controlled detection comparison. This is not a radiation pattern, propagation model, or causal conclusion about observed or unobserved distances and directions, and it does not rank antennas universally.</p>{% endif %}{% if view.goal_focus.is_some() %}<p class="goal-distance-focus"><strong>Predeclared goal focus:</strong> {{ view.goal_focus.as_ref().unwrap() }}. Counts for all four fixed categories remain alongside this focus.</p>{% endif %}{% if view.no_profiles %}<p class="empty">No usable observed paths have location evidence for an antenna profile.</p>{% else %}<p class="muted">Each remote path contributes once per antenna and exact comparison group. Observation support remains visible, but repeated observations from one endpoint do not inflate the footprint count. Near / local distance is a practical proxy only; propagation mode was not measured.</p>{% for group in view.profiles %}<section aria-labelledby="observed-profile-{{ group.index }}"><h3 id="observed-profile-{{ group.index }}">{{ group.label }}</h3>{% if group.dominant_summary.is_some() %}<p><strong>Observed profile:</strong> {{ group.dominant_summary.as_ref().unwrap() }}</p>{% endif %}<div class="table-wrap"><table><caption>Unique observed paths and location availability</caption><thead><tr><th scope="col">Antenna</th><th scope="col">Unique paths</th><th scope="col">Located</th><th scope="col">Missing location</th><th scope="col">Inconsistent location</th></tr></thead><tbody>{% for row in group.profile.totals %}<tr><td>{{ row.antenna }}</td><td>{{ row.unique_paths }}</td><td>{{ row.located }}</td><td>{{ row.missing }}</td><td>{{ row.inconsistent }}</td></tr>{% endfor %}</tbody></table></div>{% for distribution in group.profile.distributions %}<div class="table-wrap"><table><caption>{{ distribution.caption }}</caption><thead><tr><th scope="col">Category</th><th scope="col">{{ distribution.left_label }}</th><th scope="col">{{ distribution.right_label }}</th></tr></thead><tbody>{% for row in distribution.rows %}<tr><td>{{ row.label }}</td><td>{{ row.left }}</td><td>{{ row.right }}</td></tr>{% endfor %}</tbody></table></div>{% endfor %}<div class="table-wrap"><table><caption>Observed-path composition within each distance category</caption><thead><tr><th scope="col">Distance</th><th scope="col">{{ group.profile.left_label }} only</th><th scope="col">Shared</th><th scope="col">{{ group.profile.right_label }} only</th></tr></thead><tbody>{% for row in group.profile.composition %}<tr><td>{{ row.distance }}</td><td>{{ row.left_only }}</td><td>{{ row.shared }}</td><td>{{ row.right_only }}</td></tr>{% endfor %}</tbody></table></div>{% if group.profile.composition_unavailable > 0 %}<p class="muted">{{ group.profile.composition_unavailable }} path{{ group.profile.composition_suffix }} could not enter distance composition because location was missing, inconsistent, or differed between antenna records.</p>{% endif %}</section>{% endfor %}{% endif %}<details class="audit-disclosure"><summary>Review exact observed-path profile rows</summary><div class="disclosure-body">{% if view.audit_rows.is_empty() %}<p class="empty">Exact observed-path rows were omitted by the bounded report profile.</p>{% else %}<div class="table-wrap"><table><caption>Exact unique observed-path records</caption><thead><tr><th scope="col">Comparison group</th><th scope="col">Antenna / path</th><th scope="col">Location</th><th scope="col">Block / slot support</th><th scope="col">Observations</th><th scope="col">Observed SNR summary</th></tr></thead><tbody>{% for row in view.audit_rows %}<tr><td>{{ row.group }}</td><td>{{ row.antenna }}<br><span class="muted">{{ row.remote_path }}</span></td><td>{{ row.location }}</td><td>{{ row.block_support }} / {{ row.slot_support }}<br><span class="muted">blocks {{ row.blocks }} · slots {{ row.slots }}</span></td><td>{{ row.observations }}<br><span class="muted">{{ row.observation_ids }}</span></td><td>{{ row.snr }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}</div></details>{% if !view.single_antenna %}<details class="audit-disclosure"><summary>Review shared-path distance and direction context</summary><div class="disclosure-body"><p class="muted">This separate view answers where finite-SNR differences occurred among paths decoded on both antennas.</p>{% if view.path_context.no_groups %}<p class="empty">No observed paired paths are available for distance or azimuth context. This is not a near-zero path delta.</p>{% else if view.path_context.all_unavailable.is_some() %}<p class="empty">{{ view.path_context.all_unavailable.as_ref().unwrap() }}</p>{% else %}<p class="muted">Each located paired path contributes once to one fixed distance bin and one fixed 45° compass sector. The supporting paired-row count stays visible; repeated rows from one endpoint do not increase a cell’s path count.</p>{% for group in view.path_context.groups %}<section aria-labelledby="path-context-{{ group.index }}"><h3 id="path-context-{{ group.index }}">{{ group.label }}</h3><p class="muted">{{ group.located }} located matched path{{ group.located_suffix }}; {{ group.unavailable }} location unavailable ({{ group.missing }} missing, {{ group.inconsistent }} inconsistent). Exact per-antenna values remain in the matched-pair audit table.</p>{% for context in group.sections %}<h4>{{ context.heading }}</h4><div class="location-context" aria-hidden="true">{% for cell in context.cells %}<div class="location-context-cell{% if cell.empty %} empty-cell{% endif %}"><strong>{{ cell.label }}</strong><span>{{ cell.delta }}</span><small>{{ cell.evidence }}</small></div>{% endfor %}</div><div class="table-wrap"><table class="location-context-table"><caption>{{ context.caption }}</caption><thead><tr><th scope="col">Bin or sector</th><th scope="col">Unique located paths</th><th scope="col">Supporting matched pairs</th><th scope="col">Median path delta</th><th scope="col">Evidence state</th></tr></thead><tbody>{% for cell in context.cells %}<tr><td>{{ cell.label }}</td><td>{{ cell.unique_paths }}</td><td>{{ cell.paired_rows }}</td><td>{{ cell.delta }}</td><td>{{ cell.evidence }}</td></tr>{% endfor %}</tbody></table></div>{% endfor %}<details class="audit-disclosure"><summary>Review matched-path location aggregate audit</summary><div class="disclosure-body"><div class="table-wrap"><table><caption>One location-status record per matched path; raw per-antenna values remain below in the matched-pair audit.</caption><thead><tr><th scope="col">Remote path</th><th scope="col">Matched pairs</th><th scope="col">Median path delta</th><th scope="col">Location status</th><th scope="col">Distance</th><th scope="col">Azimuth</th></tr></thead><tbody>{% for path in group.paths %}<tr><td>{{ path.remote_path }}</td><td>{{ path.pairs }}</td><td>{{ path.delta }} dB</td><td>{{ path.status }}</td><td>{{ path.distance }}</td><td>{{ path.azimuth }}</td></tr>{% endfor %}</tbody></table></div></div></details></section>{% endfor %}{% if view.path_context.unavailable.is_some() %}<p class="empty collapsed-empty-strata">{{ view.path_context.unavailable.as_ref().unwrap() }}</p>{% endif %}{% endif %}</div></details><details class="audit-disclosure"><summary>Review exact paired-row distance and azimuth detail</summary><div class="disclosure-body">{% endif %}
+<section id="distance-direction"
+         class="panel question-section"
+         tabindex="-1"
+         aria-labelledby="distance-direction-title">
+  <h2 id="distance-direction-title">Observed distance and direction profile</h2>
+  {% if view.single_antenna %}
+    <p class="notice">
+      Evidence basis: all usable paths recorded for the profiled antenna, kept within each direction, band, mode, evidence-kind, and source group. This describes collected paths, not a radiation pattern, propagation model, or claim about unobserved distances and directions.
+    </p>
+  {% else %}
+    <p class="notice">
+      Evidence basis: all usable paths observed for each antenna in eligible blocks, including paths observed on only one antenna. Receiver/transmitter availability may have changed between antenna periods; this describes collected paths and is not a controlled detection comparison. This is not a radiation pattern, propagation model, or causal conclusion about observed or unobserved distances and directions, and it does not rank antennas universally.
+    </p>
+  {% endif %}
+  {% if view.goal_focus.is_some() %}
+    <p class="goal-distance-focus">
+      <strong>Predeclared goal focus:</strong> {{ view.goal_focus.as_ref().unwrap() }}. Counts for all four fixed categories remain alongside this focus.
+    </p>
+  {% endif %}
+  {% if view.no_profiles %}
+    <p class="empty">No usable observed paths have location evidence for an antenna profile.</p>
+  {% else %}
+    <p class="muted">
+      Each remote path contributes once per antenna and exact comparison group. Observation support remains visible, but repeated observations from one endpoint do not inflate the footprint count. Near / local distance is a practical proxy only; propagation mode was not measured.
+    </p>
+    {% for group in view.profiles %}
+      <section aria-labelledby="observed-profile-{{ group.index }}">
+        <h3 id="observed-profile-{{ group.index }}">{{ group.label }}</h3>
+        {% if group.dominant_summary.is_some() %}
+          <p>
+            <strong>Observed profile:</strong> {{ group.dominant_summary.as_ref().unwrap() }}
+          </p>
+        {% endif %}
+        <div class="table-wrap">
+          <table>
+            <caption>
+              Unique observed paths and location availability
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Antenna</th>
+                <th scope="col">Unique paths</th>
+                <th scope="col">Located</th>
+                <th scope="col">Missing location</th>
+                <th scope="col">Inconsistent location</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in group.profile.totals %}
+                <tr>
+                  <td>{{ row.antenna }}</td>
+                  <td>{{ row.unique_paths }}</td>
+                  <td>{{ row.located }}</td>
+                  <td>{{ row.missing }}</td>
+                  <td>{{ row.inconsistent }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% for distribution in group.profile.distributions %}
+          <div class="table-wrap">
+            <table>
+              <caption>
+                {{ distribution.caption }}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Category</th>
+                  <th scope="col">{{ distribution.left_label }}</th>
+                  <th scope="col">{{ distribution.right_label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in distribution.rows %}
+                  <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.left }}</td>
+                    <td>{{ row.right }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+        <div class="table-wrap">
+          <table>
+            <caption>
+              Observed-path composition within each distance category
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Distance</th>
+                <th scope="col">{{ group.profile.left_label }} only</th>
+                <th scope="col">Shared</th>
+                <th scope="col">{{ group.profile.right_label }} only</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in group.profile.composition %}
+                <tr>
+                  <td>{{ row.distance }}</td>
+                  <td>{{ row.left_only }}</td>
+                  <td>{{ row.shared }}</td>
+                  <td>{{ row.right_only }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if group.profile.composition_unavailable > 0 %}
+          <p class="muted">
+            {{ group.profile.composition_unavailable }} path{{ group.profile.composition_suffix }} could not enter distance composition because location was missing, inconsistent, or differed between antenna records.
+          </p>
+        {% endif %}
+      </section>
+    {% endfor %}
+  {% endif %}
+  <details class="audit-disclosure">
+    <summary>Review exact observed-path profile rows</summary>
+    <div class="disclosure-body">
+      {% if view.audit_rows.is_empty() %}
+        <p class="empty">Exact observed-path rows were omitted by the bounded report profile.</p>
+      {% else %}
+        <div class="table-wrap">
+          <table>
+            <caption>
+              Exact unique observed-path records
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Comparison group</th>
+                <th scope="col">Antenna / path</th>
+                <th scope="col">Location</th>
+                <th scope="col">Block / slot support</th>
+                <th scope="col">Observations</th>
+                <th scope="col">Observed SNR summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in view.audit_rows %}
+                <tr>
+                  <td>{{ row.group }}</td>
+                  <td>
+                    {{ row.antenna }}<br>
+                    <span class="muted">{{ row.remote_path }}</span>
+                  </td>
+                  <td>{{ row.location }}</td>
+                  <td>
+                    {{ row.block_support }} / {{ row.slot_support }}<br>
+                    <span class="muted">blocks {{ row.blocks }} · slots {{ row.slots }}</span>
+                  </td>
+                  <td>
+                    {{ row.observations }}<br>
+                    <span class="muted">{{ row.observation_ids }}</span>
+                  </td>
+                  <td>{{ row.snr }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+  </details>
+  {% if !view.single_antenna %}
+    <details class="audit-disclosure">
+      <summary>Review shared-path distance and direction context</summary>
+      <div class="disclosure-body">
+        <p class="muted">
+          This separate view answers where finite-SNR differences occurred among paths decoded on both antennas.
+        </p>
+        {% if view.path_context.no_groups %}
+          <p class="empty">
+            No observed paired paths are available for distance or azimuth context. This is not a near-zero path delta.
+          </p>
+        {% else if view.path_context.all_unavailable.is_some() %}
+          <p class="empty">{{ view.path_context.all_unavailable.as_ref().unwrap() }}</p>
+        {% else %}
+          <p class="muted">
+            Each located paired path contributes once to one fixed distance bin and one fixed 45° compass sector. The supporting paired-row count stays visible; repeated rows from one endpoint do not increase a cell’s path count.
+          </p>
+          {% for group in view.path_context.groups %}
+            <section aria-labelledby="path-context-{{ group.index }}">
+              <h3 id="path-context-{{ group.index }}">{{ group.label }}</h3>
+              <p class="muted">
+                {{ group.located }} located matched path{{ group.located_suffix }}; {{ group.unavailable }} location unavailable ({{ group.missing }} missing, {{ group.inconsistent }} inconsistent). Exact per-antenna values remain in the matched-pair audit table.
+              </p>
+              {% for context in group.sections %}
+                <h4>{{ context.heading }}</h4>
+                <div class="location-context" aria-hidden="true">
+                  {% for cell in context.cells %}
+                    <div class="location-context-cell{% if cell.empty %} empty-cell{% endif %}">
+                      <strong>{{ cell.label }}</strong>
+                      <span>{{ cell.delta }}</span>
+                      <small>{{ cell.evidence }}</small>
+                    </div>
+                  {% endfor %}
+                </div>
+                <div class="table-wrap">
+                  <table class="location-context-table">
+                    <caption>
+                      {{ context.caption }}
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Bin or sector</th>
+                        <th scope="col">Unique located paths</th>
+                        <th scope="col">Supporting matched pairs</th>
+                        <th scope="col">Median path delta</th>
+                        <th scope="col">Evidence state</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for cell in context.cells %}
+                        <tr>
+                          <td>{{ cell.label }}</td>
+                          <td>{{ cell.unique_paths }}</td>
+                          <td>{{ cell.paired_rows }}</td>
+                          <td>{{ cell.delta }}</td>
+                          <td>{{ cell.evidence }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% endfor %}
+              <details class="audit-disclosure">
+                <summary>Review matched-path location aggregate audit</summary>
+                <div class="disclosure-body">
+                  <div class="table-wrap">
+                    <table>
+                      <caption>
+                        One location-status record per matched path; raw per-antenna values remain below in the matched-pair audit.
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">Remote path</th>
+                          <th scope="col">Matched pairs</th>
+                          <th scope="col">Median path delta</th>
+                          <th scope="col">Location status</th>
+                          <th scope="col">Distance</th>
+                          <th scope="col">Azimuth</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for path in group.paths %}
+                          <tr>
+                            <td>{{ path.remote_path }}</td>
+                            <td>{{ path.pairs }}</td>
+                            <td>{{ path.delta }} dB</td>
+                            <td>{{ path.status }}</td>
+                            <td>{{ path.distance }}</td>
+                            <td>{{ path.azimuth }}</td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+            </section>
+          {% endfor %}
+          {% if view.path_context.unavailable.is_some() %}
+            <p class="empty collapsed-empty-strata">
+              {{ view.path_context.unavailable.as_ref().unwrap() }}
+            </p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </details>
+    <details class="audit-disclosure">
+      <summary>Review exact paired-row distance and azimuth detail</summary>
+      <div class="disclosure-body">
+      {% endif %}

@@ -26,6 +26,10 @@ use antennabench_report::{
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 
+mod support;
+
+use support::ReportDocument;
+
 const SESSION_ID: &str = "session-synthetic-wspr-live-field-shape";
 const FIRST_SLOT_ID: &str = "wspr-cycle-a";
 const SECOND_SLOT_ID: &str = "wspr-cycle-b";
@@ -196,6 +200,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
             if error.diagnostic.code == "resource.operation.cancelled"
     ));
     for html in [&full, &compact] {
+        let document = ReportDocument::parse(html);
         assert!(!html.contains("0 usable"));
         assert!(!html.contains("No matched paths"));
         assert!(html.contains("Which antenna was heard more often by the same active receivers?"));
@@ -207,7 +212,10 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         assert!(html.contains("43 / 180 (23.9%)"));
         assert!(html.contains("Joint detection outcomes by separate comparison group"));
         assert!(html.contains("Receiver-block opportunities"));
-        assert!(html.contains("<td>33</td><td>112</td><td>10</td><td>25</td>"));
+        document.assert_table_row_contains(
+            "Joint detection outcomes by separate comparison group",
+            &["33", "112", "10", "25"],
+        );
         assert!(html.contains("80.6% / 23.9%"));
         assert!(html.contains("Per-block joint detection outcome audit"));
         assert!(html.contains("Complete band-qualified census"));
@@ -245,7 +253,8 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert!(
         full.contains("Using both antennas produced <strong>155</strong> unique observed paths")
     );
-    assert!(full.contains("<td>112</td><td>33</td><td>10</td><td>155</td>"));
+    ReportDocument::parse(&full)
+        .assert_table_row_contains("Observed unique-path overlap", &["112", "33", "10", "155"]);
     assert!(compact.contains("Observed footprint"));
     assert!(!compact.contains("<h2 id=\"coverage-overlap-title\">"));
     assert!(compact.contains("Review whether observed paths repeated across blocks"));
@@ -253,7 +262,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert_common_visual_has_accessible_rows(&full, common);
     assert!(full.contains("activity-summary-field-shape"));
     assert!(full.contains("activity-first-000"));
-    assert!(full.contains("id=\"coverage-grid-0\" checked"));
+    ReportDocument::parse(&full).assert_present("#coverage-grid-0[checked]");
     assert!(full.contains("coverage-grid-view"));
     assert!(full.contains("coverage-polar-view"));
     assert!(full.contains("@media print"));
@@ -283,6 +292,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
 }
 
 fn assert_common_visual_has_accessible_rows(html: &str, group: &ReportCommonOpportunityMapGroup) {
+    let document = ReportDocument::parse(html);
     let sector_labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     for (sector_index, sector) in ReportAzimuthSector::ALL.iter().enumerate() {
         for distance in ReportDistanceBin::ALL {
@@ -299,18 +309,28 @@ fn assert_common_visual_has_accessible_rows(html: &str, group: &ReportCommonOppo
             let neither = facts.map_or(0, |cell| cell.heard_neither_count);
             let sector_label = sector_labels[sector_index];
             let distance_label = distance.label();
-            assert!(html.contains(&format!(
-                "<tr><td>{sector_label}</td><td>{distance_label}</td><td>{unique}</td><td>{opportunities}</td><td>{both}</td><td>{left_only}</td><td>{right_only}</td><td>{neither}</td>"
-            )));
+            document.assert_table_row_contains(
+                "Common-opportunity distance and bearing cells",
+                &[
+                    sector_label.to_string(),
+                    distance_label.to_string(),
+                    unique.to_string(),
+                    opportunities.to_string(),
+                    both.to_string(),
+                    left_only.to_string(),
+                    right_only.to_string(),
+                    neither.to_string(),
+                ],
+            );
         }
     }
-    assert_eq!(
-        html.matches("class=\"common-opportunity-rate-cell").count(),
-        64
+    document.assert_count(".common-opportunity-rate-cell", 64);
+    document.assert_present(".common-opportunity-rate-cell[tabindex=\"0\"][aria-label][title]");
+    document.assert_disclosure_contains(
+        "#coverage-map",
+        "Show exact distance and bearing data",
+        "table",
     );
-    assert!(html.contains("tabindex=\"0\" aria-label="));
-    assert!(html.contains("title=\""));
-    assert!(html.contains("Show exact distance and bearing data"));
     assert!(!html.contains("<linearGradient"));
 }
 
@@ -466,6 +486,7 @@ fn paired_rate_heatmap_states_are_distinct_and_keyboard_accessible() {
     cells[2].facts.right_detection_rate = Some(2.0 / 3.0);
 
     let compact = render_compact_summary_html(&report).unwrap();
+    let document = ReportDocument::parse(&compact);
     for state in [
         "rate-zero",
         "zero-opportunities",
@@ -474,13 +495,11 @@ fn paired_rate_heatmap_states_are_distinct_and_keyboard_accessible() {
     ] {
         assert!(compact.contains(state), "missing heatmap state: {state}");
     }
-    assert_eq!(
-        compact
-            .matches("class=\"common-opportunity-rate-cell")
-            .count(),
-        64
+    document.assert_count(".common-opportunity-rate-cell", 64);
+    document.assert_count(
+        ".common-opportunity-rate-cell[tabindex=\"0\"][aria-label]",
+        64,
     );
-    assert_eq!(compact.matches("tabindex=\"0\" aria-label=").count(), 64);
     assert!(compact.contains("Rate unavailable; not zero detection"));
     assert!(compact.contains("no located common-opportunity cell"));
     assert!(compact.contains("@media(max-width:760px)"));

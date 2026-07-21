@@ -1,1 +1,52 @@
-<h3>Derived solar context</h3><p class="notice">Solar elevation and light state are deterministic geometric context derived from UTC timestamps and explicit Maidenhead locator cell centers. They are not captured propagation observations, do not adjust comparison values, and do not establish a cause for an observed difference.</p><p class="footnote">Algorithm: {{ view.algorithm_id }} v{{ view.algorithm_version }}; coordinates: {{ view.coordinate_method }}. Daylight begins at 0°, civil twilight at −6°, nautical twilight at −12°, astronomical twilight at −18°; gray line denotes any twilight category.</p>{% if view.rows.is_empty() %}<p class="empty">No eligible matched pairs are available for solar context.</p>{% else %}<div class="table-wrap"><table><caption>Derived station and remote-endpoint solar context</caption><thead><tr><th scope="col">Stratum</th><th scope="col">Remote path</th><th scope="col">Block</th><th scope="col">Antenna</th><th scope="col">Observation</th><th scope="col">UTC time</th><th scope="col">Endpoint</th><th scope="col">Grid</th><th scope="col">Coordinates</th><th scope="col">Elevation</th><th scope="col">Light state</th><th scope="col">Gray line</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.stratum }}</td><td>{{ row.remote_path }}</td><td>{{ row.block }}</td><td>{{ row.antenna }}</td><td>{{ row.observation }}</td><td>{{ row.time }}</td><td>{{ row.endpoint_role }}: {{ row.endpoint_id }}</td><td>{{ row.grid }}</td><td>{{ row.coordinates }}</td><td>{{ row.elevation }}</td><td>{{ row.state }}</td><td>{{ row.gray_line }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h3>Derived solar context</h3>
+<p class="notice">
+  Solar elevation and light state are deterministic geometric context derived from UTC timestamps and explicit Maidenhead locator cell centers. They are not captured propagation observations, do not adjust comparison values, and do not establish a cause for an observed difference.
+</p>
+<p class="footnote">
+  Algorithm: {{ view.algorithm_id }} v{{ view.algorithm_version }}; coordinates: {{ view.coordinate_method }}. Daylight begins at 0°, civil twilight at −6°, nautical twilight at −12°, astronomical twilight at −18°; gray line denotes any twilight category.
+</p>
+{% if view.rows.is_empty() %}
+  <p class="empty">No eligible matched pairs are available for solar context.</p>
+{% else %}
+  <div class="table-wrap">
+    <table>
+      <caption>
+        Derived station and remote-endpoint solar context
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Stratum</th>
+          <th scope="col">Remote path</th>
+          <th scope="col">Block</th>
+          <th scope="col">Antenna</th>
+          <th scope="col">Observation</th>
+          <th scope="col">UTC time</th>
+          <th scope="col">Endpoint</th>
+          <th scope="col">Grid</th>
+          <th scope="col">Coordinates</th>
+          <th scope="col">Elevation</th>
+          <th scope="col">Light state</th>
+          <th scope="col">Gray line</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in view.rows %}
+          <tr>
+            <td>{{ row.stratum }}</td>
+            <td>{{ row.remote_path }}</td>
+            <td>{{ row.block }}</td>
+            <td>{{ row.antenna }}</td>
+            <td>{{ row.observation }}</td>
+            <td>{{ row.time }}</td>
+            <td>{{ row.endpoint_role }}: {{ row.endpoint_id }}</td>
+            <td>{{ row.grid }}</td>
+            <td>{{ row.coordinates }}</td>
+            <td>{{ row.elevation }}</td>
+            <td>{{ row.state }}</td>
+            <td>{{ row.gray_line }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

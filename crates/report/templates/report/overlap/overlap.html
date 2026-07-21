@@ -1,1 +1,257 @@
-{% if view.render %}{% if view.compact %}<details class="audit-disclosure repeatability-disclosure"><summary>Review whether observed paths repeated across blocks</summary><div class="disclosure-body"><p class="muted">Block support asks whether a unique observed path reappeared in another eligible block. It is supporting context, not a separate coverage score, reliability probability, or controlled comparison.</p>{% else %}<section id="coverage-overlap" class="panel question-section" tabindex="-1" aria-labelledby="coverage-overlap-title"><h2 id="coverage-overlap-title">Coverage overlap and repeatability</h2><p class="muted">Observed complementarity counts unique paths that appeared in the recorded evidence. Opportunity-conditioned complementarity separately counts one-sided detections among receivers proven active during both cycles. Neither measures signal strength or becomes a composite antenna score.</p>{% endif %}{% if view.no_groups %}<p class="empty">No overlap or repeatability evidence is available.</p>{% else %}{% for group in view.groups %}<article class="coverage-overlap-group" aria-labelledby="{% if view.compact %}repeatability{% else %}coverage-overlap{% endif %}-group-{{ group.index }}">{% if view.compact %}<h4 id="repeatability-group-{{ group.index }}">{{ group.label }}</h4>{% else %}<h3 id="coverage-overlap-group-{{ group.index }}">{{ group.label }}</h3>{% endif %}{% if group.observed.is_some() %}{% let observed = group.observed.as_ref().unwrap() %}{% if !view.compact %}<h4>Observed complementarity</h4><p>Using both antennas produced <strong>{{ observed.total }}</strong> unique observed paths: {{ observed.left_only }} appeared only on {{ observed.left_label }}, {{ observed.shared }} appeared on both, and {{ observed.right_only }} appeared only on {{ observed.right_label }}. The incremental recorded contributions were {{ observed.incremental_left }} beyond {{ observed.right_label }} and {{ observed.incremental_right }} beyond {{ observed.left_label }}.</p><div class="table-wrap"><table><caption>Observed unique-path overlap</caption><thead><tr><th scope="col">{{ observed.left_label }} only</th><th scope="col">Both</th><th scope="col">{{ observed.right_label }} only</th><th scope="col">Two-antenna total</th></tr></thead><tbody><tr><td>{{ observed.left_only }}</td><td>{{ observed.shared }}</td><td>{{ observed.right_only }}</td><td>{{ observed.total }}</td></tr></tbody></table></div>{% endif %}{% if observed.eligible_blocks < 2 %}<p class="empty"><strong>Repeatability limited:</strong> only {{ observed.eligible_blocks }} eligible block{{ observed.block_suffix }} was available. Multi-block repetition cannot be established from a single block.</p>{% endif %}<div class="repeatability-grid">{% for profile in observed.repeatability %}<section class="repeatability-card"><h5>{{ profile.antenna }}</h5><p>{{ profile.unique_paths }} unique path{{ profile.path_suffix }} contributed {{ profile.path_blocks }} path-block observation{{ profile.observation_suffix }}: {{ profile.once }} appeared in one block and {{ profile.repeated }} appeared in multiple blocks.</p><div class="table-wrap"><table><caption>Observed block-count distribution</caption><thead><tr><th scope="col">Blocks observed</th><th scope="col">Unique paths</th></tr></thead><tbody>{% for row in profile.distribution %}<tr><td>{{ row.blocks }}</td><td>{{ row.paths }}</td></tr>{% endfor %}</tbody></table></div>{% if !profile.paths.is_empty() %}<details class="audit-disclosure"><summary>Review exact path/block support</summary><div class="table-wrap"><table><caption>Per-path repeatability and antenna order</caption><thead><tr><th scope="col">Remote path</th><th scope="col">Blocks</th><th scope="col">Raw observations</th><th scope="col">First → second</th><th scope="col">Second → first</th></tr></thead><tbody>{% for path in profile.paths %}<tr><td>{{ path.remote_path }}</td><td>{{ path.blocks }}</td><td>{{ path.observations }}</td><td>{{ path.left_then_right }}</td><td>{{ path.right_then_left }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}</section>{% endfor %}</div>{% else %}<p class="empty">No observed-path overlap is available for this comparison group.</p>{% endif %}{% if !view.compact %}{% if group.common.is_some() %}{% let common = group.common.as_ref().unwrap() %}<h4>Opportunity-conditioned complementarity</h4><p class="muted">Coverage: {{ common.coverage }} ({{ common.known_blocks }} of {{ common.eligible_blocks }} eligible blocks known). The denominator is {{ common.opportunities }} receiver-block opportunities from {{ common.receivers }} unique receivers active during both cycles.</p>{% if !common.coverage_known %}<p class="empty">Common-opportunity outcomes are unavailable; missing activity evidence is not counted as no detection.</p>{% else %}<div class="table-wrap"><table><caption>Common-opportunity detection overlap</caption><thead><tr><th scope="col">First only</th><th scope="col">Both</th><th scope="col">Second only</th><th scope="col">Heard neither</th><th scope="col">Opportunities</th></tr></thead><tbody><tr><td>{{ common.left_only }}</td><td>{{ common.both }}</td><td>{{ common.right_only }}</td><td>{{ common.neither }}</td><td>{{ common.opportunities }}</td></tr></tbody></table></div>{% if !common.orders.is_empty() %}<div class="table-wrap"><table><caption>Common-opportunity outcomes by antenna order</caption><thead><tr><th scope="col">Order</th><th scope="col">Blocks</th><th scope="col">Opportunities</th><th scope="col">First only</th><th scope="col">Both</th><th scope="col">Second only</th><th scope="col">Neither</th></tr></thead><tbody>{% for row in common.orders %}<tr><td>{{ row.order }}</td><td>{{ row.blocks }}</td><td>{{ row.opportunities }}</td><td>{{ row.left_only }}</td><td>{{ row.both }}</td><td>{{ row.right_only }}</td><td>{{ row.neither }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}{% if !common.receiver_frequencies.is_empty() %}<details class="audit-disclosure"><summary>Review per-receiver detection frequency</summary><div class="table-wrap"><table><caption>Receiver detection across eligible blocks</caption><thead><tr><th scope="col">Receiver</th><th scope="col">Opportunities</th><th scope="col">First detections</th><th scope="col">Second detections</th><th scope="col">First → second opportunities</th><th scope="col">Second → first opportunities</th></tr></thead><tbody>{% for row in common.receiver_frequencies %}<tr><td>{{ row.receiver }}</td><td>{{ row.opportunities }}</td><td>{{ row.left_detections }}</td><td>{{ row.right_detections }}</td><td>{{ row.left_then_right }}</td><td>{{ row.right_then_left }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}{% endif %}{% else %}<p class="empty"><strong>Opportunity-conditioned complementarity unavailable:</strong> no common-active receiver census covers this comparison group. Observed-only paths do not substitute for that denominator.</p>{% endif %}{% endif %}</article>{% endfor %}{% endif %}{% if view.compact %}</div></details>{% else %}<p class="muted">Unique observed paths do not prove the other antenna could never reach those endpoints. Repeated block support is descriptive, not an inferential uncertainty statement, reliability probability, or recommendation to retain or remove an antenna.</p></section>{% endif %}{% endif %}
+{% if view.render %}
+  {% if view.compact %}
+    <details class="audit-disclosure repeatability-disclosure">
+      <summary>Review whether observed paths repeated across blocks</summary>
+      <div class="disclosure-body">
+        <p class="muted">
+          Block support asks whether a unique observed path reappeared in another eligible block. It is supporting context, not a separate coverage score, reliability probability, or controlled comparison.
+        </p>
+      {% else %}
+        <section id="coverage-overlap"
+                 class="panel question-section"
+                 tabindex="-1"
+                 aria-labelledby="coverage-overlap-title">
+          <h2 id="coverage-overlap-title">Coverage overlap and repeatability</h2>
+          <p class="muted">
+            Observed complementarity counts unique paths that appeared in the recorded evidence. Opportunity-conditioned complementarity separately counts one-sided detections among receivers proven active during both cycles. Neither measures signal strength or becomes a composite antenna score.
+          </p>
+        {% endif %}
+        {% if view.no_groups %}
+          <p class="empty">No overlap or repeatability evidence is available.</p>
+        {% else %}
+          {% for group in view.groups %}
+            <article class="coverage-overlap-group"
+                     aria-labelledby="{% if view.compact %}repeatability{% else %}coverage-overlap{% endif %}-group-{{ group.index }}">
+              {% if view.compact %}
+                <h4 id="repeatability-group-{{ group.index }}">{{ group.label }}</h4>
+              {% else %}
+                <h3 id="coverage-overlap-group-{{ group.index }}">{{ group.label }}</h3>
+              {% endif %}
+              {% if group.observed.is_some() %}
+                {% let observed = group.observed.as_ref().unwrap() %}
+                {% if !view.compact %}
+                  <h4>Observed complementarity</h4>
+                  <p>
+                    Using both antennas produced <strong>{{ observed.total }}</strong> unique observed paths: {{ observed.left_only }} appeared only on {{ observed.left_label }}, {{ observed.shared }} appeared on both, and {{ observed.right_only }} appeared only on {{ observed.right_label }}. The incremental recorded contributions were {{ observed.incremental_left }} beyond {{ observed.right_label }} and {{ observed.incremental_right }} beyond {{ observed.left_label }}.
+                  </p>
+                  <div class="table-wrap">
+                    <table>
+                      <caption>
+                        Observed unique-path overlap
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">{{ observed.left_label }} only</th>
+                          <th scope="col">Both</th>
+                          <th scope="col">{{ observed.right_label }} only</th>
+                          <th scope="col">Two-antenna total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>{{ observed.left_only }}</td>
+                          <td>{{ observed.shared }}</td>
+                          <td>{{ observed.right_only }}</td>
+                          <td>{{ observed.total }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                {% endif %}
+                {% if observed.eligible_blocks < 2 %}
+                  <p class="empty">
+                    <strong>Repeatability limited:</strong> only {{ observed.eligible_blocks }} eligible block{{ observed.block_suffix }} was available. Multi-block repetition cannot be established from a single block.
+                  </p>
+                {% endif %}
+                <div class="repeatability-grid">
+                  {% for profile in observed.repeatability %}
+                    <section class="repeatability-card">
+                      <h5>{{ profile.antenna }}</h5>
+                      <p>
+                        {{ profile.unique_paths }} unique path{{ profile.path_suffix }} contributed {{ profile.path_blocks }} path-block observation{{ profile.observation_suffix }}: {{ profile.once }} appeared in one block and {{ profile.repeated }} appeared in multiple blocks.
+                      </p>
+                      <div class="table-wrap">
+                        <table>
+                          <caption>
+                            Observed block-count distribution
+                          </caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">Blocks observed</th>
+                              <th scope="col">Unique paths</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for row in profile.distribution %}
+                              <tr>
+                                <td>{{ row.blocks }}</td>
+                                <td>{{ row.paths }}</td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                      {% if !profile.paths.is_empty() %}
+                        <details class="audit-disclosure">
+                          <summary>Review exact path/block support</summary>
+                          <div class="table-wrap">
+                            <table>
+                              <caption>
+                                Per-path repeatability and antenna order
+                              </caption>
+                              <thead>
+                                <tr>
+                                  <th scope="col">Remote path</th>
+                                  <th scope="col">Blocks</th>
+                                  <th scope="col">Raw observations</th>
+                                  <th scope="col">First → second</th>
+                                  <th scope="col">Second → first</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {% for path in profile.paths %}
+                                  <tr>
+                                    <td>{{ path.remote_path }}</td>
+                                    <td>{{ path.blocks }}</td>
+                                    <td>{{ path.observations }}</td>
+                                    <td>{{ path.left_then_right }}</td>
+                                    <td>{{ path.right_then_left }}</td>
+                                  </tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      {% endif %}
+                    </section>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="empty">
+                  No observed-path overlap is available for this comparison group.
+                </p>
+              {% endif %}
+              {% if !view.compact %}
+                {% if group.common.is_some() %}
+                  {% let common = group.common.as_ref().unwrap() %}
+                  <h4>Opportunity-conditioned complementarity</h4>
+                  <p class="muted">
+                    Coverage: {{ common.coverage }} ({{ common.known_blocks }} of {{ common.eligible_blocks }} eligible blocks known). The denominator is {{ common.opportunities }} receiver-block opportunities from {{ common.receivers }} unique receivers active during both cycles.
+                  </p>
+                  {% if !common.coverage_known %}
+                    <p class="empty">
+                      Common-opportunity outcomes are unavailable; missing activity evidence is not counted as no detection.
+                    </p>
+                  {% else %}
+                    <div class="table-wrap">
+                      <table>
+                        <caption>
+                          Common-opportunity detection overlap
+                        </caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">First only</th>
+                            <th scope="col">Both</th>
+                            <th scope="col">Second only</th>
+                            <th scope="col">Heard neither</th>
+                            <th scope="col">Opportunities</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>{{ common.left_only }}</td>
+                            <td>{{ common.both }}</td>
+                            <td>{{ common.right_only }}</td>
+                            <td>{{ common.neither }}</td>
+                            <td>{{ common.opportunities }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    {% if !common.orders.is_empty() %}
+                      <div class="table-wrap">
+                        <table>
+                          <caption>
+                            Common-opportunity outcomes by antenna order
+                          </caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">Order</th>
+                              <th scope="col">Blocks</th>
+                              <th scope="col">Opportunities</th>
+                              <th scope="col">First only</th>
+                              <th scope="col">Both</th>
+                              <th scope="col">Second only</th>
+                              <th scope="col">Neither</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for row in common.orders %}
+                              <tr>
+                                <td>{{ row.order }}</td>
+                                <td>{{ row.blocks }}</td>
+                                <td>{{ row.opportunities }}</td>
+                                <td>{{ row.left_only }}</td>
+                                <td>{{ row.both }}</td>
+                                <td>{{ row.right_only }}</td>
+                                <td>{{ row.neither }}</td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% endif %}
+                    {% if !common.receiver_frequencies.is_empty() %}
+                      <details class="audit-disclosure">
+                        <summary>Review per-receiver detection frequency</summary>
+                        <div class="table-wrap">
+                          <table>
+                            <caption>
+                              Receiver detection across eligible blocks
+                            </caption>
+                            <thead>
+                              <tr>
+                                <th scope="col">Receiver</th>
+                                <th scope="col">Opportunities</th>
+                                <th scope="col">First detections</th>
+                                <th scope="col">Second detections</th>
+                                <th scope="col">First → second opportunities</th>
+                                <th scope="col">Second → first opportunities</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {% for row in common.receiver_frequencies %}
+                                <tr>
+                                  <td>{{ row.receiver }}</td>
+                                  <td>{{ row.opportunities }}</td>
+                                  <td>{{ row.left_detections }}</td>
+                                  <td>{{ row.right_detections }}</td>
+                                  <td>{{ row.left_then_right }}</td>
+                                  <td>{{ row.right_then_left }}</td>
+                                </tr>
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    {% endif %}
+                  {% endif %}
+                {% else %}
+                  <p class="empty">
+                    <strong>Opportunity-conditioned complementarity unavailable:</strong> no common-active receiver census covers this comparison group. Observed-only paths do not substitute for that denominator.
+                  </p>
+                {% endif %}
+              {% endif %}
+            </article>
+          {% endfor %}
+        {% endif %}
+        {% if view.compact %}
+        </div>
+      </details>
+    {% else %}
+      <p class="muted">
+        Unique observed paths do not prove the other antenna could never reach those endpoints. Repeated block support is descriptive, not an inferential uncertainty statement, reliability probability, or recommendation to retain or remove an antenna.
+      </p>
+    </section>
+  {% endif %}
+{% endif %}

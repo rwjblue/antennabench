@@ -38,8 +38,9 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
 
     assert_eq!(first, second);
     let document = ReportDocument::parse(&first);
-    assert!(first.starts_with("<!doctype html><html lang=\"en\">"));
-    assert!(first.ends_with("</main></body></html>"));
+    assert!(first.starts_with("<!doctype html>"));
+    assert!(first.trim_end().ends_with("</html>"));
+    document.assert_present("html[lang=\"en\"]");
     assert!(first.contains("<style>"));
     assert!(first.contains("Content-Security-Policy"));
     assert!(first.contains("default-src 'none'"));
@@ -90,12 +91,12 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
         "table",
     );
     assert!(first.matches("aria-hidden=\"true\"").count() >= 5);
-    assert!(first.contains("<dt>Usable</dt><dd>19</dd>"));
-    assert!(first.contains("<dt>Excluded</dt><dd>7</dd>"));
-    assert!(first.contains("<dt>Scheduled bands</dt><dd>40 m, 20 m</dd>"));
-    assert!(first.contains("<dt>Scheduled slots</dt><dd>12</dd>"));
+    document.assert_any_rendered_text(".stat", "Usable 19");
+    document.assert_any_rendered_text(".stat", "Excluded 7");
+    document.assert_any_rendered_text(".fact", "Scheduled bands 40 m, 20 m");
+    document.assert_any_rendered_text(".fact", "Scheduled slots 12");
     assert!(first.contains("This report is descriptive and does not select an antenna winner."));
-    assert!(first.contains("<nav class=\"question-nav\" aria-label=\"Report questions\">"));
+    document.assert_present("nav.question-nav[aria-label=\"Report questions\"]");
     for anchor in [
         "what-run-show",
         "reach-unique-paths",
@@ -274,15 +275,18 @@ fn consolidates_standing_caveats_in_one_shared_reading_panel() {
     let report = paired_report(true);
     let full = render_standalone_html(&report).unwrap();
     let compact = render_compact_summary_html(&report).unwrap();
+    let compact_document = ReportDocument::parse(&compact);
     assert_eq!(full.matches("id=\"reading-guide-title\"").count(), 1);
     assert!(
         full.find("id=\"reading-guide-title\"").unwrap()
             < full.find("id=\"what-run-show-title\"").unwrap()
     );
-    assert!(compact.contains(
-        "<details class=\"panel reading-guide\"><summary>How to read this report</summary>"
-    ));
-    assert!(!compact.contains("<details class=\"panel reading-guide\" open"));
+    compact_document.assert_present("details.panel.reading-guide");
+    compact_document.assert_any_rendered_text(
+        "details.panel.reading-guide > summary",
+        "How to read this report",
+    );
+    compact_document.assert_absent("details.panel.reading-guide[open]");
     for html in [&full, &compact] {
         for caveat in [
             "A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.",
@@ -366,7 +370,7 @@ fn renders_revision_lifecycle_and_recorded_adapter_gap_disclosures() {
 
     let html = render_standalone_html(&report).unwrap();
     assert!(html.contains("Committed session snapshot"));
-    assert!(html.contains("<dt>Checkpoint revision</dt><dd>17</dd>"));
+    ReportDocument::parse(&html).assert_any_rendered_text(".fact", "Checkpoint revision 17");
     assert!(html.contains("Interrupted / in progress"));
     assert!(html.contains("1 recorded acquisition gap"));
     assert!(html.contains("Best-effort public collection retained rows for 1 recorded requested window(s); recorded acquisition gaps remain"));
@@ -749,6 +753,7 @@ fn renders_distinct_escaped_antenna_labels_without_mutating_report_data() {
 
     let full = render_standalone_html(&report).unwrap();
     let compact = render_compact_summary_html(&report).unwrap();
+    let full_document = ReportDocument::parse(&full);
 
     assert_eq!(serde_json::to_vec(&report).unwrap(), before);
     for html in [&full, &compact] {
@@ -760,12 +765,9 @@ fn renders_distinct_escaped_antenna_labels_without_mutating_report_data() {
         assert!(!html.contains(left_label));
         assert!(!html.contains(right_label));
     }
-    assert!(full.contains(
-        "<th scope=\"col\">&#60;Vertical &#38; 1&#62; usable</th><th scope=\"col\">Loop &#62; Beam usable</th>"
-    ));
-    assert!(full.contains(
-        "<th scope=\"col\">Unmatched — &#60;Vertical &#38; 1&#62; / Loop &#62; Beam</th>"
-    ));
+    full_document.assert_any_rendered_text("th", "<Vertical & 1> usable");
+    full_document.assert_any_rendered_text("th", "Loop > Beam usable");
+    full_document.assert_any_rendered_text("th", "Unmatched — <Vertical & 1> / Loop > Beam");
     for expected in [
         "Unmatched — &#60;Vertical &#38; 1&#62;",
         "Missing SNR — Loop &#62; Beam",
@@ -852,11 +854,10 @@ fn renders_every_evidence_coverage_value_with_non_comparative_explanation() {
         report.evidence.antennas[0].evidence_quality = coverage;
 
         let html = render_standalone_html(&report).unwrap();
+        let document = ReportDocument::parse(&html);
 
-        assert!(html.contains(&format!(
-            "Evidence coverage: <span class=\"badge\">{label}</span>"
-        )));
-        assert!(html.contains(&format!("<td>{label}</td>")));
+        document.assert_any_rendered_text("p", &format!("Evidence coverage: {label}"));
+        document.assert_any_rendered_text("td", label);
         assert!(html.contains(
             "Coverage reflects usable observations and contributing slots; it is not evidence that one antenna is better."
         ));
@@ -1273,6 +1274,7 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
         .conflicting_duplicate_group_count = 2;
 
     let html = render_standalone_html(&report).unwrap();
+    let document = ReportDocument::parse(&html);
 
     for section in [
         "Coverage and data-quality counts",
@@ -1294,7 +1296,7 @@ fn renders_complete_accessible_paired_diagnostics_without_conclusions() {
         "Observed azimuth path-context data",
         "Comparison-group summary data",
     ] {
-        assert!(html.contains(&format!("<caption>{caption}</caption>")));
+        document.assert_any_rendered_text("caption", caption);
     }
     for fact in [
         "Signed values:",
@@ -1338,6 +1340,7 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
         .path_median_deltas
         .push(negative_path);
     let html = render_standalone_html(&report).unwrap();
+    let document = ReportDocument::parse(&html);
 
     assert!(
         html.contains("Positive values mean Antenna &#38; positive with another deliberately long label was stronger; negative values mean Antenna &#60;negative&#62; with a deliberately long operator label was stronger.")
@@ -1354,25 +1357,31 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     assert!(html.contains("class=\"path-distribution-tick\""));
     assert!(html.contains("class=\"path-distribution-tick-label\""));
     assert!(html.contains("K3NEGATIVE: -3 dB median across"));
-    assert!(html.contains("tabindex=\"0\" role=\"img\" aria-label=\"K3NEGATIVE:"));
+    document.assert_present(
+        ".path-distribution-dot-group[tabindex=\"0\"][role=\"img\"][aria-label^=\"K3NEGATIVE:\"]",
+    );
     assert!(!html.contains("class=\"path-distribution-iqr\""));
     assert!(!html.contains("class=\"path-distribution-median\""));
-    assert!(html.contains("<dt>Tied at 0 dB</dt><dd>1</dd>"));
-    assert!(html.contains("<dt>Middle half</dt>"));
+    document.assert_any_rendered_text(".path-distribution-summary .fact", "Tied at 0 dB 1");
+    document.assert_any_rendered_text(".path-distribution-summary dt", "Middle half");
     assert!(!html.contains(" style=\""));
     assert!(html.contains("a 0 dB dot is retained as a true zero"));
-    assert!(html.contains("<caption>One path-median signed SNR delta per remote path"));
-    assert!(html.contains("<details class=\"audit-disclosure path-detail-disclosure\"><summary>Review exact remote paths and matched-pair counts"));
+    document.assert_disclosure_contains(
+        "#same-path-signal",
+        "Review exact remote paths and matched-pair counts",
+        "table",
+    );
     assert!(html.contains("See which paths contributed, how many matched pairs support each path median, and the exact delta behind each dot."));
-    assert!(html.contains("<td>K1PAIR</td><td>2</td>"));
-    assert!(html.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
+    document.assert_any_rendered_text("#same-path-signal tbody tr", "K1PAIR 2 +3 dB");
+    document.assert_any_rendered_text("#same-path-signal tbody tr", "K2SPARSE 1 0 dB");
     assert!(html.contains("A-only and B-only paths remain visible"));
-    assert!(html.contains("<caption>Unique remote-path reach counts"));
+    document.assert_present("#reach-unique-paths table > caption");
     assert!(html.contains("class=\"coverage-polar path-distribution-chart\""));
     assert!(html.contains("@media(max-width:620px)"));
     assert!(html.contains("@media print"));
 
     let compact = render_compact_summary_html(&report).unwrap();
+    let compact_document = ReportDocument::parse(&compact);
     assert_eq!(
         compact
             .matches("class=\"path-distribution-dot-group\"")
@@ -1380,7 +1389,7 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
         3
     );
     assert!(compact.contains("Review exact remote paths and matched-pair counts"));
-    assert!(compact.contains("<td>K2SPARSE</td><td>1</td><td>0 dB</td>"));
+    compact_document.assert_any_rendered_text("#same-path-signal tbody tr", "K2SPARSE 1 0 dB");
 }
 
 #[test]
@@ -1406,6 +1415,7 @@ fn renders_missing_and_unavailable_same_path_states_without_zeroing_them() {
 fn collapses_empty_strata_without_hiding_mixed_availability() {
     let empty_report = canonical_report();
     let empty_html = render_standalone_html(&empty_report).unwrap();
+    let empty_document = ReportDocument::parse(&empty_html);
 
     assert_eq!(empty_report.overview.strata.len(), 8);
     assert!(empty_html.contains("No path delta in 8 comparison groups"));
@@ -1432,7 +1442,7 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
         0
     );
     assert!(empty_html.matches("No observed paired paths").count() <= 4);
-    assert!(empty_html.split_whitespace().count() < 10_000);
+    empty_document.assert_rendered_word_count_below("body", 11_000);
 
     let mut mixed_report = paired_report(true);
     let mut empty_stratum = mixed_report.overview.strata[0].clone();
@@ -1503,6 +1513,7 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     report.comparison.paired_rows.push(second_stratum);
 
     let html = render_standalone_html(&report).unwrap();
+    let document = ReportDocument::parse(&html);
 
     assert!(html.contains("Location unavailable"));
     assert!(html.contains("Unique paths in stratum"));
@@ -1510,8 +1521,8 @@ fn renders_stratified_location_context_missingness_and_concentration() {
     assert!(html.contains("Most populated 45° display sector"));
     assert!(html.contains("TX path · 20 m · WSPR · Local decode · WSJT-X log"));
     assert!(html.contains("RX path · 40 m · WSPR · Public report · WSPRnet"));
-    assert!(html.contains("<caption>Observed distance path-context data</caption>"));
-    assert!(html.contains("<caption>Observed azimuth path-context data</caption>"));
+    document.assert_any_rendered_text("caption", "Observed distance path-context data");
+    document.assert_any_rendered_text("caption", "Observed azimuth path-context data");
     assert!(html.contains("Distance and azimuth describe only the remote paths observed"));
     assert!(!html.contains("<script"));
     assert!(!html.contains("http://"));

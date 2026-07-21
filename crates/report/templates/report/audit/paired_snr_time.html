@@ -1,1 +1,60 @@
-<h3>Matched SNR over time</h3>{% if view.rows.is_empty() %}<p class="empty">No matched SNR-over-time pairs are available.</p>{% else %}<div class="legend"><span><i class="swatch left"></i>{{ view.left_label }}</span><span><i class="swatch right"></i>{{ view.right_label }}</span></div><div class="comparison-chart" aria-hidden="true">{% for row in view.rows %}<div class="comparison-row"><span class="chart-label">{{ row.left_time }} · {{ row.remote_path }}</span><span class="snr-pair"><span class="snr-left geometry-left {{ row.snr_left_class }}"></span><span class="snr-right geometry-left {{ row.snr_right_class }}"></span></span><span>{{ row.left_snr }} / {{ row.right_snr }} dB</span></div>{% endfor %}</div><div class="table-wrap"><table><caption>Matched SNR over time data</caption><thead><tr><th scope="col">Comparison group</th><th scope="col">Remote path</th><th scope="col">Block</th><th scope="col">Order</th><th scope="col">{{ view.left_label }} time</th><th scope="col">{{ view.right_label }} time</th><th scope="col">Elapsed</th><th scope="col">{{ view.left_label }} SNR</th><th scope="col">{{ view.right_label }} SNR</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.stratum }}</td><td>{{ row.remote_path }}</td><td>{{ row.block }}</td><td>{{ row.order }}</td><td>{{ row.left_time }}</td><td>{{ row.right_time }}</td><td>{{ row.elapsed }} s</td><td>{{ row.left_snr }} dB</td><td>{{ row.right_snr }} dB</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h3>Matched SNR over time</h3>
+{% if view.rows.is_empty() %}
+  <p class="empty">No matched SNR-over-time pairs are available.</p>
+{% else %}
+  <div class="legend">
+    <span>
+      <i class="swatch left"></i>{{ view.left_label }}
+    </span>
+    <span>
+      <i class="swatch right"></i>{{ view.right_label }}
+    </span>
+  </div>
+  <div class="comparison-chart" aria-hidden="true">
+    {% for row in view.rows %}
+      <div class="comparison-row">
+        <span class="chart-label">{{ row.left_time }} · {{ row.remote_path }}</span>
+        <span class="snr-pair">
+          <span class="snr-left geometry-left {{ row.snr_left_class }}"></span>
+          <span class="snr-right geometry-left {{ row.snr_right_class }}"></span>
+        </span>
+        <span>{{ row.left_snr }} / {{ row.right_snr }} dB</span>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>
+        Matched SNR over time data
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Comparison group</th>
+          <th scope="col">Remote path</th>
+          <th scope="col">Block</th>
+          <th scope="col">Order</th>
+          <th scope="col">{{ view.left_label }} time</th>
+          <th scope="col">{{ view.right_label }} time</th>
+          <th scope="col">Elapsed</th>
+          <th scope="col">{{ view.left_label }} SNR</th>
+          <th scope="col">{{ view.right_label }} SNR</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in view.rows %}
+          <tr>
+            <td>{{ row.stratum }}</td>
+            <td>{{ row.remote_path }}</td>
+            <td>{{ row.block }}</td>
+            <td>{{ row.order }}</td>
+            <td>{{ row.left_time }}</td>
+            <td>{{ row.right_time }}</td>
+            <td>{{ row.elapsed }} s</td>
+            <td>{{ row.left_snr }} dB</td>
+            <td>{{ row.right_snr }} dB</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

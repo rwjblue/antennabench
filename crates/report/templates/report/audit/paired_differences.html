@@ -1,1 +1,60 @@
-<h3>Matched-pair difference distribution</h3>{% if view.rows.is_empty() %}<p class="empty">No usable same-path matched differences are available.</p>{% else %}<div class="comparison-chart" aria-hidden="true">{% for row in view.rows %}<div class="comparison-row"><span class="chart-label">{{ row.remote_path }} · {{ row.stratum }}</span><span class="comparison-track"><span class="comparison-zero"></span><span class="comparison-delta-position geometry-left {{ row.delta_left_class }}"><span class="comparison-delta geometry-width {{ row.delta_width_class }}"></span></span></span><span>{{ row.delta }} dB</span></div>{% endfor %}</div><div class="table-wrap"><table><caption>Matched-pair difference data</caption><thead><tr><th scope="col">Comparison group</th><th scope="col">Remote path</th><th scope="col">Block</th><th scope="col">Order</th><th scope="col">{{ view.left_label }} observation</th><th scope="col">{{ view.right_label }} observation</th><th scope="col">{{ view.left_label }} slot</th><th scope="col">{{ view.right_label }} slot</th><th scope="col">{{ view.left_label }} SNR</th><th scope="col">{{ view.right_label }} SNR</th><th scope="col">Signed delta</th><th scope="col">Elapsed</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.stratum }}</td><td>{{ row.remote_path }}</td><td>{{ row.block }}</td><td>{{ row.order }}</td><td>{{ row.left_observation }}</td><td>{{ row.right_observation }}</td><td>{{ row.left_slot }}</td><td>{{ row.right_slot }}</td><td>{{ row.left_snr }} dB</td><td>{{ row.right_snr }} dB</td><td>{{ row.delta }} dB</td><td>{{ row.elapsed }} s</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h3>Matched-pair difference distribution</h3>
+{% if view.rows.is_empty() %}
+  <p class="empty">No usable same-path matched differences are available.</p>
+{% else %}
+  <div class="comparison-chart" aria-hidden="true">
+    {% for row in view.rows %}
+      <div class="comparison-row">
+        <span class="chart-label">{{ row.remote_path }} · {{ row.stratum }}</span>
+        <span class="comparison-track">
+          <span class="comparison-zero"></span>
+          <span class="comparison-delta-position geometry-left {{ row.delta_left_class }}">
+            <span class="comparison-delta geometry-width {{ row.delta_width_class }}"></span>
+          </span>
+        </span>
+        <span>{{ row.delta }} dB</span>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>
+        Matched-pair difference data
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Comparison group</th>
+          <th scope="col">Remote path</th>
+          <th scope="col">Block</th>
+          <th scope="col">Order</th>
+          <th scope="col">{{ view.left_label }} observation</th>
+          <th scope="col">{{ view.right_label }} observation</th>
+          <th scope="col">{{ view.left_label }} slot</th>
+          <th scope="col">{{ view.right_label }} slot</th>
+          <th scope="col">{{ view.left_label }} SNR</th>
+          <th scope="col">{{ view.right_label }} SNR</th>
+          <th scope="col">Signed delta</th>
+          <th scope="col">Elapsed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in view.rows %}
+          <tr>
+            <td>{{ row.stratum }}</td>
+            <td>{{ row.remote_path }}</td>
+            <td>{{ row.block }}</td>
+            <td>{{ row.order }}</td>
+            <td>{{ row.left_observation }}</td>
+            <td>{{ row.right_observation }}</td>
+            <td>{{ row.left_slot }}</td>
+            <td>{{ row.right_slot }}</td>
+            <td>{{ row.left_snr }} dB</td>
+            <td>{{ row.right_snr }} dB</td>
+            <td>{{ row.delta }} dB</td>
+            <td>{{ row.elapsed }} s</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

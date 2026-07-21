@@ -1,1 +1,63 @@
-<h3>Data-quality timeline</h3>{% if view.rows.is_empty() %}<p class="empty">No comparison timeline rows are available.</p>{% else %}<div class="timeline" aria-hidden="true">{% for row in view.rows %}<span class="timeline-slot{{ row.class }}"><strong>{{ row.sequence }}</strong><br>{{ row.actual }}<br>{{ row.status }}</span>{% endfor %}</div><div class="table-wrap"><table><caption>Data-quality timeline details</caption><thead><tr><th scope="col">Block</th><th scope="col">Eligible</th><th scope="col">Sequence</th><th scope="col">Slot</th><th scope="col">Starts</th><th scope="col">Band</th><th scope="col">Actual label</th><th scope="col">Side</th><th scope="col">Status</th><th scope="col">Total</th><th scope="col">Usable</th><th scope="col">Excluded</th><th scope="col">Missing SNR</th><th scope="col">Missing/invalid mode</th><th scope="col">Ambiguous</th><th scope="col">Duplicates</th><th scope="col">Conflicts</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.block }}</td><td>{{ row.eligible }}</td><td>{{ row.sequence }}</td><td>{{ row.slot_id }}</td><td>{{ row.starts_at }}</td><td>{{ row.band }}</td><td>{{ row.actual }}</td><td>{{ row.side }}</td><td>{{ row.status }}</td><td>{{ row.total }}</td><td>{{ row.usable }}</td><td>{{ row.excluded }}</td><td>{{ row.missing_snr }}</td><td>{{ row.missing_mode }}</td><td>{{ row.ambiguous }}</td><td>{{ row.duplicates }}</td><td>{{ row.conflicts }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h3>Data-quality timeline</h3>
+{% if view.rows.is_empty() %}
+  <p class="empty">No comparison timeline rows are available.</p>
+{% else %}
+  <div class="timeline" aria-hidden="true">
+    {% for row in view.rows %}
+      <span class="timeline-slot{{ row.class }}">
+        <strong>{{ row.sequence }}</strong><br>{{ row.actual }}<br>{{ row.status }}
+      </span>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>
+        Data-quality timeline details
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Block</th>
+          <th scope="col">Eligible</th>
+          <th scope="col">Sequence</th>
+          <th scope="col">Slot</th>
+          <th scope="col">Starts</th>
+          <th scope="col">Band</th>
+          <th scope="col">Actual label</th>
+          <th scope="col">Side</th>
+          <th scope="col">Status</th>
+          <th scope="col">Total</th>
+          <th scope="col">Usable</th>
+          <th scope="col">Excluded</th>
+          <th scope="col">Missing SNR</th>
+          <th scope="col">Missing/invalid mode</th>
+          <th scope="col">Ambiguous</th>
+          <th scope="col">Duplicates</th>
+          <th scope="col">Conflicts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in view.rows %}
+          <tr>
+            <td>{{ row.block }}</td>
+            <td>{{ row.eligible }}</td>
+            <td>{{ row.sequence }}</td>
+            <td>{{ row.slot_id }}</td>
+            <td>{{ row.starts_at }}</td>
+            <td>{{ row.band }}</td>
+            <td>{{ row.actual }}</td>
+            <td>{{ row.side }}</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.total }}</td>
+            <td>{{ row.usable }}</td>
+            <td>{{ row.excluded }}</td>
+            <td>{{ row.missing_snr }}</td>
+            <td>{{ row.missing_mode }}</td>
+            <td>{{ row.ambiguous }}</td>
+            <td>{{ row.duplicates }}</td>
+            <td>{{ row.conflicts }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

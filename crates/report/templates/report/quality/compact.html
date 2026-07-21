@@ -1,1 +1,33 @@
-<section id="run-quality" class="panel question-section" tabindex="-1" aria-labelledby="run-quality-title"><h2 id="run-quality-title">Run quality and answerability</h2><p class="muted">These are typed availability and count facts.</p><div class="run-summary"><div><span>Comparison state</span><strong>{{ view.comparison_state }}</strong></div><div><span>Session state</span><strong>{{ view.lifecycle }}</strong></div><div><span>Usable / excluded</span><strong>{{ view.usable }} / {{ view.excluded }}</strong></div><div><span>Acquisition</span><strong>{{ view.acquisition }}</strong></div></div>{% if view.bounded %}<p class="notice"><strong>Bounded overview:</strong> detailed report families were intentionally omitted by the resource policy; no rows were sampled. Use the full evidence report and lossless session bundle for available audit detail.</p>{% endif %}<p class="muted compact-omission">This compact summary intentionally omits unmatched-path, missing-SNR, exclusion, duplicate, conflict, timeline, lifecycle-history, controller-output, import, solar, and raw-observation audit rows. The full evidence report and lossless session bundle retain that complete audit evidence; no rows are sampled here.</p></section>
+<section id="run-quality"
+         class="panel question-section"
+         tabindex="-1"
+         aria-labelledby="run-quality-title">
+  <h2 id="run-quality-title">Run quality and answerability</h2>
+  <p class="muted">These are typed availability and count facts.</p>
+  <div class="run-summary">
+    <div>
+      <span>Comparison state</span>
+      <strong>{{ view.comparison_state }}</strong>
+    </div>
+    <div>
+      <span>Session state</span>
+      <strong>{{ view.lifecycle }}</strong>
+    </div>
+    <div>
+      <span>Usable / excluded</span>
+      <strong>{{ view.usable }} / {{ view.excluded }}</strong>
+    </div>
+    <div>
+      <span>Acquisition</span>
+      <strong>{{ view.acquisition }}</strong>
+    </div>
+  </div>
+  {% if view.bounded %}
+    <p class="notice">
+      <strong>Bounded overview:</strong> detailed report families were intentionally omitted by the resource policy; no rows were sampled. Use the full evidence report and lossless session bundle for available audit detail.
+    </p>
+  {% endif %}
+  <p class="muted compact-omission">
+    This compact summary intentionally omits unmatched-path, missing-SNR, exclusion, duplicate, conflict, timeline, lifecycle-history, controller-output, import, solar, and raw-observation audit rows. The full evidence report and lossless session bundle retain that complete audit evidence; no rows are sampled here.
+  </p>
+</section>

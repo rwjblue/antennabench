@@ -1,1 +1,99 @@
-<section class="panel" aria-labelledby="antenna-title"><h2 id="antenna-title">Antenna evidence</h2><h3>Antenna SNR visualization</h3>{% if view.snr_rows.is_empty() %}<p class="empty">No antenna SNR rows are available.</p>{% else %}<div class="chart" aria-hidden="true">{% for row in view.snr_rows %}<div class="chart-row"><span class="chart-label">{{ row.label }}</span>{% if row.snr.is_some() %}{% let snr = row.snr.as_ref().unwrap() %}<span class="snr-track"><span class="snr-range-position geometry-left {{ snr.left_class }}"><span class="snr-range geometry-width {{ snr.width_class }}"></span></span><span class="snr-point geometry-left {{ snr.median_class }}"></span></span><span class="chart-value">{{ snr.median }} dB</span>{% else %}<span class="snr-track"></span><span class="chart-value">Unavailable</span>{% endif %}</div>{% endfor %}</div><div class="table-wrap"><table><caption>Antenna SNR chart data</caption><thead><tr><th scope="col">Antenna</th><th scope="col">Usable observations</th><th scope="col">Samples</th><th scope="col">Minimum</th><th scope="col">Median</th><th scope="col">Mean</th><th scope="col">Maximum</th></tr></thead><tbody>{% for row in view.snr_rows %}<tr><td>{{ row.label }}</td><td>{{ row.usable_observation_count }}</td>{% if row.snr.is_some() %}{% let snr = row.snr.as_ref().unwrap() %}<td>{{ snr.sample_count }}</td><td>{{ snr.minimum }} dB</td><td>{{ snr.median }} dB</td><td>{{ snr.mean }} dB</td><td>{{ snr.maximum }} dB</td>{% else %}<td colspan="5">Not available</td>{% endif %}</tr>{% endfor %}</tbody></table></div>{% endif %}{% if view.evidence_rows.is_empty() %}<p class="empty">No per-antenna evidence is available.</p>{% else %}<div class="table-wrap"><table><caption>Evidence by antenna</caption><thead><tr><th scope="col">Antenna</th><th scope="col">Coverage</th><th scope="col">Contributing slots</th><th scope="col">Counts</th><th scope="col">Usable kinds</th><th scope="col">Exclusions</th><th scope="col">SNR</th></tr></thead><tbody>{% for row in view.evidence_rows %}<tr><td>{{ row.label }}</td><td>{{ row.coverage }}</td><td>{{ row.contributing_slots }}</td><td>{{ row.counts }}</td><td>{{ row.kinds }}</td><td>{{ row.exclusions }}</td><td>{{ row.snr }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}</section>
+<section class="panel" aria-labelledby="antenna-title">
+  <h2 id="antenna-title">Antenna evidence</h2>
+  <h3>Antenna SNR visualization</h3>
+  {% if view.snr_rows.is_empty() %}
+    <p class="empty">No antenna SNR rows are available.</p>
+  {% else %}
+    <div class="chart" aria-hidden="true">
+      {% for row in view.snr_rows %}
+        <div class="chart-row">
+          <span class="chart-label">{{ row.label }}</span>
+          {% if row.snr.is_some() %}
+            {% let snr = row.snr.as_ref().unwrap() %}
+            <span class="snr-track">
+              <span class="snr-range-position geometry-left {{ snr.left_class }}">
+                <span class="snr-range geometry-width {{ snr.width_class }}"></span>
+              </span>
+              <span class="snr-point geometry-left {{ snr.median_class }}"></span>
+            </span>
+            <span class="chart-value">{{ snr.median }} dB</span>
+          {% else %}
+            <span class="snr-track"></span>
+            <span class="chart-value">Unavailable</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Antenna SNR chart data
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Antenna</th>
+            <th scope="col">Usable observations</th>
+            <th scope="col">Samples</th>
+            <th scope="col">Minimum</th>
+            <th scope="col">Median</th>
+            <th scope="col">Mean</th>
+            <th scope="col">Maximum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.snr_rows %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{{ row.usable_observation_count }}</td>
+              {% if row.snr.is_some() %}
+                {% let snr = row.snr.as_ref().unwrap() %}
+                <td>{{ snr.sample_count }}</td>
+                <td>{{ snr.minimum }} dB</td>
+                <td>{{ snr.median }} dB</td>
+                <td>{{ snr.mean }} dB</td>
+                <td>{{ snr.maximum }} dB</td>
+              {% else %}
+                <td colspan="5">Not available</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if view.evidence_rows.is_empty() %}
+    <p class="empty">No per-antenna evidence is available.</p>
+  {% else %}
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Evidence by antenna
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Antenna</th>
+            <th scope="col">Coverage</th>
+            <th scope="col">Contributing slots</th>
+            <th scope="col">Counts</th>
+            <th scope="col">Usable kinds</th>
+            <th scope="col">Exclusions</th>
+            <th scope="col">SNR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in view.evidence_rows %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{{ row.coverage }}</td>
+              <td>{{ row.contributing_slots }}</td>
+              <td>{{ row.counts }}</td>
+              <td>{{ row.kinds }}</td>
+              <td>{{ row.exclusions }}</td>
+              <td>{{ row.snr }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
