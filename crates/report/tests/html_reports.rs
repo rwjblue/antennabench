@@ -25,6 +25,10 @@ use antennabench_report::{
 use antennabench_storage::BundleStore;
 use chrono::Duration;
 
+mod support;
+
+use support::{assert_full_compact_policy, ReportDocument};
+
 #[test]
 fn renders_the_canonical_report_as_deterministic_offline_html() {
     let report = canonical_report();
@@ -33,6 +37,7 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     let second = render_standalone_html(&report).unwrap();
 
     assert_eq!(first, second);
+    let document = ReportDocument::parse(&first);
     assert!(first.starts_with("<!doctype html><html lang=\"en\">"));
     assert!(first.ends_with("</main></body></html>"));
     assert!(first.contains("<style>"));
@@ -43,33 +48,47 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     assert!(!first.contains("https://"));
     assert!(!first.contains("src=\""));
 
-    for section in [
+    document.assert_section_order(&[
+        "what-run-show",
+        "reach-unique-paths",
+        "distance-direction",
+        "run-quality",
+        "audit-appendix",
+    ]);
+    document.assert_labelled_by(
+        "what-run-show",
+        "what-run-show-title",
         "What did the run show?",
-        "Observed reach",
-        "Run quality",
-        "Audit appendix",
-        "Session context",
-        "Schedule overview",
-        "Evidence overview",
-        "Antenna evidence",
-        "Band evidence",
-        "Slot evidence",
-    ] {
-        assert!(first.contains(section), "missing section: {section}");
-    }
-    for caption in [
+    );
+    document.assert_labelled_by(
+        "run-quality",
+        "run-quality-title",
+        "Run quality and answerability",
+    );
+    document.assert_labelled_by("audit-appendix", "audit-title", "Audit appendix");
+    document.assert_table(
         "Planned slots",
-        "Path overlap and missingness data",
-        "Data-quality timeline details",
+        &[
+            "Sequence", "Slot", "Band", "Antenna", "Starts", "Ends", "Guard",
+        ],
+    );
+    document.assert_table(
         "Antenna SNR chart data",
-        "Evidence by antenna",
-        "Band evidence chart data",
-        "Evidence details by band",
-        "Slot evidence chart data",
-        "Evidence details by slot",
-    ] {
-        assert!(first.contains(&format!("<caption>{caption}</caption>")));
-    }
+        &[
+            "Antenna",
+            "Usable observations",
+            "Samples",
+            "Minimum",
+            "Median",
+            "Mean",
+            "Maximum",
+        ],
+    );
+    document.assert_disclosure_contains(
+        "#audit-appendix",
+        "Review station, antenna, and planned schedule detail",
+        "table",
+    );
     assert!(first.matches("aria-hidden=\"true\"").count() >= 5);
     assert!(first.contains("<dt>Usable</dt><dd>19</dd>"));
     assert!(first.contains("<dt>Excluded</dt><dd>7</dd>"));
@@ -84,14 +103,12 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
         "run-quality",
         "audit-appendix",
     ] {
-        assert!(first.contains(&format!("href=\"#{anchor}\"")));
-        assert!(first.contains(&format!("id=\"{anchor}\"")));
+        document.assert_navigation_target(anchor);
     }
     for unavailable_anchor in ["same-path-signal", "reporter-activity"] {
-        assert!(!first.contains(&format!("href=\"#{unavailable_anchor}\"")));
-        assert!(!first.contains(&format!("id=\"{unavailable_anchor}\"")));
+        document.assert_no_navigation_target(unavailable_anchor);
     }
-    assert!(first.contains("<details class=\"audit-disclosure\">"));
+    document.assert_present("details.audit-disclosure");
     assert!(first.contains("details:not([open])>:not(summary){display:none!important}"));
     assert!(first.contains("break-after:page"));
 }
@@ -157,6 +174,8 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
     let full = render_standalone_html(&report).unwrap();
     let first = render_compact_summary_html(&report).unwrap();
     let second = render_compact_summary_html(&report).unwrap();
+    let full_document = ReportDocument::parse(&full);
+    let compact_document = ReportDocument::parse(&first);
 
     assert_eq!(first, second, "compact bytes are deterministic");
     assert!(first.contains("AntennaBench compact share summary"));
@@ -198,8 +217,15 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
     assert!(full.contains(&count_fact));
     assert!(first.contains(&count_fact));
     assert!(first.contains("no rows are sampled here"));
+    assert_full_compact_policy(&full_document, &compact_document, "#what-run-show", true);
+    assert_full_compact_policy(&full_document, &compact_document, "#audit-appendix", false);
+    assert_full_compact_policy(
+        &full_document,
+        &compact_document,
+        "table.overview-table",
+        true,
+    );
     for omitted in [
-        "Audit appendix",
         "Antenna-control command attempts",
         "controller audit output",
         "--secret-audit-argument",
@@ -208,6 +234,39 @@ fn compact_summary_reuses_full_report_facts_without_audit_detail() {
     ] {
         assert!(!first.contains(omitted), "compact output leaked {omitted}");
     }
+}
+
+#[test]
+fn semantic_text_assertions_preserve_inline_flow_and_optional_spacing() {
+    let report = paired_report(true);
+    let full_html = render_standalone_html(&report).unwrap();
+    let compact_html = render_compact_summary_html(&report).unwrap();
+    let full = ReportDocument::parse(&full_html);
+    let compact = ReportDocument::parse(&compact_html);
+
+    full.assert_rendered_text(
+        "header.hero > p.muted",
+        &format!("Session {}", report.overview.scope.session_id),
+    );
+    compact.assert_rendered_text(
+        "header.hero > p.muted",
+        &format!(
+            "Not the full audit report · Session {}",
+            report.overview.scope.session_id
+        ),
+    );
+    full.assert_rendered_text(
+        "#same-path-signal .path-view-note",
+        "Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale; a 0 dB dot is retained as a true zero.",
+    );
+    compact.assert_rendered_text(
+        "#same-path-signal .path-view-note",
+        "Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale.",
+    );
+    full.assert_rendered_text(
+        "section[aria-labelledby=\"acquisition-quality-title\"] > p",
+        "No acquisition workflow was configured. No workflow-completion or provider-completeness claim is inferred.",
+    );
 }
 
 #[test]
