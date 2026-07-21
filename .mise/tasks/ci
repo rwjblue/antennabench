@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # -*- mode: sh; sh-shell: bash; -*-
 #MISE description="Run CI checks"
-#MISE depends=["module-size", "toolchain", "supply-chain", "dependency-policy", "report:template-format-check", "desktop:frontend-coverage", "desktop:release-test", "hosted:test", "examples:test", "ci-rust"]
+#MISE depends=["module-size", "toolchain", "supply-chain", "dependency-policy", "report:template-format-check", "report:css-format-check", "desktop:frontend-coverage", "desktop:release-test", "hosted:test", "examples:test", "ci-rust"]
 
 set -euo pipefail
 

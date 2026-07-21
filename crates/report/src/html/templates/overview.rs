@@ -23,6 +23,5 @@ pub(in crate::html) struct AnswerFirstTemplate {
 #[derive(Template)]
 #[template(path = "report/overview/compact_header.html")]
 pub(in crate::html) struct CompactHeaderTemplate<'a> {
-    pub(in crate::html) main_class: &'a str,
     pub(in crate::html) session_id: &'a str,
 }

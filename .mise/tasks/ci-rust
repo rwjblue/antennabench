@@ -10,4 +10,5 @@ set -euo pipefail
 # node-side ci tasks run in parallel.
 mise run check
 mise run desktop:e2e
+mise run desktop:report-style-check
 mise run desktop:report-browser

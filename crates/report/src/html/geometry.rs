@@ -1,7 +1,5 @@
 use std::fmt::Write as _;
 
-use super::shared::CheckedHtmlWriter;
-
 const GEOMETRY_STEPS: u16 = 1_000;
 
 pub(super) fn geometry_class(percent: f64) -> String {
@@ -9,16 +7,19 @@ pub(super) fn geometry_class(percent: f64) -> String {
     format!("g{step}")
 }
 
-pub(super) fn render_geometry_styles(out: &mut CheckedHtmlWriter<'_>) {
-    out.push_str(".geometry-left{left:var(--g)}.geometry-width{width:var(--g)}");
+pub(super) fn write_geometry_styles(write: &mut impl FnMut(&str)) {
+    write(".geometry-left{left:var(--g)}.geometry-width{width:var(--g)}");
     for step in 0..=GEOMETRY_STEPS {
         let whole = step / 10;
         let tenth = step % 10;
+        let mut rule = String::with_capacity(24);
         if tenth == 0 {
-            write!(out, ".g{step}{{--g:{whole}%}}").expect("checked HTML writer records failures");
+            write!(rule, ".g{step}{{--g:{whole}%}}")
+                .expect("writing CSS to a string cannot fail");
         } else {
-            write!(out, ".g{step}{{--g:{whole}.{tenth}%}}")
-                .expect("checked HTML writer records failures");
+            write!(rule, ".g{step}{{--g:{whole}.{tenth}%}}")
+                .expect("writing CSS to a string cannot fail");
         }
+        write(&rule);
     }
 }

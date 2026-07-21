@@ -5,7 +5,6 @@ use crate::{
 };
 
 use super::{
-    geometry::render_geometry_styles,
     questions::{
         is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
         render_answer_first_overview_with_reference, render_compact_coverage_map_section,
@@ -13,11 +12,11 @@ use super::{
         render_reporter_activity_section, render_same_path_view,
     },
     shared::*,
-    styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
+    styles::{write_stylesheet, StylesheetVariant},
     templates::{
-        render_template, CompactHeaderTemplate, CompactQualityTemplate, CompactReferenceTemplate,
-        CompactSamePathEndTemplate, CompactSamePathStartTemplate, DocumentEndTemplate,
-        DocumentStartTemplate,
+        render_template, BodyStartTemplate, CompactHeaderTemplate, CompactQualityTemplate,
+        CompactReferenceTemplate, CompactSamePathEndTemplate, CompactSamePathStartTemplate,
+        DocumentEndTemplate, DocumentStartTemplate,
     },
     view::{CompactQualityView, CompactReferenceView},
 };
@@ -50,11 +49,6 @@ pub fn render_compact_summary_html_with_resources(
             title: "AntennaBench compact share summary",
         },
     )?;
-    out.push_str(STYLES);
-    render_geometry_styles(&mut out);
-    out.push_str(COVERAGE_STYLES);
-    out.push_str(COMPACT_STYLES);
-    out.push_str(COMPACT_SMALL_PRINT_STYLES);
     let compact_main_class = if report.overview.strata.len() <= 2
         && report
             .overview
@@ -68,10 +62,16 @@ pub fn render_compact_summary_html_with_resources(
     } else {
         "compact-summary"
     };
+    write_stylesheet(&mut out, StylesheetVariant::Compact);
+    render_template(
+        &mut out,
+        &BodyStartTemplate {
+            main_class: compact_main_class,
+        },
+    )?;
     render_template(
         &mut out,
         &CompactHeaderTemplate {
-            main_class: compact_main_class,
             session_id: &report.overview.scope.session_id,
         },
     )?;

@@ -111,13 +111,7 @@ fn report_renderer_has_no_legacy_markup_assembly() {
                         || line.contains("self.push_str(value)")
                 }
                 Some("templates.rs") => line.contains("self.writer.push_str(value)"),
-                Some("geometry.rs") => line.contains("out.push_str(\".geometry-"),
-                Some("html.rs") | Some("compact.rs") => {
-                    line.contains("out.push_str(STYLES)")
-                        || line.contains("out.push_str(COVERAGE_STYLES)")
-                        || line.contains("out.push_str(COMPACT_STYLES)")
-                        || line.contains("out.push_str(COMPACT_SMALL_PRINT_STYLES)")
-                }
+                Some("styles.rs") => line.contains("out.push_str("),
                 _ => false,
             };
             assert!(
@@ -129,4 +123,37 @@ fn report_renderer_has_no_legacy_markup_assembly() {
             );
         }
     }
+}
+
+#[test]
+fn report_css_is_compile_time_authored_source() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let styles = fs::read_to_string(manifest.join("src/html/styles.rs"))
+        .expect("read canonical stylesheet assembly");
+
+    for name in [
+        "report.css",
+        "coverage.css",
+        "compact.css",
+        "compact-small-print.css",
+    ] {
+        assert!(
+            styles.contains(&format!("include_str!(\"../../styles/{name}\")")),
+            "{name} must be embedded at compile time"
+        );
+        let source = fs::read_to_string(manifest.join("styles").join(name))
+            .expect("read authored stylesheet");
+        assert!(!source.contains('\r'), "{name} must use LF line endings");
+        assert!(!source.contains("@import"), "{name} must not import CSS");
+        assert!(!source.contains("url("), "{name} must not load assets");
+    }
+
+    assert!(
+        !styles.contains("fs::") && !styles.contains("std::fs"),
+        "stylesheet assembly must not read runtime files"
+    );
+    assert!(
+        !styles.contains("r#\""),
+        "authored stylesheet declarations must not return to Rust raw strings"
+    );
 }

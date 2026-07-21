@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Check canonical authored report CSS formatting"
+#MISE depends=["npm:deps"]
+
+set -euo pipefail
+
+npx --no-install prettier --check 'crates/report/styles/*.css'

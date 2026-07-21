@@ -91,6 +91,12 @@ presentation model. Report templates may not use Askama's `safe` filter,
 disable auto-escaping, or accept a generic safe-HTML fragment. Template and
 repository validation enforce this rule.
 
+Authored CSS lives in readable LF-only files under `crates/report/styles/`, is
+formatted by the exact root-workspace Prettier pin, and is embedded with
+`include_str!`. Rust assembles shared CSS, the bounded generated geometry table,
+coverage CSS, and compact overrides in one deterministic order. The same
+production assembly emits the standalone inline stylesheet and the generated
+desktop stylesheet mirrors; neither path performs runtime filesystem discovery.
 Static embedded CSS and Rust-generated geometry CSS remain an explicit trusted
 writer path outside report-data templates. This narrow exception does not
 permit report strings, controller output, operational history, imported data,
@@ -125,7 +131,8 @@ or postpone all switching to a flag day.
 
 The final renderer contains no report-data-dependent `write_html!`, manual HTML
 escaping, or direct markup `push_str` calls. Remaining direct writes are
-limited to the checked sink and the documented static or generated CSS path.
+limited to the checked sink, the Askama adapter, canonical static CSS assembly,
+and deterministic Rust-generated geometry CSS.
 An architecture test enumerates every report template, requires a corresponding
 compiled Askama path, rejects escaping overrides and script markup, and checks
 every remaining `push_str` site against that narrow allowlist.

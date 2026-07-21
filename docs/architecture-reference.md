@@ -190,8 +190,13 @@ Rust projects narrow presentation view models and streams each fragment directly
 through `CheckedHtmlWriter`, which preserves byte limits, cancellation, typed
 resource failures, and all-or-nothing output. Askama auto-escapes report data;
 the renderer has no manual report-data escaping or generic safe-HTML boundary.
-Direct writes are limited to the checked sink, its Askama adapter, static embedded
-CSS, and deterministic geometry CSS generated from renderer-owned numeric values.
+Direct writes are limited to the checked sink, its Askama adapter, static
+embedded CSS assembly, and deterministic geometry CSS generated from
+renderer-owned numeric values. Authored declarations are readable LF-only files
+under `crates/report/styles/`, embedded with `include_str!` and assembled in one
+explicit full/compact order. Standalone reports inline that complete assembly;
+the desktop packages deterministic generated mirrors and performs no runtime
+stylesheet lookup.
 
 Comparison availability precedes overlap and missingness, slot data-quality,
 paired-difference, SNR-over-time, stratum-summary, and distance/azimuth
@@ -651,9 +656,10 @@ frame without script, top-navigation, IPC, or network authority. The frame uses
 focus report targets; it has no script or top-navigation sandbox token, and the
 report-local CSP denies scripts. For this embedded copy only, the frontend
 replaces the standalone inline style element with a checked-in same-origin
-report stylesheet; a deterministic browser check byte-compares that asset with
-the trusted renderer output. The shell therefore keeps `style-src 'self'` and
-adds `blob:` only to `frame-src`.
+report stylesheet generated from the same canonical Rust assembly; a
+deterministic update/check command and browser regression byte-compare that
+asset with the trusted renderer output. The shell therefore keeps
+`style-src 'self'` and adds `blob:` only to `frame-src`.
 Exported reports retain their inline stylesheet, restrictive report-local CSP,
 and fully self-contained standalone behavior. Superseded blob URLs are revoked
 when a new presentation is installed or the desktop controller is disposed.

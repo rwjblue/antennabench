@@ -320,6 +320,14 @@ ignores. Treat source indentation and rendered whitespace separately; add
 explicit Askama whitespace-control markers only where a rendered-text assertion
 shows that inline flow requires them.
 
+Authored report declarations live under `crates/report/styles/` and are
+formatted with the exact root-workspace Prettier pin. Use `mise run
+report:css-format` to update those sources and `mise run
+report:css-format-check` for CI's non-mutating check. Generated desktop assets
+are not formatter inputs: `mise run desktop:report-style-update` regenerates
+`report.css` and `report-compact.css` from the production Rust renderer, and
+`mise run desktop:report-style-check` rejects byte drift.
+
 The run-quality state matrix additionally pins ordinary, late, unknown-
 occupancy, missed, bad, corrected, interrupted/resumed, abandoned,
 command-verified, explicit acquisition-gap, malformed/conflict/duplicate, and
@@ -534,7 +542,7 @@ a desktop production dependency. The blocked embedded-report stylesheet was
 such a boundary defect, so `desktop:report-browser` now renders generated full
 and compact reports in a real browser under the exact desktop CSP. It verifies
 the sandboxed blob frame has no scripts or top-navigation authority, byte-checks
-the same-origin stylesheet assets against renderer output, activates native
+the generated same-origin stylesheet assets against renderer output, activates native
 fragment links and their focusable targets, and asserts meaningful typography,
 panel, table, and narrow-layout computed styles. `mise run ci` runs this focused
 smoke through the exactly pinned browser-automation tool; it adds no desktop
@@ -661,7 +669,8 @@ report commands return only a bounded revision-keyed presentation. No dialog-plu
 filesystem-plugin permission is granted to JavaScript; this is intentional
 even though the native dialog plugin is registered. The local report is loaded
 into a sandboxed blob frame. Its embedded copy uses only the checked-in
-same-origin report stylesheet, while exported HTML remains self-contained;
+same-origin report stylesheet generated from the renderer's canonical
+compile-time CSS assembly, while exported HTML remains self-contained;
 neither the shell nor report is given network authority.
 
 The transfer screen's RBN action is available only for schema-v3 sessions that

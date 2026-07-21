@@ -1,0 +1,44 @@
+@media print {
+  @page {
+    margin: 5mm;
+  }
+  .compact-summary.compact-small {
+    font-size: 8pt;
+    line-height: 1.12;
+  }
+  .compact-summary.compact-small .panel {
+    padding: 0.25rem;
+    margin-top: 0.15rem;
+    break-inside: auto;
+  }
+  .compact-summary.compact-small .hero {
+    padding: 0.3rem 0.4rem;
+  }
+  .compact-summary.compact-small h1 {
+    font-size: 1.3rem;
+  }
+  .compact-summary.compact-small h2 {
+    font-size: 0.9rem;
+  }
+  .compact-summary.compact-small h3 {
+    font-size: 0.8rem;
+    margin: 0.2rem 0 0.08rem;
+  }
+  .compact-summary.compact-small .headline-facts,
+  .compact-summary.compact-small .overview-support,
+  .compact-summary.compact-small .run-summary {
+    gap: 0.15rem;
+  }
+  .compact-summary.compact-small .fact,
+  .compact-summary.compact-small .run-summary div {
+    padding: 0.15rem 0.25rem;
+  }
+  .compact-summary.compact-small .orientation,
+  .compact-summary.compact-small .overview .answer {
+    padding: 0.15rem 0.25rem;
+    margin: 0.15rem 0;
+  }
+  .compact-summary.compact-small p {
+    margin: 0.15rem 0;
+  }
+}
