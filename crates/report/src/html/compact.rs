@@ -16,7 +16,8 @@ use super::{
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
     templates::{
         render_template, CompactHeaderTemplate, CompactQualityTemplate, CompactReferenceTemplate,
-        CompactSamePathEndTemplate, CompactSamePathStartTemplate,
+        CompactSamePathEndTemplate, CompactSamePathStartTemplate, DocumentEndTemplate,
+        DocumentStartTemplate,
     },
     view::{CompactQualityView, CompactReferenceView},
 };
@@ -43,13 +44,12 @@ pub fn render_compact_summary_html_with_resources(
         "compact_summary_html",
     )?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
-    out.push_str(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
-<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
-<meta name=\"color-scheme\" content=\"light\">\
-<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'\">\
-<title>AntennaBench compact share summary</title><style>",
-    );
+    render_template(
+        &mut out,
+        &DocumentStartTemplate {
+            title: "AntennaBench compact share summary",
+        },
+    )?;
     out.push_str(STYLES);
     render_geometry_styles(&mut out);
     out.push_str(COVERAGE_STYLES);
@@ -117,11 +117,13 @@ pub fn render_compact_summary_html_with_resources(
     }
     render_compact_run_quality(&mut out, report)?;
     render_compact_reference(&mut out, report)?;
-    if is_single_antenna_lens(report) {
-        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This compact profiling summary describes only recorded evidence from the named antenna.</p></main></body></html>");
-    } else {
-        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This compact summary is descriptive and does not select an antenna winner.</p></main></body></html>");
-    }
+    render_template(
+        &mut out,
+        &DocumentEndTemplate {
+            compact: true,
+            single_antenna: is_single_antenna_lens(report),
+        },
+    )?;
     out.finish().map_err(ReportError::from)
 }
 

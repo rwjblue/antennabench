@@ -9,6 +9,11 @@ Issues: [#241](https://github.com/rwjblue/antennabench/issues/241),
 
 Accepted.
 
+Implemented by the report renderer migration tracked in #241. The completed
+renderer streams compile-time fragments through the checked writer and retains
+only the static CSS, generated geometry CSS, template adapter, and checked sink
+as direct writer paths.
+
 ## Context
 
 AntennaBench already separates report projection from presentation. The
@@ -121,6 +126,9 @@ or postpone all switching to a flag day.
 The final renderer contains no report-data-dependent `write_html!`, manual HTML
 escaping, or direct markup `push_str` calls. Remaining direct writes are
 limited to the checked sink and the documented static or generated CSS path.
+An architecture test enumerates every report template, requires a corresponding
+compiled Askama path, rejects escaping overrides and script markup, and checks
+every remaining `push_str` site against that narrow allowlist.
 
 ## Consequences
 

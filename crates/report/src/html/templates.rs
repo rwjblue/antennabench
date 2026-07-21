@@ -27,6 +27,19 @@ pub(super) use paths::*;
 pub(super) use quality::*;
 
 #[derive(Template)]
+#[template(path = "report/document_start.html")]
+pub(super) struct DocumentStartTemplate<'a> {
+    pub(super) title: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "report/document_end.html")]
+pub(super) struct DocumentEndTemplate {
+    pub(super) compact: bool,
+    pub(super) single_antenna: bool,
+}
+
+#[derive(Template)]
 #[template(path = "report/full_header.html")]
 pub(super) struct FullHeaderTemplate<'a> {
     pub(super) view: super::view::FullHeaderView<'a>,

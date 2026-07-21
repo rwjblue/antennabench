@@ -423,6 +423,11 @@ pub(super) fn report_error_payload(error: ReportError) -> SessionErrorPayload {
             "The local report could not be serialized.",
             message,
         ),
+        ReportError::TemplateRendering { message } => SessionErrorPayload::new(
+            SessionErrorKind::ReportPipeline,
+            "The local report template could not be rendered.",
+            message,
+        ),
     }
 }
 

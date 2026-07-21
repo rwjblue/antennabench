@@ -664,9 +664,8 @@ fn escapes_every_untrusted_report_string() {
     assert!(!html.contains(&hostile));
     assert!(!html.contains("<script>"));
     assert!(!html.contains("</script>"));
-    assert!(
-        html.contains("&#34;&#62;&#60;script&#62;alert(&#39;x&#39;) &#38; imported&#60;/script&#62;")
-    );
+    assert!(html
+        .contains("&#34;&#62;&#60;script&#62;alert(&#39;x&#39;) &#38; imported&#60;/script&#62;"));
 }
 
 #[test]

@@ -6,7 +6,7 @@ use crate::{
     html::{
         templates::{
             render_template, PathQuestionSectionEndTemplate, ReachAuditStartTemplate,
-            ReachBarTemplate, ReachSectionStartTemplate, ReachTemplate, SamePathAuditStartTemplate,
+            ReachSectionStartTemplate, ReachTemplate, SamePathAuditStartTemplate,
             SamePathSectionStartTemplate, SamePathTemplate,
         },
         view::{
@@ -363,19 +363,6 @@ fn reach_view(report: &SessionReport) -> ReachView {
         rows,
         unavailable: unavailable_message,
     }
-}
-
-pub(in super::super) fn render_reach_bar(
-    out: &mut CheckedHtmlWriter<'_>,
-    reach: &ReportOverviewReach,
-    class: &str,
-) -> Result<(), ReportError> {
-    render_template(
-        out,
-        &ReachBarTemplate {
-            view: reach_bar_view(reach, class),
-        },
-    )
 }
 
 fn reach_bar_view(reach: &ReportOverviewReach, class: &str) -> ReachBarView {

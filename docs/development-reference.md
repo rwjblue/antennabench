@@ -281,6 +281,10 @@ audit-only detail, compact print rules, escaping, unavailable, and
 bounded-overview behavior. Separate hostile-string, single-antenna/unavailable,
 bounded-overview, and empty-data cases pin escaping, visible limitations and
 omissions, and honest unavailable states without making network requests.
+The Askama architecture test also enumerates every report template and rejects
+uncompiled template files, escaping overrides, script markup, legacy
+`write_html!` or manual escaping, and direct writes outside the checked
+sink/static-CSS/generated-geometry allowlist.
 The run-quality state matrix additionally pins ordinary, late, unknown-
 occupancy, missed, bad, corrected, interrupted/resumed, abandoned,
 command-verified, explicit acquisition-gap, malformed/conflict/duplicate, and

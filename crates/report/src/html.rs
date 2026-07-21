@@ -3,12 +3,6 @@ use crate::{
     ReportResourceLimits, ReportResourceStage, SessionReport, REPORT_RESOURCE_LIMITS,
 };
 
-macro_rules! write_html {
-    ($output:expr, $($argument:tt)*) => {
-        write!($output, $($argument)*).expect("checked HTML writer records failures")
-    };
-}
-
 // Keep the public rendering surface here; section ownership remains renderer-private.
 mod audit;
 mod compact;
@@ -32,7 +26,10 @@ use questions::{
 };
 use shared::CheckedHtmlWriter;
 use styles::{COVERAGE_STYLES, STYLES};
-use templates::{render_template, FullHeaderTemplate, OperationalHistoryTemplate};
+use templates::{
+    render_template, DocumentEndTemplate, DocumentStartTemplate, FullHeaderTemplate,
+    OperationalHistoryTemplate,
+};
 use view::{FullHeaderView, OperationalHistoryView};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -122,17 +119,15 @@ fn render_standalone_html_document(
 ) -> Result<String, ReportError> {
     check_cancelled(cancellation, ReportResourceStage::Render, "standalone_html")?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
-    out.push_str(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
-<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
-<meta name=\"color-scheme\" content=\"light\">\
-<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'\">\
-<title>AntennaBench session report</title><style>",
-    );
+    render_template(
+        &mut out,
+        &DocumentStartTemplate {
+            title: "AntennaBench session report",
+        },
+    )?;
     out.push_str(STYLES);
     render_geometry_styles(&mut out);
     out.push_str(COVERAGE_STYLES);
-    out.push_str("</style></head><body><main><a class=\"skip-link\" href=\"#what-run-show\">Skip to report findings</a>");
 
     render_template(
         &mut out,
@@ -171,10 +166,12 @@ fn render_standalone_html_document(
         )?;
     }
 
-    if is_single_antenna_lens(report) {
-        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This profiling report describes only recorded evidence from the named antenna.</p></main></body></html>");
-    } else {
-        out.push_str("<p class=\"footnote\">Generated locally from deterministic report data. This report is descriptive and does not select an antenna winner.</p></main></body></html>");
-    }
+    render_template(
+        &mut out,
+        &DocumentEndTemplate {
+            compact: false,
+            single_antenna: is_single_antenna_lens(report),
+        },
+    )?;
     out.finish().map_err(ReportError::from)
 }

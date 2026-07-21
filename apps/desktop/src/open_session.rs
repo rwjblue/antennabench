@@ -410,11 +410,14 @@ mod tests {
         let analysis = report_error_payload(ReportError::Analysis(AnalysisError::NonFiniteSnr {
             observation_id: "observation-7".into(),
         }));
-        let pipeline = SessionErrorPayload::report_pipeline("renderer unavailable");
+        let pipeline = report_error_payload(ReportError::TemplateRendering {
+            message: "renderer unavailable".into(),
+        });
 
         assert_eq!(analysis.kind, SessionErrorKind::Analysis);
         assert!(analysis.detail.contains("observation-7"));
         assert_eq!(pipeline.kind, SessionErrorKind::ReportPipeline);
+        assert!(pipeline.detail.contains("renderer unavailable"));
     }
 
     #[test]

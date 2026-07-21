@@ -2,8 +2,7 @@ use std::fmt;
 
 use crate::{
     report_resource_error, ReportCancellationToken, ReportDetailFamily, ReportImportedEvidence,
-    ReportNotice, ReportOperatorEventKind, ReportOverviewStratum, ReportProviderCompleteness,
-    ReportResourceStage,
+    ReportNotice, ReportOperatorEventKind, ReportProviderCompleteness, ReportResourceStage,
 };
 use antennabench_analysis::{
     ComparisonAvailability, ComparisonBlockEligibility, ComparisonOrder, EvidenceQuality,
@@ -132,21 +131,6 @@ pub(super) fn format_number(value: f64) -> String {
         .to_string()
 }
 
-pub(super) fn escape_html(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for character in value.chars() {
-        match character {
-            '&' => escaped.push_str("&amp;"),
-            '<' => escaped.push_str("&lt;"),
-            '>' => escaped.push_str("&gt;"),
-            '"' => escaped.push_str("&quot;"),
-            '\'' => escaped.push_str("&#39;"),
-            _ => escaped.push(character),
-        }
-    }
-    escaped
-}
-
 pub(super) fn band(value: Band) -> &'static str {
     match value {
         Band::M160 => "160 m",
@@ -216,32 +200,10 @@ pub(super) fn comparison_availability_text(value: ComparisonAvailability) -> &'s
         }
     }
 }
-pub(super) fn comparison_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
-    format!(
-        "{} · {} · {} · {} · {}",
-        path_direction(value.direction),
-        band(value.band),
-        escape_html(value.mode.as_str()),
-        observation_kind(value.observation_kind),
-        record_source(value.source)
-    )
-}
-pub(super) fn comparison_strata_list(rows: &[&ReportOverviewStratum]) -> String {
-    rows.iter()
-        .map(|row| comparison_stratum(&row.stratum))
-        .collect::<Vec<_>>()
-        .join("; ")
-}
 pub(super) fn comparison_groups_label(count: usize) -> String {
     format!(
         "{count} comparison {}",
         if count == 1 { "group" } else { "groups" }
-    )
-}
-pub(super) fn report_antenna_labels(report: &crate::SessionReport) -> (String, String) {
-    (
-        escape_html(report.comparison.left_label.as_deref().unwrap_or("Left")),
-        escape_html(report.comparison.right_label.as_deref().unwrap_or("Right")),
     )
 }
 pub(super) fn labeled_comparison_order(

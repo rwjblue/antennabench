@@ -1,5 +1,3 @@
-use std::fmt::Write as _;
-
 use crate::{
     GeographicProfileAnswerability, ObservedReachAnswerability, PairedDetectabilityAnswerability,
     RepeatabilityAnswerability, ReportAzimuthSector, ReportDistanceBin, ReportError,
@@ -34,8 +32,7 @@ pub(super) use overview::{
     render_answer_first_overview_with_reference, render_how_to_read, render_question_navigation,
 };
 pub(super) use paths::{
-    plural_suffix, render_reach_bar, render_reach_section, render_same_path_section,
-    render_same_path_view,
+    plural_suffix, render_reach_section, render_same_path_section, render_same_path_view,
 };
 pub(super) use quality::render_run_quality_section;
 

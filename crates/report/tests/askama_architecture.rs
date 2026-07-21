@@ -15,15 +15,36 @@ fn visit_templates(path: &Path, templates: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+fn visit_rust_sources(path: &Path, sources: &mut Vec<std::path::PathBuf>) {
+    for entry in fs::read_dir(path).expect("read renderer source directory") {
+        let entry = entry.expect("read renderer source entry");
+        let path = entry.path();
+        if path.is_dir() {
+            visit_rust_sources(&path, sources);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            sources.push(path);
+        }
+    }
+}
+
 #[test]
 fn report_templates_preserve_automatic_escaping() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("templates/report");
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = manifest.join("templates/report");
     let mut templates = Vec::new();
     visit_templates(&root, &mut templates);
     assert!(
         !templates.is_empty(),
         "the report must have compiled templates"
     );
+
+    let mut rust_sources = Vec::new();
+    visit_rust_sources(&manifest.join("src/html"), &mut rust_sources);
+    let compiled_templates = rust_sources
+        .iter()
+        .map(|path| fs::read_to_string(path).expect("read renderer source"))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     for template in templates {
         let source = fs::read_to_string(&template).expect("read report template");
@@ -37,5 +58,75 @@ fn report_templates_preserve_automatic_escaping() {
             "{} changes the automatic escaping policy",
             template.display()
         );
+        assert!(
+            !source.to_ascii_lowercase().contains("<script"),
+            "{} introduces executable script markup",
+            template.display()
+        );
+        let relative = template
+            .strip_prefix(manifest.join("templates"))
+            .expect("template lives below crate template root")
+            .to_string_lossy()
+            .replace('\\', "/");
+        assert!(
+            compiled_templates.contains(&format!("path = \"{relative}\"")),
+            "{} is not referenced by a compiled Askama type",
+            template.display()
+        );
+    }
+
+    assert!(
+        !compiled_templates.contains("escape = \"none\"")
+            && !compiled_templates.contains("escape=\"none\""),
+        "renderer templates may not disable Askama escaping"
+    );
+}
+
+#[test]
+fn report_renderer_has_no_legacy_markup_assembly() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/html");
+    let mut sources = Vec::new();
+    visit_rust_sources(&root, &mut sources);
+
+    for path in sources {
+        let source = fs::read_to_string(&path).expect("read renderer source");
+        assert!(
+            !source.contains("write_html"),
+            "{} retains the legacy HTML assembly macro",
+            path.display()
+        );
+        assert!(
+            !source.contains("escape_html"),
+            "{} retains manual report-data escaping",
+            path.display()
+        );
+        for (line_number, line) in source.lines().enumerate() {
+            if !line.contains("push_str(") {
+                continue;
+            }
+            let allowed = match path.file_name().and_then(|name| name.to_str()) {
+                Some("shared.rs") => {
+                    line.contains("fn push_str")
+                        || line.contains("self.output.push_str(value)")
+                        || line.contains("self.push_str(value)")
+                }
+                Some("templates.rs") => line.contains("self.writer.push_str(value)"),
+                Some("geometry.rs") => line.contains("out.push_str(\".geometry-"),
+                Some("html.rs") | Some("compact.rs") => {
+                    line.contains("out.push_str(STYLES)")
+                        || line.contains("out.push_str(COVERAGE_STYLES)")
+                        || line.contains("out.push_str(COMPACT_STYLES)")
+                        || line.contains("out.push_str(COMPACT_SMALL_PRINT_STYLES)")
+                }
+                _ => false,
+            };
+            assert!(
+                allowed,
+                "{}:{} contains a direct write outside the checked sink or trusted CSS/geometry allowlist: {}",
+                path.display(),
+                line_number + 1,
+                line.trim()
+            );
+        }
     }
 }

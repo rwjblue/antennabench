@@ -185,6 +185,14 @@ and important limitations stay outside closed audit disclosures. Closed
 disclosures stay closed in default print output; an explicitly opened disclosure
 remains printable.
 
+Application-authored report structure lives in compile-time Askama fragments.
+Rust projects narrow presentation view models and streams each fragment directly
+through `CheckedHtmlWriter`, which preserves byte limits, cancellation, typed
+resource failures, and all-or-nothing output. Askama auto-escapes report data;
+the renderer has no manual report-data escaping or generic safe-HTML boundary.
+Direct writes are limited to the checked sink, its Askama adapter, static embedded
+CSS, and deterministic geometry CSS generated from renderer-owned numeric values.
+
 Comparison availability precedes overlap and missingness, slot data-quality,
 paired-difference, SNR-over-time, stratum-summary, and distance/azimuth
 path-context detail. Geographic views consume the already

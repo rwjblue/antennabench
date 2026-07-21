@@ -1,6 +1,6 @@
 use askama::Template;
 
-use super::super::view::{ReachBarView, ReachView, SamePathView};
+use super::super::view::{ReachView, SamePathView};
 
 #[derive(Template)]
 #[template(path = "report/paths/same_path_section_start.html")]
@@ -40,10 +40,4 @@ pub(in crate::html) struct SamePathTemplate {
 #[template(path = "report/paths/reach.html")]
 pub(in crate::html) struct ReachTemplate {
     pub(in crate::html) view: ReachView,
-}
-
-#[derive(Template)]
-#[template(path = "report/paths/reach_bar.html")]
-pub(in crate::html) struct ReachBarTemplate {
-    pub(in crate::html) view: ReachBarView,
 }
