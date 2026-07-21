@@ -20,7 +20,9 @@ use antennabench_core::{
 };
 use antennabench_report::{
     build_report_with_snapshot_and_activity, render_compact_summary_html, render_standalone_html,
-    ReportAzimuthSector, ReportCommonOpportunityMapGroup, ReportDistanceBin, ReportSnapshotContext,
+    render_standalone_html_with_resources, ReportAzimuthSector, ReportCancellationToken,
+    ReportCommonOpportunityMapGroup, ReportDistanceBin, ReportError, ReportResourceLimits,
+    ReportSnapshotContext, REPORT_RESOURCE_LIMITS,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 
@@ -175,6 +177,24 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     }));
     let full = render_standalone_html(&report).expect("full report should render");
     let compact = render_compact_summary_html(&report).expect("compact report should render");
+    let resource_error = render_standalone_html_with_resources(
+        &report,
+        ReportResourceLimits::testing(25_000, 8 * 1024 * 1024, full.len() as u64 - 1),
+        &ReportCancellationToken::default(),
+    )
+    .expect_err("high-row activity template loops must honor the checked writer byte limit");
+    assert!(matches!(
+        resource_error,
+        ReportError::Resource(ref error)
+            if error.diagnostic.code == "resource.report.html_bytes"
+    ));
+    let cancellation = ReportCancellationToken::default();
+    cancellation.cancel();
+    assert!(matches!(
+        render_standalone_html_with_resources(&report, REPORT_RESOURCE_LIMITS, &cancellation),
+        Err(ReportError::Resource(ref error))
+            if error.diagnostic.code == "resource.operation.cancelled"
+    ));
     for html in [&full, &compact] {
         assert!(!html.contains("0 usable"));
         assert!(!html.contains("No matched paths"));

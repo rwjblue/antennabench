@@ -93,8 +93,8 @@ pub fn render_compact_summary_html_with_resources(
                 render_template(&mut out, &CompactSamePathEndTemplate)?;
             }
             ReportQuestionFamily::CommonOpportunityDetection => {
-                render_reporter_activity_section(&mut out, report);
-                render_compact_coverage_map_section(&mut out, report);
+                render_reporter_activity_section(&mut out, report)?;
+                render_compact_coverage_map_section(&mut out, report)?;
             }
             ReportQuestionFamily::ObservedReach => {
                 if !rendered_observed_footprint {

@@ -6,12 +6,16 @@ use crate::ReportError;
 
 use super::{shared::CheckedHtmlWriter, view::OperationalHistoryView};
 
+mod activity;
 mod audit;
+mod coverage;
 mod evidence;
 mod overview;
 mod paths;
 
+pub(super) use activity::*;
 pub(super) use audit::*;
+pub(super) use coverage::*;
 pub(super) use evidence::*;
 pub(super) use overview::*;
 pub(super) use paths::*;

@@ -149,8 +149,8 @@ fn render_standalone_html_document(
         match family {
             ReportQuestionFamily::SharedPathSignal => render_same_path_section(&mut out, report)?,
             ReportQuestionFamily::CommonOpportunityDetection => {
-                render_reporter_activity_section(&mut out, report);
-                render_coverage_map_section(&mut out, report);
+                render_reporter_activity_section(&mut out, report)?;
+                render_coverage_map_section(&mut out, report)?;
             }
             ReportQuestionFamily::ObservedReach => render_reach_section(&mut out, report)?,
             ReportQuestionFamily::GeographicProfile => render_distance_section(&mut out, report)?,

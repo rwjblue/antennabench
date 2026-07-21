@@ -8,6 +8,8 @@
 *.swo
 node_modules/
 coverage/
+!crates/report/templates/report/coverage/
+!crates/report/templates/report/coverage/**
 .wrangler/
 /apps/hosted/dist/
 /apps/hosted/.astro/
