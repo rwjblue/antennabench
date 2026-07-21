@@ -5,4 +5,8 @@
 set -euo pipefail
 
 mise run desktop:frontend-test
+
+if [[ "${OS:-}" == "Windows_NT" ]]; then
+  export ANTENNABENCH_WINDOWS_TEST_MANIFEST=1
+fi
 cargo test -p antennabench-desktop --lib
