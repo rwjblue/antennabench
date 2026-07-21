@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "session_id": "session-3e698e14-13ff-4ce4-b6bb-71e66734c6e4",
-  "created_at": "2026-07-20T16:47:52.865299Z",
+  "session_id": "session-canonical-sample-2026-03-14",
+  "created_at": "2026-03-14T19:58:00Z",
   "app_version": "0.1.0",
   "files": {
     "manifest": "manifest.json",

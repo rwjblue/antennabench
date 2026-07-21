@@ -336,7 +336,7 @@ mod tests {
         );
         assert_eq!(
             opened.summary.session_id,
-            "session-canonical-sample-2026-03-14"
+            "session-3e698e14-13ff-4ce4-b6bb-71e66734c6e4"
         );
         assert!(!opened.summary.callsign.is_empty());
         assert!(opened
@@ -930,7 +930,10 @@ mod tests {
         let OpenSessionOutcome::Opened { session } = opened else {
             panic!("deterministic source selection unexpectedly cancelled");
         };
-        assert_eq!(session.session_id, "session-canonical-sample-2026-03-14");
+        assert_eq!(
+            session.session_id,
+            "session-3e698e14-13ff-4ce4-b6bb-71e66734c6e4"
+        );
 
         println!("desktop-e2e phase=report session_id={}", session.session_id);
         let source_report = active_session_report_for(&state)

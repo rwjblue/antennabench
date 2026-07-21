@@ -43,6 +43,17 @@ synthetic as documented in the
 [Development Technical Reference](development-reference.md); external service
 availability and third-party rights are never treated as bundle invariants.
 
+The canonical public sample is derived from a real 2026-07-20 WSPR.live-backed
+station session. WSPR.live states that its services may be used for research and
+projects when results remain freely accessible and are not commercial or
+profit-oriented. AntennaBench publishes the generated sample report and its
+normalized fixture freely, identifies WSPR.live as the source, and makes no
+affiliation or endorsement claim. The publication-clean fixture excludes the
+captured HTTP responses, attachment payloads, query locators, and duplicate or
+filtered adapter envelopes; it retains only the normalized spot evidence needed
+to audit and reproduce the report. Revisit this use if the project's commercial
+boundary or WSPR.live's terms change.
+
 ## NOAA Solar Calculation References
 
 Derived solar context uses the equations documented in NOAA Global Monitoring

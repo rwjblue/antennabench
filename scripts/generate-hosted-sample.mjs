@@ -5,55 +5,74 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
-const committedOutput = join(
+const publicRoot = join(repositoryRoot, "apps", "hosted", "public");
+const inconclusiveFixture = join(
   repositoryRoot,
-  "apps",
-  "hosted",
-  "public",
-  "sample-report",
-  "index.html",
+  "fixtures",
+  "session-bundles",
+  "inconclusive-sample-report.session.wsprabundle",
 );
+const samples = [
+  {
+    relativeOutput: join("sample-report", "index.html"),
+    rendererArguments: [],
+  },
+  {
+    relativeOutput: join("sample-report", "compact", "index.html"),
+    rendererArguments: ["--compact-summary"],
+  },
+  {
+    relativeOutput: join("sample-report", "inconclusive", "index.html"),
+    rendererArguments: ["--bundle", inconclusiveFixture],
+  },
+];
 const check = process.argv.slice(2).includes("--check");
 const temporaryDirectory = check
   ? mkdtempSync(join(tmpdir(), "antennabench-hosted-sample-"))
   : undefined;
-const output = temporaryDirectory === undefined
-  ? committedOutput
-  : join(temporaryDirectory, "index.html");
 
 try {
-  mkdirSync(dirname(output), { recursive: true });
-  const result = spawnSync(
-    "cargo",
-    [
-      "run",
-      "--quiet",
-      "-p",
-      "antennabench-report",
-      "--example",
-      "render_canonical_sample",
-      "--",
-      output,
-    ],
-    { cwd: repositoryRoot, encoding: "utf8" },
-  );
-  if (result.status !== 0) {
-    process.stderr.write(result.stdout);
-    process.stderr.write(result.stderr);
-    process.exit(result.status ?? 1);
-  }
-
-  if (check) {
-    const generated = readFileSync(output);
-    const committed = readFileSync(committedOutput);
-    if (!generated.equals(committed)) {
-      throw new Error(
-        "apps/hosted/public/sample-report/index.html is stale; run `npm run site:sample --workspace @antennabench/hosted`",
-      );
+  for (const sample of samples) {
+    const committedOutput = join(publicRoot, sample.relativeOutput);
+    const output = temporaryDirectory === undefined
+      ? committedOutput
+      : join(temporaryDirectory, sample.relativeOutput);
+    mkdirSync(dirname(output), { recursive: true });
+    const result = spawnSync(
+      "cargo",
+      [
+        "run",
+        "--quiet",
+        "-p",
+        "antennabench-report",
+        "--example",
+        "render_canonical_sample",
+        "--",
+        output,
+        ...sample.rendererArguments,
+      ],
+      { cwd: repositoryRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      process.stderr.write(result.stdout);
+      process.stderr.write(result.stderr);
+      process.exit(result.status ?? 1);
     }
-    console.log("Canonical hosted sample matches the trusted Rust renderer");
-  } else {
-    process.stdout.write(result.stdout);
+
+    if (check) {
+      const generated = readFileSync(output);
+      const committed = readFileSync(committedOutput);
+      if (!generated.equals(committed)) {
+        throw new Error(
+          `${sample.relativeOutput} is stale; run \`npm run site:sample --workspace @antennabench/hosted\``,
+        );
+      }
+    } else {
+      process.stdout.write(result.stdout);
+    }
+  }
+  if (check) {
+    console.log("Hosted samples match the trusted Rust renderer");
   }
 } finally {
   if (temporaryDirectory !== undefined) {

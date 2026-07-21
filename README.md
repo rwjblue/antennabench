@@ -8,7 +8,8 @@
 
 <p align="center">
   <a href="https://antennabench.com">Project site</a> ·
-  <a href="https://antennabench.com/sample-report/">Canonical sample report</a> ·
+  <a href="https://antennabench.com/sample-report/">Real sample report</a> ·
+  <a href="https://antennabench.com/sample-report/inconclusive/">Inconclusive sample</a> ·
   <a href="docs/README.md">Documentation</a>
 </p>
 

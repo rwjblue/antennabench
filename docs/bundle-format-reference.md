@@ -571,11 +571,18 @@ The canonical sample-report input is:
 fixtures/session-bundles/canonical-sample-report.session.wsprabundle/
 ```
 
-It is a purpose-built, redistribution-safe synthetic whole-station A/B session
-with two antennas and two bands. It retains source-shaped local and imported
-inputs, representative operator events, exclusions, and missing optional data.
-It is the designated input for sample rendering; it is not evidence for an
-antenna winner or a scientifically valid comparison.
+It is a publication-clean projection of a real interleaved WSPR A/B session.
+It retains the measured schedule and normalized observations needed to
+reproduce the matched-path report while excluding private operational metadata
+and raw provider captures. It is the designated input for primary sample
+rendering; its descriptive result applies only to that session and is not an
+antenna winner or a scientifically universal comparison.
+
+The previous synthetic zero-matched-path fixture remains at:
+
+```text
+fixtures/session-bundles/inconclusive-sample-report.session.wsprabundle/
+```
 
 Fixture provenance, synthetic-data policy, demonstrated cases, and the roles of
 the smaller focused fixtures are maintained in

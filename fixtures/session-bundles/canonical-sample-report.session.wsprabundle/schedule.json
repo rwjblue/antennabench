@@ -1,20 +1,152 @@
 {
   "schema_version": 1,
-  "session_id": "session-canonical-sample-2026-03-14",
-  "mode": "whole_station_ab",
+  "session_id": "session-3e698e14-13ff-4ce4-b6bb-71e66734c6e4",
+  "mode": "tx_focused",
   "goal": "general_coverage",
   "slots": [
-    {"slot_id":"slot-001","sequence_number":1,"starts_at":"2026-03-14T20:00:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Vertical"},
-    {"slot_id":"slot-002","sequence_number":2,"starts_at":"2026-03-14T20:02:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Inverted V"},
-    {"slot_id":"slot-003","sequence_number":3,"starts_at":"2026-03-14T20:04:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Vertical"},
-    {"slot_id":"slot-004","sequence_number":4,"starts_at":"2026-03-14T20:06:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Inverted V"},
-    {"slot_id":"slot-005","sequence_number":5,"starts_at":"2026-03-14T20:08:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Vertical"},
-    {"slot_id":"slot-006","sequence_number":6,"starts_at":"2026-03-14T20:10:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Inverted V"},
-    {"slot_id":"slot-007","sequence_number":7,"starts_at":"2026-03-14T20:12:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Vertical"},
-    {"slot_id":"slot-008","sequence_number":8,"starts_at":"2026-03-14T20:14:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Inverted V"},
-    {"slot_id":"slot-009","sequence_number":9,"starts_at":"2026-03-14T20:16:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Vertical"},
-    {"slot_id":"slot-010","sequence_number":10,"starts_at":"2026-03-14T20:18:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Inverted V"},
-    {"slot_id":"slot-011","sequence_number":11,"starts_at":"2026-03-14T20:20:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Vertical"},
-    {"slot_id":"slot-012","sequence_number":12,"starts_at":"2026-03-14T20:22:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Inverted V"}
+    {
+      "slot_id": "slot-f2d39e9e-4efd-42b6-a8ec-96d2e80a05de",
+      "sequence_number": 1,
+      "starts_at": "2026-07-20T16:50:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    },
+    {
+      "slot_id": "slot-90969ae2-1e10-45d2-b443-a863abe2dd09",
+      "sequence_number": 2,
+      "starts_at": "2026-07-20T16:52:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-25bd05e1-d735-4894-bf4f-bc959f787f06",
+      "sequence_number": 3,
+      "starts_at": "2026-07-20T16:54:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-30c41095-4778-4750-a1aa-c2cd5702b892",
+      "sequence_number": 4,
+      "starts_at": "2026-07-20T16:56:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    },
+    {
+      "slot_id": "slot-6181b5e3-2009-4067-bbea-6c78ded74e54",
+      "sequence_number": 5,
+      "starts_at": "2026-07-20T16:58:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    },
+    {
+      "slot_id": "slot-d257f63d-329e-4976-9418-10d8789c9d9c",
+      "sequence_number": 6,
+      "starts_at": "2026-07-20T17:00:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-8f1a5040-3ab5-44ec-8cb6-8753f77ef9c7",
+      "sequence_number": 7,
+      "starts_at": "2026-07-20T17:02:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-85b2c3eb-ba2d-4ada-9d36-b635c933125d",
+      "sequence_number": 8,
+      "starts_at": "2026-07-20T17:04:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    },
+    {
+      "slot_id": "slot-a67d4084-1be0-4424-89db-7af544b99e7e",
+      "sequence_number": 9,
+      "starts_at": "2026-07-20T17:06:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    },
+    {
+      "slot_id": "slot-0fb76d55-c6a6-441b-8411-6ac4924003ba",
+      "sequence_number": 10,
+      "starts_at": "2026-07-20T17:08:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-f6c7829a-04d3-49ee-92c4-26e38810167c",
+      "sequence_number": 11,
+      "starts_at": "2026-07-20T17:10:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-3f48e0bb-881f-4a77-9a91-b8a6a24a7d20",
+      "sequence_number": 12,
+      "starts_at": "2026-07-20T17:12:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    },
+    {
+      "slot_id": "slot-c9b0270c-f1d7-4654-bd21-513c5dc0833b",
+      "sequence_number": 13,
+      "starts_at": "2026-07-20T17:14:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    },
+    {
+      "slot_id": "slot-755cf152-d610-4366-a9cd-4ebb03576761",
+      "sequence_number": 14,
+      "starts_at": "2026-07-20T17:18:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-35b4ebb7-70ab-45f8-90cf-a4f8d6cbcd0a",
+      "sequence_number": 15,
+      "starts_at": "2026-07-20T17:22:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "DX Commander"
+    },
+    {
+      "slot_id": "slot-e9aaaecd-6349-4db0-8b17-aeeb59b45e93",
+      "sequence_number": 16,
+      "starts_at": "2026-07-20T17:48:01Z",
+      "duration_seconds": 120,
+      "guard_seconds": 0,
+      "band": "20m",
+      "antenna_label": "Attic EFHW"
+    }
   ]
 }

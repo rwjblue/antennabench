@@ -5,10 +5,12 @@ It keeps missing evidence, comparison limits, and run problems visible instead
 of turning them into a cleaner-looking result.
 
 Open the [canonical sample report](https://antennabench.com/sample-report/) in
-another tab if you want a concrete report to follow. The sample is intentionally
-useful as an inconclusive example: both antennas produced evidence, but it has
-no [matched pairs](glossary.md#matched-pair-internally-paired-row), so it does
-not manufacture an A/B difference.
+another tab if you want a concrete report to follow. It is generated from a
+real, sanitized station session and contains 83 shared paths and 327
+[matched pairs](glossary.md#matched-pair-internally-paired-row). A separate
+[inconclusive sample](https://antennabench.com/sample-report/inconclusive/)
+shows the equally honest case where both antennas produced evidence but no
+same-path comparison was available.
 
 This guide follows the full evidence report from top to bottom. The shorter
 compact summary uses the same result facts but omits most audit detail.

@@ -1,10 +1,7 @@
 {
   "schema_version": 1,
-  "session_id": "session-canonical-sample-2026-03-14",
+  "session_id": "session-3e698e14-13ff-4ce4-b6bb-71e66734c6e4",
   "generated_at": null,
   "status": "not_run",
-  "notes": [
-    "Derived analysis is intentionally not persisted in the canonical sample",
-    "Build current report data from the normalized bundle"
-  ]
+  "notes": []
 }

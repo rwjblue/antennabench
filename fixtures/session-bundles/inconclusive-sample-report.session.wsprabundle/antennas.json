@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "session_id": "session-canonical-sample-2026-03-14",
+  "antennas": [
+    {
+      "label": "Vertical",
+      "facets": ["vertical", "ground_mounted", "multiband"],
+      "height_m": 7.2,
+      "radial_count": 24,
+      "radial_length_m": 5.0,
+      "orientation_degrees": null,
+      "tuner": "remote automatic tuner at feedpoint",
+      "feedline": "15 m RG-8X",
+      "notes": "Synthetic 7.2 m wire over a mixed-length radial field"
+    },
+    {
+      "label": "Inverted V",
+      "facets": ["dipole", "inverted_vee", "multiband"],
+      "height_m": 10.5,
+      "radial_count": null,
+      "radial_length_m": null,
+      "orientation_degrees": 65.0,
+      "tuner": null,
+      "feedline": null,
+      "notes": "Synthetic center-fed wire; tuner and feedline details intentionally unrecorded"
+    }
+  ]
+}

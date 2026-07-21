@@ -933,7 +933,7 @@ fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_compact_
 #[test]
 fn no_matched_paths_with_zero_usable_observations_does_not_claim_reach_evidence() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/session-bundles/canonical-sample-report.session.wsprabundle");
+        .join("../../fixtures/session-bundles/inconclusive-sample-report.session.wsprabundle");
     let mut bundle = BundleStore::new(fixture)
         .read_normalized_validated()
         .expect("canonical sample should be valid");
@@ -1708,7 +1708,7 @@ fn plain_language_answer_from(html: &str) -> &str {
 
 fn canonical_report() -> SessionReport {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/session-bundles/canonical-sample-report.session.wsprabundle");
+        .join("../../fixtures/session-bundles/inconclusive-sample-report.session.wsprabundle");
     let bundle = BundleStore::new(fixture)
         .read_normalized_validated()
         .expect("canonical sample should be valid");

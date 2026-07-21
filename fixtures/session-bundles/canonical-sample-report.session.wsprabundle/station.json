@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "session_id": "session-canonical-sample-2026-03-14",
-  "callsign": "N0CALL",
-  "grid": "FN42",
+  "session_id": "session-3e698e14-13ff-4ce4-b6bb-71e66734c6e4",
+  "callsign": "N1RWJ",
+  "grid": "FN41fr",
   "power_watts": 5.0,
-  "operator_notes": "Purpose-built synthetic whole-station A/B session; no operator or on-air data"
+  "operator_notes": null
 }

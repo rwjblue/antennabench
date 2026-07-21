@@ -286,8 +286,10 @@ invariant(
 const canonicalSample = read("apps/hosted/public/sample-report/index.html");
 for (const reportContract of [
   "What did the run show?",
-  "Answered by this run: Observed reach",
-  "No same-path SNR comparison",
+  "Answered by this run: Shared-path signal",
+  "+5 dB median",
+  "83 shared paths",
+  "327 matched pairs",
   "Observed reach",
   "Run quality and answerability",
   "does not select an antenna winner",
@@ -298,11 +300,41 @@ for (const reportContract of [
   );
 }
 invariant(
-  !canonicalSample.includes('id="same-path-signal"') &&
-    !canonicalSample.includes('href="#same-path-signal"'),
-  "Unavailable shared-path signal must not dominate canonical sample navigation",
+  canonicalSample.includes('id="same-path-signal"') &&
+    canonicalSample.includes('href="#same-path-signal"'),
+  "Available shared-path evidence must lead canonical sample navigation",
 );
 invariant(!/<script\b/i.test(canonicalSample), "Canonical sample must remain standalone and script-free");
+
+const compactSample = read("apps/hosted/public/sample-report/compact/index.html");
+for (const reportContract of ["+5 dB median", "83 shared paths", "327 matched pairs"]) {
+  invariant(
+    compactSample.includes(reportContract),
+    `Compact sample is missing the report contract: ${reportContract}`,
+  );
+}
+invariant(!/<script\b/i.test(compactSample), "Compact sample must remain standalone and script-free");
+
+const inconclusiveSample = read("apps/hosted/public/sample-report/inconclusive/index.html");
+for (const reportContract of [
+  "Answered by this run: Observed reach",
+  "No same-path SNR comparison",
+  "does not select an antenna winner",
+]) {
+  invariant(
+    inconclusiveSample.includes(reportContract),
+    `Inconclusive sample is missing the report contract: ${reportContract}`,
+  );
+}
+invariant(
+  !inconclusiveSample.includes('id="same-path-signal"') &&
+    !inconclusiveSample.includes('href="#same-path-signal"'),
+  "Unavailable shared-path signal must not dominate inconclusive sample navigation",
+);
+invariant(
+  !/<script\b/i.test(inconclusiveSample),
+  "Inconclusive sample must remain standalone and script-free",
+);
 
 const deployedMark = read("apps/hosted/public/mark.svg");
 const desktopMark = read("apps/desktop/frontend/mark.svg");

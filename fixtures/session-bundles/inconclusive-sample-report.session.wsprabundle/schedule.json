@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "session_id": "session-canonical-sample-2026-03-14",
+  "mode": "whole_station_ab",
+  "goal": "general_coverage",
+  "slots": [
+    {"slot_id":"slot-001","sequence_number":1,"starts_at":"2026-03-14T20:00:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Vertical"},
+    {"slot_id":"slot-002","sequence_number":2,"starts_at":"2026-03-14T20:02:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Inverted V"},
+    {"slot_id":"slot-003","sequence_number":3,"starts_at":"2026-03-14T20:04:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Vertical"},
+    {"slot_id":"slot-004","sequence_number":4,"starts_at":"2026-03-14T20:06:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Inverted V"},
+    {"slot_id":"slot-005","sequence_number":5,"starts_at":"2026-03-14T20:08:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Vertical"},
+    {"slot_id":"slot-006","sequence_number":6,"starts_at":"2026-03-14T20:10:00Z","duration_seconds":120,"guard_seconds":15,"band":"20m","antenna_label":"Inverted V"},
+    {"slot_id":"slot-007","sequence_number":7,"starts_at":"2026-03-14T20:12:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Vertical"},
+    {"slot_id":"slot-008","sequence_number":8,"starts_at":"2026-03-14T20:14:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Inverted V"},
+    {"slot_id":"slot-009","sequence_number":9,"starts_at":"2026-03-14T20:16:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Vertical"},
+    {"slot_id":"slot-010","sequence_number":10,"starts_at":"2026-03-14T20:18:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Inverted V"},
+    {"slot_id":"slot-011","sequence_number":11,"starts_at":"2026-03-14T20:20:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Vertical"},
+    {"slot_id":"slot-012","sequence_number":12,"starts_at":"2026-03-14T20:22:00Z","duration_seconds":120,"guard_seconds":15,"band":"40m","antenna_label":"Inverted V"}
+  ]
+}

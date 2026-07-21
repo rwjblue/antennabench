@@ -571,8 +571,9 @@ try {
     assert.deepEqual(
       navigationTargets,
       mode === "full"
-        ? [
+          ? [
             "what-run-show",
+            "same-path-signal",
             "reach-unique-paths",
             "distance-direction",
             "coverage-overlap",
@@ -581,6 +582,7 @@ try {
           ]
         : [
             "what-run-show",
+            "same-path-signal",
             "observed-footprint",
             "run-quality",
           ],

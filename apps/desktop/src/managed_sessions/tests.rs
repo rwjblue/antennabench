@@ -342,7 +342,7 @@ fn healthy_rows_sort_by_authoritative_creation_time_then_name() {
     )
     .unwrap();
     copy_directory(
-        &fixture("canonical-sample-report.session.wsprabundle"),
+        &fixture("inconclusive-sample-report.session.wsprabundle"),
         &older,
     )
     .unwrap();

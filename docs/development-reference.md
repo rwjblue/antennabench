@@ -188,11 +188,12 @@ antennabench-propagation` never contacts NOAA. The live blocking transport is a
 one-shot boundary for future desktop orchestration; network or source failure
 must remain a typed optional outcome rather than a session failure.
 
-The canonical sample-report bundle is purpose-built synthetic data documented
-under `fixtures/session-bundles/`. Its focused integration test reads,
-normalizes, validates, exports, reopens, analyzes, and builds report data from
-the bundle. The test pins important scenario counts without snapshotting the
-entire fixture.
+The canonical sample-report bundle is a publication-clean projection of a real
+A/B session documented under `fixtures/session-bundles/`. Its focused
+integration test reads, normalizes, validates, exports, reopens, analyzes, and
+builds report data from the bundle. The test pins important evidence and
+sanitation invariants without snapshotting the entire fixture. The former
+synthetic canonical bundle remains beside it as the inconclusive sample.
 
 `crates/storage/tests/v2_bundle.rs` treats every checked-in v1 bundle as a
 migration fixture. It upgrades each source into a temporary
@@ -309,6 +310,7 @@ To generate the canonical sample as an untracked verification artifact:
 ```bash
 cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-sample.html
 cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-compact-summary.html --compact-summary
+cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-inconclusive.html --bundle fixtures/session-bundles/inconclusive-sample-report.session.wsprabundle
 ```
 
 For documentation-only changes, inspect the rendered intent and verify the diff

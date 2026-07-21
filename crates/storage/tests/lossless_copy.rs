@@ -6,7 +6,7 @@ use tempfile::TempDir;
 
 fn canonical_fixture() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/session-bundles/canonical-sample-report.session.wsprabundle")
+        .join("../../fixtures/session-bundles/inconclusive-sample-report.session.wsprabundle")
 }
 
 fn copy_fixture(temp: &TempDir) -> std::path::PathBuf {

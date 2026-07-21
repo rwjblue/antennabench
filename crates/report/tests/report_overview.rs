@@ -14,8 +14,8 @@ use antennabench_storage::BundleStore;
 use chrono::Duration;
 
 #[test]
-fn canonical_overview_is_explicit_serializable_and_has_no_invented_comparison() {
-    let report = build_report(&canonical_bundle()).expect("canonical report should build");
+fn inconclusive_overview_is_explicit_serializable_and_has_no_invented_comparison() {
+    let report = build_report(&inconclusive_bundle()).expect("inconclusive report should build");
     let overview = &report.overview;
 
     assert_eq!(overview.scope.session_id, report.context.session_id);
@@ -650,8 +650,8 @@ fn located_tx_observation(
     observation
 }
 
-fn canonical_bundle() -> BundleContents {
-    fixture_bundle("canonical-sample-report.session.wsprabundle")
+fn inconclusive_bundle() -> BundleContents {
+    fixture_bundle("inconclusive-sample-report.session.wsprabundle")
 }
 
 fn minimal_bundle() -> BundleContents {

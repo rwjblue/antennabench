@@ -30,11 +30,13 @@ npm run site:dry-build --workspace @antennabench/hosted
 
 `mise run hosted:test` runs those checks together with the preserved hosted
 Worker tests, type drift check, strict TypeScript compilation, and prototype dry
-builds. The sample check reruns the canonical fixture through the
-trusted Rust report renderer and byte-compares the result with
-`public/sample-report/index.html`. The social-card check validates the committed
-PNG signature and dimensions together with its editable SVG design source.
-Astro adds no hydration or client JavaScript.
+builds. The sample check reruns the real canonical fixture and the retained
+synthetic inconclusive fixture through the trusted Rust report renderer. It
+byte-compares the primary full report, primary compact summary, and
+inconclusive report with their committed files under `public/sample-report/`.
+The social-card check validates the committed PNG signature and dimensions
+together with its editable SVG design source. Astro adds no hydration or client
+JavaScript.
 
 The static validation checks expected pages and assets, internal links, canonical
 and social metadata, security headers, the site-only Wrangler boundary, exact
