@@ -45,8 +45,6 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          cache-on-failure: true
 
       - name: Run CI checks
         run: mise run ci
@@ -94,7 +92,8 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          cache-on-failure: true
+          # Preserve healthy caches while forcing Windows off the suspect v0 artifacts.
+          prefix-key: ${{ matrix.name == 'Windows' && 'v1-rust' || 'v0-rust' }}
 
       - name: Run portable workspace tests
         run: mise run test
