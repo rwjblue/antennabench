@@ -253,14 +253,6 @@ pub(super) fn report_antenna_labels(report: &crate::SessionReport) -> (String, S
         escape_html(report.comparison.right_label.as_deref().unwrap_or("Right")),
     )
 }
-pub(super) fn orientation_antenna_labels(
-    orientation: &antennabench_analysis::DeltaOrientation,
-) -> (String, String) {
-    (
-        escape_html(&orientation.subtrahend_label),
-        escape_html(&orientation.minuend_label),
-    )
-}
 pub(super) fn labeled_comparison_order(
     value: ComparisonOrder,
     left_label: &str,

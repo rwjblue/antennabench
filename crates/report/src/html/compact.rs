@@ -12,11 +12,14 @@ use super::{
         is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
         render_answer_first_overview_with_reference, render_compact_coverage_map_section,
         render_compact_observed_footprint_section, render_how_to_read, render_question_navigation,
-        render_reporter_activity_section, render_same_path_stratum,
+        render_reporter_activity_section, render_same_path_view,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
-    templates::{render_template, CompactHeaderTemplate},
+    templates::{
+        render_template, CompactHeaderTemplate, CompactSamePathEndTemplate,
+        CompactSamePathStartTemplate,
+    },
 };
 
 /// Renders a concise, deterministic, standalone HTML summary from the same
@@ -85,9 +88,9 @@ pub fn render_compact_summary_html_with_resources(
     for family in ordered_question_families(report) {
         match family {
             ReportQuestionFamily::SharedPathSignal => {
-                out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Shared-path signal</h2>");
-                render_compact_same_path_view(&mut out, report);
-                out.push_str("</section>");
+                render_template(&mut out, &CompactSamePathStartTemplate)?;
+                render_same_path_view(&mut out, report, true)?;
+                render_template(&mut out, &CompactSamePathEndTemplate)?;
             }
             ReportQuestionFamily::CommonOpportunityDetection => {
                 render_reporter_activity_section(&mut out, report);
@@ -95,19 +98,19 @@ pub fn render_compact_summary_html_with_resources(
             }
             ReportQuestionFamily::ObservedReach => {
                 if !rendered_observed_footprint {
-                    render_compact_observed_footprint_section(&mut out, report);
+                    render_compact_observed_footprint_section(&mut out, report)?;
                     rendered_observed_footprint = true;
                 }
             }
             ReportQuestionFamily::GeographicProfile => {
                 if !rendered_observed_footprint {
-                    render_compact_observed_footprint_section(&mut out, report);
+                    render_compact_observed_footprint_section(&mut out, report)?;
                     rendered_observed_footprint = true;
                 }
             }
             ReportQuestionFamily::Repeatability => {
                 if !rendered_observed_footprint {
-                    render_compact_observed_footprint_section(&mut out, report);
+                    render_compact_observed_footprint_section(&mut out, report)?;
                     rendered_observed_footprint = true;
                 }
             }
@@ -158,43 +161,6 @@ pub(super) fn render_compact_run_quality(out: &mut CheckedHtmlWriter<'_>, report
         out.push_str("<p class=\"notice\"><strong>Bounded overview:</strong> detailed report families were intentionally omitted by the resource policy; no rows were sampled. Use the full evidence report and lossless session bundle for available audit detail.</p>");
     }
     out.push_str("<p class=\"muted compact-omission\">This compact summary intentionally omits unmatched-path, missing-SNR, exclusion, duplicate, conflict, timeline, lifecycle-history, controller-output, import, solar, and raw-observation audit rows. The full evidence report and lossless session bundle retain that complete audit evidence; no rows are sampled here.</p></section>");
-}
-
-pub(super) fn render_compact_same_path_view(
-    out: &mut CheckedHtmlWriter<'_>,
-    report: &SessionReport,
-) {
-    if report.overview.strata.is_empty() {
-        out.push_str("<p class=\"empty\">No comparison group has same-path evidence available. This is not a 0 dB result.</p>");
-        return;
-    }
-    let orientation = report.overview.scope.delta_orientation.as_ref();
-    let available = report
-        .overview
-        .strata
-        .iter()
-        .filter(|row| !row.path_median_deltas.is_empty())
-        .collect::<Vec<_>>();
-    let unavailable = report
-        .overview
-        .strata
-        .iter()
-        .filter(|row| row.path_median_deltas.is_empty())
-        .collect::<Vec<_>>();
-    if available.is_empty() {
-        write_html!(out, "<p class=\"empty\">No usable same-path path-median delta is available across {} ({}). This is not a 0 dB result; availability remains explicit in the result table.</p>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable));
-        return;
-    }
-    if let Some(orientation) = orientation {
-        write_html!(out, "<p class=\"orientation\"><strong>Signed values:</strong> Positive values mean {} was stronger; negative values mean {} was stronger. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label));
-    }
-    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale.</p>");
-    for row in available {
-        render_same_path_stratum(out, row, orientation);
-    }
-    if !unavailable.is_empty() {
-        write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable same-path path-median delta in {} of {} comparison groups: {}. Availability remains explicit in the result table.</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable));
-    }
 }
 
 pub(super) fn render_compact_reference(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {

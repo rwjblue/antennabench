@@ -695,7 +695,7 @@ fn renders_distinct_escaped_antenna_labels_without_mutating_report_data() {
     assert_eq!(serde_json::to_vec(&report).unwrap(), before);
     for html in [&full, &compact] {
         assert!(html.contains(
-            "Positive values mean Loop &gt; Beam was stronger; negative values mean &lt;Vertical &amp; 1&gt; was stronger."
+            "Positive values mean Loop &#62; Beam was stronger; negative values mean &#60;Vertical &#38; 1&#62; was stronger."
         ));
         assert!(html.contains("&lt;Vertical &amp; 1&gt; only"));
         assert!(html.contains("Loop &gt; Beam only"));
@@ -1282,7 +1282,7 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     let html = render_standalone_html(&report).unwrap();
 
     assert!(
-        html.contains("Positive values mean Antenna &amp; positive with another deliberately long label was stronger; negative values mean Antenna &lt;negative&gt; with a deliberately long operator label was stronger.")
+        html.contains("Positive values mean Antenna &#38; positive with another deliberately long label was stronger; negative values mean Antenna &#60;negative&#62; with a deliberately long operator label was stronger.")
     );
     assert_eq!(
         html.matches("class=\"path-distribution-dot-group\"")

@@ -1,42 +1,77 @@
+use std::collections::BTreeMap;
+
 use super::super::geometry::geometry_class;
 use super::*;
-use crate::ReportOverviewPathMedianDelta;
-use std::collections::BTreeMap;
+use crate::{
+    html::{
+        templates::{
+            render_template, PathQuestionSectionEndTemplate, ReachAuditStartTemplate,
+            ReachBarTemplate, ReachSectionStartTemplate, ReachTemplate, SamePathAuditStartTemplate,
+            SamePathSectionStartTemplate, SamePathTemplate,
+        },
+        view::{
+            ExactPathView, PathDistributionView, PathDotView, PathStratumView, PathTickView,
+            ReachBarView, ReachRowView, ReachSegmentView, ReachView, SamePathView,
+        },
+    },
+    ReportOverviewPathMedianDelta,
+};
 
 pub(in super::super) fn render_same_path_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
-    out.push_str("<section id=\"same-path-signal\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"same-path-title\"><h2 id=\"same-path-title\">Shared-path signal</h2><p class=\"muted\">Evidence basis: finite-SNR reports for the same remote path in both cycles of an eligible block, kept within each separate comparison group.</p>");
-    render_same_path_view(out, report);
-    out.push_str("<details class=\"audit-disclosure\"><summary>Review same-path signal detail</summary><div class=\"disclosure-body\">");
+    render_template(out, &SamePathSectionStartTemplate)?;
+    render_same_path_view(out, report, false)?;
+    render_template(out, &SamePathAuditStartTemplate)?;
     render_comparison_diagnostics(out, report)?;
     render_paired_differences(out, report)?;
     render_paired_snr_time(out, report)?;
     render_stratum_summaries(out, report)?;
-    out.push_str("</div></details></section>");
-    Ok(())
+    render_template(out, &PathQuestionSectionEndTemplate)
 }
+
 pub(in super::super) fn render_reach_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
-    out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2><p class=\"muted\">Evidence basis: unique observed finite-SNR remote paths by antenna within each separate comparison group.</p>");
-    render_reach_view(out, report);
-    out.push_str("<details class=\"audit-disclosure\"><summary>Review path overlap and missingness</summary><div class=\"disclosure-body\">");
+    render_template(out, &ReachSectionStartTemplate)?;
+    render_template(
+        out,
+        &ReachTemplate {
+            view: reach_view(report),
+        },
+    )?;
+    render_template(out, &ReachAuditStartTemplate)?;
     render_overlap(out, report)?;
-    out.push_str("</div></details></section>");
-    Ok(())
+    render_template(out, &PathQuestionSectionEndTemplate)
 }
+
 pub(in super::super) fn render_same_path_view(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-) {
+    compact: bool,
+) -> Result<(), ReportError> {
+    render_template(
+        out,
+        &SamePathTemplate {
+            view: same_path_view(report, compact),
+        },
+    )
+}
+
+fn same_path_view(report: &SessionReport, compact: bool) -> SamePathView {
     if report.overview.strata.is_empty() {
-        out.push_str("<p class=\"empty\">No comparison group has same-path evidence available. This is not a zero-delta result.</p>");
-        return;
+        return SamePathView {
+            compact,
+            no_groups: true,
+            all_unavailable: None,
+            orientation: None,
+            strata: Vec::new(),
+            unavailable: None,
+        };
     }
-    let (left_label, right_label) = report_antenna_labels(report);
+    let (left_label, right_label) = raw_labels(report);
     let orientation = report.overview.scope.delta_orientation.as_ref();
     let available = report
         .overview
@@ -51,69 +86,115 @@ pub(in super::super) fn render_same_path_view(
         .filter(|row| row.path_median_deltas.is_empty())
         .collect::<Vec<_>>();
     if available.is_empty() {
-        let missing_left = unavailable
-            .iter()
-            .map(|row| row.missing_snr_left_count)
-            .sum::<usize>();
-        let missing_right = unavailable
-            .iter()
-            .map(|row| row.missing_snr_right_count)
-            .sum::<usize>();
-        write_html!(out, "<p class=\"empty\">No usable same-path signal reports are available across {} ({}). Missing SNR remains separate ({}: {}, {}: {}). This is not a 0 dB result.</p>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable), left_label, missing_left, right_label, missing_right);
-        return;
+        let all_unavailable = if compact {
+            format!(
+                "No usable same-path path-median delta is available across {} ({}). This is not a 0 dB result; availability remains explicit in the result table.",
+                comparison_groups_label(unavailable.len()),
+                raw_strata_list(&unavailable)
+            )
+        } else {
+            let (missing_left, missing_right) = missing_snr_totals(&unavailable);
+            format!(
+                "No usable same-path signal reports are available across {} ({}). Missing SNR remains separate ({left_label}: {missing_left}, {right_label}: {missing_right}). This is not a 0 dB result.",
+                comparison_groups_label(unavailable.len()),
+                raw_strata_list(&unavailable)
+            )
+        };
+        return SamePathView {
+            compact,
+            no_groups: false,
+            all_unavailable: Some(all_unavailable),
+            orientation: None,
+            strata: Vec::new(),
+            unavailable: None,
+        };
     }
-    if let Some(orientation) = orientation {
-        write_html!(out, "<p class=\"orientation\"><strong>Signed values:</strong> Positive values mean {} was stronger; negative values mean {} was stronger. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label));
-    }
-    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale; a 0 dB dot is retained as a true zero.</p>");
-    for row in available {
-        render_same_path_stratum(out, row, orientation);
-    }
-    if !unavailable.is_empty() {
-        let missing_left = unavailable
-            .iter()
-            .map(|row| row.missing_snr_left_count)
-            .sum::<usize>();
-        let missing_right = unavailable
-            .iter()
-            .map(|row| row.missing_snr_right_count)
-            .sum::<usize>();
-        write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable same-path signal reports in {} of {} comparison groups: {}. Missing SNR remains separate ({}: {}, {}: {}).</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable), left_label, missing_left, right_label, missing_right);
+    let orientation_text = orientation.map(|value| {
+        format!(
+            "Positive values mean {} was stronger; negative values mean {} was stronger. The vertical reference is zero.",
+            value.minuend_label, value.subtrahend_label
+        )
+    });
+    let unavailable_message = (!unavailable.is_empty()).then(|| {
+        if compact {
+            format!(
+                "No usable same-path path-median delta in {} of {} comparison groups: {}. Availability remains explicit in the result table.",
+                unavailable.len(),
+                report.overview.strata.len(),
+                raw_strata_list(&unavailable)
+            )
+        } else {
+            let (missing_left, missing_right) = missing_snr_totals(&unavailable);
+            format!(
+                "No usable same-path signal reports in {} of {} comparison groups: {}. Missing SNR remains separate ({left_label}: {missing_left}, {right_label}: {missing_right}).",
+                unavailable.len(),
+                report.overview.strata.len(),
+                raw_strata_list(&unavailable)
+            )
+        }
+    });
+    SamePathView {
+        compact,
+        no_groups: false,
+        all_unavailable: None,
+        orientation: orientation_text,
+        strata: available
+            .into_iter()
+            .map(|row| path_stratum_view(row, orientation))
+            .collect(),
+        unavailable: unavailable_message,
     }
 }
-pub(in super::super) fn render_same_path_stratum(
-    out: &mut CheckedHtmlWriter<'_>,
+
+fn path_stratum_view(
     row: &ReportOverviewStratum,
     orientation: Option<&antennabench_analysis::DeltaOrientation>,
-) {
-    write_html!(
-        out,
-        "<h3>{}</h3><p class=\"muted\">{} matched path{} · {} matched pair{} · {} block{}</p>",
-        comparison_stratum(&row.stratum),
-        row.path_median_deltas.len(),
-        plural_suffix(row.path_median_deltas.len()),
-        row.paired_row_count,
-        plural_suffix(row.paired_row_count),
-        row.contributing_block_count,
-        plural_suffix(row.contributing_block_count)
-    );
+) -> PathStratumView {
+    let matched_paths = row.path_median_deltas.len();
+    let empty_message = if row.path_median_deltas.is_empty() {
+        Some(
+            if row.missing_snr_left_count > 0 || row.missing_snr_right_count > 0 {
+                let (left_label, right_label) = orientation
+                    .map(raw_orientation_labels)
+                    .unwrap_or_else(|| ("Left".into(), "Right".into()));
+                format!(
+                "No usable same-path signal report is available; missing SNR is retained separately ({left_label}: {}, {right_label}: {}). This is not a 0 dB result.",
+                row.missing_snr_left_count, row.missing_snr_right_count
+            )
+            } else {
+                "No usable same-path signal report is available for this comparison group. This is not a 0 dB result."
+                .to_string()
+            },
+        )
+    } else {
+        None
+    };
+    PathStratumView {
+        label: raw_stratum(&row.stratum),
+        matched_paths,
+        path_suffix: plural_suffix(matched_paths),
+        matched_pairs: row.paired_row_count,
+        pair_suffix: plural_suffix(row.paired_row_count),
+        blocks: row.contributing_block_count,
+        block_suffix: plural_suffix(row.contributing_block_count),
+        empty_message,
+        distribution: path_distribution_view(row, orientation),
+    }
+}
+
+fn path_distribution_view(
+    row: &ReportOverviewStratum,
+    orientation: Option<&antennabench_analysis::DeltaOrientation>,
+) -> Option<PathDistributionView> {
     if row.path_median_deltas.is_empty() {
-        if row.missing_snr_left_count > 0 || row.missing_snr_right_count > 0 {
-            let (left_label, right_label) = orientation
-                .map(orientation_antenna_labels)
-                .unwrap_or_else(|| ("Left".into(), "Right".into()));
-            write_html!(out, "<p class=\"empty\">No usable same-path signal report is available; missing SNR is retained separately ({}: {}, {}: {}). This is not a 0 dB result.</p>", left_label, row.missing_snr_left_count, right_label, row.missing_snr_right_count);
-        } else {
-            out.push_str("<p class=\"empty\">No usable same-path signal report is available for this comparison group. This is not a 0 dB result.</p>");
-        }
-        return;
+        return None;
     }
     let median = match row.path_delta {
         ReportOverviewPathDelta::Available {
             median_path_delta_right_minus_left_db,
             ..
         } => median_path_delta_right_minus_left_db,
-        ReportOverviewPathDelta::Unavailable => return,
+        ReportOverviewPathDelta::Unavailable => return None,
     };
     let max_abs = row
         .path_median_deltas
@@ -121,8 +202,9 @@ pub(in super::super) fn render_same_path_stratum(
         .map(|path| path.median_delta_right_minus_left_db.abs())
         .chain(std::iter::once(median.abs()))
         .fold(1.0_f64, f64::max);
+    let maximum_absolute = path_axis_limit(max_abs);
     let (negative_label, positive_label) = orientation
-        .map(orientation_antenna_labels)
+        .map(raw_orientation_labels)
         .unwrap_or_else(|| ("Negative side".into(), "Positive side".into()));
     let mut paths = row.path_median_deltas.iter().collect::<Vec<_>>();
     paths.sort_by(|left, right| {
@@ -134,106 +216,235 @@ pub(in super::super) fn render_same_path_stratum(
         .iter()
         .map(|path| path.median_delta_right_minus_left_db)
         .collect::<Vec<_>>();
-    let first_quartile = interpolated_quantile(&values, 0.25);
-    let third_quartile = interpolated_quantile(&values, 0.75);
-    let negative_count = values.iter().filter(|value| **value < 0.0).count();
-    let tied_count = values.iter().filter(|value| **value == 0.0).count();
-    let positive_count = values.iter().filter(|value| **value > 0.0).count();
-
-    write_html!(out, "<div class=\"path-distribution\"><dl class=\"facts path-distribution-summary\"><div class=\"fact\"><dt>{} stronger</dt><dd>{}</dd></div><div class=\"fact\"><dt>Tied at 0 dB</dt><dd>{}</dd></div><div class=\"fact\"><dt>{} stronger</dt><dd>{}</dd></div><div class=\"fact\"><dt>Group median</dt><dd>{} dB</dd></div><div class=\"fact\"><dt>Middle half</dt><dd>{} to {} dB</dd></div></dl>", negative_label, negative_count, tied_count, positive_label, positive_count, format_signed(median), format_signed(first_quartile), format_signed(third_quartile));
-    render_path_distribution_svg(
-        out,
-        &paths,
-        PathDistributionScale {
-            maximum_absolute: path_axis_limit(max_abs),
+    let tick_step = path_axis_tick_step(maximum_absolute);
+    let tick_count = (maximum_absolute / tick_step).round() as i32;
+    let ticks = (-tick_count..=tick_count)
+        .map(|tick| {
+            let value = tick as f64 * tick_step;
+            PathTickView {
+                x: format!("{:.2}", path_x(value, maximum_absolute)),
+                label: if tick == 0 {
+                    "0".to_string()
+                } else {
+                    format_signed(value)
+                },
+            }
+        })
+        .collect();
+    let dots = path_dots(&paths, maximum_absolute);
+    Some(PathDistributionView {
+        negative_count: values.iter().filter(|value| **value < 0.0).count(),
+        tied_count: values.iter().filter(|value| **value == 0.0).count(),
+        positive_count: values.iter().filter(|value| **value > 0.0).count(),
+        median: format_signed(median),
+        first_quartile: format_signed(interpolated_quantile(&values, 0.25)),
+        third_quartile: format_signed(interpolated_quantile(&values, 0.75)),
+        aria_label: format!(
+            "Distribution of {} signed path-median SNR differences. Negative values favor {negative_label}; positive values favor {positive_label}.",
+            paths.len()
+        ),
+        negative_label,
+        positive_label,
+        ticks,
+        dots,
+        orientation_text: if orientation.is_some() {
+            "signed".to_string()
+        } else {
+            "right − left".to_string()
         },
-        &negative_label,
-        &positive_label,
-    );
-    out.push_str("</div>");
-    let orientation_text = orientation
-        .map(|_| "signed".to_string())
-        .unwrap_or_else(|| "right − left".to_string());
-    out.push_str("<details class=\"audit-disclosure path-detail-disclosure\"><summary>Review exact remote paths and matched-pair counts<span class=\"disclosure-purpose\">See which paths contributed, how many matched pairs support each path median, and the exact delta behind each dot.</span></summary><div class=\"disclosure-body\">");
-    write_html!(out, "<div class=\"table-wrap\"><table><caption>One path-median {} SNR delta per remote path for {}; the group median is {} dB.</caption><thead><tr><th scope=\"col\">Remote path</th><th scope=\"col\">Matched pairs</th><th scope=\"col\">Median delta</th></tr></thead><tbody>", escape_html(&orientation_text), comparison_stratum(&row.stratum), format_signed(median));
-    for path in &row.path_median_deltas {
-        write_html!(
-            out,
-            "<tr><td>{}</td><td>{}</td><td>{} dB</td></tr>",
-            escape_html(&path.remote_path),
-            path.paired_row_count,
-            format_signed(path.median_delta_right_minus_left_db)
-        );
-    }
-    out.push_str("</tbody></table></div></div></details>");
+        exact_paths: row
+            .path_median_deltas
+            .iter()
+            .map(|path| ExactPathView {
+                remote_path: path.remote_path.clone(),
+                pairs: path.paired_row_count,
+                delta: format_signed(path.median_delta_right_minus_left_db),
+            })
+            .collect(),
+    })
 }
 
-#[derive(Clone, Copy)]
-struct PathDistributionScale {
-    maximum_absolute: f64,
-}
-
-fn render_path_distribution_svg(
-    out: &mut CheckedHtmlWriter<'_>,
-    paths: &[&ReportOverviewPathMedianDelta],
-    scale: PathDistributionScale,
-    negative_label: &str,
-    positive_label: &str,
-) {
-    const LEFT: f64 = 44.0;
-    const WIDTH: f64 = 632.0;
+fn path_dots(paths: &[&ReportOverviewPathMedianDelta], maximum_absolute: f64) -> Vec<PathDotView> {
     const BASELINE: f64 = 156.0;
-    let x = |value: f64| LEFT + delta_position(value, scale.maximum_absolute) / 100.0 * WIDTH;
     let mut stack_sizes = BTreeMap::<i64, usize>::new();
     for path in paths {
-        let value = path.median_delta_right_minus_left_db;
         *stack_sizes
-            .entry((value * 1_000.0).round() as i64)
+            .entry((path.median_delta_right_minus_left_db * 1_000.0).round() as i64)
             .or_default() += 1;
     }
     let largest_stack = stack_sizes.values().copied().max().unwrap_or(1);
     let vertical_step = (104.0 / largest_stack as f64).min(11.0);
     let radius = (vertical_step * 0.38).clamp(2.2, 4.2);
     let mut stack_offsets = BTreeMap::<i64, usize>::new();
+    paths
+        .iter()
+        .map(|path| {
+            let value = path.median_delta_right_minus_left_db;
+            let level = stack_offsets
+                .entry((value * 1_000.0).round() as i64)
+                .or_default();
+            let y = BASELINE - (*level as f64 + 0.5) * vertical_step;
+            *level += 1;
+            let (class, fill) = if value < 0.0 {
+                ("path-dot-negative", "#315da8")
+            } else if value > 0.0 {
+                ("path-dot-positive", "#b35c00")
+            } else {
+                ("path-dot-zero", "#5c667a")
+            };
+            PathDotView {
+                detail: format!(
+                    "{}: {} dB median across {} matched pair{}",
+                    path.remote_path,
+                    format_signed(value),
+                    path.paired_row_count,
+                    plural_suffix(path.paired_row_count)
+                ),
+                class,
+                x: format!("{:.2}", path_x(value, maximum_absolute)),
+                y: format!("{y:.2}"),
+                radius: format!("{radius:.2}"),
+                fill,
+            }
+        })
+        .collect()
+}
 
-    write_html!(out, "<svg class=\"coverage-polar path-distribution-chart\" viewBox=\"0 0 720 220\" role=\"img\" aria-label=\"Distribution of {} signed path-median SNR differences. Negative values favor {}; positive values favor {}.\"><rect width=\"720\" height=\"220\" rx=\"8\" fill=\"#f5f7fb\"/>", paths.len(), escape_html(negative_label), escape_html(positive_label));
-    out.push_str("<line class=\"path-distribution-axis\" x1=\"44\" y1=\"160\" x2=\"676\" y2=\"160\" stroke=\"#5c667a\"/>");
-    let tick_step = path_axis_tick_step(scale.maximum_absolute);
-    let tick_count = (scale.maximum_absolute / tick_step).round() as i32;
-    for tick in -tick_count..=tick_count {
-        let value = tick as f64 * tick_step;
-        let tick_x = x(value);
-        let label = if tick == 0 {
-            "0".to_string()
-        } else {
-            format_signed(value)
-        };
-        write_html!(out, "<line class=\"path-distribution-tick\" x1=\"{tick_x:.2}\" y1=\"156\" x2=\"{tick_x:.2}\" y2=\"166\" stroke=\"#5c667a\"/><text class=\"path-distribution-tick-label\" x=\"{tick_x:.2}\" y=\"178\" fill=\"#5c667a\" font-size=\"10\" text-anchor=\"middle\">{label}</text>");
+fn path_x(value: f64, maximum_absolute: f64) -> f64 {
+    44.0 + delta_position(value, maximum_absolute) / 100.0 * 632.0
+}
+
+fn reach_view(report: &SessionReport) -> ReachView {
+    let (left_label, right_label) = raw_labels(report);
+    let (available, unavailable): (Vec<_>, Vec<_>) =
+        report.overview.strata.iter().partition(|row| {
+            row.reach.left_only_unique_path_count
+                + row.reach.both_unique_path_count
+                + row.reach.right_only_unique_path_count
+                > 0
+        });
+    let rows = available
+        .into_iter()
+        .map(|row| {
+            let reach = &row.reach;
+            let universe = reach.left_only_unique_path_count
+                + reach.both_unique_path_count
+                + reach.right_only_unique_path_count;
+            ReachRowView {
+                label: raw_stratum(&row.stratum),
+                left_only: reach.left_only_unique_path_count,
+                both: reach.both_unique_path_count,
+                right_only: reach.right_only_unique_path_count,
+                left_total: reach.left_only_unique_path_count + reach.both_unique_path_count,
+                right_total: reach.right_only_unique_path_count + reach.both_unique_path_count,
+                universe,
+                universe_suffix: plural_suffix(universe),
+                missing_left: row.missing_snr_left_count,
+                missing_right: row.missing_snr_right_count,
+                duplicates: row.exact_duplicate_count,
+                conflicts: row.conflicting_duplicate_group_count,
+                bar: reach_bar_view(reach, "reach-bar"),
+            }
+        })
+        .collect();
+    let unavailable_message = (!unavailable.is_empty()).then(|| {
+        let (missing_left, missing_right) = missing_snr_totals(&unavailable);
+        format!(
+            "No usable path-reach signal reports in {} of {} comparison groups: {}. Missing SNR remains separate ({left_label}: {missing_left}, {right_label}: {missing_right}).",
+            unavailable.len(),
+            report.overview.strata.len(),
+            raw_strata_list(&unavailable)
+        )
+    });
+    ReachView {
+        left_label,
+        right_label,
+        no_groups: report.overview.strata.is_empty(),
+        rows,
+        unavailable: unavailable_message,
     }
-    write_html!(out, "<text class=\"path-distribution-unit\" x=\"684\" y=\"178\" fill=\"#5c667a\" font-size=\"10\">dB</text>");
-    for path in paths {
-        let value = path.median_delta_right_minus_left_db;
-        let bucket = (value * 1_000.0).round() as i64;
-        let level = stack_offsets.entry(bucket).or_default();
-        let y = BASELINE - (*level as f64 + 0.5) * vertical_step;
-        *level += 1;
-        let (class, fill) = if value < 0.0 {
-            ("path-dot-negative", "#315da8")
-        } else if value > 0.0 {
-            ("path-dot-positive", "#b35c00")
-        } else {
-            ("path-dot-zero", "#5c667a")
-        };
-        let detail = format!(
-            "{}: {} dB median across {} matched pair{}",
-            path.remote_path,
-            format_signed(value),
-            path.paired_row_count,
-            plural_suffix(path.paired_row_count)
-        );
-        write_html!(out, "<g class=\"path-distribution-dot-group\" tabindex=\"0\" role=\"img\" aria-label=\"{}\"><title>{}</title><circle class=\"path-distribution-dot {class}\" cx=\"{:.2}\" cy=\"{y:.2}\" r=\"{radius:.2}\" fill=\"{fill}\" stroke=\"#fff\"/></g>", escape_html(&detail), escape_html(&detail), x(value));
+}
+
+pub(in super::super) fn render_reach_bar(
+    out: &mut CheckedHtmlWriter<'_>,
+    reach: &ReportOverviewReach,
+    class: &str,
+) -> Result<(), ReportError> {
+    render_template(
+        out,
+        &ReachBarTemplate {
+            view: reach_bar_view(reach, class),
+        },
+    )
+}
+
+fn reach_bar_view(reach: &ReportOverviewReach, class: &str) -> ReachBarView {
+    let counts = [
+        (reach.left_only_unique_path_count, "left"),
+        (reach.both_unique_path_count, "both"),
+        (reach.right_only_unique_path_count, "right"),
+    ];
+    let total = counts.iter().map(|(count, _)| count).sum::<usize>().max(1) as f64;
+    ReachBarView {
+        class: class.to_string(),
+        segments: counts
+            .into_iter()
+            .filter(|(count, _)| *count > 0)
+            .map(|(count, side)| ReachSegmentView {
+                side,
+                geometry_class: geometry_class(count as f64 / total * 100.0),
+            })
+            .collect(),
     }
-    write_html!(out, "<text class=\"path-distribution-label path-distribution-label-negative\" x=\"44\" y=\"207\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\">{} stronger</text><text class=\"path-distribution-label path-distribution-label-positive\" x=\"676\" y=\"207\" fill=\"#5c667a\" font-size=\"12\" font-weight=\"700\" text-anchor=\"end\">{} stronger</text></svg>", escape_html(negative_label), escape_html(positive_label));
+}
+
+fn missing_snr_totals(rows: &[&ReportOverviewStratum]) -> (usize, usize) {
+    (
+        rows.iter().map(|row| row.missing_snr_left_count).sum(),
+        rows.iter().map(|row| row.missing_snr_right_count).sum(),
+    )
+}
+
+fn raw_labels(report: &SessionReport) -> (String, String) {
+    (
+        report
+            .comparison
+            .left_label
+            .clone()
+            .unwrap_or_else(|| "Left".into()),
+        report
+            .comparison
+            .right_label
+            .clone()
+            .unwrap_or_else(|| "Right".into()),
+    )
+}
+
+fn raw_orientation_labels(
+    orientation: &antennabench_analysis::DeltaOrientation,
+) -> (String, String) {
+    (
+        orientation.subtrahend_label.clone(),
+        orientation.minuend_label.clone(),
+    )
+}
+
+fn raw_stratum(value: &antennabench_analysis::ComparisonStratum) -> String {
+    format!(
+        "{} · {} · {} · {} · {}",
+        path_direction(value.direction),
+        band(value.band),
+        value.mode.as_str(),
+        observation_kind(value.observation_kind),
+        record_source(value.source)
+    )
+}
+
+fn raw_strata_list(rows: &[&ReportOverviewStratum]) -> String {
+    rows.iter()
+        .map(|row| raw_stratum(&row.stratum))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn path_axis_limit(maximum_absolute: f64) -> f64 {
@@ -263,73 +474,11 @@ fn interpolated_quantile(sorted: &[f64], probability: f64) -> f64 {
     let weight = position - lower as f64;
     sorted[lower] + (sorted[upper] - sorted[lower]) * weight
 }
-pub(in super::super) fn render_reach_view(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
-    let (left_label, right_label) = report_antenna_labels(report);
-    write_html!(out, "<p class=\"muted\">Counts are unique remote paths with usable signal reports within each comparison group. “Heard by both” supplies the path universe for same-path analysis; {}-only and {}-only paths remain visible.</p>", left_label, right_label);
-    if report.overview.strata.is_empty() {
-        out.push_str(
-            "<p class=\"empty\">No comparison group has path-reach evidence available.</p>",
-        );
-        return;
-    }
-    let (available, unavailable): (Vec<_>, Vec<_>) =
-        report.overview.strata.iter().partition(|row| {
-            row.reach.left_only_unique_path_count
-                + row.reach.both_unique_path_count
-                + row.reach.right_only_unique_path_count
-                > 0
-        });
-    for row in available {
-        let reach = &row.reach;
-        let universe = reach.left_only_unique_path_count
-            + reach.both_unique_path_count
-            + reach.right_only_unique_path_count;
-        write_html!(out, "<h3>{}</h3>", comparison_stratum(&row.stratum));
-        write_html!(out, "<div class=\"reach-strip\" aria-hidden=\"true\"><div class=\"reach-cells\"><span><strong>{}</strong><small><span class=\"swatch left\"></span>{} only</small></span><span><strong>{}</strong><small><span class=\"swatch both\"></span>heard by both</small></span><span><strong>{}</strong><small><span class=\"swatch right\"></span>{} only</small></span></div>", reach.left_only_unique_path_count, left_label, reach.both_unique_path_count, reach.right_only_unique_path_count, right_label);
-        render_reach_bar(out, reach, "reach-bar");
-        out.push_str("</div>");
-        write_html!(out, "<p class=\"muted reach-note\">Segment widths are proportional to unique-path counts. {} heard {} of {} unique path{}; {} heard {}.</p>", left_label, reach.left_only_unique_path_count + reach.both_unique_path_count, universe, plural_suffix(universe), right_label, reach.right_only_unique_path_count + reach.both_unique_path_count);
-        write_html!(out, "<div class=\"table-wrap\"><table><caption>Unique remote-path reach counts for {}.</caption><thead><tr><th scope=\"col\">{} only</th><th scope=\"col\">Heard by both</th><th scope=\"col\">{} only</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Missing SNR — {}</th><th scope=\"col\">Duplicates</th><th scope=\"col\">Conflicts</th></tr></thead><tbody><tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr></tbody></table></div>", comparison_stratum(&row.stratum), left_label, right_label, left_label, right_label, reach.left_only_unique_path_count, reach.both_unique_path_count, reach.right_only_unique_path_count, row.missing_snr_left_count, row.missing_snr_right_count, row.exact_duplicate_count, row.conflicting_duplicate_group_count);
-    }
-    if !unavailable.is_empty() {
-        let missing_left = unavailable
-            .iter()
-            .map(|row| row.missing_snr_left_count)
-            .sum::<usize>();
-        let missing_right = unavailable
-            .iter()
-            .map(|row| row.missing_snr_right_count)
-            .sum::<usize>();
-        write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable path-reach signal reports in {} of {} comparison groups: {}. Missing SNR remains separate ({}: {}, {}: {}).</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable), left_label, missing_left, right_label, missing_right);
-    }
-}
-pub(in super::super) fn render_reach_bar(
-    out: &mut CheckedHtmlWriter<'_>,
-    reach: &ReportOverviewReach,
-    class: &str,
-) {
-    write_html!(out, "<span class=\"{class}\" aria-hidden=\"true\">");
-    let counts = [
-        (reach.left_only_unique_path_count, "left"),
-        (reach.both_unique_path_count, "both"),
-        (reach.right_only_unique_path_count, "right"),
-    ];
-    let total = counts.iter().map(|(count, _)| count).sum::<usize>().max(1) as f64;
-    for (count, segment) in counts {
-        if count > 0 {
-            let width = count as f64 / total * 100.0;
-            write_html!(
-                out,
-                "<span class=\"reach-seg {segment} {}\"></span>",
-                geometry_class(width)
-            );
-        }
-    }
-    out.push_str("</span>");
-}
+
 pub(in super::super) fn delta_position(value: f64, maximum_absolute: f64) -> f64 {
     (50.0 + value / maximum_absolute * 50.0).clamp(0.0, 100.0)
 }
+
 pub(in super::super) fn plural_suffix(value: usize) -> &'static str {
     if value == 1 {
         ""

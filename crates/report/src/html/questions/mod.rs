@@ -35,7 +35,7 @@ pub(super) use overview::{
 };
 pub(super) use paths::{
     plural_suffix, render_reach_bar, render_reach_section, render_same_path_section,
-    render_same_path_stratum,
+    render_same_path_view,
 };
 pub(super) use quality::render_run_quality_section;
 

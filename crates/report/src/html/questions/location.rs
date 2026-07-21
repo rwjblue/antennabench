@@ -27,7 +27,7 @@ pub(in super::super) fn render_distance_section(
 pub(in super::super) fn render_compact_observed_footprint_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-) {
+) -> Result<(), ReportError> {
     out.push_str("<section id=\"observed-footprint\" class=\"panel question-section observed-footprint\" tabindex=\"-1\" aria-labelledby=\"observed-footprint-title\"><h2 id=\"observed-footprint-title\">Observed footprint</h2>");
     if is_single_antenna_lens(report) {
         out.push_str("<p class=\"notice\">These are the unique usable paths recorded for the profiled antenna. They describe collected evidence, not a radiation pattern or unobserved coverage.</p>");
@@ -45,11 +45,11 @@ pub(in super::super) fn render_compact_observed_footprint_section(
         });
     if available.is_empty() {
         out.push_str("<p class=\"empty\">No usable observed-path footprint is available. Missing evidence is not rendered as zero reach.</p></section>");
-        return;
+        return Ok(());
     }
     for (index, stratum) in available.into_iter().enumerate() {
         write_html!(out, "<article class=\"antenna-card footprint-group\" aria-labelledby=\"footprint-group-{index}\"><h3 id=\"footprint-group-{index}\">{}</h3>", comparison_stratum(&stratum.stratum));
-        render_footprint_overlap(out, report, stratum);
+        render_footprint_overlap(out, report, stratum)?;
         let profile = &stratum.observed_profile;
         out.push_str("<details class=\"audit-disclosure footprint-profile-disclosure\"><summary>Review observed distance and direction profile</summary><div class=\"disclosure-body\"><p class=\"muted\">These all-path counts are retained for geographic context, but stay secondary to the controlled common-active detection maps above.</p>");
         render_profile_bar_chart(
@@ -97,19 +97,20 @@ pub(in super::super) fn render_compact_observed_footprint_section(
     out.push_str("<details class=\"audit-disclosure\"><summary>Review exact unique observed-path rows</summary><div class=\"disclosure-body\">");
     render_observed_profile_audit(out, report);
     out.push_str("</div></details></section>");
+    Ok(())
 }
 
 fn render_footprint_overlap(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
     stratum: &ReportOverviewStratum,
-) {
+) -> Result<(), ReportError> {
     let (left_label, right_label) = report_antenna_labels(report);
     let reach = &stratum.reach;
     let left_total = reach.left_only_unique_path_count + reach.both_unique_path_count;
     let right_total = reach.right_only_unique_path_count + reach.both_unique_path_count;
     write_html!(out, "<div class=\"reach-strip footprint-overlap\"><div class=\"reach-cells footprint-overlap-counts\"><span><strong>{}</strong><small>{} only</small></span><span><strong>{}</strong><small>Heard by both</small></span><span><strong>{}</strong><small>{} only</small></span></div>", reach.left_only_unique_path_count, left_label, reach.both_unique_path_count, reach.right_only_unique_path_count, right_label);
-    render_reach_bar(out, reach, "reach-bar");
+    render_reach_bar(out, reach, "reach-bar")?;
     write_html!(
         out,
         "<p><strong>{}</strong>: {} unique paths · <strong>{}</strong>: {} unique paths</p></div>",
@@ -118,6 +119,7 @@ fn render_footprint_overlap(
         right_label,
         right_total
     );
+    Ok(())
 }
 
 fn render_profile_bar_chart<T: Copy>(
