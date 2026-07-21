@@ -24,7 +24,7 @@ mod quality;
 pub(super) use activity::{coverage_text, render_reporter_activity_section};
 pub(super) use coverage::{render_compact_coverage_map_section, render_coverage_map_section};
 
-pub(super) use location::{render_compact_distance_section, render_distance_section};
+pub(super) use location::{render_compact_observed_footprint_section, render_distance_section};
 pub(super) use overlap::{
     render_compact_overlap_repeatability_section, render_overlap_repeatability_section,
 };

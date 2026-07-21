@@ -11,9 +11,9 @@ use super::{
     questions::{
         is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
         render_answer_first_overview_with_reference, render_compact_coverage_map_section,
-        render_compact_distance_section, render_compact_overlap_repeatability_section,
-        render_how_to_read, render_question_navigation, render_reach_bar,
-        render_reporter_activity_section, render_same_path_stratum,
+        render_compact_observed_footprint_section, render_compact_overlap_repeatability_section,
+        render_how_to_read, render_question_navigation, render_reporter_activity_section,
+        render_same_path_stratum,
     },
     shared::*,
     styles::{COMPACT_SMALL_PRINT_STYLES, COMPACT_STYLES, COVERAGE_STYLES, STYLES},
@@ -78,12 +78,14 @@ pub fn render_compact_summary_html_with_resources(
         escape_html(&report.overview.scope.session_id)
     );
     render_question_navigation(&mut out, report, false);
-    render_how_to_read(&mut out, report);
+    render_how_to_read(&mut out, report, true);
     render_answer_first_overview_with_reference(
         &mut out,
         report,
         "the full evidence report and session bundle",
+        true,
     );
+    let mut rendered_observed_footprint = false;
     for family in ordered_question_families(report) {
         match family {
             ReportQuestionFamily::SharedPathSignal => {
@@ -96,12 +98,16 @@ pub fn render_compact_summary_html_with_resources(
                 render_compact_coverage_map_section(&mut out, report);
             }
             ReportQuestionFamily::ObservedReach => {
-                out.push_str("<section id=\"reach-unique-paths\" class=\"panel question-section\" tabindex=\"-1\" aria-labelledby=\"reach-title\"><h2 id=\"reach-title\">Observed reach</h2>");
-                render_compact_reach_view(&mut out, report);
-                out.push_str("</section>");
+                if !rendered_observed_footprint {
+                    render_compact_observed_footprint_section(&mut out, report);
+                    rendered_observed_footprint = true;
+                }
             }
             ReportQuestionFamily::GeographicProfile => {
-                render_compact_distance_section(&mut out, report)
+                if !rendered_observed_footprint {
+                    render_compact_observed_footprint_section(&mut out, report);
+                    rendered_observed_footprint = true;
+                }
             }
             ReportQuestionFamily::Repeatability => {
                 render_compact_overlap_repeatability_section(&mut out, report)
@@ -183,65 +189,13 @@ pub(super) fn render_compact_same_path_view(
     if let Some(orientation) = orientation {
         write_html!(out, "<p class=\"orientation\"><strong>Signed values:</strong> Positive values mean {} was stronger; negative values mean {} was stronger. The vertical reference is zero.</p>", escape_html(&orientation.minuend_label), escape_html(&orientation.subtrahend_label));
     }
-    out.push_str("<p class=\"path-view-note\">Each blue dot is one unique remote path’s median across its matched pairs; the purple diamond is the median across those path medians.</p>");
+    out.push_str("<p class=\"path-view-note\">Each dot is one unique remote path’s median across its matched pairs. The purple marker is the group median and the purple span is the middle half.</p>");
     for row in available {
         render_same_path_stratum(out, row, orientation);
     }
     if !unavailable.is_empty() {
         write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable same-path path-median delta in {} of {} comparison groups: {}. Availability remains explicit in the result table.</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable));
     }
-}
-
-pub(super) fn render_compact_reach_view(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
-    if report.overview.strata.is_empty() {
-        out.push_str("<p class=\"empty\">No comparison groups are available for reach counts.</p>");
-        return;
-    }
-    let any_reach = report.overview.strata.iter().any(|row| {
-        row.reach.left_only_unique_path_count > 0
-            || row.reach.both_unique_path_count > 0
-            || row.reach.right_only_unique_path_count > 0
-    });
-    if !any_reach {
-        let strata = report.overview.strata.iter().collect::<Vec<_>>();
-        write_html!(out, "<p class=\"empty\">No unique observed paths are available for reach overlap across {} ({}).</p>", comparison_groups_label(strata.len()), comparison_strata_list(&strata));
-        return;
-    }
-    let (left_label, right_label) = report_antenna_labels(report);
-    write_html!(out, "<p class=\"muted reach-note\" aria-hidden=\"true\">Overlap bars — <span class=\"swatch left\"></span>{} only · <span class=\"swatch both\"></span>heard by both · <span class=\"swatch right\"></span>{} only; segment widths are proportional to counts.</p>", left_label, right_label);
-    write_html!(out, "<div class=\"table-wrap\"><table><caption>Unique observed-path overlap by separate comparison group</caption><thead><tr><th scope=\"col\">Comparison group</th><th scope=\"col\">{} only</th><th scope=\"col\">Heard by both</th><th scope=\"col\">{} only</th><th scope=\"col\">Overlap</th></tr></thead><tbody>", left_label, right_label);
-    let unavailable = report
-        .overview
-        .strata
-        .iter()
-        .filter(|row| {
-            row.reach.left_only_unique_path_count
-                + row.reach.both_unique_path_count
-                + row.reach.right_only_unique_path_count
-                == 0
-        })
-        .collect::<Vec<_>>();
-    for row in report.overview.strata.iter().filter(|row| {
-        row.reach.left_only_unique_path_count
-            + row.reach.both_unique_path_count
-            + row.reach.right_only_unique_path_count
-            > 0
-    }) {
-        write_html!(
-            out,
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>",
-            comparison_stratum(&row.stratum),
-            row.reach.left_only_unique_path_count,
-            row.reach.both_unique_path_count,
-            row.reach.right_only_unique_path_count
-        );
-        render_reach_bar(out, &row.reach, "reach-mini");
-        out.push_str("</td></tr>");
-    }
-    if !unavailable.is_empty() {
-        write_html!(out, "<tr class=\"collapsed-empty-strata\"><td colspan=\"5\">No usable reach evidence in {}: {}.</td></tr>", comparison_groups_label(unavailable.len()), comparison_strata_list(&unavailable));
-    }
-    out.push_str("</tbody></table></div><p class=\"muted\">These are unique observed paths, not a coverage score or a claim about unobserved paths.</p>");
 }
 
 pub(super) fn render_compact_reference(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {

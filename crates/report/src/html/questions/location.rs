@@ -1,3 +1,4 @@
+use super::super::geometry::geometry_class;
 use super::*;
 
 pub(in super::super) fn render_distance_section(
@@ -22,14 +23,140 @@ pub(in super::super) fn render_distance_section(
     out.push_str("</div></details></section>");
 }
 
-pub(in super::super) fn render_compact_distance_section(
+pub(in super::super) fn render_compact_observed_footprint_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) {
-    render_observed_profile_intro(out, report);
+    out.push_str("<section id=\"observed-footprint\" class=\"panel question-section observed-footprint\" tabindex=\"-1\" aria-labelledby=\"observed-footprint-title\"><h2 id=\"observed-footprint-title\">Observed footprint</h2>");
+    if is_single_antenna_lens(report) {
+        out.push_str("<p class=\"notice\">These are the unique usable paths recorded for the profiled antenna. They describe collected evidence, not a radiation pattern or unobserved coverage.</p>");
+    } else {
+        out.push_str("<p class=\"notice\">This is the uncontrolled set of unique usable paths observed for either antenna. Unlike common-active receiver detection, it does not prove the same receivers were listening in both cycles; observed-only paths are not controlled non-detections.</p>");
+    }
     render_goal_distance_focus(out, report);
-    render_all_path_profiles(out, report);
-    out.push_str("</section>");
+    let (available, unavailable): (Vec<_>, Vec<_>) =
+        report.overview.strata.iter().partition(|stratum| {
+            stratum.observed_profile.left.is_some()
+                || stratum.observed_profile.right.is_some()
+                || stratum.reach.left_only_unique_path_count > 0
+                || stratum.reach.both_unique_path_count > 0
+                || stratum.reach.right_only_unique_path_count > 0
+        });
+    if available.is_empty() {
+        out.push_str("<p class=\"empty\">No usable observed-path footprint is available. Missing evidence is not rendered as zero reach.</p></section>");
+        return;
+    }
+    for (index, stratum) in available.into_iter().enumerate() {
+        write_html!(out, "<article class=\"antenna-card footprint-group\" aria-labelledby=\"footprint-group-{index}\"><h3 id=\"footprint-group-{index}\">{}</h3>", comparison_stratum(&stratum.stratum));
+        render_footprint_overlap(out, report, stratum);
+        let profile = &stratum.observed_profile;
+        render_profile_bar_chart(
+            out,
+            "Observed unique paths by distance",
+            profile.left.as_ref(),
+            profile.right.as_ref(),
+            |value| &value.distance_bins,
+            |cell| cell.category.label(),
+        );
+        render_profile_bar_chart(
+            out,
+            "Observed unique paths by direction",
+            profile.left.as_ref(),
+            profile.right.as_ref(),
+            |value| &value.azimuth_sectors,
+            |cell| fixed_azimuth_sector_label(cell.category),
+        );
+        if profile.composition_location_unavailable_count > 0 {
+            write_html!(out, "<p class=\"muted\">{} unique path{} could not enter distance composition because location was missing, inconsistent, or differed between antenna records.</p>", profile.composition_location_unavailable_count, plural_suffix(profile.composition_location_unavailable_count));
+        }
+        out.push_str("<details class=\"audit-disclosure\"><summary>Review exact observed-footprint counts and location quality</summary><div class=\"disclosure-body\">");
+        render_profile_totals(out, profile.left.as_ref(), profile.right.as_ref());
+        render_profile_distribution(
+            out,
+            "Exact unique-path distance counts and observation support",
+            profile.left.as_ref(),
+            profile.right.as_ref(),
+            |value| &value.distance_bins,
+            |cell| cell.category.label(),
+        );
+        render_profile_distribution(
+            out,
+            "Exact unique-path direction counts and observation support",
+            profile.left.as_ref(),
+            profile.right.as_ref(),
+            |value| &value.azimuth_sectors,
+            |cell| fixed_azimuth_sector_label(cell.category),
+        );
+        out.push_str("</div></details></article>");
+    }
+    if !unavailable.is_empty() {
+        write_html!(out, "<p class=\"empty collapsed-empty-strata\">No usable observed footprint in {} of {} comparison groups: {}. Missing path or location evidence is not rendered as zero.</p>", unavailable.len(), report.overview.strata.len(), comparison_strata_list(&unavailable));
+    }
+    out.push_str("<details class=\"audit-disclosure\"><summary>Review exact unique observed-path rows</summary><div class=\"disclosure-body\">");
+    render_observed_profile_audit(out, report);
+    out.push_str("</div></details></section>");
+}
+
+fn render_footprint_overlap(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+    stratum: &ReportOverviewStratum,
+) {
+    let (left_label, right_label) = report_antenna_labels(report);
+    let reach = &stratum.reach;
+    let left_total = reach.left_only_unique_path_count + reach.both_unique_path_count;
+    let right_total = reach.right_only_unique_path_count + reach.both_unique_path_count;
+    write_html!(out, "<div class=\"reach-strip footprint-overlap\"><div class=\"reach-cells footprint-overlap-counts\"><span><strong>{}</strong><small>{} only</small></span><span><strong>{}</strong><small>Heard by both</small></span><span><strong>{}</strong><small>{} only</small></span></div>", reach.left_only_unique_path_count, left_label, reach.both_unique_path_count, reach.right_only_unique_path_count, right_label);
+    render_reach_bar(out, reach, "reach-bar");
+    write_html!(
+        out,
+        "<p><strong>{}</strong>: {} unique paths · <strong>{}</strong>: {} unique paths</p></div>",
+        left_label,
+        left_total,
+        right_label,
+        right_total
+    );
+}
+
+fn render_profile_bar_chart<T: Copy>(
+    out: &mut CheckedHtmlWriter<'_>,
+    heading: &str,
+    left: Option<&ReportObservedAntennaProfile>,
+    right: Option<&ReportObservedAntennaProfile>,
+    cells: impl Fn(&ReportObservedAntennaProfile) -> &[ReportObservedProfileCell<T>],
+    label: impl Fn(&ReportObservedProfileCell<T>) -> &'static str,
+) {
+    let left_label = left.map_or("First antenna", |profile| profile.antenna_label.as_str());
+    let right_label = right.map_or("Second antenna", |profile| profile.antenna_label.as_str());
+    let row_count = left
+        .map(|profile| cells(profile).len())
+        .or_else(|| right.map(|profile| cells(profile).len()))
+        .unwrap_or_default();
+    let maximum = (0..row_count)
+        .flat_map(|index| {
+            [
+                left.and_then(|profile| cells(profile).get(index))
+                    .map_or(0, |cell| cell.unique_path_count),
+                right
+                    .and_then(|profile| cells(profile).get(index))
+                    .map_or(0, |cell| cell.unique_path_count),
+            ]
+        })
+        .max()
+        .unwrap_or(0);
+    write_html!(out, "<section class=\"footprint-profile\"><h4>{}</h4><p class=\"muted\">Paired bars share one scale; counts are unique observed paths, not repeated observations.</p><div class=\"chart footprint-profile-chart\">", escape_html(heading));
+    for index in 0..row_count {
+        let left_cell = left.and_then(|profile| cells(profile).get(index));
+        let right_cell = right.and_then(|profile| cells(profile).get(index));
+        let category = left_cell
+            .or(right_cell)
+            .expect("observed profile category exists");
+        let left_count = left_cell.map_or(0, |cell| cell.unique_path_count);
+        let right_count = right_cell.map_or(0, |cell| cell.unique_path_count);
+        let scale = maximum.max(1) as f64;
+        write_html!(out, "<div class=\"chart-row footprint-profile-row\"><span class=\"chart-label\"><strong>{}</strong><br>{}</span><span class=\"bar-track footprint-bar-track\"><i class=\"bar left geometry-width {}\"></i></span><span>{}</span></div><div class=\"chart-row footprint-profile-row\"><span class=\"chart-label\"><strong>{}</strong><br>{}</span><span class=\"bar-track footprint-bar-track\"><i class=\"bar right geometry-width {}\"></i></span><span>{}</span></div>", label(category), escape_html(left_label), geometry_class(left_count as f64 / scale * 100.0), left_count, label(category), escape_html(right_label), geometry_class(right_count as f64 / scale * 100.0), right_count);
+    }
+    out.push_str("</div></section>");
 }
 
 fn render_observed_profile_intro(out: &mut CheckedHtmlWriter<'_>, report: &SessionReport) {
