@@ -2,11 +2,6 @@
 members = ["apps/desktop", "crates/*"]
 resolver = "2"
 
-# Full debuginfo roughly triples target/ size and slows compiles and links;
-# line tables keep file:line in backtraces, which is all tests need.
-[profile.dev]
-debug = "line-tables-only"
-
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
