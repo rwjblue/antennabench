@@ -1,1 +1,2 @@
 crates/report/assets/natural-earth-110m-coastline.txt text eol=lf
+crates/report/templates/** text eol=lf
