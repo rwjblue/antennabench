@@ -4,4 +4,10 @@
 
 set -euo pipefail
 
-cargo test --workspace --all-targets
+if [[ "${OS:-}" == "Windows_NT" ]]; then
+  export ANTENNABENCH_WINDOWS_TEST_MANIFEST=1
+fi
+
+# Exercise every test-bearing target. The desktop binary is a two-line Tauri
+# entry point whose generated test harness conflicts with Tauri's app manifest.
+cargo test --workspace --lib --tests --benches --examples
