@@ -9,6 +9,9 @@ log_file="$log_dir/last-run.log"
 mkdir -p "$log_dir"
 
 platform="${RUNNER_OS:-$(uname -s)}"
+if [[ "${OS:-}" == "Windows_NT" ]]; then
+  export ANTENNABENCH_WINDOWS_TEST_MANIFEST=1
+fi
 started_ms="$(node -p 'Date.now()')"
 
 set +e
