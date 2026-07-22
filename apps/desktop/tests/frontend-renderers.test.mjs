@@ -707,6 +707,7 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   renderReport(e, state, reportDocuments);
   assert.equal(e.reportStatus.textContent, "Unavailable");
   assert.equal(e.reportViewer.hidden, true);
+  assert.equal(e.mainContent.classList.contains("report-reading-active"), false);
 
   state.session = {
     bundleName: "test.session.antennabundle", callsign: "N1RWJ", grid: "FN42",
@@ -717,6 +718,11 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   state.reportPresentationId = 3;
   renderReport(e, state, reportDocuments);
   assert.equal(e.reportFrame.getAttribute("src"), "blob:report-1");
+  assert.equal(e.mainContent.classList.contains("report-reading-active"), true);
+  assert.equal(e.mainContent.closest(".workspace").classList.contains("report-reading-active"), true);
+  assert.equal(e.reportPanelHeading.hidden, true);
+  assert.equal(e.reportActiveRunButton.hidden, false);
+  assert.equal(e.reportExportRevision.textContent, "revision 3");
   assert.equal(e.reportControllerOptions.hidden, true);
   assert.equal(e.reportControllerHandling.value, "complete");
 
@@ -841,7 +847,7 @@ test("operational history renders every honest accessible state and reopened-ses
 
   renderReport(e, state, reportDocuments);
   assert.equal(e.operationalHistory.getAttribute("aria-labelledby"), "operational-history-title");
-  assert.equal(e.operationalHistory.open, false, "support history is collapsed by default");
+  assert.equal(e.reportDiagnosticsDialog.open, false, "support history is secondary by default");
   assert.equal(e.operationalHistoryAlert.hidden, false, "material diagnostics stay visible");
   assert.match(e.operationalHistoryAlertTitle.textContent, /partial result/i);
   assert.match(e.operationalHistoryAlertMessage.textContent, /supporting detail/i);
@@ -851,13 +857,13 @@ test("operational history renders every honest accessible state and reopened-ses
   assert.match(e.operationalHistoryDiagnostics.textContent, /Primary evidence committed/i);
   assert.equal(e.reportOperationalHandling.value, "omitted", "full export is private by default");
   assert.match(e.operationalHistoryBounds.textContent, /2048 records/);
-  e.operationalHistory.querySelector("summary").click();
-  assert.equal(e.operationalHistory.open, true, "native summary expands the support detail");
+  e.reportDiagnosticsDialog.setAttribute("open", "");
+  assert.equal(e.reportDiagnosticsDialog.open, true, "Diagnostics exposes the complete support detail");
   renderReport(e, state, reportDocuments);
-  assert.equal(e.operationalHistory.open, true, "rerender preserves the operator's disclosure state");
+  assert.equal(e.reportDiagnosticsDialog.open, true, "rerender preserves the operator's dialog state");
   state.reportPresentationId = 10;
   renderReport(e, state, reportDocuments);
-  assert.equal(e.operationalHistory.open, false, "a new report presentation starts collapsed");
+  assert.equal(e.reportDiagnosticsDialog.open, false, "a new report presentation closes Diagnostics");
 
   const bothDiagnostics = state.session.operationalHistory.diagnostics;
   state.session.operationalHistory.diagnostics = bothDiagnostics.slice(0, 1);
@@ -896,11 +902,11 @@ test("operational history renders every honest accessible state and reopened-ses
 
   state.session.operationalHistory.historyState = "persistence_gap";
   renderReport(e, state, reportDocuments);
-  assert.equal(e.operationalHistory.open, false);
+  assert.equal(e.reportDiagnosticsDialog.open, false);
   assert.equal(e.operationalHistoryAlert.hidden, false);
   assert.match(e.operationalHistoryAlertTitle.textContent, /known persistence gap/i);
-  e.operationalHistory.querySelector("summary").click();
-  assert.equal(e.operationalHistory.open, true);
+  e.reportDiagnosticsDialog.setAttribute("open", "");
+  assert.equal(e.reportDiagnosticsDialog.open, true);
   assert.equal(e.copySupportSummary.disabled, false);
   assert.match(e.copySupportSummary.parentElement.nextElementSibling.textContent, /redacted by default/i);
 });

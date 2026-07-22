@@ -433,6 +433,17 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
         && payload.locatorId === "locator-existing"));
       assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-1");
     });
+    assert.equal(elements.mainContent.classList.contains("report-reading-active"), true);
+    assert.equal(elements.reportActiveRunButton.hidden, true, "terminal sessions do not offer Active run");
+    elements.reportDiagnosticsButton.click();
+    await vi.waitFor(() => assert.equal(elements.reportDiagnosticsDialog.open, true));
+    assert.equal(document.activeElement, elements.reportDiagnosticsClose);
+    elements.reportDiagnosticsDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    assert.equal(elements.reportDiagnosticsDialog.open, false);
+    assert.equal(document.activeElement, elements.reportDiagnosticsButton);
+    elements.reportExportButton.click();
+    await vi.waitFor(() => assert.equal(elements.reportExportDialog.open, true));
+    assert.equal(document.activeElement, elements.reportExportClose);
     elements.reportCompactExportButton.click();
     await vi.waitFor(() => assert.equal(elements.reportReplaceDialog.open, true));
     assert.equal(document.activeElement, elements.reportReplaceCancel);
@@ -457,7 +468,8 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     elements.reportReplaceConfirm.click();
     await vi.waitFor(() => {
       assert.equal(elements.reportReplaceDialog.open, false);
-      assert.equal(document.activeElement, elements.reportFullExportButton);
+      assert.equal(elements.reportExportDialog.open, false);
+      assert.equal(document.activeElement, elements.reportExportButton);
       assert.match(elements.reportFeedback.textContent, /existing-full\.html/);
     });
     assert.equal(
@@ -465,7 +477,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       1,
       "replacement confirmation cannot be submitted twice",
     );
-    elements.navigation.find((button) => button.dataset.workflow === "saved").click();
+    elements.reportSavedButton.click();
     await vi.waitFor(() => assert.equal(window.location.hash, "#saved"));
     elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
     await vi.waitFor(() => {

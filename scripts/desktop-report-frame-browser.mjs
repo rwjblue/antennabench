@@ -339,62 +339,87 @@ try {
 
   const reportHierarchy = (await browser(["eval", `(() => {
     const content = document.querySelector(".content");
+    const workspace = document.querySelector(".workspace");
     for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== "report";
     const viewer = document.querySelector("[data-report-viewer]");
+    document.querySelector("[data-report-panel-heading]").hidden = true;
     document.querySelector("[data-report-placeholder]").hidden = true;
     viewer.hidden = false;
     const history = document.querySelector("[data-operational-history]");
+    const diagnostics = document.querySelector("[data-report-diagnostics-dialog]");
     const alert = document.querySelector("[data-operational-history-alert]");
     const frame = document.querySelector("[data-report-frame]");
+    content.classList.add("report-reading-active");
+    workspace.classList.add("report-reading-active");
+    document.querySelector("[data-report-bundle]").textContent = "canonical-sample.session.wsprabundle";
+    document.querySelector("[data-report-revision]").textContent = "Revision 16 · ended";
+    const status = document.querySelector("[data-report-status]");
+    status.textContent = "Full detail · revision 16";
+    status.classList.remove("muted");
+    document.querySelector("[data-report-summary]").textContent = "K1ABC · FN42 · 2 antennas · 16 slots · 1,025 observations";
     history.hidden = false;
-    history.open = false;
     alert.hidden = true;
     frame.hidden = false;
+    frame.src = "/standalone-full";
     content.scrollTop = 0;
     const contentRect = content.getBoundingClientRect();
     const frameRect = frame.getBoundingClientRect();
+    const toolbarRect = document.querySelector(".report-toolbar").getBoundingClientRect();
     return {
-      nativeDetails: history.tagName,
-      open: history.open,
+      nativeDialog: diagnostics.tagName,
+      open: diagnostics.open,
       alertVisible: alert.getClientRects().length > 0,
-      detailVisible: history.querySelector(".operational-history-detail").getClientRects().length > 0,
+      detailVisible: history.getClientRects().length > 0,
       frameBeginsInReadingPath: frameRect.top >= contentRect.top && frameRect.top < contentRect.bottom,
       frameTop: frameRect.top,
       contentBottom: contentRect.bottom,
+      contentOverflow: getComputedStyle(content).overflowY,
+      contentScrollHeight: content.scrollHeight,
+      contentClientHeight: content.clientHeight,
+      toolbarVisible: toolbarRect.top >= contentRect.top && toolbarRect.bottom <= contentRect.bottom,
+      sidebarVisible: document.querySelector(".sidebar").getClientRects().length > 0,
     };
   })()`], { json: true })).result;
-  assert.equal(reportHierarchy.nativeDetails, "DETAILS");
+  assert.equal(reportHierarchy.nativeDialog, "DIALOG");
   assert.equal(reportHierarchy.open, false);
   assert.equal(reportHierarchy.alertVisible, false);
   assert.equal(reportHierarchy.detailVisible, false);
+  assert.equal(reportHierarchy.contentOverflow, "hidden");
+  assert.equal(reportHierarchy.contentScrollHeight, reportHierarchy.contentClientHeight);
+  assert.equal(reportHierarchy.toolbarVisible, true);
+  assert.equal(reportHierarchy.sidebarVisible, false);
   assert.equal(reportHierarchy.frameBeginsInReadingPath, true,
     `report frame began at ${reportHierarchy.frameTop}px after the ${reportHierarchy.contentBottom}px reading path`);
-  await browser(["eval", `document.querySelector("[data-operational-history] > summary").focus()`], { json: true });
-  await browser(["press", "Enter"]);
+  await browser(["wait", "1000"]);
+  await browser(["eval", `(() => {
+    document.querySelector("[data-report-diagnostics-dialog]").showModal();
+    document.querySelector("[data-report-diagnostics-close]").focus();
+  })()`], { json: true });
   const expandedHistory = (await browser(["eval", `(() => {
     const history = document.querySelector("[data-operational-history]");
+    const diagnostics = document.querySelector("[data-report-diagnostics-dialog]");
     return {
-      open: history.open,
+      open: diagnostics.open,
       detailVisible: history.querySelector(".operational-history-detail").getClientRects().length > 0,
-      focused: document.activeElement === history.querySelector("summary"),
-      outline: getComputedStyle(history.querySelector("summary")).outlineStyle,
+      focused: document.activeElement === document.querySelector("[data-report-diagnostics-close]"),
     };
   })()`], { json: true })).result;
-  assert.deepEqual(expandedHistory, { open: true, detailVisible: true, focused: true, outline: "solid" });
+  assert.deepEqual(expandedHistory, { open: true, detailVisible: true, focused: true });
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-diagnostics-1120x760.png")]);
+  await browser(["eval", `document.querySelector("[data-report-diagnostics-dialog]").close()`], { json: true });
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-workspace-1120x760.png")]);
   const materialWarning = (await browser(["eval", `(() => {
-    const history = document.querySelector("[data-operational-history]");
     const alert = document.querySelector("[data-operational-history-alert]");
-    history.open = false;
-    history.dataset.state = "persistence_gap";
+    document.querySelector("[data-operational-history]").dataset.state = "persistence_gap";
     alert.hidden = false;
     alert.querySelector("strong").textContent = "Operational history has a known persistence gap";
-    alert.querySelector("span").textContent = "Open Build and operational history for detail.";
+    alert.querySelector("span").textContent = "Open Diagnostics for detail.";
     return {
-      historyOpen: history.open,
+      historyOpen: document.querySelector("[data-report-diagnostics-dialog]").open,
       alertVisible: alert.getClientRects().length > 0,
       alertRole: alert.getAttribute("role"),
       alertText: alert.textContent.trim(),
-      nestedOverflow: getComputedStyle(history).overflowY,
+      nestedOverflow: getComputedStyle(document.querySelector(".report-notices")).overflowY,
     };
   })()`], { json: true })).result;
   assert.equal(materialWarning.historyOpen, false);
@@ -402,10 +427,37 @@ try {
   assert.equal(materialWarning.alertRole, "alert");
   assert.match(materialWarning.alertText, /known persistence gap/);
   assert.notEqual(materialWarning.nestedOverflow, "scroll");
-  await browser(["set", "viewport", "500", "760"]);
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-material-warning-1120x760.png")]);
+  const exportDialog = (await browser(["eval", `(() => {
+    const dialog = document.querySelector("[data-report-export-dialog]");
+    dialog.showModal();
+    document.querySelector("[data-report-export-close]").focus();
+    return {
+      open: dialog.open,
+      labelledBy: dialog.getAttribute("aria-labelledby"),
+      compactAction: document.querySelector("[data-report-export-compact]").textContent.trim(),
+      fullAction: document.querySelector("[data-report-export-full]").textContent.trim(),
+      focused: document.activeElement === document.querySelector("[data-report-export-close]"),
+    };
+  })()`], { json: true })).result;
+  assert.deepEqual(exportDialog, {
+    open: true,
+    labelledBy: "report-export-title",
+    compactAction: "Export compact summary HTML",
+    fullAction: "Export full evidence HTML",
+    focused: true,
+  });
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-export-1120x760.png")]);
+  await browser(["eval", `(() => {
+    document.querySelector("[data-report-export-dialog]").close();
+    document.querySelector("[data-operational-history-alert]").hidden = true;
+  })()`], { json: true });
+  await browser(["set", "viewport", "820", "620"]);
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-workspace-820x620.png")]);
   const narrowHistory = (await browser(["eval", `(() => {
+    const diagnostics = document.querySelector("[data-report-diagnostics-dialog]");
     const history = document.querySelector("[data-operational-history]");
-    history.open = true;
+    diagnostics.showModal();
     const rect = history.getBoundingClientRect();
     return {
       overflowX: getComputedStyle(history).overflowX,
@@ -420,6 +472,9 @@ try {
   assert.equal(narrowHistory.detailVisible, true);
   await browser(["set", "viewport", "1120", "760"]);
   await browser(["eval", `(() => {
+    document.querySelector("[data-report-diagnostics-dialog]").close();
+    document.querySelector(".workspace").classList.remove("report-reading-active");
+    document.querySelector(".content").classList.remove("report-reading-active");
     for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== "setup";
     const content = document.querySelector(".content");
     content.scrollTop = 0;
@@ -711,6 +766,30 @@ try {
       };
     })()`);
     assert.deepEqual(readerAfter, readerBefore);
+
+    await evaluateReportFrame(pageUrl, `(() => {
+      const main = document.querySelector("main");
+      main.tabIndex = -1;
+      main.focus();
+      scrollTo({ top: 0, behavior: "instant" });
+    })()`);
+    await browser(["press", "End"]);
+    await browser(["wait", "200"]);
+    const endScroll = await evaluateReportFrame(pageUrl, "scrollY");
+    assert.ok(endScroll > 0, `${mode} End did not scroll the report document`);
+    await browser(["press", "Home"]);
+    await browser(["wait", "200"]);
+    assert.equal(await evaluateReportFrame(pageUrl, "scrollY"), 0);
+    await browser(["press", "PageDown"]);
+    await browser(["wait", "200"]);
+    const pageDownScroll = await evaluateReportFrame(pageUrl, "scrollY");
+    assert.ok(pageDownScroll > 0, `${mode} Page Down did not scroll the report document`);
+    await browser(["press", "PageUp"]);
+    await browser(["wait", "200"]);
+    assert.ok(
+      await evaluateReportFrame(pageUrl, "scrollY") < pageDownScroll,
+      `${mode} Page Up did not move back through the report document`,
+    );
 
     await browser(["set", "viewport", "500", "900"]);
     const responsive = await evaluateReportFrame(pageUrl, `(() => ({

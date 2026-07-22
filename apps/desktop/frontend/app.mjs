@@ -156,7 +156,15 @@ export function mount(root, browserWindow) {
     reportBundleName,
     reportRevision,
     reportSummary,
+    reportSavedButton,
+    reportActiveRunButton,
     reportRefreshButton,
+    reportDiagnosticsButton,
+    reportDiagnosticsDialog,
+    reportDiagnosticsClose,
+    reportExportButton,
+    reportExportDialog,
+    reportExportClose,
     reportCompactExportButton, reportFullExportButton, reportControllerHandling,
     reportOperationalHandling, copySupportSummary,
     reportReplaceDialog, reportReplaceCancel, reportReplaceConfirm,
@@ -248,6 +256,10 @@ export function mount(root, browserWindow) {
     onDispose() {
       if (skipCycleDialog.open) skipCycleDialog.close?.();
       skipCycleDialog.removeAttribute("open");
+      if (reportDiagnosticsDialog.open) reportDiagnosticsDialog.close?.();
+      reportDiagnosticsDialog.removeAttribute("open");
+      if (reportExportDialog.open) reportExportDialog.close?.();
+      reportExportDialog.removeAttribute("open");
       skipCycleTrigger = null;
       releaseReportFrame(reportFrame, reportDocuments);
     },
@@ -260,6 +272,15 @@ export function mount(root, browserWindow) {
       focusActiveHeading(elements, state.activeWorkflow);
     });
   }
+
+  reportSavedButton.addEventListener("click", async () => {
+    await controller.selectWorkflow("saved");
+    focusActiveHeading(elements, "saved");
+  });
+  reportActiveRunButton.addEventListener("click", async () => {
+    await controller.selectWorkflow("run");
+    focusActiveHeading(elements, "run");
+  });
 
   const startNewSession = async () => {
     await controller.selectWorkflow("setup");
@@ -690,6 +711,42 @@ export function mount(root, browserWindow) {
   });
 
   reportRefreshButton.addEventListener("click", () => controller.refreshReport());
+  reportDiagnosticsButton.addEventListener("click", () => {
+    if (typeof reportDiagnosticsDialog.showModal === "function") {
+      reportDiagnosticsDialog.showModal();
+    } else {
+      reportDiagnosticsDialog.setAttribute("open", "");
+    }
+    Promise.resolve().then(() => reportDiagnosticsClose.focus());
+  });
+  const closeReportDiagnostics = () => {
+    if (reportDiagnosticsDialog.open) reportDiagnosticsDialog.close?.();
+    reportDiagnosticsDialog.removeAttribute("open");
+    reportDiagnosticsButton.focus();
+  };
+  reportDiagnosticsClose.addEventListener("click", closeReportDiagnostics);
+  reportDiagnosticsDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeReportDiagnostics();
+  });
+  reportExportButton.addEventListener("click", () => {
+    if (typeof reportExportDialog.showModal === "function") {
+      reportExportDialog.showModal();
+    } else {
+      reportExportDialog.setAttribute("open", "");
+    }
+    Promise.resolve().then(() => reportExportClose.focus());
+  });
+  const closeReportExport = () => {
+    if (reportExportDialog.open) reportExportDialog.close?.();
+    reportExportDialog.removeAttribute("open");
+    reportExportButton.focus();
+  };
+  reportExportClose.addEventListener("click", closeReportExport);
+  reportExportDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeReportExport();
+  });
   reportCompactExportButton.addEventListener("click", async () => {
     reportExportTrigger = reportCompactExportButton;
     await controller.exportReport("compact_summary_html");
@@ -697,6 +754,7 @@ export function mount(root, browserWindow) {
       Promise.resolve().then(() => reportReplaceCancel.focus());
     } else {
       reportExportTrigger = null;
+      closeReportExport();
     }
   });
   reportFullExportButton.addEventListener("click", async () => {
@@ -710,6 +768,7 @@ export function mount(root, browserWindow) {
       Promise.resolve().then(() => reportReplaceCancel.focus());
     } else {
       reportExportTrigger = null;
+      closeReportExport();
     }
   });
   const cancelReportReplacement = async () => {
@@ -743,11 +802,10 @@ export function mount(root, browserWindow) {
   });
   reportReplaceConfirm.addEventListener("click", async () => {
     if (["replacing", "cancelling"].includes(state.reportExportStatus)) return;
-    const trigger = reportExportTrigger;
     await controller.confirmReportReplacement();
     if (!state.reportExportPending) {
       reportExportTrigger = null;
-      trigger?.focus();
+      closeReportExport();
     }
   });
   copySupportSummary.addEventListener("click", async () => {

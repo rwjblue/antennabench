@@ -865,9 +865,10 @@ export function renderEvidenceImports(elements, state) {
 
 export function renderReport(elements, state, reportDocuments) {
   const {
-    reportStatus, reportPlaceholder, reportViewer, reportFrame, reportRefreshButton,
+    reportStatus, reportPanelHeading, reportPlaceholder, reportViewer, reportFrame,
+    reportSavedButton, reportActiveRunButton, reportRefreshButton,
     reportCompactExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
-    reportBundleName, reportRevision, reportSummary, reportControllerOptions,
+    reportBundleName, reportRevision, reportExportRevision, reportSummary, reportControllerOptions,
     reportControllerHandling,
     reportOperationalOptions, reportOperationalHandling,
     reportReplaceDialog, reportReplaceTitle, reportReplaceDescription,
@@ -875,6 +876,11 @@ export function renderReport(elements, state, reportDocuments) {
   } = elements;
   const hasSession = state.session !== null;
   const hasReport = typeof state.session?.reportHtml === "string";
+  const readingActive = state.activeWorkflow === "report" && hasReport;
+  const content = reportViewer.closest(".content");
+  content?.classList.toggle("report-reading-active", readingActive);
+  content?.closest(".workspace")?.classList.toggle("report-reading-active", readingActive);
+  reportPanelHeading.hidden = readingActive;
   const reportBusy = state.reportStatus === "refreshing"
     || ["loading", "confirming", "replacing", "cancelling"].includes(state.reportExportStatus);
   reportStatus.textContent = state.reportStatus === "refreshing"
@@ -886,6 +892,9 @@ export function renderReport(elements, state, reportDocuments) {
   reportPlaceholder.hidden = hasSession;
   reportViewer.hidden = !hasSession;
   reportFrame.hidden = !hasReport;
+  reportActiveRunButton.hidden = !["planned", "running", "interrupted"].includes(
+    state.session?.lifecycle,
+  );
   reportRefreshButton.disabled = reportBusy;
   reportCompactExportButton.disabled = reportBusy || !hasReport;
   reportFullExportButton.disabled = reportBusy || !hasReport;
@@ -903,7 +912,7 @@ export function renderReport(elements, state, reportDocuments) {
     reportOperationalHandling.value = "omitted";
     reportOperationalOptions.dataset.presentationId = String(state.reportPresentationId);
   }
-  reportRefreshButton.textContent = state.reportStatus === "refreshing" ? "Refreshing…" : "Refresh committed snapshot";
+  reportRefreshButton.textContent = state.reportStatus === "refreshing" ? "Refreshing…" : "Refresh";
   const exportAction = state.reportExportStatus === "loading"
     ? "Exporting…"
     : state.reportExportStatus === "replacing"
@@ -920,6 +929,7 @@ export function renderReport(elements, state, reportDocuments) {
   if (!hasSession) return;
   reportBundleName.textContent = state.session.bundleName;
   reportRevision.textContent = `Revision ${state.session.revision ?? "legacy"} · ${humanizeIdentifier(state.session.lifecycle ?? "static")}`;
+  reportExportRevision.textContent = `revision ${state.session.revision ?? "legacy"}`;
   reportSummary.textContent = `${state.session.callsign} · ${state.session.grid} · ${state.session.antennaCount} antennas · ${state.session.slotCount} slots · ${state.session.observationCount} observations`;
   if (hasReport) updateReportFrame(reportFrame, state, reportDocuments);
 }
@@ -982,7 +992,7 @@ function renderOperationalHistory(elements, state) {
     operationalHistoryAlert, operationalHistoryAlertTitle, operationalHistoryAlertMessage,
     operationalHistory, operationalHistoryStatus, operationalHistoryMessage,
     operationalHistoryContexts, operationalHistoryDiagnostics, operationalHistoryBounds,
-    copySupportSummary, copySupportStatus,
+    copySupportSummary, copySupportStatus, reportDiagnosticsDialog,
   } = elements;
   const history = state.session?.operationalHistory;
   operationalHistory.hidden = state.session === null;
@@ -990,7 +1000,8 @@ function renderOperationalHistory(elements, state) {
   if (!state.session) return;
   const presentationId = String(state.reportPresentationId);
   if (operationalHistory.dataset.presentationId !== presentationId) {
-    operationalHistory.open = false;
+    if (reportDiagnosticsDialog.open) reportDiagnosticsDialog.close?.();
+    reportDiagnosticsDialog.removeAttribute("open");
     operationalHistory.dataset.presentationId = presentationId;
   }
   const historyState = history?.historyState ?? "unavailable";
@@ -1011,8 +1022,8 @@ function renderOperationalHistory(elements, state) {
         ? "A recorded operation retained only a partial result"
         : "A recorded operation failed";
     operationalHistoryAlertMessage.textContent = materialDiagnostic?.summary
-      ? `${materialDiagnostic.summary} Open Build and operational history for supporting detail.`
-      : "Open Build and operational history for the recorded gap and retention detail.";
+      ? `${materialDiagnostic.summary} Open Diagnostics for supporting detail.`
+      : "Open Diagnostics for the recorded gap and retention detail.";
   }
 
   const document = operationalHistory.ownerDocument;

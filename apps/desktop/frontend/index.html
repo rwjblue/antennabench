@@ -490,43 +490,41 @@
           </section>
 
           <section class="workflow-panel" data-panel="report" aria-labelledby="report-title" hidden>
-            <div class="panel-heading">
+            <div class="panel-heading report-panel-heading" data-report-panel-heading>
               <div><p class="eyebrow">Review the evidence</p><h1 id="report-title">Local report</h1></div>
-              <span class="status-chip muted" data-report-status>Unavailable</span>
             </div>
             <div class="report-placeholder" data-report-placeholder>
               <div class="report-bars" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
               <div><h2>Choose a saved session to view its report</h2><p>Open Saved sessions to select a local experiment or a portable session from another location.</p></div>
             </div>
             <div class="report-viewer" data-report-viewer hidden>
-              <div class="report-context">
-                <div><span>Active source</span><strong data-report-bundle></strong></div>
-                <div><span>Committed snapshot</span><strong data-report-revision></strong></div>
-                <p data-report-summary></p>
-              </div>
-              <div class="operational-history-alert" data-operational-history-alert hidden role="alert">
-                <strong data-operational-history-alert-title></strong>
-                <span data-operational-history-alert-message></span>
-              </div>
-              <details class="operational-history" data-operational-history aria-labelledby="operational-history-title">
-                <summary class="operational-history-summary">
-                  <span class="operational-history-heading">
-                    <span><span class="eyebrow">Local support view</span><span class="operational-history-title" id="operational-history-title">Build and operational history</span></span>
-                    <span class="status-chip" data-operational-history-status></span>
-                  </span>
-                  <span class="operational-history-message" data-operational-history-message></span>
-                </summary>
-                <div class="operational-history-detail">
-                  <div class="runtime-contexts" data-operational-history-contexts></div>
-                  <ol class="operational-diagnostics" data-operational-history-diagnostics></ol>
-                  <p class="history-bounds" data-operational-history-bounds></p>
-                  <div class="support-summary-actions">
-                    <button type="button" data-copy-support-summary>Copy support summary</button>
-                    <span role="status" aria-live="polite" aria-atomic="true" data-copy-support-status></span>
-                  </div>
-                  <p class="privacy-note">The copied JSON is redacted by default. It omits station identity and grid, bundle filenames and paths, target identifiers, controller output, attachments, and evidence rows.</p>
+              <header class="report-toolbar" aria-label="Local report controls">
+                <div class="report-toolbar-navigation">
+                  <button type="button" data-report-saved>Saved sessions</button>
+                  <button type="button" data-report-active-run>Active run</button>
                 </div>
-              </details>
+                <div class="report-toolbar-identity">
+                  <div><span>Session</span><strong data-report-bundle></strong></div>
+                  <div><span>Committed snapshot</span><strong data-report-revision></strong></div>
+                  <span class="status-chip muted" data-report-status>Unavailable</span>
+                </div>
+                <p class="report-toolbar-summary" data-report-summary></p>
+                <div class="report-toolbar-actions">
+                  <button type="button" data-report-refresh>Refresh</button>
+                  <button type="button" data-report-diagnostics aria-haspopup="dialog" aria-controls="report-diagnostics-dialog">Diagnostics</button>
+                  <button type="button" data-report-export aria-haspopup="dialog" aria-controls="report-export-dialog">Export</button>
+                </div>
+              </header>
+              <div class="report-notices">
+                <div class="operational-history-alert" data-operational-history-alert hidden role="alert">
+                  <strong data-operational-history-alert-title></strong>
+                  <span data-operational-history-alert-message></span>
+                </div>
+                <div class="open-feedback" data-report-feedback hidden role="status" aria-live="polite">
+                  <span class="feedback-mark" aria-hidden="true"></span>
+                  <div><strong data-report-feedback-message></strong><p data-report-feedback-detail></p></div>
+                </div>
+              </div>
               <!-- Same-origin identity is limited to native fragment navigation; scripts and top navigation remain sandboxed. -->
               <iframe
                 data-report-frame
@@ -534,34 +532,63 @@
                 sandbox="allow-same-origin"
                 referrerpolicy="no-referrer"
               ></iframe>
-              <div class="report-export-choice" data-report-controller-options hidden>
-                <label>Full evidence HTML controller details
-                  <select data-report-controller-handling>
-                    <option value="complete" selected>Include controller command details</option>
-                    <option value="omitted_at_export">Omit controller command details</option>
-                  </select>
-                </label>
-                <p>For the full evidence HTML, controller programs, arguments, and output can reveal local paths, usernames, or addresses. Include them, or omit them with a visible notice. Compact summaries already omit controller output.</p>
-              </div>
-              <div class="report-export-choice" data-report-operational-options>
-                <label>Full evidence HTML operational history
-                  <select data-report-operational-handling>
-                    <option value="omitted" selected>Omit operational history</option>
-                    <option value="included_redacted">Include redacted support history</option>
-                  </select>
-                </label>
-                <p>Operational history is omitted by default and is never added to compact/public output. Explicit inclusion adds only the bounded redacted support view shown above; it remains separate from scientific findings.</p>
-              </div>
-              <div class="conductor-actions report-actions">
-                <button type="button" data-report-refresh>Refresh committed snapshot</button>
-                <button type="button" data-report-export-compact>Export compact summary HTML</button>
-                <button type="button" data-report-export-full>Export full evidence HTML</button>
-              </div>
-              <div class="open-feedback" data-report-feedback hidden role="status" aria-live="polite">
-                <span class="feedback-mark" aria-hidden="true"></span>
-                <div><strong data-report-feedback-message></strong><p data-report-feedback-detail></p></div>
-              </div>
             </div>
+            <dialog class="report-dialog report-diagnostics-dialog" id="report-diagnostics-dialog" data-report-diagnostics-dialog aria-labelledby="report-diagnostics-title">
+              <div class="report-dialog-content">
+                <div class="report-dialog-heading">
+                  <div><p class="eyebrow">Local support view</p><h2 id="report-diagnostics-title">Diagnostics</h2></div>
+                  <button type="button" data-report-diagnostics-close>Close</button>
+                </div>
+                <section class="operational-history" data-operational-history aria-labelledby="operational-history-title">
+                  <div class="operational-history-heading">
+                    <span><span class="eyebrow">Build and operational history</span><span class="operational-history-title" id="operational-history-title">Support evidence for this snapshot</span></span>
+                    <span class="status-chip" data-operational-history-status></span>
+                  </div>
+                  <p class="operational-history-message" data-operational-history-message></p>
+                  <div class="operational-history-detail">
+                    <div class="runtime-contexts" data-operational-history-contexts></div>
+                    <ol class="operational-diagnostics" data-operational-history-diagnostics></ol>
+                    <p class="history-bounds" data-operational-history-bounds></p>
+                    <div class="support-summary-actions">
+                      <button type="button" data-copy-support-summary>Copy support summary</button>
+                      <span role="status" aria-live="polite" aria-atomic="true" data-copy-support-status></span>
+                    </div>
+                    <p class="privacy-note">The copied JSON is redacted by default. It omits station identity and grid, bundle filenames and paths, target identifiers, controller output, attachments, and evidence rows.</p>
+                  </div>
+                </section>
+              </div>
+            </dialog>
+            <dialog class="report-dialog report-export-dialog" id="report-export-dialog" data-report-export-dialog aria-labelledby="report-export-title">
+              <div class="report-dialog-content">
+                <div class="report-dialog-heading">
+                  <div><p class="eyebrow">Save a committed artifact</p><h2 id="report-export-title">Export</h2></div>
+                  <button type="button" data-report-export-close>Close</button>
+                </div>
+                <p class="report-export-revision">Exports use the displayed coherent snapshot: <strong data-report-export-revision></strong>.</p>
+                <div class="report-export-choice" data-report-controller-options hidden>
+                  <label>Full evidence HTML controller details
+                    <select data-report-controller-handling>
+                      <option value="complete" selected>Include controller command details</option>
+                      <option value="omitted_at_export">Omit controller command details</option>
+                    </select>
+                  </label>
+                  <p>For the full evidence HTML, controller programs, arguments, and output can reveal local paths, usernames, or addresses. Include them, or omit them with a visible notice. Compact summaries already omit controller output.</p>
+                </div>
+                <div class="report-export-choice" data-report-operational-options>
+                  <label>Full evidence HTML operational history
+                    <select data-report-operational-handling>
+                      <option value="omitted" selected>Omit operational history</option>
+                      <option value="included_redacted">Include redacted support history</option>
+                    </select>
+                  </label>
+                  <p>Operational history is omitted by default and is never added to compact/public output. Explicit inclusion adds only the bounded redacted support view shown in Diagnostics; it remains separate from scientific findings.</p>
+                </div>
+                <div class="report-export-actions">
+                  <button type="button" data-report-export-compact>Export compact summary HTML</button>
+                  <button type="button" data-report-export-full>Export full evidence HTML</button>
+                </div>
+              </div>
+            </dialog>
             <dialog class="saved-delete-dialog" data-report-replace-dialog aria-labelledby="report-replace-title" aria-describedby="report-replace-description">
               <div class="saved-delete-content">
                 <p class="eyebrow">Replace standalone report</p>

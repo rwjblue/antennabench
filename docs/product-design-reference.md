@@ -352,14 +352,17 @@ under the active run's **Add evidence** disclosure because they append evidence
 to one active experiment. Compact and full HTML exports remain in Local report;
 there is no separate numbered Import / export destination.
 
-Local report presentation keeps durable operational history above, but outside,
-the scientific report iframe. It shows bounded creator/subsequent runtime cards
-and chronological failed, partial, and recovery outcomes with explicit legacy,
-unavailable, retention-capped, and persistence-gap states. Reopened running or
+Local report is a viewport-bounded reading workspace: a compact persistent
+toolbar owns navigation, coherent revision identity, refresh, Diagnostics, and
+Export, while the sandboxed scientific report iframe is the sole routine
+vertical scroll owner. Diagnostics contains bounded creator/subsequent runtime
+cards and chronological failed, partial, and recovery outcomes with explicit
+legacy, unavailable, retention-capped, and persistence-gap states. Material
+warnings remain visible outside that secondary dialog. Reopened running or
 interrupted sessions surface the latest relevant failure on Active run. One
 clipboard action copies deterministic redacted JSON; compact/public output omits
 the history, and full evidence export requires a separate explicit inclusion
-choice.
+choice in the Export dialog.
 
 The routine presentation shows one prominent next action. It says whether to
 keep or switch the named antenna and, independently, whether to turn WSJT-X
