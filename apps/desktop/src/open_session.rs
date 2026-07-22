@@ -438,6 +438,17 @@ mod tests {
 
         open_session_with_selection(&state, || Ok(Some(canonical_fixture()))).unwrap();
         let presentation = active_session_report_for(&state).unwrap();
+        let report_bytes = presentation.report_html.len();
+        let summary_bytes = presentation.summary_html.len();
+        let combined_document_bytes = report_bytes + summary_bytes;
+        assert_eq!(
+            (report_bytes, summary_bytes, combined_document_bytes),
+            (2_588_060, 66_898, 2_654_958),
+            "canonical desktop presentation byte baseline changed"
+        );
+        assert!(report_bytes < REPORT_DOCUMENT_IPC_BYTES as usize);
+        assert!(summary_bytes < REPORT_DOCUMENT_IPC_BYTES as usize);
+        assert!(combined_document_bytes < REPORT_DOCUMENT_IPC_BYTES as usize);
         let serialized = serde_json::to_value(&presentation).unwrap();
         assert!(serialized.get("reportHtml").is_some());
         assert!(serialized.get("summaryHtml").is_none());

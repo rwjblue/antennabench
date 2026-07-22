@@ -585,6 +585,40 @@ try {
     assert.equal(standalone.heroDisplay, mode === "summary" ? "block" : "grid");
     assert.ok(Math.abs(standalone.negative - 0.2) < 0.01);
     assert.ok(Math.abs(standalone.proportionalWidth - 0.25) < 0.01);
+    if (mode === "summary") {
+      const focusOrder = (await browser(["eval", `(() => {
+        const selector = [
+          'a[href]',
+          'button:not([disabled])',
+          'input:not([disabled])',
+          'select:not([disabled])',
+          'textarea:not([disabled])',
+          'summary',
+          '[tabindex="0"]',
+        ].join(',');
+        return [...document.querySelectorAll(selector)]
+          .filter((element) => element.getClientRects().length > 0)
+          .map((element) => element.tagName);
+      })()`], { json: true })).result;
+      assert.deepEqual(focusOrder, [
+        "A",
+        "SUMMARY",
+        "SUMMARY",
+        "SUMMARY",
+        "A",
+        "A",
+        "A",
+        "SUMMARY",
+        "SUMMARY",
+      ]);
+
+      const pdfPath = resolve("target/desktop-report-browser/summary-us-letter.pdf");
+      await browser(["pdf", pdfPath]);
+      const pdf = readFileSync(pdfPath).toString("latin1");
+      const printPageCount = pdf.match(/\/Type\s*\/Page\b/g)?.length ?? 0;
+      assert.equal(printPageCount, 2, `canonical Summary US Letter page baseline changed`);
+      assert.ok(printPageCount <= 2, `Summary printed to ${printPageCount} pages`);
+    }
   }
 
   for (const mode of ["full", "summary"]) {
@@ -634,6 +668,7 @@ try {
               ".coverage-polar",
             ].join(",")).length,
             readingRuleCount: document.querySelectorAll(".summary-reading-rules li").length,
+            disclosureCount: document.querySelectorAll("details").length,
             provenanceOpen: document.querySelector(".summary-reference").open,
           };
         })() : null,
@@ -656,6 +691,7 @@ try {
       assert.equal(styles.summaryOpening.rawTabStopCount, 0);
       assert.equal(styles.summaryOpening.auditVisualCount, 0);
       assert.equal(styles.summaryOpening.readingRuleCount, 2);
+      assert.equal(styles.summaryOpening.disclosureCount, 5);
       assert.equal(styles.summaryOpening.provenanceOpen, false);
       assert.ok(styles.summaryOpening.overviewTop >= 0);
       assert.ok(

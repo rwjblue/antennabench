@@ -29,7 +29,7 @@ use sha2::{Digest, Sha256};
 
 mod support;
 
-use support::{assert_full_summary_policy, ReportDocument};
+use support::{assert_full_summary_policy, ReportDocument, SummaryBudgetMetrics};
 
 #[test]
 fn renders_the_canonical_report_as_deterministic_offline_html() {
@@ -1788,6 +1788,121 @@ fn summary_omits_audit_level_evidence_and_keeps_aggregate_equivalents() {
     let material = render_summary_html(&report).unwrap();
     assert!(material.contains("Run quality that affects interpretation"));
     assert!(material.contains("2 observation(s) were excluded"));
+}
+
+#[test]
+fn summary_information_density_and_interaction_budgets_are_explicit() {
+    let successful = paired_report(true);
+    let inconclusive = canonical_report();
+    let mut bounded = paired_report(true);
+    bounded.completeness = antennabench_report::ReportCompleteness::BoundedOverview;
+    let single = single_antenna_report();
+
+    for (name, report, expected) in [
+        (
+            "successful",
+            successful,
+            SummaryBudgetMetrics {
+                visible_words: 373,
+                primary_sections: 3,
+                visible_tables: 0,
+                visible_table_rows: 0,
+                disclosures: 5,
+                focusable_elements: 9,
+                focusable_chart_points: 0,
+                repeated_visible_caveats: 0,
+                primary_finding_word_index: 36,
+                html_bytes: 66_602,
+            },
+        ),
+        (
+            "inconclusive",
+            inconclusive,
+            SummaryBudgetMetrics {
+                visible_words: 535,
+                primary_sections: 3,
+                visible_tables: 0,
+                visible_table_rows: 0,
+                disclosures: 5,
+                focusable_elements: 9,
+                focusable_chart_points: 0,
+                repeated_visible_caveats: 0,
+                primary_finding_word_index: 40,
+                html_bytes: 75_341,
+            },
+        ),
+        (
+            "bounded-small-evidence",
+            bounded,
+            SummaryBudgetMetrics {
+                visible_words: 407,
+                primary_sections: 4,
+                visible_tables: 0,
+                visible_table_rows: 0,
+                disclosures: 5,
+                focusable_elements: 10,
+                focusable_chart_points: 0,
+                repeated_visible_caveats: 0,
+                primary_finding_word_index: 36,
+                html_bytes: 67_172,
+            },
+        ),
+        (
+            "single-antenna",
+            single,
+            SummaryBudgetMetrics {
+                visible_words: 229,
+                primary_sections: 2,
+                visible_tables: 0,
+                visible_table_rows: 0,
+                disclosures: 5,
+                focusable_elements: 8,
+                focusable_chart_points: 0,
+                repeated_visible_caveats: 0,
+                primary_finding_word_index: 37,
+                html_bytes: 59_463,
+            },
+        ),
+    ] {
+        let summary = render_summary_html(&report).unwrap();
+        assert_eq!(summary, render_summary_html(&report).unwrap());
+        let document = ReportDocument::parse(&summary);
+        let metrics = document.summary_budget_metrics(&summary);
+        assert_eq!(metrics, expected, "{name} Summary baseline changed");
+
+        assert!(metrics.visible_words <= 800, "{name}: {metrics:?}");
+        assert!(metrics.primary_sections <= 4, "{name}: {metrics:?}");
+        assert_eq!(metrics.visible_tables, 0, "{name}: {metrics:?}");
+        assert_eq!(metrics.visible_table_rows, 0, "{name}: {metrics:?}");
+        assert_eq!(metrics.focusable_chart_points, 0, "{name}: {metrics:?}");
+        assert!(metrics.focusable_elements <= 10, "{name}: {metrics:?}");
+        assert_eq!(metrics.disclosures, 5, "{name}: {metrics:?}");
+        assert_eq!(metrics.repeated_visible_caveats, 0, "{name}: {metrics:?}");
+        assert!(
+            metrics.primary_finding_word_index < 200,
+            "{name}: {metrics:?}"
+        );
+        assert!(metrics.html_bytes < 100_000, "{name}: {metrics:?}");
+        document.assert_absent(
+            ".paired-row-audit, .common-opportunity-rate-map, .coverage-world, .raw-observation-table",
+        );
+        document.assert_absent("[tabindex=\"0\"]");
+
+        let full = render_standalone_html(&report).unwrap();
+        let revision = report
+            .snapshot
+            .checkpoint_revision
+            .or(report.overview.lifecycle.checkpoint_revision);
+        if let Some(revision) = revision {
+            assert!(full.contains(&revision.to_string()));
+            assert!(summary.contains(&revision.to_string()));
+        }
+    }
+
+    let successful = render_summary_html(&paired_report(true)).unwrap();
+    let successful_document = ReportDocument::parse(&successful);
+    successful_document.assert_present(".summary-path-aggregate svg[role=\"img\"][aria-label]");
+    successful_document.assert_present(".summary-path-aggregate + .summary-method-note");
 }
 
 #[test]
