@@ -1,7 +1,9 @@
 import { conductorActionAvailable, WORKFLOWS, wsjtxReadinessModel } from "./models.mjs";
 
 function hasCoherentReport(session) {
-  return typeof session?.reportHtml === "string"
+  return session?.presentationId !== undefined
+    && session?.presentationId !== null
+    && typeof session?.reportHtml === "string"
     && typeof session?.summaryHtml === "string";
 }
 
@@ -35,7 +37,7 @@ export function initialState(workflow = "saved") {
       managedLocationNotice: null,
       activeManagedLocatorId: null,
       session: null,
-      reportPresentationId: 0,
+      reportPresentationId: null,
       reportMode: "summary",
       pendingReportPresentation: null,
       reportWindowStatus: "idle",
@@ -204,8 +206,7 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     reportWindowStatus: "idle",
     reportWindowError: null,
     reportWindowNotice: null,
-    reportPresentationId: session.presentationId
-      ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
+    reportPresentationId: session.presentationId ?? null,
     reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
     reportError: null,
     reportExportStatus: "idle",
@@ -268,8 +269,7 @@ export function openSessionSucceeded(
     reportWindowStatus: "idle",
     reportWindowError: null,
     reportWindowNotice: null,
-    reportPresentationId: session.presentationId
-      ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
+    reportPresentationId: session.presentationId ?? null,
     reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
     reportError: null,
     reportExportStatus: "idle",

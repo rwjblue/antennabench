@@ -140,12 +140,14 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       ],
     },
   };
+  const reportHtml = "<!doctype html><meta data-antennabench-report-csp http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'\"><style>body{color:#172033}</style><p>headless report</p>";
+  const summaryHtml = "<!doctype html><meta data-antennabench-report-csp http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'\"><style>body{color:#172033}</style><main class=\"summary\"><p>headless summary</p></main>";
   const session = {
+    sessionId: "session-headless",
     bundleName: "headless.session.antennabundle",
     lifecycle: "running",
     schemaVersion: 4,
-    reportHtml: "<!doctype html><meta data-antennabench-report-csp http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'\"><style>body{color:#172033}</style><p>headless report</p>",
-    summaryHtml: "<!doctype html><meta data-antennabench-report-csp http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'\"><style>body{color:#172033}</style><main class=\"summary\"><p>headless summary</p></main>",
+    reportAvailable: true,
     revision: 1,
   };
   let managedOpenAttempts = 0;
@@ -266,6 +268,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
         status: "opened",
         session: {
           ...session,
+          sessionId: "session-existing",
           bundleName: "existing.session.antennabundle",
           lifecycle: "ended",
           revision: 9,
@@ -273,21 +276,30 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       };
     },
     reveal_managed_session: undefined,
-    refresh_active_session_report: () => {
+    refresh_active_session_report: (payload) => {
+      if (reportRefreshes < 2) {
+        assert.equal(
+          payload,
+          undefined,
+          "the first report refresh for each newly activated session claims no prior presentation",
+        );
+      } else {
+        assert.deepEqual(payload, { displayedPresentationId: 2 });
+      }
       reportRefreshes += 1;
       return reportRefreshes === 1
         ? {
           presentationId: 1,
-          reportHtml: session.reportHtml,
-          summaryHtml: session.summaryHtml,
+          reportHtml,
+          summaryHtml,
           revision: 9,
           lifecycle: "ended",
           completeness: "full_detail",
         }
         : {
           presentationId: 2,
-          reportHtml: session.reportHtml,
-          summaryHtml: session.summaryHtml,
+          reportHtml,
+          summaryHtml,
           revision: 1,
           lifecycle: "running",
           completeness: "full_detail",

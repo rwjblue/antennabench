@@ -283,7 +283,7 @@ test("the shell starts in saved sessions", () => {
     managedLocationNotice: null,
     activeManagedLocatorId: null,
     session: null,
-    reportPresentationId: 0,
+    reportPresentationId: null,
     reportMode: "summary",
     pendingReportPresentation: null,
     reportWindowStatus: "idle",
@@ -834,6 +834,7 @@ test("setup creation cancellation, failure, and success preserve coherent state"
   const session = {
     sessionId: "session-1",
     bundleName: "created.session.antennabundle",
+    presentationId: 1,
     reportHtml: "<!doctype html>",
     summaryHtml: "<!doctype html><main class=\"summary\"></main>",
   };
@@ -1389,6 +1390,7 @@ test("opening a session transitions through loading and ready", () => {
   const loading = beginOpenSession(initialState("saved"), "managed", "work", "locator-1");
   const session = {
     sessionId: "session-1",
+    presentationId: 1,
     reportHtml: "<!doctype html>",
     summaryHtml: "<!doctype html><main class=\"summary\"></main>",
   };
@@ -1440,6 +1442,7 @@ test("same-ID successful opens refresh only the new report presentation", () => 
   const reportDocuments = reportDocumentHarness();
   const first = openSessionSucceeded(initialState("report"), {
     sessionId: "session-1",
+    presentationId: 1,
     reportHtml: "<!doctype html><title>first</title>",
     summaryHtml: "<!doctype html><title>first summary</title>",
   });
@@ -1467,6 +1470,7 @@ test("same-ID successful opens refresh only the new report presentation", () => 
 
   const second = openSessionSucceeded(beginOpenSession(first), {
     sessionId: "session-1",
+    presentationId: 2,
     reportHtml: "<!doctype html><title>second</title>",
     summaryHtml: "<!doctype html><title>second summary</title>",
   });
@@ -1987,7 +1991,7 @@ test("the frontend invokes only the narrow session commands", async () => {
   const importedSession = await invokeImportManagedSession(invoke);
   const exportedSession = await invokeExportManagedSession(invoke, "locator-1");
   const report = await invokeActiveSessionReport(invoke);
-  const refreshed = await invokeRefreshActiveSessionReport(invoke);
+  const refreshed = await invokeRefreshActiveSessionReport(invoke, null);
   const reportWindow = await invokeOpenReportWindow(invoke, 7, "summary");
   const reportWindowDocument = await invokeReportWindowDocument(invoke);
   const reportExported = await invokeExportActiveSessionReport(invoke, "full_evidence_html");

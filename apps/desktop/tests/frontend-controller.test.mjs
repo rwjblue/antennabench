@@ -4,14 +4,28 @@ import { test } from "vitest";
 import { createDesktopController } from "../frontend/controller.mjs";
 import { initialState, openSessionSucceeded } from "../frontend/state.mjs";
 
+// Represents frontend state after Rust has returned a complete report presentation.
 const session = (overrides = {}) => ({
   sessionId: "session-1",
   bundleName: "test.session.antennabundle",
+  presentationId: 1,
   lifecycle: "running",
   schemaVersion: 4,
   reportHtml: "<p>prior</p>",
   summaryHtml: "<p>prior summary</p>",
   revision: 3,
+  ...overrides,
+});
+
+// Mirrors Rust's OpenedSession IPC shape: report availability is summarized,
+// but presentation identity and document bytes are returned only by report commands.
+const sessionSummary = (overrides = {}) => ({
+  sessionId: "session-1",
+  bundleName: "test.session.antennabundle",
+  lifecycle: "ready",
+  schemaVersion: 6,
+  revision: 0,
+  reportAvailable: true,
   ...overrides,
 });
 
@@ -99,7 +113,7 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
     review_session_setup: { valid: true, reviewId: "review-3" },
     create_session_from_review: {
       status: "created",
-      session: session(),
+      session: sessionSummary(),
       managedLocation: {
         locatorId: "locator-created",
         bundleName: "test.session.antennabundle",
@@ -108,14 +122,15 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
       },
     },
     refresh_active_session_report: {
-      presentationId: 4,
+      presentationId: 1,
+      sessionId: "session-1",
       reportHtml: "<p>fresh</p>",
       summaryHtml: "<p>fresh summary</p>",
-      revision: 4,
-      lifecycle: "running",
+      revision: 0,
+      lifecycle: "ready",
       completeness: "full_detail",
     },
-    active_session_conductor: conductor({ revision: 4 }),
+    active_session_conductor: conductor({ revision: 0, lifecycle: "ready" }),
     active_session_antenna_controller: { policy: "manual", attached: false, armed: false, targets: {} },
     active_session_wsjtx_status: { phase: "stopped" },
     advance_active_session_wspr_live: { status: "disabled" },
@@ -132,8 +147,74 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
     "active_session_conductor",
     "active_session_antenna_controller",
     "active_session_wsjtx_status",
-    "advance_active_session_wspr_live",
   ]);
+  assert.deepEqual(
+    created.calls.find(([command]) => command === "refresh_active_session_report"),
+    ["refresh_active_session_report", undefined],
+    "a newly created session has no displayed report identity to claim",
+  );
+});
+
+test("a Rust-shaped creation response keeps the first conductor action on revision zero", async () => {
+  let reportRefresh = 0;
+  const run = harness({
+    review_session_setup: { valid: true, reviewId: "review-real-shape" },
+    create_session_from_review: {
+      status: "created",
+      session: sessionSummary(),
+      managedLocation: {
+        locatorId: "locator-real-shape",
+        bundleName: "test.session.antennabundle",
+        origin: "managed",
+        originLabel: "Saved by AntennaBench",
+      },
+    },
+    refresh_active_session_report: () => {
+      reportRefresh += 1;
+      return {
+        presentationId: reportRefresh,
+        sessionId: "session-1",
+        reportHtml: `<p>revision ${reportRefresh - 1}</p>`,
+        summaryHtml: `<p>summary revision ${reportRefresh - 1}</p>`,
+        revision: reportRefresh - 1,
+        lifecycle: reportRefresh === 1 ? "ready" : "running",
+        completeness: "full_detail",
+      };
+    },
+    active_session_conductor: conductor({ revision: 0, lifecycle: "ready" }),
+    mutate_active_session_conductor: conductor({
+      actionToken: "action-2",
+      revision: 1,
+      lifecycle: "running",
+    }),
+    active_session_antenna_controller: {
+      policy: "manual", attached: false, armed: false, targets: {},
+    },
+    active_session_wsjtx_status: { phase: "stopped" },
+    advance_active_session_wspr_live: { status: "disabled" },
+  });
+
+  await run.controller.reviewSetup({ station: {} });
+  await run.controller.createSession();
+  await run.controller.submitConductorAction({ kind: "start", note: null });
+
+  const reportCalls = run.calls.filter(([command]) => command === "refresh_active_session_report");
+  assert.deepEqual(reportCalls, [
+    ["refresh_active_session_report", undefined],
+    ["refresh_active_session_report", { displayedPresentationId: 1 }],
+  ]);
+  assert.deepEqual(
+    run.calls.find(([command]) => command === "mutate_active_session_conductor"),
+    ["mutate_active_session_conductor", {
+      request: {
+        actionToken: "action-1",
+        expectedRevision: 0,
+        action: { kind: "start", note: null },
+      },
+    }],
+  );
+  assert.equal(run.controller.state.conductor.revision, 1);
+  assert.equal(run.controller.state.session.revision, 1);
 });
 
 test("controller profiles can be explicitly saved and deleted during setup", async () => {
@@ -312,7 +393,10 @@ test("managed import refreshes the catalog and row export remains independently 
 test("managed opening obeys explicit report and work intents from the fresh summary", async () => {
   for (const lifecycle of ["ready", "running", "interrupted", "ended", "abandoned", null]) {
     const reportOnly = harness({
-      open_managed_session: { status: "opened", session: session({ lifecycle }) },
+      open_managed_session: {
+        status: "opened",
+        session: sessionSummary({ lifecycle, revision: lifecycle === null ? null : 3 }),
+      },
       refresh_active_session_report: {
         presentationId: 4,
         reportHtml: "<p>report only</p>",
@@ -326,14 +410,17 @@ test("managed opening obeys explicit report and work intents from the fresh summ
     assert.deepEqual(reportOnly.navigations, ["report"]);
     assert.deepEqual(reportOnly.calls, [
       ["open_managed_session", { locatorId: `locator-${lifecycle}` }],
-      ["refresh_active_session_report", { displayedPresentationId: 1 }],
+      ["refresh_active_session_report", undefined],
     ]);
     assert.equal(reportOnly.controller.state.conductor, null);
   }
 
   for (const lifecycle of ["ready", "interrupted"]) {
     const work = harness({
-      open_managed_session: { status: "opened", session: session({ lifecycle }) },
+      open_managed_session: {
+        status: "opened",
+        session: sessionSummary({ lifecycle, revision: 3 }),
+      },
       refresh_active_session_report: {
         presentationId: 4,
         reportHtml: `<p>${lifecycle}</p>`,

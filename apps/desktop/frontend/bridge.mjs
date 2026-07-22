@@ -47,7 +47,9 @@ export function invokeActiveSessionReport(invoke) {
 }
 
 export function invokeRefreshActiveSessionReport(invoke, displayedPresentationId) {
-  if (displayedPresentationId === undefined) return invoke("refresh_active_session_report");
+  if (displayedPresentationId === undefined || displayedPresentationId === null) {
+    return invoke("refresh_active_session_report");
+  }
   return invoke("refresh_active_session_report", { displayedPresentationId });
 }
 
@@ -71,7 +73,7 @@ export function invokeExportActiveSessionReport(
     controllerEvidence,
     operationalHistory,
   };
-  if (displayedPresentationId !== undefined) {
+  if (displayedPresentationId !== undefined && displayedPresentationId !== null) {
     payload.displayedPresentationId = displayedPresentationId;
   }
   return invoke("export_active_session_report", payload);
