@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta data-antennabench-report-csp
           http-equiv="Content-Security-Policy"
-          content="default-src 'none'; style-src 'sha256-bk/umniD0kRe6bM6awHZ4GTQjXfm0j7UmkjaSfXmYn8='; style-src-attr 'none'; base-uri 'none'; form-action 'none'">
+          content="default-src 'none'; style-src 'sha256-6VjjSU+zyow01Gy8S7wmyjBzR7YC4Va4FJsYTMnXT2g='; style-src-attr 'none'; base-uri 'none'; form-action 'none'">
     <title>AntennaBench Summary</title>
     <style>:root {
   color-scheme: light;
@@ -1448,6 +1448,101 @@ main.summary {
   width: min(900px, calc(100% - 2rem));
   margin: 1rem auto;
 }
+.summary .summary-overview {
+  border-top-width: 0.25rem;
+}
+.summary-context-line {
+  position: relative;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+.summary-context-line .goal-help {
+  display: inline-block;
+  margin-left: 0.25rem;
+}
+.summary-context-line .goal-help > summary {
+  display: inline-grid;
+  width: 1.1rem;
+  height: 1.1rem;
+  place-items: center;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  cursor: help;
+  font-size: 0.72rem;
+  list-style: none;
+}
+.summary-context-line .goal-help > summary::-webkit-details-marker {
+  display: none;
+}
+.summary-context-line .goal-help-popover {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  width: min(32rem, 100%);
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--paper);
+  box-shadow: 0 0.5rem 1.5rem rgb(23 32 51 / 16%);
+  color: var(--ink);
+  font-weight: 400;
+}
+.summary-context-line .goal-help-popover p {
+  margin: 0.35rem 0 0;
+}
+.summary-interpretation {
+  margin: 0.45rem 0;
+  font-size: 1rem;
+}
+.summary-populations {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.summary-finding {
+  min-width: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--soft);
+}
+.summary-finding-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+.summary-finding h3,
+.summary-finding p {
+  margin: 0;
+}
+.summary-finding-result {
+  margin-top: 0.35rem !important;
+  font-weight: 800;
+}
+.summary-finding-support,
+.summary-finding-population {
+  margin-top: 0.25rem !important;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.summary-principal-limitation {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-left: 0.25rem solid var(--accent);
+  background: var(--accent-soft);
+}
+.summary-condition-detail {
+  margin-top: 0.5rem;
+}
+@media (max-width: 760px) {
+  .summary-populations {
+    grid-template-columns: 1fr;
+  }
+}
 .summary .hero {
   display: block;
 }
@@ -1647,81 +1742,14 @@ main.summary {
   <p class="muted">
     Not the Full evidence report · Session <code>session-3e698e14-13ff-4ce4-b6bb-71e66734c6e4</code>
   </p>
-</header><nav class="question-nav" aria-label="Report questions">
-  <ul>
-    
-      <li>
-        <a href="#what-run-show">What did the run show?</a>
-      </li>
-    
-      <li>
-        <a href="#same-path-signal">Shared-path signal</a>
-      </li>
-    
-      <li>
-        <a href="#observed-footprint">Observed footprint</a>
-      </li>
-    
-      <li>
-        <a href="#run-quality">Run quality</a>
-      </li>
-    
-  </ul>
-</nav>
-  <details class="panel reading-guide">
-    <summary>How to read this report</summary>
-    <div class="reading-guide-body">
-    
-      
-        <ul>
-          <li>
-            A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.
-          </li>
-          <li>
-            This report describes evidence; it does not select a winner or prove one antenna is better.
-          </li>
-          <li>
-            Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.
-          </li>
-          <li>A block is a back-to-back pair of cycles, one per antenna.</li>
-          <li>Alternating antennas reduces but does not eliminate time and propagation effects.</li>
-        </ul>
-      
-      
-      </div>
-    </details>
-  <section id="what-run-show"
-         class="panel overview"
+</header><section id="what-run-show"
+         class="panel overview summary-overview"
          tabindex="-1"
          aria-labelledby="what-run-show-title">
   <p class="eyebrow">Answer first</p>
   <h2 id="what-run-show-title">What did the run show?</h2>
-  <p class="answerability-headline">
-    <strong>Answered by this run: Shared-path signal; Observed reach; Observed distance and direction profile; Repeatability across blocks.</strong>
-  </p>
-  <p class="answer plain-language-answer">For this General coverage run in TX path · 20 m · WSPR · Imported spot · WSPR.live (delayed/public), DX Commander produced stronger recorded results: a +5 dB median across 83 shared paths, 133 versus 120 unique observed paths. These results describe this session, not a universal antenna ranking.</p>
-  
-    
-    <dl class="facts answer-metrics">
-      
-        <div class="fact">
-          <dt>Shared-path signal</dt>
-          <dd>
-            +5 dB median<br><small class="muted">83 shared paths · DX Commander stronger at the median</small>
-          </dd>
-        </div>
-      
-        <div class="fact">
-          <dt>Observed footprint</dt>
-          <dd>
-            133 vs 120 paths<br><small class="muted">DX Commander / Attic EFHW · uncontrolled observations</small>
-          </dd>
-        </div>
-      
-    </dl>
-  
-  <div class="scope-line">
-    Station <strong>N1RWJ</strong> at <strong>FN41fr</strong>; goal: <strong>General coverage</strong>
+  <div class="summary-context-line">
+    N1RWJ · FN41fr · General coverage · 20 m · tx path; Transmit-focused
       
       <details class="goal-help">
         <summary aria-label="About the recorded General coverage goal lens">i</summary>
@@ -1733,69 +1761,103 @@ main.summary {
             The goal changes presentation priority only; evidence and calculations are unchanged.
           </p>
         </div>
-      </details>.
-  </div>
-  
-  <dl class="facts headline-facts">
-    <div class="fact">
-      <dt>Antennas</dt>
-      <dd>
-        Attic EFHW / DX Commander
-      </dd>
-    </div>
-    <div class="fact">
-      <dt>Bands</dt>
-      <dd>
-        20 m
-      </dd>
-    </div>
-    <div class="fact">
-      <dt>Direction / mode</dt>
-      <dd>
-        TX path; Transmit-focused
-      </dd>
-    </div>
-    <div class="fact">
-      <dt>Session state</dt>
-      <dd>
-        Not recorded
-      </dd>
-    </div>
-  </dl>
-  <p class="orientation">
-    <strong>Signed values:</strong> Positive values mean DX Commander was stronger; negative values mean Attic EFHW was stronger.
+      </details></div>
+  <p class="summary-interpretation">
+    <strong>Shared-path signal, controlled detection, and uncontrolled observed paths answer separate questions; none is combined into a broader stronger-results claim.</strong>
   </p>
+  <div class="summary-populations" aria-label="Separate evidence populations">
+    
+      <article class="summary-finding">
+        <div class="summary-finding-heading">
+          <h3>Paired shared-path signal</h3>
+          <span class="badge availability-status status-available">
+            Available
+          </span>
+        </div>
+        <p class="summary-finding-result">+5 dB median</p>
+        <p class="summary-finding-support">83 shared paths · DX Commander stronger at the median</p>
+        <p class="summary-finding-population">
+          <strong>Population:</strong> finite-SNR reports from the same remote path within the same eligible alternating block and comparison condition
+        </p>
+      </article>
+    
+      <article class="summary-finding">
+        <div class="summary-finding-heading">
+          <h3>Controlled common-opportunity detection</h3>
+          <span class="badge availability-status status-unavailable">
+            Unavailable
+          </span>
+        </div>
+        <p class="summary-finding-result">Activity coverage unknown</p>
+        <p class="summary-finding-support">Uncontrolled path totals are not substituted for this population.</p>
+        <p class="summary-finding-population">
+          <strong>Population:</strong> receivers confirmed active in both cycles of an eligible block for the same comparison condition
+        </p>
+      </article>
+    
+      <article class="summary-finding">
+        <div class="summary-finding-heading">
+          <h3>Uncontrolled unique observed paths</h3>
+          <span class="badge availability-status status-available">
+            Available
+          </span>
+        </div>
+        <p class="summary-finding-result">133 vs 120 paths</p>
+        <p class="summary-finding-support">DX Commander / Attic EFHW · uncontrolled observations</p>
+        <p class="summary-finding-population">
+          <strong>Population:</strong> unique recorded remote paths per antenna, whether or not the receiver was active in both cycles
+        </p>
+      </article>
+    
+  </div>
+  <aside class="summary-principal-limitation" aria-label="Principal limitation">
+    <strong>Principal limitation:</strong> Unmatched paths: 89 Attic EFHW / 281 DX Commander.
+  </aside>
   
-  
-    <details class="audit-disclosure overview-group-disclosure">
-      <summary>Review exact per-group headline evidence</summary>
-      <div class="disclosure-body">
+  <details class="audit-disclosure summary-condition-detail">
+    <summary>Review exact evidence for this condition</summary>
+    <div class="disclosure-body">
+      
+        
+        <dl class="facts answer-metrics">
+          
+            <div class="fact">
+              <dt>Shared-path signal</dt>
+              <dd>
+                +5 dB median<br><small class="muted">83 shared paths · DX Commander stronger at the median</small>
+              </dd>
+            </div>
+          
+            <div class="fact">
+              <dt>Observed footprint</dt>
+              <dd>
+                133 vs 120 paths<br><small class="muted">DX Commander / Attic EFHW · uncontrolled observations</small>
+              </dd>
+            </div>
+          
+        </dl>
       
       <div class="table-wrap">
         <table class="overview-table">
           <caption>
-            Descriptive result by comparison group
+            Descriptive result by comparison condition
           </caption>
           <thead>
             <tr>
-              <th scope="col">Comparison group</th>
+              <th scope="col">Comparison condition</th>
               <th scope="col">Path delta</th>
               <th scope="col">Paths / matched pairs</th>
-              <th scope="col">
-                Blocks <small>(back-to-back cycle pairs, one cycle per antenna)</small>
-              </th>
-              <th scope="col">Coverage</th>
+              <th scope="col">Alternating blocks</th>
             </tr>
           </thead>
           <tbody>
             
               
                 <tr>
-                  <td data-label="Comparison group">TX path · 20 m · WSPR · Imported spot · WSPR.live (delayed/public)</td>
+                  <td data-label="Comparison condition">TX path · 20 m · WSPR · Imported spot · WSPR.live (delayed/public)</td>
                   <td data-label="Path delta">-18 to +25 dB; median across paths +5 dB</td>
                   <td data-label="Paths / matched pairs">83 / 327</td>
-                  <td data-label="Blocks">7</td>
-                  <td data-label="Coverage">Available</td>
+                  <td data-label="Alternating blocks">7</td>
                 </tr>
               
               
@@ -1803,32 +1865,10 @@ main.summary {
           </tbody>
         </table>
       </div>
-      
-      </div>
-    </details>
-  
-  <div class="overview-support">
-    <section aria-labelledby="supported-title">
-      <h3 id="supported-title">Supported by this run</h3>
-      <ul>
-        <li>
-          The recorded comparison state is <strong>Descriptive pairs available</strong>.
-        </li>
-        <li>327 matched pair(s) are retained in 1 separate comparison group(s).</li>
-      </ul>
-    </section>
-    
-      <section aria-labelledby="not-established-title">
-        <h3 id="not-established-title">Not established by this run</h3>
-        <ul>
-          <li>Unmatched paths: 89 Attic EFHW / 281 DX Commander.</li><li>Duplicates: 1 exact / 0 conflicting group(s).</li>
-        </ul>
-      </section>
-    
-  </div>
-  
+    </div>
+  </details>
   <details class="audit-disclosure answerability-disclosure">
-    <summary>Question availability and limits</summary>
+    <summary>Methods and unavailable questions</summary>
     <dl class="facts answerability-facts disclosure-body">
       
         <div class="fact availability-row">
@@ -1873,7 +1913,50 @@ main.summary {
       
     </dl>
   </details>
-</section><section id="same-path-signal"
+</section><nav class="question-nav" aria-label="Report questions">
+  <ul>
+    
+      <li>
+        <a href="#what-run-show">What did the run show?</a>
+      </li>
+    
+      <li>
+        <a href="#same-path-signal">Shared-path signal</a>
+      </li>
+    
+      <li>
+        <a href="#observed-footprint">Observed footprint</a>
+      </li>
+    
+      <li>
+        <a href="#run-quality">Run quality</a>
+      </li>
+    
+  </ul>
+</nav>
+  <details class="panel reading-guide">
+    <summary>How to read this report</summary>
+    <div class="reading-guide-body">
+    
+      
+        <ul>
+          <li>
+            A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.
+          </li>
+          <li>
+            This report describes evidence; it does not select a winner or prove one antenna is better.
+          </li>
+          <li>
+            Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.
+          </li>
+          <li>A block is a back-to-back pair of cycles, one per antenna.</li>
+          <li>Alternating antennas reduces but does not eliminate time and propagation effects.</li>
+        </ul>
+      
+      
+      </div>
+    </details>
+  <section id="same-path-signal"
          class="panel question-section"
          tabindex="-1"
          aria-labelledby="same-path-title">

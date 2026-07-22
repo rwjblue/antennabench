@@ -275,12 +275,14 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     );
     assert!(summary.contains("Common-opportunity distance and bearing cells"));
     assert!(!summary.contains("<svg class=\"coverage-world\""));
-    assert!(summary.contains("For this General coverage run"));
-    assert!(summary.contains("detection among 180 common-active receiver opportunities"));
+    let summary_document = ReportDocument::parse(&summary);
+    summary_document.assert_count(".summary-finding", 3);
+    assert!(summary.contains(
+        "Shared-path signal, controlled detection, and uncontrolled observed paths answer separate questions"
+    ));
+    assert!(summary.contains("180 opportunities"));
     assert!(summary.contains("unique observed paths"));
-    assert!(
-        summary.contains("These results describe this session, not a universal antenna ranking.")
-    );
+    assert!(!summary.contains("stronger recorded results"));
     assert_eq!(
         summary
             .matches("<dl class=\"facts answer-metrics\">")
@@ -288,7 +290,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         1
     );
     assert!(summary.contains("<details class=\"goal-help\">"));
-    assert!(summary.contains("Question availability and limits"));
+    assert!(summary.contains("Methods and unavailable questions"));
 }
 
 fn assert_common_visual_has_accessible_rows(html: &str, group: &ReportCommonOpportunityMapGroup) {

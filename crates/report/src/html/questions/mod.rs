@@ -28,8 +28,8 @@ pub(super) use overlap::{
     render_overlap_repeatability_section, render_summary_repeatability_disclosure,
 };
 pub(super) use overview::{
-    overview_lifecycle_label, render_answer_first_overview,
-    render_answer_first_overview_with_reference, render_how_to_read, render_question_navigation,
+    overview_lifecycle_label, render_answer_first_overview, render_how_to_read,
+    render_question_navigation, render_summary_answer_first_overview,
 };
 pub(super) use paths::{
     plural_suffix, render_reach_section, render_same_path_section, render_same_path_view,

@@ -249,10 +249,11 @@ fn summary_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
         report.overview.scope.station.callsign, report.overview.scope.station.grid
     );
     assert!(full.contains(&scope_fact));
-    assert!(first.contains(&scope_fact));
+    assert!(first.contains("class=\"summary-context-line\""));
+    assert!(first.contains(&report.overview.scope.station.callsign));
+    assert!(first.contains(&report.overview.scope.station.grid));
     for shared_fact in [
         "Signed values:",
-        "Supported by this run",
         "Shared-path signal",
         "Observed reach",
         "Run quality and answerability",
@@ -263,6 +264,7 @@ fn summary_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
             "summary output lost {shared_fact}"
         );
     }
+    assert!(full.contains("Supported by this run"));
     assert!(first.contains("committed revision <strong>27</strong>"));
     let stratum = &report.overview.strata[0];
     let count_fact = format!(
@@ -329,6 +331,62 @@ fn semantic_text_assertions_preserve_inline_flow_and_optional_spacing() {
 }
 
 #[test]
+fn summary_leads_with_separate_populations_and_defers_exact_condition_detail() {
+    let report = paired_report(true);
+    let html = render_summary_html(&report).unwrap();
+    let document = ReportDocument::parse(&html);
+
+    document.assert_count(".summary-context-line", 1);
+    document.assert_count(".summary-populations > .summary-finding", 3);
+    document.assert_count(".summary-finding-result", 3);
+    document.assert_count(".summary-finding-support", 3);
+    document.assert_count(".summary-finding-population", 3);
+    for label in [
+        "Paired shared-path signal",
+        "Controlled common-opportunity detection",
+        "Uncontrolled unique observed paths",
+    ] {
+        document.assert_any_rendered_text(".summary-finding h3", label);
+    }
+    document.assert_present(".summary-principal-limitation");
+    document.assert_present("details.summary-condition-detail:not([open])");
+    document.assert_present("details.answerability-disclosure:not([open])");
+    document.assert_disclosure_contains(
+        "#what-run-show",
+        "Review exact evidence for this condition",
+        "table.overview-table",
+    );
+
+    let overview = html.find("id=\"what-run-show\"").unwrap();
+    let populations = html.find("class=\"summary-populations\"").unwrap();
+    let limitation = html.find("class=\"summary-principal-limitation\"").unwrap();
+    let condition_detail = html
+        .find("class=\"audit-disclosure summary-condition-detail\"")
+        .unwrap();
+    let methods = html
+        .find("class=\"audit-disclosure answerability-disclosure\"")
+        .unwrap();
+    let navigation = html.find("class=\"question-nav\"").unwrap();
+    assert!(overview < populations);
+    assert!(populations < limitation);
+    assert!(limitation < condition_detail);
+    assert!(condition_detail < methods);
+    assert!(methods < navigation);
+
+    let interpretation = summary_interpretation_from(&html);
+    assert!(interpretation.contains(
+        "Shared-path signal, controlled detection, and uncontrolled observed paths answer separate questions"
+    ));
+    for prohibited in [
+        "stronger recorded results",
+        "overall winner",
+        "better antenna",
+    ] {
+        assert!(!interpretation.to_ascii_lowercase().contains(prohibited));
+    }
+}
+
+#[test]
 fn consolidates_standing_caveats_in_one_shared_reading_panel() {
     let report = paired_report(true);
     let full = render_standalone_html(&report).unwrap();
@@ -369,7 +427,7 @@ fn summary_escapes_unavailable_and_bounded_reports() {
     unavailable.overview.strata.clear();
     let unavailable_html = render_summary_html(&unavailable).unwrap();
     assert!(unavailable_html.contains("&#60;summary &#38; session&#62;"));
-    assert!(unavailable_html.contains("No comparison groups are available"));
+    assert!(unavailable_html.contains("No comparison conditions are available"));
     assert!(!unavailable_html.contains("<summary & session>"));
 
     let mut bounded = paired_report(true);
@@ -948,39 +1006,30 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
         report.comparison.availability = availability;
         report.overview.comparison_availability = availability;
 
-        for html in [
-            render_standalone_html(&report).unwrap(),
-            render_summary_html(&report).unwrap(),
-        ] {
-            let answer = plain_language_answer_from(&html);
-            assert!(answer.contains(expected), "missing headline for {availability:?}");
-            if availability == ComparisonAvailability::NoMatchedPaths {
-                assert!(answer.contains("unique observed paths"));
-                assert!(answer.contains("not a universal antenna ranking"));
-            }
-            for forbidden in ["winner", "significant", "better antenna", "confidence"] {
-                assert!(
-                    !answer.to_ascii_lowercase().contains(forbidden),
-                    "headline used prohibited claim language: {answer}"
-                );
-            }
+        let html = render_standalone_html(&report).unwrap();
+        let answer = plain_language_answer_from(&html);
+        assert!(answer.contains(expected), "missing headline for {availability:?}");
+        if availability == ComparisonAvailability::NoMatchedPaths {
+            assert!(answer.contains("unique observed paths"));
+            assert!(answer.contains("not a universal antenna ranking"));
+        }
+        for forbidden in ["winner", "significant", "better antenna", "confidence"] {
+            assert!(
+                !answer.to_ascii_lowercase().contains(forbidden),
+                "headline used prohibited claim language: {answer}"
+            );
         }
     }
 
     let report = paired_report(true);
-    for html in [
-        render_standalone_html(&report).unwrap(),
-        render_summary_html(&report).unwrap(),
-    ] {
-        let answer = plain_language_answer_from(&html);
-        assert!(answer.contains("For this General coverage run"));
-        assert!(answer.contains("a +1.5 dB median across 2 shared paths"));
-        assert!(answer
-            .contains("These results describe this session, not a universal antenna ranking."));
-    }
-    assert!(render_standalone_html(&report)
-        .unwrap()
-        .contains("For scale:</strong> a 3 dB difference"));
+    let full = render_standalone_html(&report).unwrap();
+    let answer = plain_language_answer_from(&full);
+    assert!(answer.contains("For this General coverage run"));
+    assert!(answer.contains("a +1.5 dB median across 2 shared paths"));
+    assert!(
+        answer.contains("These results describe this session, not a universal antenna ranking.")
+    );
+    assert!(full.contains("For scale:</strong> a 3 dB difference"));
     assert!(!render_summary_html(&report)
         .unwrap()
         .contains("For scale:</strong> a 3 dB difference"));
@@ -1002,14 +1051,23 @@ fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_summary_
     let full = render_standalone_html(&report).unwrap();
     let summary = render_summary_html(&report).unwrap();
     let full_answer = plain_language_answer_from(&full);
-    let summary_answer = plain_language_answer_from(&summary);
-    assert_eq!(full_answer, summary_answer);
+    let summary_document = ReportDocument::parse(&summary);
+    assert!(full.contains("Answered by this run: Observed reach"));
+    assert!(full.contains("No same-path SNR comparison"));
     for html in [&full, &summary] {
-        assert!(html.contains("Answered by this run: Observed reach"));
-        assert!(html.contains("No same-path SNR comparison"));
         assert!(!html.contains("id=\"same-path-signal\""));
         assert!(!html.contains("href=\"#same-path-signal\""));
     }
+    summary_document.assert_count(".summary-finding", 3);
+    summary_document.assert_any_rendered_text(".summary-finding h3", "Paired shared-path signal");
+    summary_document.assert_any_rendered_text(
+        ".summary-finding h3",
+        "Controlled common-opportunity detection",
+    );
+    summary_document
+        .assert_any_rendered_text(".summary-finding h3", "Uncontrolled unique observed paths");
+    assert!(summary.contains("No same-path SNR comparison: no matched paths"));
+    assert!(summary.contains("unique observed paths"));
     assert!(full_answer.starts_with("Headline evidence is shown separately for "));
     assert!(full_answer.contains("comparison groups below and is not pooled"));
     assert_eq!(
@@ -1064,15 +1122,20 @@ fn no_matched_paths_with_zero_usable_observations_does_not_claim_reach_evidence(
     assert_eq!(report.evidence.overall.observation_counts.usable, 0);
 
     let full = render_standalone_html(&report).unwrap();
-    let summary = render_summary_html(&report).unwrap();
     let full_answer = plain_language_answer_from(&full);
-    assert_eq!(full_answer, plain_language_answer_from(&summary));
     assert_eq!(
         full_answer,
         "No usable observations were recorded, so this run has no reach evidence and no same-path signal delta to summarize."
     );
     assert!(!full_answer.contains("Both"));
     assert!(!full_answer.contains("unique path"));
+
+    let summary = render_summary_html(&report).unwrap();
+    let summary_document = ReportDocument::parse(&summary);
+    summary_document.assert_count(".summary-finding", 3);
+    assert!(summary.contains("No usable observed paths"));
+    assert!(summary.contains("Missing shared paths are not a 0 dB result"));
+    assert!(!summary.contains("0 dB median"));
 }
 
 #[test]
@@ -1831,6 +1894,19 @@ fn plain_language_answer_from(html: &str) -> &str {
         + html[start..]
             .find("</p>")
             .expect("plain-language answer should close");
+    &html[start..end]
+}
+
+fn summary_interpretation_from(html: &str) -> &str {
+    let marker = "<p class=\"summary-interpretation\">";
+    let start = html
+        .find(marker)
+        .map(|index| index + marker.len())
+        .expect("summary interpretation should render");
+    let end = start
+        + html[start..]
+            .find("</p>")
+            .expect("summary interpretation should close");
     &html[start..end]
 }
 

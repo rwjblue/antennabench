@@ -7,8 +7,8 @@ use crate::{
 use super::{
     questions::{
         is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
-        render_answer_first_overview_with_reference, render_how_to_read,
-        render_question_navigation, render_reporter_activity_section, render_same_path_view,
+        render_how_to_read, render_question_navigation, render_reporter_activity_section,
+        render_same_path_view, render_summary_answer_first_overview,
         render_summary_coverage_map_section, render_summary_observed_footprint_section,
     },
     shared::*,
@@ -74,14 +74,9 @@ pub fn render_summary_html_with_resources(
             session_id: &report.overview.scope.session_id,
         },
     )?;
+    render_summary_answer_first_overview(&mut out, report)?;
     render_question_navigation(&mut out, report, false)?;
     render_how_to_read(&mut out, report, true)?;
-    render_answer_first_overview_with_reference(
-        &mut out,
-        report,
-        "the full evidence report and session bundle",
-        true,
-    )?;
     let mut rendered_observed_footprint = false;
     for family in ordered_question_families(report) {
         match family {

@@ -1,0 +1,136 @@
+<section id="what-run-show"
+         class="panel overview summary-overview"
+         tabindex="-1"
+         aria-labelledby="what-run-show-title">
+  <p class="eyebrow">Answer first</p>
+  <h2 id="what-run-show-title">What did the run show?</h2>
+  <div class="summary-context-line">
+    {{ view.context }}
+    {%- if view.goal_lens.is_some() %}
+      {% let lens = view.goal_lens.as_ref().unwrap() %}
+      <details class="goal-help">
+        <summary aria-label="About the recorded {{ lens.label }} goal lens">i</summary>
+        <div class="goal-help-popover">
+          <strong>{{ lens.label }} lens</strong>
+          <p>{{ lens.practical_meaning }}</p>
+          {% if lens.distance_focus.is_some() %}
+            <p>
+              <strong>Prespecified distance focus:</strong> {{ lens.distance_focus.as_ref().unwrap() }}. Every other available distance category remains visible.
+            </p>
+          {% endif %}
+          <p>
+            The goal changes presentation priority only; evidence and calculations are unchanged.
+          </p>
+        </div>
+      </details>
+    {%- endif -%}
+  </div>
+  <p class="summary-interpretation">
+    <strong>{{ view.interpretation }}</strong>
+  </p>
+  <div class="summary-populations" aria-label="Separate evidence populations">
+    {% for finding in view.findings %}
+      <article class="summary-finding">
+        <div class="summary-finding-heading">
+          <h3>{{ finding.label }}</h3>
+          <span class="badge availability-status status-{{ finding.status_class }}">
+            {{ finding.status }}
+          </span>
+        </div>
+        <p class="summary-finding-result">{{ finding.result }}</p>
+        <p class="summary-finding-support">{{ finding.support }}</p>
+        <p class="summary-finding-population">
+          <strong>Population:</strong> {{ finding.population }}
+        </p>
+      </article>
+    {% endfor %}
+  </div>
+  <aside class="summary-principal-limitation" aria-label="Principal limitation">
+    <strong>Principal limitation:</strong> {{ view.principal_limitation }}
+  </aside>
+  {% for notice in view.notices %}
+    <p class="notice{% if notice.critical %} critical{% endif %}">
+      <strong>{{ notice.label }}:</strong> {{ notice.message }}.
+    </p>
+  {% endfor %}
+  <details class="audit-disclosure summary-condition-detail">
+    <summary>{{ view.condition_label }}</summary>
+    <div class="disclosure-body">
+      {% for group in view.headline_groups %}
+        {% if group.title.is_some() %}
+          <h3 class="headline-group-title" id="headline-group-{{ group.index }}">
+            {{ group.title.as_ref().unwrap() }}
+          </h3>
+          <p class="headline-group-answer">{{ group.answer.as_ref().unwrap() }}</p>
+        {% endif %}
+        <dl class="facts answer-metrics">
+          {% for fact in group.facts %}
+            <div class="fact">
+              <dt>{{ fact.label }}</dt>
+              <dd>
+                {{ fact.value }}<br><small class="muted">{{ fact.detail }}</small>
+              </dd>
+            </div>
+          {% endfor %}
+        </dl>
+      {% endfor %}
+      <div class="table-wrap">
+        <table class="overview-table">
+          <caption>
+            Descriptive result by comparison condition
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Comparison condition</th>
+              <th scope="col">Path delta</th>
+              <th scope="col">Paths / matched pairs</th>
+              <th scope="col">Alternating blocks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if view.rows.is_empty() && view.unavailable_groups.is_none() %}
+              <tr>
+                <td data-label="Comparison condition" colspan="4">
+                  No comparison conditions are available for this run.
+                </td>
+              </tr>
+            {% else %}
+              {% for row in view.rows %}
+                <tr>
+                  <td data-label="Comparison condition">{{ row.group }}</td>
+                  <td data-label="Path delta">{{ row.delta }}</td>
+                  <td data-label="Paths / matched pairs">{{ row.paths }} / {{ row.pairs }}</td>
+                  <td data-label="Alternating blocks">{{ row.blocks }}</td>
+                </tr>
+              {% endfor %}
+              {% if view.unavailable_groups.is_some() %}
+                <tr class="collapsed-empty-strata">
+                  <td data-label="Comparison condition">
+                    {{ view.unavailable_groups.as_ref().unwrap() }}
+                  </td>
+                  <td data-label="Path delta">Not available</td>
+                  <td data-label="Paths / matched pairs">Kept separate</td>
+                  <td data-label="Alternating blocks">Kept separate</td>
+                </tr>
+              {% endif %}
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  <details class="audit-disclosure answerability-disclosure">
+    <summary>Methods and unavailable questions</summary>
+    <dl class="facts answerability-facts disclosure-body">
+      {% for fact in view.availability %}
+        <div class="fact availability-row">
+          <dt>{{ fact.question }}</dt>
+          <dd>
+            <strong class="badge availability-status status-{{ fact.status_class }}">{{ fact.status }}</strong><br>
+            <span>{{ fact.availability }}</span>
+          </dd>
+        </div>
+      {% endfor %}
+    </dl>
+  </details>
+</section>

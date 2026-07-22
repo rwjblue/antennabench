@@ -613,6 +613,19 @@ try {
         panelBorderStyle: style(".panel").borderTopStyle,
         tableCollapse: style("table").borderCollapse,
         heroDisplay: style(".hero").display,
+        summaryOpening: ${mode === "summary"} ? (() => {
+          const overview = document.querySelector(".summary-overview");
+          const limitation = document.querySelector(".summary-principal-limitation");
+          return {
+            overviewTop: overview.getBoundingClientRect().top,
+            limitationBottom: limitation.getBoundingClientRect().bottom,
+            viewportHeight: innerHeight,
+            findingCount: document.querySelectorAll(".summary-finding").length,
+            populationCount: document.querySelectorAll(".summary-finding-population").length,
+            exactDetailOpen: document.querySelector(".summary-condition-detail").open,
+            methodsOpen: document.querySelector(".answerability-disclosure").open,
+          };
+        })() : null,
       };
     })()`);
     assert.equal(styles.scripts, 0);
@@ -622,6 +635,19 @@ try {
     assert.equal(styles.panelBorderStyle, "solid");
     assert.equal(styles.tableCollapse, "collapse");
     assert.equal(styles.heroDisplay, mode === "summary" ? "block" : "grid");
+    if (mode === "summary") {
+      assert.equal(styles.summaryOpening.findingCount, 3);
+      assert.equal(styles.summaryOpening.populationCount, 3);
+      assert.equal(styles.summaryOpening.exactDetailOpen, false);
+      assert.equal(styles.summaryOpening.methodsOpen, false);
+      assert.ok(styles.summaryOpening.overviewTop >= 0);
+      assert.ok(
+        styles.summaryOpening.limitationBottom <= styles.summaryOpening.viewportHeight,
+        `Summary limitation missed the initial viewport: ${JSON.stringify(styles.summaryOpening)}`,
+      );
+    } else {
+      assert.equal(styles.summaryOpening, null);
+    }
 
     const geometry = await evaluateReportFrame(pageUrl, `(() => {
       const ratio = (selector, dimension) => {
@@ -795,7 +821,9 @@ try {
     const responsive = await evaluateReportFrame(pageUrl, `(() => ({
       tableHeadPosition: getComputedStyle(document.querySelector(".overview-table thead")).position,
       tableRowDisplay: getComputedStyle(document.querySelector(".overview-table tbody tr")).display,
-      supportColumns: getComputedStyle(document.querySelector(".overview-support")).gridTemplateColumns,
+      supportColumns: getComputedStyle(document.querySelector(
+        ${JSON.stringify(mode === "summary" ? ".summary-populations" : ".overview-support")},
+      )).gridTemplateColumns,
     }))()`);
     assert.equal(responsive.tableHeadPosition, "absolute");
     assert.equal(responsive.tableRowDisplay, "block");

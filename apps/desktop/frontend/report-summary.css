@@ -1438,6 +1438,101 @@ main.summary {
   width: min(900px, calc(100% - 2rem));
   margin: 1rem auto;
 }
+.summary .summary-overview {
+  border-top-width: 0.25rem;
+}
+.summary-context-line {
+  position: relative;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+.summary-context-line .goal-help {
+  display: inline-block;
+  margin-left: 0.25rem;
+}
+.summary-context-line .goal-help > summary {
+  display: inline-grid;
+  width: 1.1rem;
+  height: 1.1rem;
+  place-items: center;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  cursor: help;
+  font-size: 0.72rem;
+  list-style: none;
+}
+.summary-context-line .goal-help > summary::-webkit-details-marker {
+  display: none;
+}
+.summary-context-line .goal-help-popover {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  width: min(32rem, 100%);
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--paper);
+  box-shadow: 0 0.5rem 1.5rem rgb(23 32 51 / 16%);
+  color: var(--ink);
+  font-weight: 400;
+}
+.summary-context-line .goal-help-popover p {
+  margin: 0.35rem 0 0;
+}
+.summary-interpretation {
+  margin: 0.45rem 0;
+  font-size: 1rem;
+}
+.summary-populations {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.summary-finding {
+  min-width: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--soft);
+}
+.summary-finding-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+.summary-finding h3,
+.summary-finding p {
+  margin: 0;
+}
+.summary-finding-result {
+  margin-top: 0.35rem !important;
+  font-weight: 800;
+}
+.summary-finding-support,
+.summary-finding-population {
+  margin-top: 0.25rem !important;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.summary-principal-limitation {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-left: 0.25rem solid var(--accent);
+  background: var(--accent-soft);
+}
+.summary-condition-detail {
+  margin-top: 0.5rem;
+}
+@media (max-width: 760px) {
+  .summary-populations {
+    grid-template-columns: 1fr;
+  }
+}
 .summary .hero {
   display: block;
 }

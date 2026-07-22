@@ -1,10 +1,13 @@
 use super::*;
 use crate::html::{
-    templates::{render_template, AnswerFirstTemplate, NavigationTemplate, ReadingGuideTemplate},
+    templates::{
+        render_template, AnswerFirstTemplate, NavigationTemplate, ReadingGuideTemplate,
+        SummaryAnswerFirstTemplate,
+    },
     view::{
         AvailabilityFactView, GoalLensView, HeadlineFactView, HeadlineGroupView,
         NavigationLinkView, NavigationView, NoticeView, OverviewResultRowView, OverviewView,
-        ReadingGuideView,
+        ReadingGuideView, SummaryFindingView, SummaryOverviewView,
     },
 };
 use crate::ReportAcquisitionWorkflowStatus;
@@ -134,6 +137,18 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     )
 }
 
+pub(in super::super) fn render_summary_answer_first_overview(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) -> Result<(), ReportError> {
+    render_template(
+        out,
+        &SummaryAnswerFirstTemplate {
+            view: summary_overview_view(report),
+        },
+    )
+}
+
 fn overview_view(report: &SessionReport, audit_reference: &str, summary: bool) -> OverviewView {
     let overview = &report.overview;
     let scope = &overview.scope;
@@ -191,46 +206,8 @@ fn overview_view(report: &SessionReport, audit_reference: &str, summary: bool) -
                 .to_string(),
         ),
     };
-    let rows = overview
-        .strata
-        .iter()
-        .filter_map(|row| match row.path_delta {
-            ReportOverviewPathDelta::Unavailable => None,
-            ReportOverviewPathDelta::Available {
-                minimum_delta_right_minus_left_db,
-                median_path_delta_right_minus_left_db,
-                maximum_delta_right_minus_left_db,
-            } => Some(OverviewResultRowView {
-                group: comparison_group_label(&row.stratum),
-                delta: format!(
-                    "{} to {} dB; median across paths {} dB",
-                    format_signed(minimum_delta_right_minus_left_db),
-                    format_signed(maximum_delta_right_minus_left_db),
-                    format_signed(median_path_delta_right_minus_left_db),
-                ),
-                paths: row.unique_path_count,
-                pairs: row.paired_row_count,
-                blocks: row.contributing_block_count,
-                coverage: "Available",
-            }),
-        })
-        .collect();
-    let unavailable = overview
-        .strata
-        .iter()
-        .filter(|row| row.path_delta == ReportOverviewPathDelta::Unavailable)
-        .collect::<Vec<_>>();
-    let unavailable_groups = (!unavailable.is_empty()).then(|| {
-        format!(
-            "No path delta in {}: {}",
-            comparison_groups_label(unavailable.len()),
-            unavailable
-                .iter()
-                .map(|row| comparison_group_label(&row.stratum))
-                .collect::<Vec<_>>()
-                .join("; ")
-        )
-    });
+    let rows = overview_result_rows(report);
+    let unavailable_groups = unavailable_overview_groups(report);
     let support = if overview.strata.is_empty() {
         "The session scope and availability state remain explicit even without an available comparison group."
             .to_string()
@@ -283,6 +260,266 @@ fn overview_view(report: &SessionReport, audit_reference: &str, summary: bool) -
         notices: acquisition_notices(report, audit_reference),
         availability: answerability_facts(report),
     }
+}
+
+fn summary_overview_view(report: &SessionReport) -> SummaryOverviewView {
+    let scope = &report.overview.scope;
+    let bands = if scope.bands.is_empty() {
+        "No band recorded".to_string()
+    } else {
+        scope
+            .bands
+            .iter()
+            .map(|value| band(*value))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let directions = if scope.observed_directions.is_empty() {
+        "no direction recorded".to_string()
+    } else {
+        scope
+            .observed_directions
+            .iter()
+            .map(|value| path_direction(*value).to_ascii_lowercase())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mode = scope
+        .experiment_mode
+        .map(experiment_mode)
+        .unwrap_or("mode not recorded");
+    let goal = scope.goal.map(session_goal).unwrap_or("Goal not recorded");
+    let condition_count = report.overview.strata.len();
+    SummaryOverviewView {
+        context: format!(
+            "{} · {} · {goal} · {bands} · {directions}; {mode}",
+            scope.station.callsign, scope.station.grid,
+        ),
+        interpretation: summary_scoped_interpretation(report),
+        findings: summary_findings(report),
+        principal_limitation: summary_principal_limitation(report),
+        goal_lens: goal_lens_view(report),
+        headline_groups: headline_groups(report),
+        condition_label: match condition_count {
+            0 => "Review condition availability".to_string(),
+            1 => "Review exact evidence for this condition".to_string(),
+            count => format!("Review exact evidence for {count} separate conditions"),
+        },
+        rows: overview_result_rows(report),
+        unavailable_groups: unavailable_overview_groups(report),
+        notices: acquisition_notices(report, "the Full evidence report and session bundle"),
+        availability: answerability_facts(report),
+    }
+}
+
+fn goal_lens_view(report: &SessionReport) -> Option<GoalLensView> {
+    report.overview.goal_lens.as_ref().map(|lens| GoalLensView {
+        label: session_goal(lens.goal),
+        practical_meaning: lens.practical_meaning.clone(),
+        distance_focus: (!lens.emphasized_distance_bins.is_empty()).then(|| {
+            lens.emphasized_distance_bins
+                .iter()
+                .map(|bin| bin.label())
+                .collect::<Vec<_>>()
+                .join("; ")
+        }),
+    })
+}
+
+fn summary_scoped_interpretation(report: &SessionReport) -> String {
+    match report.overview.comparison_availability {
+        antennabench_analysis::ComparisonAvailability::NotApplicable => {
+            "This session profiles one antenna. Comparative signal and detection questions do not apply; review its recorded footprint and repetition evidence when available."
+                .to_string()
+        }
+        antennabench_analysis::ComparisonAvailability::UnsupportedComparisonShape => {
+            "This session shape cannot support an A/B comparison; available observed-path evidence remains descriptive."
+                .to_string()
+        }
+        antennabench_analysis::ComparisonAvailability::NoEligibleBlocks => {
+            "No eligible alternating block supports a paired comparison; available observed-path evidence remains uncontrolled."
+                .to_string()
+        }
+        antennabench_analysis::ComparisonAvailability::NoMatchedPaths => {
+            "No shared-path signal comparison is available; controlled detection and uncontrolled observed paths remain separate when present."
+                .to_string()
+        }
+        antennabench_analysis::ComparisonAvailability::DescriptivePairsAvailable => {
+            "Shared-path signal, controlled detection, and uncontrolled observed paths answer separate questions; none is combined into a broader stronger-results claim."
+                .to_string()
+        }
+    }
+}
+
+fn summary_findings(report: &SessionReport) -> Vec<SummaryFindingView> {
+    let answerability = &report.overview.answerability;
+    let evidence = |family| {
+        report
+            .overview
+            .strata
+            .iter()
+            .filter_map(|row| {
+                headline_evidence(report, row)
+                    .into_iter()
+                    .find(|fact| fact.family == family)
+            })
+            .collect::<Vec<_>>()
+    };
+    let shared = evidence(crate::ReportQuestionFamily::SharedPathSignal);
+    let controlled = evidence(crate::ReportQuestionFamily::CommonOpportunityDetection);
+    let observed = evidence(crate::ReportQuestionFamily::ObservedReach);
+    let controlled_limited = report
+        .reporter_activity
+        .joint_summaries
+        .iter()
+        .any(|summary| {
+            matches!(
+                summary.coverage,
+                antennabench_analysis::ReporterActivityCoverage::Partial
+                    | antennabench_analysis::ReporterActivityCoverage::Truncated
+            )
+        });
+    vec![
+        summary_finding(
+            "Paired shared-path signal",
+            if answerability.same_path_signal == SamePathSignalAnswerability::Available {
+                "Available"
+            } else {
+                "Unavailable"
+            },
+            "finite-SNR reports from the same remote path within the same eligible alternating block and comparison condition",
+            shared,
+            same_path_answerability_text(answerability.same_path_signal),
+            "Missing shared paths are not a 0 dB result.",
+        ),
+        summary_finding(
+            "Controlled common-opportunity detection",
+            if answerability.paired_detectability == PairedDetectabilityAnswerability::Available {
+                if controlled_limited { "Limited" } else { "Available" }
+            } else {
+                "Unavailable"
+            },
+            "receivers confirmed active in both cycles of an eligible block for the same comparison condition",
+            controlled,
+            paired_detectability_answerability_text(answerability.paired_detectability),
+            "Uncontrolled path totals are not substituted for this population.",
+        ),
+        summary_finding(
+            "Uncontrolled unique observed paths",
+            if answerability.observed_reach == ObservedReachAnswerability::Available {
+                "Available"
+            } else {
+                "Unavailable"
+            },
+            "unique recorded remote paths per antenna, whether or not the receiver was active in both cycles",
+            observed,
+            match answerability.observed_reach {
+                ObservedReachAnswerability::Available => "Available from unique observed paths",
+                ObservedReachAnswerability::NoUsablePaths => "No usable observed paths",
+            },
+            "These descriptive footprint counts are not a controlled coverage comparison.",
+        ),
+    ]
+}
+
+fn summary_finding(
+    label: &'static str,
+    status: &'static str,
+    population: &'static str,
+    evidence: Vec<HeadlineEvidence>,
+    unavailable_result: &'static str,
+    unavailable_support: &'static str,
+) -> SummaryFindingView {
+    let status_class = match status {
+        "Available" => "available",
+        "Limited" => "limited",
+        _ => "unavailable",
+    };
+    let (result, support) = match evidence.as_slice() {
+        [fact] => (fact.value.clone(), fact.detail.clone()),
+        [] => (
+            unavailable_result.to_string(),
+            unavailable_support.to_string(),
+        ),
+        facts => (
+            format!("Available in {} separate conditions", facts.len()),
+            "Exact values remain separated by direction, band, mode, evidence kind, and source."
+                .to_string(),
+        ),
+    };
+    SummaryFindingView {
+        label,
+        status,
+        status_class,
+        population,
+        result,
+        support,
+    }
+}
+
+fn summary_principal_limitation(report: &SessionReport) -> String {
+    report
+        .overview
+        .limitations
+        .first()
+        .map(|limitation| overview_limitation_text(*limitation, report))
+        .unwrap_or_else(|| {
+            if is_single_antenna_lens(report) {
+                "The profile describes only this antenna in the recorded conditions and does not infer unobserved coverage."
+                    .to_string()
+            } else {
+                "Alternating antennas reduces order bias but does not eliminate time or propagation changes; results apply only to this session."
+                    .to_string()
+            }
+        })
+}
+
+fn overview_result_rows(report: &SessionReport) -> Vec<OverviewResultRowView> {
+    report
+        .overview
+        .strata
+        .iter()
+        .filter_map(|row| match row.path_delta {
+            ReportOverviewPathDelta::Unavailable => None,
+            ReportOverviewPathDelta::Available {
+                minimum_delta_right_minus_left_db,
+                median_path_delta_right_minus_left_db,
+                maximum_delta_right_minus_left_db,
+            } => Some(OverviewResultRowView {
+                group: comparison_group_label(&row.stratum),
+                delta: format!(
+                    "{} to {} dB; median across paths {} dB",
+                    format_signed(minimum_delta_right_minus_left_db),
+                    format_signed(maximum_delta_right_minus_left_db),
+                    format_signed(median_path_delta_right_minus_left_db),
+                ),
+                paths: row.unique_path_count,
+                pairs: row.paired_row_count,
+                blocks: row.contributing_block_count,
+                coverage: "Available",
+            }),
+        })
+        .collect()
+}
+
+fn unavailable_overview_groups(report: &SessionReport) -> Option<String> {
+    let unavailable = report
+        .overview
+        .strata
+        .iter()
+        .filter(|row| row.path_delta == ReportOverviewPathDelta::Unavailable)
+        .collect::<Vec<_>>();
+    (!unavailable.is_empty()).then(|| {
+        format!(
+            "No path delta in {}: {}",
+            comparison_groups_label(unavailable.len()),
+            unavailable
+                .iter()
+                .map(|row| comparison_group_label(&row.stratum))
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    })
 }
 
 fn answerability_headline(report: &SessionReport) -> String {
@@ -500,6 +737,31 @@ fn prioritized_headline_evidence(
     report: &SessionReport,
     row: &ReportOverviewStratum,
 ) -> Vec<HeadlineEvidence> {
+    let facts = headline_evidence(report, row);
+    let default_priority = [
+        crate::ReportQuestionFamily::SharedPathSignal,
+        crate::ReportQuestionFamily::CommonOpportunityDetection,
+        crate::ReportQuestionFamily::ObservedReach,
+    ];
+    let priority = report
+        .overview
+        .goal_lens
+        .as_ref()
+        .map(|lens| lens.priority.as_slice())
+        .unwrap_or(&default_priority);
+    let mut ordered = Vec::new();
+    for family in priority {
+        if let Some(fact) = facts.iter().find(|fact| fact.family == *family) {
+            ordered.push(fact.clone());
+        }
+        if ordered.len() == 3 {
+            break;
+        }
+    }
+    ordered
+}
+
+fn headline_evidence(report: &SessionReport, row: &ReportOverviewStratum) -> Vec<HeadlineEvidence> {
     let AntennaLabels {
         left: left_label,
         right: right_label,
@@ -617,27 +879,7 @@ fn prioritized_headline_evidence(
             direction: right_paths.cmp(&left_paths) as i8,
         });
     }
-    let default_priority = [
-        crate::ReportQuestionFamily::SharedPathSignal,
-        crate::ReportQuestionFamily::CommonOpportunityDetection,
-        crate::ReportQuestionFamily::ObservedReach,
-    ];
-    let priority = report
-        .overview
-        .goal_lens
-        .as_ref()
-        .map(|lens| lens.priority.as_slice())
-        .unwrap_or(&default_priority);
-    let mut ordered = Vec::new();
-    for family in priority {
-        if let Some(fact) = facts.iter().find(|fact| fact.family == *family) {
-            ordered.push(fact.clone());
-        }
-        if ordered.len() == 3 {
-            break;
-        }
-    }
-    ordered
+    facts
 }
 
 fn plain_language_answer(report: &SessionReport) -> String {

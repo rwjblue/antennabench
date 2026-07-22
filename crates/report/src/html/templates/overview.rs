@@ -1,6 +1,6 @@
 use askama::Template;
 
-use super::super::view::{NavigationView, OverviewView, ReadingGuideView};
+use super::super::view::{NavigationView, OverviewView, ReadingGuideView, SummaryOverviewView};
 
 #[derive(Template)]
 #[template(path = "report/overview/navigation.html")]
@@ -18,6 +18,12 @@ pub(in crate::html) struct ReadingGuideTemplate {
 #[template(path = "report/overview/answer_first.html")]
 pub(in crate::html) struct AnswerFirstTemplate {
     pub(in crate::html) view: OverviewView,
+}
+
+#[derive(Template)]
+#[template(path = "report/overview/summary_answer_first.html")]
+pub(in crate::html) struct SummaryAnswerFirstTemplate {
+    pub(in crate::html) view: SummaryOverviewView,
 }
 
 #[derive(Template)]
