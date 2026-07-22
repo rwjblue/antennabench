@@ -145,6 +145,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     lifecycle: "running",
     schemaVersion: 4,
     reportHtml: "<!doctype html><meta data-antennabench-report-csp http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'\"><style>body{color:#172033}</style><p>headless report</p>",
+    summaryHtml: "<!doctype html><meta data-antennabench-report-csp http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'\"><style>body{color:#172033}</style><main class=\"summary\"><p>headless summary</p></main>",
     revision: 1,
   };
   let managedOpenAttempts = 0;
@@ -277,7 +278,8 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       return reportRefreshes === 1
         ? {
           presentationId: 1,
-          reportHtml: "<p>existing saved report</p>",
+          reportHtml: session.reportHtml,
+          summaryHtml: session.summaryHtml,
           revision: 9,
           lifecycle: "ended",
           completeness: "full_detail",
@@ -285,6 +287,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
         : {
           presentationId: 2,
           reportHtml: session.reportHtml,
+          summaryHtml: session.summaryHtml,
           revision: 1,
           lifecycle: "running",
           completeness: "full_detail",
@@ -435,6 +438,18 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     });
     assert.equal(elements.mainContent.classList.contains("report-reading-active"), true);
     assert.equal(elements.reportActiveRunButton.hidden, true, "terminal sessions do not offer Active run");
+    assert.equal(elements.reportSummaryModeButton.getAttribute("aria-pressed"), "true");
+    elements.reportFullModeButton.click();
+    await vi.waitFor(() => {
+      assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-2");
+      assert.equal(elements.reportFullModeButton.getAttribute("aria-pressed"), "true");
+    });
+    assert.deepEqual(window.URL.revokeObjectURL.mock.calls.at(-1), ["blob:headless-report-1"]);
+    assert.equal(
+      calls.filter(([command]) => command === "refresh_active_session_report").length,
+      1,
+      "mode switching performs no report refresh",
+    );
     elements.reportDiagnosticsButton.click();
     await vi.waitFor(() => assert.equal(elements.reportDiagnosticsDialog.open, true));
     assert.equal(document.activeElement, elements.reportDiagnosticsClose);
@@ -462,6 +477,11 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     assert.ok(calls.some(([command, payload]) => command === "cancel_report_export"
       && payload.pendingExportId === "pending-summary_html"));
 
+    elements.reportSummaryModeButton.click();
+    await vi.waitFor(() => {
+      assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-3");
+      assert.equal(elements.reportSummaryModeButton.getAttribute("aria-pressed"), "true");
+    });
     elements.reportFullExportButton.click();
     await vi.waitFor(() => assert.equal(elements.reportReplaceDialog.open, true));
     elements.reportReplaceConfirm.click();
@@ -482,7 +502,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
     await vi.waitFor(() => {
       assert.match(elements.savedCatalog.textContent, /saved bundle moved/);
-      assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-1");
+      assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-3");
     });
     elements.savedNew.click();
     await vi.waitFor(() => {
@@ -603,8 +623,13 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       assert.ok(calls.some(([command, payload]) => command === "reveal_managed_session"
         && payload.locatorId === "locator-headless"));
     });
-    assert.deepEqual(reportDocumentUrls, ["blob:headless-report-1", "blob:headless-report-2"]);
-    assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-2");
+    assert.deepEqual(reportDocumentUrls, [
+      "blob:headless-report-1",
+      "blob:headless-report-2",
+      "blob:headless-report-3",
+      "blob:headless-report-4",
+    ]);
+    assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-4");
 
     const start = elements.lifecycleButtons.find(
       (button) => button.dataset.conductorAction === "start",

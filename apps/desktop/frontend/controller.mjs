@@ -92,6 +92,7 @@ import {
   reportRefreshSucceeded,
   reportRefreshSuperseded,
   requestSkipCycle,
+  selectReportMode as transitionReportMode,
   selectWorkflow,
   setWsjtxReadinessAcknowledged,
   setupCreationCancelled,
@@ -220,6 +221,13 @@ export function createDesktopController(options = {}) {
 
     render() {
       effects.render(state);
+    },
+
+    selectReportMode(reportMode) {
+      if (!state.session?.reportHtml || !state.session?.summaryHtml) return state;
+      const nextState = transitionReportMode(state, reportMode);
+      if (nextState !== state) commit(nextState);
+      return state;
     },
 
     editSetup() {
@@ -593,6 +601,7 @@ export function createDesktopController(options = {}) {
     ) {
       if (
         !state.session?.reportHtml
+        || !state.session?.summaryHtml
         || ["loading", "confirming", "replacing", "cancelling"].includes(
           state.reportExportStatus,
         )

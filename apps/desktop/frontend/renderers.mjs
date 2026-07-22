@@ -867,6 +867,7 @@ export function renderReport(elements, state, reportDocuments) {
   const {
     reportStatus, reportPanelHeading, reportPlaceholder, reportViewer, reportFrame,
     reportSavedButton, reportActiveRunButton, reportRefreshButton,
+    reportSummaryModeButton, reportFullModeButton,
     reportSummaryExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
     reportBundleName, reportRevision, reportExportRevision, reportSummary, reportControllerOptions,
     reportControllerHandling,
@@ -875,7 +876,8 @@ export function renderReport(elements, state, reportDocuments) {
     reportReplaceIdentity, reportReplaceError, reportReplaceCancel, reportReplaceConfirm,
   } = elements;
   const hasSession = state.session !== null;
-  const hasReport = typeof state.session?.reportHtml === "string";
+  const hasReport = typeof state.session?.reportHtml === "string"
+    && typeof state.session?.summaryHtml === "string";
   const readingActive = state.activeWorkflow === "report" && hasReport;
   const content = reportViewer.closest(".content");
   content?.classList.toggle("report-reading-active", readingActive);
@@ -892,6 +894,16 @@ export function renderReport(elements, state, reportDocuments) {
   reportPlaceholder.hidden = hasSession;
   reportViewer.hidden = !hasSession;
   reportFrame.hidden = !hasReport;
+  reportSummaryModeButton.disabled = !hasReport;
+  reportFullModeButton.disabled = !hasReport;
+  reportSummaryModeButton.setAttribute("aria-pressed", String(state.reportMode === "summary"));
+  reportFullModeButton.setAttribute(
+    "aria-pressed",
+    String(state.reportMode === "full_evidence"),
+  );
+  reportFrame.title = state.reportMode === "full_evidence"
+    ? "AntennaBench Full evidence report"
+    : "AntennaBench Summary report";
   reportActiveRunButton.hidden = !["planned", "running", "interrupted"].includes(
     state.session?.lifecycle,
   );

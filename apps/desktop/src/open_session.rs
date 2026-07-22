@@ -451,7 +451,13 @@ mod tests {
         assert!(combined_document_bytes < REPORT_DOCUMENT_IPC_BYTES as usize);
         let serialized = serde_json::to_value(&presentation).unwrap();
         assert!(serialized.get("reportHtml").is_some());
-        assert!(serialized.get("summaryHtml").is_none());
+        assert!(serialized.get("summaryHtml").is_some());
+        check_ipc_payload(
+            &presentation,
+            REPORT_DOCUMENT_IPC_BYTES,
+            "report_presentation",
+        )
+        .unwrap();
         state
             .0
             .lock()
@@ -466,7 +472,24 @@ mod tests {
         let oversized = active_session_report_for(&state).unwrap_err();
         assert_eq!(oversized.kind, SessionErrorKind::Resource);
         assert!(oversized.detail.contains("resource.desktop.ipc_bytes"));
-        assert!(oversized.detail.contains("report_document"));
+        assert!(oversized.detail.contains("report_presentation"));
+        let mut active = state.0.lock().unwrap();
+        let presentation = active
+            .active
+            .as_mut()
+            .unwrap()
+            .presentation
+            .as_mut()
+            .unwrap();
+        presentation.report_html = "full".into();
+        presentation.summary_html = "x".repeat(REPORT_DOCUMENT_IPC_BYTES as usize + 1);
+        drop(active);
+        let oversized_summary = active_session_report_for(&state).unwrap_err();
+        assert_eq!(oversized_summary.kind, SessionErrorKind::Resource);
+        assert!(oversized_summary
+            .detail
+            .contains("resource.desktop.ipc_bytes"));
+        assert!(oversized_summary.detail.contains("report_presentation"));
     }
 
     #[test]

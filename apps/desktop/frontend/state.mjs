@@ -1,5 +1,17 @@
 import { conductorActionAvailable, WORKFLOWS, wsjtxReadinessModel } from "./models.mjs";
 
+function hasCoherentReport(session) {
+  return typeof session?.reportHtml === "string"
+    && typeof session?.summaryHtml === "string";
+}
+
+function reportModeForSession(state, session) {
+  return typeof session?.sessionId === "string"
+    && state.session?.sessionId === session.sessionId
+    ? state.reportMode
+    : "summary";
+}
+
 export function initialState(workflow = "saved") {
   return selectWorkflow(
     {
@@ -24,6 +36,7 @@ export function initialState(workflow = "saved") {
       activeManagedLocatorId: null,
       session: null,
       reportPresentationId: 0,
+      reportMode: "summary",
       reportStatus: "idle",
       reportError: null,
       reportExportStatus: "idle",
@@ -182,9 +195,10 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     setupNotice: "created",
     openStatus: "ready",
     session,
+    reportMode: reportModeForSession(state, session),
     reportPresentationId: session.presentationId
-      ?? (session.reportHtml ? state.reportPresentationId + 1 : state.reportPresentationId),
-    reportStatus: session.reportHtml ? "ready" : "unavailable",
+      ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
+    reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
     reportError: null,
     reportExportStatus: "idle",
     reportExportPending: null,
@@ -241,9 +255,10 @@ export function openSessionSucceeded(
     openStatus: "ready",
     openIntent: intent,
     session,
+    reportMode: reportModeForSession(state, session),
     reportPresentationId: session.presentationId
-      ?? (session.reportHtml ? state.reportPresentationId + 1 : state.reportPresentationId),
-    reportStatus: session.reportHtml ? "ready" : "unavailable",
+      ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
+    reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
     reportError: null,
     reportExportStatus: "idle",
     reportExportPending: null,
@@ -524,6 +539,7 @@ export function wsprLiveImportSucceeded(state, outcome) {
       ...state.session,
       ...outcome.session,
       reportHtml: null,
+      summaryHtml: null,
     },
     reportStatus: "unavailable",
     reportError: null,
@@ -872,6 +888,16 @@ export function beginReportRefresh(state) {
 }
 
 export function reportRefreshSucceeded(state, presentation) {
+  if (!hasCoherentReport(presentation)) {
+    throw new TypeError("A report presentation must contain both immutable document variants.");
+  }
+  if (
+    presentation.sessionId !== undefined
+    && state.session?.sessionId !== undefined
+    && presentation.sessionId !== state.session.sessionId
+  ) {
+    throw new RangeError("A report presentation cannot cross active-session identity.");
+  }
   const presentationChanged = String(presentation.presentationId)
     !== String(state.reportPresentationId);
   return {
@@ -886,6 +912,7 @@ export function reportRefreshSucceeded(state, presentation) {
     session: state.session ? {
       ...state.session,
       reportHtml: presentation.reportHtml,
+      summaryHtml: presentation.summaryHtml,
       revision: presentation.revision,
       lifecycle: presentation.lifecycle,
       completeness: presentation.completeness,
@@ -895,6 +922,14 @@ export function reportRefreshSucceeded(state, presentation) {
       reportAvailable: true,
     } : state.session,
   };
+}
+
+export function selectReportMode(state, reportMode) {
+  if (!["summary", "full_evidence"].includes(reportMode)) {
+    throw new RangeError(`Unknown report mode: ${reportMode}`);
+  }
+  if (state.reportMode === reportMode) return state;
+  return { ...state, reportMode };
 }
 
 export function beginSupportSummaryCopy(state) {
@@ -916,7 +951,7 @@ export function supportSummaryCopyFailed(state, error) {
 export function reportRefreshFailed(state, error) {
   return {
     ...state,
-    reportStatus: state.session?.reportHtml ? "ready" : "unavailable",
+    reportStatus: hasCoherentReport(state.session) ? "ready" : "unavailable",
     reportError: normalizeOpenError(error),
   };
 }
@@ -924,7 +959,7 @@ export function reportRefreshFailed(state, error) {
 export function reportRefreshSuperseded(state) {
   return {
     ...state,
-    reportStatus: state.session?.reportHtml ? "ready" : "unavailable",
+    reportStatus: hasCoherentReport(state.session) ? "ready" : "unavailable",
     reportError: null,
   };
 }

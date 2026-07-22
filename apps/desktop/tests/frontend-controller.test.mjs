@@ -10,6 +10,7 @@ const session = (overrides = {}) => ({
   lifecycle: "running",
   schemaVersion: 4,
   reportHtml: "<p>prior</p>",
+  summaryHtml: "<p>prior summary</p>",
   revision: 3,
   ...overrides,
 });
@@ -109,6 +110,7 @@ test("the controller composes setup review outcomes and reviewed creation", asyn
     refresh_active_session_report: {
       presentationId: 4,
       reportHtml: "<p>fresh</p>",
+      summaryHtml: "<p>fresh summary</p>",
       revision: 4,
       lifecycle: "running",
       completeness: "full_detail",
@@ -314,6 +316,7 @@ test("managed opening obeys explicit report and work intents from the fresh summ
       refresh_active_session_report: {
         presentationId: 4,
         reportHtml: "<p>report only</p>",
+        summaryHtml: "<p>report only summary</p>",
         revision: lifecycle === null ? null : 3,
         lifecycle,
         completeness: "full_detail",
@@ -334,6 +337,7 @@ test("managed opening obeys explicit report and work intents from the fresh summ
       refresh_active_session_report: {
         presentationId: 4,
         reportHtml: `<p>${lifecycle}</p>`,
+        summaryHtml: `<p>${lifecycle} summary</p>`,
         revision: 3,
         lifecycle,
         completeness: "full_detail",
@@ -370,6 +374,7 @@ test("managed opening obeys explicit report and work intents from the fresh summ
       return {
         presentationId: 4 + reportCount,
         reportHtml: `<p>revision ${reportCount === 1 ? 3 : 4}</p>`,
+        summaryHtml: `<p>summary revision ${reportCount === 1 ? 3 : 4}</p>`,
         revision: reportCount === 1 ? 3 : 4,
         lifecycle: reportCount === 1 ? "running" : "interrupted",
         completeness: "full_detail",
@@ -405,6 +410,7 @@ test("an imported-session follow-up uses the freshly opened lifecycle for routin
     refresh_active_session_report: {
       presentationId: 3,
       reportHtml: "<p>ready</p>",
+      summaryHtml: "<p>ready summary</p>",
       revision: 3,
       lifecycle: "ready",
       completeness: "full_detail",
@@ -424,6 +430,7 @@ test("an imported-session follow-up uses the freshly opened lifecycle for routin
     refresh_active_session_report: {
       presentationId: 4,
       reportHtml: "<p>ended</p>",
+      summaryHtml: "<p>ended summary</p>",
       revision: 4,
       lifecycle: "ended",
       completeness: "full_detail",
@@ -443,6 +450,7 @@ test("terminal work requests redirect to report without loading run services", a
     refresh_active_session_report: {
       presentationId: 8,
       reportHtml: "<p>ended</p>",
+      summaryHtml: "<p>ended summary</p>",
       revision: 8,
       lifecycle: "ended",
       completeness: "full_detail",
@@ -473,6 +481,7 @@ test("open, report, and conductor foreground operations do not overlap", async (
   resolveReport({
     presentationId: 5,
     reportHtml: "<p>fresh</p>",
+    summaryHtml: "<p>fresh summary</p>",
     revision: 3,
     lifecycle: "ended",
     completeness: "full_detail",
@@ -524,6 +533,7 @@ test("conductor mutations serialize follow-up adapter, acquisition, and report r
     refresh_active_session_report: {
       presentationId: 4,
       reportHtml: "<p>revision 4</p>",
+      summaryHtml: "<p>summary revision 4</p>",
       revision: 4,
       lifecycle: "running",
       completeness: "full_detail",
@@ -587,6 +597,7 @@ test("skip-cycle submission uses presented authority once and preserves typed fa
     refresh_active_session_report: {
       presentationId: 5,
       reportHtml: "<p>revision 4</p>",
+      summaryHtml: "<p>summary revision 4</p>",
       revision: 4,
       lifecycle: "ended",
       completeness: "full_detail",
@@ -670,6 +681,7 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
     refresh_active_session_report: {
       presentationId: 6,
       reportHtml: "<p>complete</p>",
+      summaryHtml: "<p>complete summary</p>",
       revision: 6,
       lifecycle: "ended",
       completeness: "full_detail",
@@ -760,6 +772,7 @@ test("background refresh does not duplicate an in-flight final WSPR.live acquisi
     refresh_active_session_report: {
       presentationId: 7,
       reportHtml: "<p>ended</p>",
+      summaryHtml: "<p>ended summary</p>",
       revision: 7,
       lifecycle: "ended",
       completeness: "full_detail",
@@ -831,6 +844,7 @@ test("report background checks are silent, change-aware, and bounded by lifecycl
     refresh_active_session_report: {
       presentationId: 7,
       reportHtml: "<p>prior</p>",
+      summaryHtml: "<p>prior summary</p>",
       revision: 7,
       lifecycle: "ended",
       completeness: "full_detail",
@@ -860,6 +874,7 @@ test("report background checks are silent, change-aware, and bounded by lifecycl
     refresh_active_session_report: () => ({
       presentationId,
       reportHtml: `<p>revision ${presentationId}</p>`,
+      summaryHtml: `<p>summary revision ${presentationId}</p>`,
       revision: presentationId,
       lifecycle: "running",
       completeness: "full_detail",
@@ -911,6 +926,7 @@ test("manual report refresh retains visible progress and queues behind a silent 
   resolvers.shift()({
     presentationId: 3,
     reportHtml: "<p>prior</p>",
+    summaryHtml: "<p>prior summary</p>",
     revision: 3,
     lifecycle: "running",
     completeness: "full_detail",
@@ -922,6 +938,7 @@ test("manual report refresh retains visible progress and queues behind a silent 
   resolvers.shift()({
     presentationId: 3,
     reportHtml: "<p>prior</p>",
+    summaryHtml: "<p>prior summary</p>",
     revision: 3,
     lifecycle: "running",
     completeness: "full_detail",
@@ -958,6 +975,7 @@ test("report refresh survives same-session conductor reconciliation on success a
   resolveReport({
     presentationId: 4,
     reportHtml: "<p>fresh after reconciliation</p>",
+    summaryHtml: "<p>fresh summary after reconciliation</p>",
     revision: 4,
     lifecycle: "ended",
     completeness: "full_detail",
@@ -1008,6 +1026,7 @@ test("a stale report request cannot update a genuinely different active session"
   resolvers.shift()({
     presentationId: 4,
     reportHtml: "<p>stale session</p>",
+    summaryHtml: "<p>stale session summary</p>",
     revision: 4,
     lifecycle: "running",
     completeness: "full_detail",
@@ -1020,6 +1039,7 @@ test("a stale report request cannot update a genuinely different active session"
   resolvers.shift()({
     presentationId: 1,
     reportHtml: "<p>replacement session</p>",
+    summaryHtml: "<p>replacement session summary</p>",
     revision: 1,
     lifecycle: "running",
     completeness: "full_detail",
@@ -1086,6 +1106,7 @@ test("default report watchdog timers retain the Window receiver", async () => {
       refresh_active_session_report: {
         presentationId: 4,
         reportHtml: "<p>fresh</p>",
+        summaryHtml: "<p>fresh summary</p>",
         revision: 4,
         lifecycle: "running",
         completeness: "full_detail",

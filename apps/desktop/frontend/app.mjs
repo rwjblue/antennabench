@@ -158,6 +158,8 @@ export function mount(root, browserWindow) {
     reportSummary,
     reportSavedButton,
     reportActiveRunButton,
+    reportSummaryModeButton,
+    reportFullModeButton,
     reportRefreshButton,
     reportDiagnosticsButton,
     reportDiagnosticsDialog,
@@ -711,6 +713,11 @@ export function mount(root, browserWindow) {
   });
 
   reportRefreshButton.addEventListener("click", () => controller.refreshReport());
+  reportSummaryModeButton.addEventListener("click", () => controller.selectReportMode("summary"));
+  reportFullModeButton.addEventListener(
+    "click",
+    () => controller.selectReportMode("full_evidence"),
+  );
   reportDiagnosticsButton.addEventListener("click", () => {
     if (typeof reportDiagnosticsDialog.showModal === "function") {
       reportDiagnosticsDialog.showModal();

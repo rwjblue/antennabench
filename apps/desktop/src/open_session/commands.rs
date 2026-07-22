@@ -730,16 +730,11 @@ pub(super) fn active_session_report_for(
             "the active snapshot is available for lossless export, but report rendering is unavailable",
         )
     })?;
-    if presentation.report_html.len() as u64 > REPORT_DOCUMENT_IPC_BYTES {
-        return Err(SessionErrorPayload::resource(
-            SessionErrorKind::Resource,
-            "resource.desktop.ipc_bytes",
-            "report_document",
-            REPORT_DOCUMENT_IPC_BYTES,
-            Some(presentation.report_html.len() as u64),
-            "bytes",
-        ));
-    }
+    check_ipc_payload(
+        presentation,
+        REPORT_DOCUMENT_IPC_BYTES,
+        "report_presentation",
+    )?;
 
     Ok(presentation.clone())
 }
@@ -777,9 +772,15 @@ pub(super) fn refresh_active_session_report_for(
             })
             .cloned()
         {
+            check_ipc_payload(&existing, REPORT_DOCUMENT_IPC_BYTES, "report_presentation")?;
             return Ok(existing);
         }
         let mut presentation = prepare_presentation(&snapshot).map_err(report_error_payload)?;
+        check_ipc_payload(
+            &presentation,
+            REPORT_DOCUMENT_IPC_BYTES,
+            "report_presentation",
+        )?;
         let verified = load_snapshot(&source, &bundle_name).map_err(SessionErrorPayload::from)?;
         if snapshot.revision != verified.revision {
             continue;

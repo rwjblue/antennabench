@@ -35,12 +35,17 @@ function loadDesktopDocument() {
 
 function reportDocumentHarness() {
   let sequence = 0;
+  const created = [];
+  const revoked = [];
   return {
-    create() {
+    created,
+    revoked,
+    create(html) {
+      created.push(html);
       sequence += 1;
       return `blob:report-${sequence}`;
     },
-    revoke() {},
+    revoke(url) { revoked.push(url); },
   };
 }
 
@@ -712,12 +717,17 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   state.session = {
     bundleName: "test.session.antennabundle", callsign: "N1RWJ", grid: "FN42",
     antennaCount: 2, slotCount: 4, observationCount: 8, revision: 3,
-    lifecycle: "running", completeness: "full_detail", reportHtml: "<p>three</p>",
+    lifecycle: "running", completeness: "full_detail", reportHtml: "<p>three full</p>",
+    summaryHtml: "<p>three summary</p>",
   };
   state.reportStatus = "ready";
   state.reportPresentationId = 3;
   renderReport(e, state, reportDocuments);
   assert.equal(e.reportFrame.getAttribute("src"), "blob:report-1");
+  assert.deepEqual(reportDocuments.created, ["<p>three summary</p>"]);
+  assert.equal(e.reportSummaryModeButton.getAttribute("aria-pressed"), "true");
+  assert.equal(e.reportFullModeButton.getAttribute("aria-pressed"), "false");
+  assert.equal(e.reportFrame.title, "AntennaBench Summary report");
   assert.equal(e.mainContent.classList.contains("report-reading-active"), true);
   assert.equal(e.mainContent.closest(".workspace").classList.contains("report-reading-active"), true);
   assert.equal(e.reportPanelHeading.hidden, true);
@@ -725,6 +735,15 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.reportExportRevision.textContent, "revision 3");
   assert.equal(e.reportControllerOptions.hidden, true);
   assert.equal(e.reportControllerHandling.value, "complete");
+
+  state.reportMode = "full_evidence";
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportFrame.getAttribute("src"), "blob:report-2");
+  assert.equal(reportDocuments.created.at(-1), "<p>three full</p>");
+  assert.deepEqual(reportDocuments.revoked, ["blob:report-1"]);
+  assert.equal(e.reportSummaryModeButton.getAttribute("aria-pressed"), "false");
+  assert.equal(e.reportFullModeButton.getAttribute("aria-pressed"), "true");
+  assert.equal(e.reportFrame.title, "AntennaBench Full evidence report");
 
   state.session.hasControllerEvidence = true;
   renderReport(e, state, reportDocuments);

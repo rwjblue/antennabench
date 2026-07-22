@@ -123,6 +123,7 @@ import {
   rbnImportFailed,
   rbnImportSucceeded,
   selectWorkflow,
+  selectReportMode,
   setWsjtxReadinessAcknowledged,
   setupCreationCancelled,
   setupCreationFailed,
@@ -273,6 +274,7 @@ test("the shell starts in saved sessions", () => {
     activeManagedLocatorId: null,
     session: null,
     reportPresentationId: 0,
+    reportMode: "summary",
     reportStatus: "idle",
     reportError: null,
     reportExportStatus: "idle",
@@ -819,6 +821,7 @@ test("setup creation cancellation, failure, and success preserve coherent state"
     sessionId: "session-1",
     bundleName: "created.session.antennabundle",
     reportHtml: "<!doctype html>",
+    summaryHtml: "<!doctype html><main class=\"summary\"></main>",
   };
   const managedLocation = {
     locatorId: "locator-created",
@@ -1370,7 +1373,11 @@ test("setup native errors remain typed and editable", () => {
 
 test("opening a session transitions through loading and ready", () => {
   const loading = beginOpenSession(initialState("saved"), "managed", "work", "locator-1");
-  const session = { sessionId: "session-1", reportHtml: "<!doctype html>" };
+  const session = {
+    sessionId: "session-1",
+    reportHtml: "<!doctype html>",
+    summaryHtml: "<!doctype html><main class=\"summary\"></main>",
+  };
   const ready = openSessionSucceeded(loading, session, "run");
 
   assert.equal(loading.openStatus, "loading");
@@ -1420,11 +1427,12 @@ test("same-ID successful opens refresh only the new report presentation", () => 
   const first = openSessionSucceeded(initialState("report"), {
     sessionId: "session-1",
     reportHtml: "<!doctype html><title>first</title>",
+    summaryHtml: "<!doctype html><title>first summary</title>",
   });
 
   assert.equal(updateReportFrame(reportFrame, first, reportDocuments), true);
   assert.equal(reportFrame.src, "blob:report-1");
-  assert.deepEqual(reportDocuments.created, ["<!doctype html><title>first</title>"]);
+  assert.deepEqual(reportDocuments.created, ["<!doctype html><title>first summary</title>"]);
 
   const navigated = selectWorkflow(first, "saved");
   const exporting = beginManagedExport(navigated, "locator-1");
@@ -1446,6 +1454,7 @@ test("same-ID successful opens refresh only the new report presentation", () => 
   const second = openSessionSucceeded(beginOpenSession(first), {
     sessionId: "session-1",
     reportHtml: "<!doctype html><title>second</title>",
+    summaryHtml: "<!doctype html><title>second summary</title>",
   });
   assert.equal(second.session.sessionId, first.session.sessionId);
   assert.notEqual(second.reportPresentationId, first.reportPresentationId);
@@ -1455,6 +1464,126 @@ test("same-ID successful opens refresh only the new report presentation", () => 
   releaseReportFrame(reportFrame, reportDocuments);
   assert.deepEqual(reportDocuments.revoked, ["blob:report-1", "blob:report-2"]);
   assert.equal(reportFrame.dataset.reportDocumentUrl, undefined);
+});
+
+test("report modes switch immutable documents without changing presentation identity", () => {
+  const frame = { dataset: {}, src: "", removeAttribute() {} };
+  const reportDocuments = reportDocumentHarness();
+  const summary = openSessionSucceeded(initialState("report"), {
+    sessionId: "session-1",
+    presentationId: 8,
+    revision: 4,
+    reportHtml: "<!doctype html><title>full revision 4</title>",
+    summaryHtml: "<!doctype html><title>summary revision 4</title>",
+  });
+
+  assert.equal(summary.reportMode, "summary");
+  assert.equal(updateReportFrame(frame, summary, reportDocuments), true);
+  assert.deepEqual(reportDocuments.created, ["<!doctype html><title>summary revision 4</title>"]);
+
+  const full = selectReportMode(summary, "full_evidence");
+  assert.equal(full.reportPresentationId, summary.reportPresentationId);
+  assert.equal(full.session, summary.session);
+  assert.equal(updateReportFrame(frame, full, reportDocuments), true);
+  assert.deepEqual(reportDocuments.created, [
+    "<!doctype html><title>summary revision 4</title>",
+    "<!doctype html><title>full revision 4</title>",
+  ]);
+  assert.deepEqual(reportDocuments.revoked, ["blob:report-1"]);
+  assert.equal(updateReportFrame(frame, selectReportMode(full, "full_evidence"), reportDocuments), false);
+  assert.throws(() => selectReportMode(full, "audit"), /Unknown report mode/u);
+  assert.throws(
+    () => reportRefreshSucceeded(beginReportRefresh(full), {
+      presentationId: 9,
+      sessionId: "session-2",
+      reportHtml: "other full",
+      summaryHtml: "other summary",
+    }),
+    /cannot cross active-session identity/u,
+  );
+  assert.throws(
+    () => reportRefreshSucceeded(beginReportRefresh(full), {
+      presentationId: 9,
+      sessionId: "session-1",
+      reportHtml: "full without Summary",
+    }),
+    /both immutable document variants/u,
+  );
+
+  const refreshed = reportRefreshSucceeded(beginReportRefresh(full), {
+    presentationId: 9,
+    revision: 5,
+    lifecycle: "ended",
+    completeness: "full_detail",
+    hasControllerEvidence: false,
+    reportHtml: "<!doctype html><title>full revision 5</title>",
+    summaryHtml: "<!doctype html><title>summary revision 5</title>",
+  });
+  assert.equal(refreshed.reportMode, "full_evidence", "refresh preserves the reader choice");
+  assert.equal(updateReportFrame(frame, refreshed, reportDocuments), true);
+  assert.equal(reportDocuments.created.at(-1), "<!doctype html><title>full revision 5</title>");
+
+  const different = openSessionSucceeded(beginOpenSession(refreshed), {
+    sessionId: "session-2",
+    presentationId: 10,
+    reportHtml: "<!doctype html><title>other full</title>",
+    summaryHtml: "<!doctype html><title>other summary</title>",
+  });
+  assert.equal(different.reportMode, "summary", "a genuinely different session resets to Summary");
+});
+
+test("report mode switching carries a bounded reading-position hint", () => {
+  let restore;
+  let focused = false;
+  const frame = {
+    dataset: {
+      presentationId: "8",
+      reportMode: "summary",
+      reportDocumentUrl: "blob:prior-summary",
+    },
+    src: "blob:prior-summary#findings",
+    contentWindow: {
+      location: { hash: "#findings" },
+      innerHeight: 500,
+      scrollY: 750,
+      scrollTo() {},
+    },
+    contentDocument: {
+      activeElement: { id: "finding-details" },
+      scrollingElement: { scrollHeight: 2_000 },
+    },
+    addEventListener(type, callback, options) {
+      assert.equal(type, "load");
+      assert.deepEqual(options, { once: true });
+      restore = callback;
+    },
+    removeAttribute() {},
+  };
+  const reportDocuments = reportDocumentHarness();
+  const state = {
+    reportPresentationId: 8,
+    reportMode: "full_evidence",
+    session: {
+      reportHtml: "full document",
+      summaryHtml: "summary document",
+    },
+  };
+
+  assert.equal(updateReportFrame(frame, state, reportDocuments), true);
+  assert.equal(frame.src, "blob:report-1#findings");
+  assert.deepEqual(reportDocuments.revoked, ["blob:prior-summary"]);
+
+  frame.contentDocument = {
+    activeElement: { id: "" },
+    scrollingElement: { scrollHeight: 3_000 },
+    getElementById(id) {
+      if (id === "findings") return {};
+      if (id === "finding-details") return { focus: () => { focused = true; } };
+      return null;
+    },
+  };
+  restore();
+  assert.equal(focused, true);
 });
 
 test("revision-keyed report refresh retains coherent prior output on failure and export state", () => {
@@ -1471,6 +1600,7 @@ test("revision-keyed report refresh retains coherent prior output on failure and
     completeness: "full_detail",
     hasControllerEvidence: true,
     reportHtml: "<!doctype html><title>revision 4</title>",
+    summaryHtml: "<!doctype html><title>revision 4 summary</title>",
   });
   assert.equal(first.session.hasControllerEvidence, true);
   assert.equal(updateReportFrame(frame, first, reportDocuments), true);
@@ -1526,6 +1656,7 @@ test("revision-keyed report refresh retains coherent prior output on failure and
     completeness: "bounded_overview",
     hasControllerEvidence: false,
     reportHtml: "<!doctype html><title>revision 5</title>",
+    summaryHtml: "<!doctype html><title>revision 5 summary</title>",
   });
   assert.equal(second.session.hasControllerEvidence, false);
   assert.equal(updateReportFrame(frame, second, reportDocuments), true);
@@ -1604,6 +1735,7 @@ test("WSPR.live import preserves focused state and refreshes the active summary"
     lifecycle: "running",
     observationCount: 2,
     reportHtml: "old",
+    summaryHtml: "old summary",
   });
   const loading = beginWsprLiveImport(active);
   const imported = wsprLiveImportSucceeded(loading, {
@@ -1628,6 +1760,7 @@ test("WSPR.live import preserves focused state and refreshes the active summary"
   assert.equal(imported.importStatus, "ready");
   assert.equal(imported.session.observationCount, 5);
   assert.equal(imported.session.reportHtml, null);
+  assert.equal(imported.session.summaryHtml, null);
   assert.equal(imported.reportStatus, "unavailable");
   assert.equal(cancelled.importNotice, "cancelled");
   assert.equal(failed.importError.kind, "validation");
@@ -1641,6 +1774,7 @@ test("RBN import preserves focused state and refreshes the schema-v3 summary", (
     lifecycle: "ended",
     observationCount: 2,
     reportHtml: "old",
+    summaryHtml: "old summary",
   });
   const loading = beginRbnImport(active);
   const imported = rbnImportSucceeded(loading, {
@@ -1667,6 +1801,7 @@ test("RBN import preserves focused state and refreshes the schema-v3 summary", (
   assert.equal(imported.importStatus, "ready");
   assert.equal(imported.session.observationCount, 4);
   assert.equal(imported.session.reportHtml, null);
+  assert.equal(imported.session.summaryHtml, null);
   assert.equal(cancelled.importNotice, "cancelled");
   assert.equal(failed.importError.kind, "validation");
   assert.equal(failed.session, active.session);

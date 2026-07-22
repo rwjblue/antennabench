@@ -460,26 +460,84 @@ export function releaseReportFrame(reportFrame, reportDocuments) {
   if (currentUrl) reportDocuments.revoke(currentUrl);
   delete reportFrame.dataset.reportDocumentUrl;
   delete reportFrame.dataset.presentationId;
+  delete reportFrame.dataset.reportMode;
   reportFrame.removeAttribute?.("src");
 }
 
+function captureReportReadingPosition(reportFrame) {
+  try {
+    const document = reportFrame.contentDocument;
+    const view = reportFrame.contentWindow;
+    const scrolling = document?.scrollingElement;
+    const maximumScroll = Math.max(0, (scrolling?.scrollHeight ?? 0) - (view?.innerHeight ?? 0));
+    const hash = view?.location?.hash ?? "";
+    const focusedId = document?.activeElement?.id ?? "";
+    return {
+      hash: /^#[A-Za-z][A-Za-z0-9_.:-]{0,127}$/u.test(hash) ? hash : "",
+      focusedId: /^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/u.test(focusedId) ? focusedId : "",
+      scrollRatio: maximumScroll > 0
+        ? Math.min(1, Math.max(0, (view?.scrollY ?? 0) / maximumScroll))
+        : 0,
+    };
+  } catch {
+    return { hash: "", focusedId: "", scrollRatio: 0 };
+  }
+}
+
+function restoreReportReadingPosition(reportFrame, position) {
+  if (!position.hash && !position.focusedId && position.scrollRatio === 0) return;
+  reportFrame.addEventListener?.("load", () => {
+    try {
+      const document = reportFrame.contentDocument;
+      const view = reportFrame.contentWindow;
+      const hashTarget = position.hash
+        ? document?.getElementById(position.hash.slice(1))
+        : null;
+      if (!hashTarget && position.scrollRatio > 0) {
+        const maximumScroll = Math.max(
+          0,
+          (document?.scrollingElement?.scrollHeight ?? 0) - (view?.innerHeight ?? 0),
+        );
+        view?.scrollTo?.(0, Math.round(maximumScroll * position.scrollRatio));
+      }
+      document?.getElementById(position.focusedId)?.focus?.({ preventScroll: true });
+    } catch {
+      // The immutable document remains usable even if the reading-position hint is unavailable.
+    }
+  }, { once: true });
+}
+
 export function updateReportFrame(reportFrame, state, reportDocuments) {
-  if (state.session === null || typeof state.session.reportHtml !== "string") return false;
+  if (
+    state.session === null
+    || typeof state.session.reportHtml !== "string"
+    || typeof state.session.summaryHtml !== "string"
+  ) return false;
 
   const presentationId = String(state.reportPresentationId);
-  if (reportFrame.dataset.presentationId === presentationId) return false;
+  const reportMode = state.reportMode === "full_evidence" ? "full_evidence" : "summary";
+  if (
+    reportFrame.dataset.presentationId === presentationId
+    && reportFrame.dataset.reportMode === reportMode
+  ) return false;
 
   const previousUrl = reportFrame.dataset.reportDocumentUrl;
-  const nextUrl = reportDocuments.create(state.session.reportHtml);
+  const readingPosition = captureReportReadingPosition(reportFrame);
+  const reportHtml = reportMode === "summary"
+    ? state.session.summaryHtml
+    : state.session.reportHtml;
+  const nextUrl = reportDocuments.create(reportHtml);
+  restoreReportReadingPosition(reportFrame, readingPosition);
   try {
     reportFrame.removeAttribute?.("srcdoc");
-    reportFrame.src = nextUrl;
+    reportFrame.src = `${nextUrl}${readingPosition.hash}`;
   } catch (error) {
     reportDocuments.revoke(nextUrl);
     throw error;
   }
   reportFrame.dataset.reportDocumentUrl = nextUrl;
   reportFrame.dataset.presentationId = presentationId;
+  reportFrame.dataset.reportMode = reportMode;
   if (previousUrl) reportDocuments.revoke(previousUrl);
   return true;
 }

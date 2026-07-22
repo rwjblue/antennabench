@@ -187,12 +187,21 @@ const server = createServer((request, response) => {
       const frame = document.querySelector("#report");
       const state = {
         reportPresentationId: 1,
-        session: { reportHtml: reports[mode] },
+        reportMode: mode === "full" ? "full_evidence" : "summary",
+        session: { reportHtml: reports.full, summaryHtml: reports.summary },
       };
       const reportDocuments = createReportDocumentUrls(window);
       frame.addEventListener("load", () => { document.body.dataset.reportLoaded = "true"; }, { once: true });
       updateReportFrame(frame, state, reportDocuments);
       window.noopReportUpdate = () => updateReportFrame(frame, state, reportDocuments);
+      window.switchReportMode = (reportMode) => {
+        document.body.dataset.reportLoaded = "false";
+        frame.addEventListener("load", () => {
+          document.body.dataset.reportLoaded = "true";
+        }, { once: true });
+        state.reportMode = reportMode;
+        return updateReportFrame(frame, state, reportDocuments);
+      };
     `);
     return;
   }
@@ -360,11 +369,12 @@ try {
     history.hidden = false;
     alert.hidden = true;
     frame.hidden = false;
-    frame.src = "/standalone-full";
+    frame.src = "/standalone-summary";
     content.scrollTop = 0;
     const contentRect = content.getBoundingClientRect();
     const frameRect = frame.getBoundingClientRect();
     const toolbarRect = document.querySelector(".report-toolbar").getBoundingClientRect();
+    const modeControl = document.querySelector(".report-mode-control").getBoundingClientRect();
     return {
       nativeDialog: diagnostics.tagName,
       open: diagnostics.open,
@@ -377,6 +387,11 @@ try {
       contentScrollHeight: content.scrollHeight,
       contentClientHeight: content.clientHeight,
       toolbarVisible: toolbarRect.top >= contentRect.top && toolbarRect.bottom <= contentRect.bottom,
+      modeControlVisible: modeControl.left >= toolbarRect.left && modeControl.right <= toolbarRect.right,
+      summarySelected: document.querySelector('[data-report-mode="summary"]')
+        .getAttribute("aria-pressed"),
+      fullSelected: document.querySelector('[data-report-mode="full_evidence"]')
+        .getAttribute("aria-pressed"),
       sidebarVisible: document.querySelector(".sidebar").getClientRects().length > 0,
     };
   })()`], { json: true })).result;
@@ -387,6 +402,9 @@ try {
   assert.equal(reportHierarchy.contentOverflow, "hidden");
   assert.equal(reportHierarchy.contentScrollHeight, reportHierarchy.contentClientHeight);
   assert.equal(reportHierarchy.toolbarVisible, true);
+  assert.equal(reportHierarchy.modeControlVisible, true);
+  assert.equal(reportHierarchy.summarySelected, "true");
+  assert.equal(reportHierarchy.fullSelected, "false");
   assert.equal(reportHierarchy.sidebarVisible, false);
   assert.equal(reportHierarchy.frameBeginsInReadingPath, true,
     `report frame began at ${reportHierarchy.frameTop}px after the ${reportHierarchy.contentBottom}px reading path`);
@@ -881,6 +899,19 @@ try {
     assert.equal(responsive.tableRowDisplay, "block");
     assert.doesNotMatch(responsive.supportColumns, /\s/);
     await browser(["set", "viewport", "1200", "900"]);
+
+    const alternateMode = mode === "summary" ? "full_evidence" : "summary";
+    const switched = (await browser([
+      "eval",
+      `window.switchReportMode(${JSON.stringify(alternateMode)})`,
+    ], { json: true })).result;
+    assert.equal(switched, true);
+    await browser(["wait", "body[data-report-loaded='true']"]);
+    const alternateHero = await evaluateReportFrame(
+      pageUrl,
+      "getComputedStyle(document.querySelector('.hero')).display",
+    );
+    assert.equal(alternateHero, alternateMode === "summary" ? "block" : "grid");
   }
   process.stdout.write(
     `Standalone and embedded ${basename(fullPath)} and ${basename(summaryPath)} retained report CSS under exact CSP boundaries.\n`,

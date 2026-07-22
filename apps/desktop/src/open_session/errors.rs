@@ -11,7 +11,6 @@ pub(crate) struct ReportPresentation {
     pub(super) has_controller_evidence: bool,
     pub(crate) operational_history: BundleDiagnosticsPresentation,
     pub(super) report_html: String,
-    #[serde(skip)]
     pub(super) summary_html: String,
     #[serde(skip)]
     pub(super) controller_omitted_report_html: Option<String>,

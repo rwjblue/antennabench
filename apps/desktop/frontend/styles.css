@@ -375,17 +375,21 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 
 .report-viewer { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0; overflow: hidden; border: 1px solid #d8ddd6; border-radius: 18px; background: #fff; box-shadow: 0 10px 30px rgba(40, 63, 59, 0.07); }
 .content.report-reading-active .report-viewer { border: 0; border-radius: 0; box-shadow: none; }
-.report-toolbar { display: grid; grid-template-columns: auto minmax(330px, 1fr) minmax(180px, auto) auto; align-items: center; gap: 12px 18px; min-width: 0; padding: 10px 14px; border-bottom: 1px solid #cbd8d2; background: #eef4ef; }
+.report-toolbar { display: grid; grid-template-areas: "navigation mode identity summary actions"; grid-template-columns: auto auto minmax(330px, 1fr) minmax(180px, auto) auto; align-items: center; gap: 12px 18px; min-width: 0; padding: 10px 14px; border-bottom: 1px solid #cbd8d2; background: #eef4ef; }
 .report-toolbar-navigation, .report-toolbar-actions, .report-export-actions { display: flex; align-items: center; gap: 8px; }
+.report-toolbar-navigation { grid-area: navigation; }
 .report-toolbar button, .report-dialog button { border: 1px solid #8ab3aa; border-radius: 8px; padding: 8px 10px; color: #245451; background: #fff; font-size: .72rem; font-weight: 800; cursor: pointer; }
 .report-toolbar button:disabled, .report-dialog button:disabled { color: #87948f; border-color: #cbd3ce; background: #eef0ed; cursor: wait; }
-.report-toolbar-identity { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.report-mode-control { display: flex; grid-area: mode; align-items: center; justify-self: start; padding: 2px; border: 1px solid #b5cbc5; border-radius: 10px; background: #dfeae4; }
+.report-mode-control button { border: 0; background: transparent; }
+.report-mode-control button[aria-pressed="true"] { color: #fff; background: #245451; box-shadow: 0 1px 3px rgba(28, 64, 61, .2); }
+.report-toolbar-identity { display: flex; grid-area: identity; align-items: center; gap: 16px; min-width: 0; }
 .report-toolbar-identity div { display: grid; gap: 2px; min-width: 0; }
 .report-toolbar-identity div > span { color: #77857f; font-size: .58rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .report-toolbar-identity strong { max-width: 26vw; overflow: hidden; color: #315d57; font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
 .report-toolbar-identity .status-chip { padding: 6px 8px; font-size: .62rem; }
-.report-toolbar-summary { min-width: 0; margin: 0; overflow: hidden; color: #62736f; font-size: .66rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.report-toolbar-actions { justify-self: end; }
+.report-toolbar-summary { grid-area: summary; min-width: 0; margin: 0; overflow: hidden; color: #62736f; font-size: .66rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.report-toolbar-actions { grid-area: actions; justify-self: end; }
 .report-notices:empty { display: none; }
 .report-notices:not(:has(> :not([hidden]))) { display: none; }
 .report-export-choice { display: grid; grid-template-columns: minmax(240px, 0.7fr) minmax(280px, 1.3fr); align-items: center; gap: 18px; padding: 14px 19px; border-bottom: 1px solid #d8ddd6; background: #f8faf7; }
@@ -430,6 +434,12 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 
 [hidden] { display: none !important; }
 
+@media (max-width: 1200px) {
+  .report-toolbar { grid-template-areas: "navigation mode identity actions"; grid-template-columns: auto auto minmax(0, 1fr) auto; }
+  .report-toolbar-summary { display: none; }
+  .report-toolbar-identity strong { max-width: 24vw; }
+}
+
 @media (max-width: 900px) {
   html, body { height: auto; overflow: visible; }
   .app-shell { display: block; height: auto; min-height: 100vh; min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); overflow: visible; }
@@ -442,9 +452,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
   .content { min-height: auto; overflow: visible; overscroll-behavior-y: auto; scrollbar-gutter: auto; }
   .workspace.report-reading-active { height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 0; overflow: hidden; }
   .content.report-reading-active { min-height: 0; overflow: hidden; }
-  .report-toolbar { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .report-toolbar-summary { display: none; }
-  .report-toolbar-identity strong { max-width: 24vw; }
+  .report-toolbar { grid-template-areas: "navigation identity actions" "mode mode mode"; grid-template-columns: auto minmax(0, 1fr) auto; }
   .setup-grid { grid-template-columns: 1fr; }
   .card { min-height: 190px; }
   .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
