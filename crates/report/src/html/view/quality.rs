@@ -84,17 +84,22 @@ pub(in crate::html) struct QualityView {
 }
 
 #[derive(Debug, Clone)]
+pub(in crate::html) struct SummaryQualityFactView {
+    pub(in crate::html) label: &'static str,
+    pub(in crate::html) value: String,
+}
+
+#[derive(Debug, Clone)]
 pub(in crate::html) struct SummaryQualityView {
-    pub(in crate::html) comparison_state: &'static str,
-    pub(in crate::html) lifecycle: &'static str,
-    pub(in crate::html) usable: usize,
-    pub(in crate::html) excluded: usize,
-    pub(in crate::html) acquisition: String,
+    pub(in crate::html) facts: Vec<SummaryQualityFactView>,
     pub(in crate::html) bounded: bool,
+    pub(in crate::html) detail_omitted: bool,
 }
 
 #[derive(Debug, Clone)]
 pub(in crate::html) struct SummaryReferenceView {
     pub(in crate::html) session_id: String,
     pub(in crate::html) revision: String,
+    pub(in crate::html) lifecycle: String,
+    pub(in crate::html) acquisition: String,
 }

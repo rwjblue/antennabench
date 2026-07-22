@@ -160,8 +160,50 @@ main.summary {
 .summary .summary-reference {
   font-size: 0.84rem;
 }
+.summary .summary-reference > summary,
+.summary .summary-reading-rules > summary {
+  cursor: pointer;
+  font-weight: 800;
+}
 .summary .summary-omission {
   font-size: 0.84rem;
+}
+.summary-signal-condition + .summary-signal-condition {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+.summary-signal-support,
+.summary-method-note {
+  font-size: 0.8rem;
+}
+.summary-path-facts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.summary-path-aggregate {
+  margin: 0.45rem 0;
+}
+.summary-path-aggregate svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.summary-goal-distance {
+  margin-top: 0.6rem;
+  padding: 0.6rem;
+  border-radius: 0.45rem;
+  background: var(--accent-soft);
+}
+.summary-goal-distance p:first-child {
+  margin-top: 0;
+}
+.summary-quality-facts,
+.summary-provenance-facts,
+.summary-goal-distance-facts {
+  margin: 0.45rem 0;
 }
 @media print {
   .summary {
@@ -247,5 +289,8 @@ main.summary {
   }
   .summary .path-strip-row {
     grid-template-columns: 1fr;
+  }
+  .summary-path-facts {
+    grid-template-columns: 1fr 1fr;
   }
 }

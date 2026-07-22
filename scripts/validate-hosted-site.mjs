@@ -307,7 +307,12 @@ invariant(
 invariant(!/<script\b/i.test(canonicalSample), "Canonical sample must remain standalone and script-free");
 
 const summarySample = read("apps/hosted/public/sample-report/summary/index.html");
-for (const reportContract of ["+5 dB median", "83 shared paths", "327 matched pairs"]) {
+for (const reportContract of [
+  "+5 dB median",
+  "83 unique shared paths",
+  "327 paired observations",
+  "summary-path-aggregate",
+]) {
   invariant(
     summarySample.includes(reportContract),
     `Summary sample is missing the report contract: ${reportContract}`,

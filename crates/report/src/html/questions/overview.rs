@@ -102,6 +102,7 @@ pub(in super::super) fn render_question_navigation(
         },
     )
 }
+
 pub(in super::super) fn render_how_to_read(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
@@ -117,6 +118,7 @@ pub(in super::super) fn render_how_to_read(
         },
     )
 }
+
 pub(in super::super) fn render_answer_first_overview(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
@@ -379,6 +381,24 @@ fn summary_findings(report: &SessionReport) -> Vec<SummaryFindingView> {
                     | antennabench_analysis::ReporterActivityCoverage::Truncated
             )
         });
+    let mut controlled_finding = summary_finding(
+        "Controlled common-opportunity detection",
+        if answerability.paired_detectability == PairedDetectabilityAnswerability::Available {
+            if controlled_limited { "Limited" } else { "Available" }
+        } else {
+            "Unavailable"
+        },
+        "receivers confirmed active in both cycles of an eligible block for the same comparison condition",
+        controlled,
+        paired_detectability_answerability_text(answerability.paired_detectability),
+        "Uncontrolled path totals are not substituted for this population.",
+    );
+    if controlled_limited {
+        controlled_finding.support = format!(
+            "{} Activity coverage was partial or truncated; rates use only retained known opportunities.",
+            controlled_finding.support,
+        );
+    }
     vec![
         summary_finding(
             "Paired shared-path signal",
@@ -392,18 +412,7 @@ fn summary_findings(report: &SessionReport) -> Vec<SummaryFindingView> {
             same_path_answerability_text(answerability.same_path_signal),
             "Missing shared paths are not a 0 dB result.",
         ),
-        summary_finding(
-            "Controlled common-opportunity detection",
-            if answerability.paired_detectability == PairedDetectabilityAnswerability::Available {
-                if controlled_limited { "Limited" } else { "Available" }
-            } else {
-                "Unavailable"
-            },
-            "receivers confirmed active in both cycles of an eligible block for the same comparison condition",
-            controlled,
-            paired_detectability_answerability_text(answerability.paired_detectability),
-            "Uncontrolled path totals are not substituted for this population.",
-        ),
+        controlled_finding,
         summary_finding(
             "Uncontrolled unique observed paths",
             if answerability.observed_reach == ObservedReachAnswerability::Available {

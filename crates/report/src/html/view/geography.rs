@@ -25,23 +25,6 @@ pub(in crate::html) struct ProfileDistributionView {
 }
 
 #[derive(Debug, Clone)]
-pub(in crate::html) struct ProfileBarRowView {
-    pub(in crate::html) label: &'static str,
-    pub(in crate::html) left_label: String,
-    pub(in crate::html) left_count: usize,
-    pub(in crate::html) left_class: String,
-    pub(in crate::html) right_label: String,
-    pub(in crate::html) right_count: usize,
-    pub(in crate::html) right_class: String,
-}
-
-#[derive(Debug, Clone)]
-pub(in crate::html) struct ProfileBarChartView {
-    pub(in crate::html) heading: &'static str,
-    pub(in crate::html) rows: Vec<ProfileBarRowView>,
-}
-
-#[derive(Debug, Clone)]
 pub(in crate::html) struct CompositionRowView {
     pub(in crate::html) distance: &'static str,
     pub(in crate::html) left_only: usize,
@@ -55,7 +38,6 @@ pub(in crate::html) struct ProfileView {
     pub(in crate::html) left_label: String,
     pub(in crate::html) right_label: String,
     pub(in crate::html) distributions: Vec<ProfileDistributionView>,
-    pub(in crate::html) bar_charts: Vec<ProfileBarChartView>,
     pub(in crate::html) composition: Vec<CompositionRowView>,
     pub(in crate::html) composition_unavailable: usize,
     pub(in crate::html) composition_suffix: &'static str,
@@ -86,7 +68,14 @@ pub(in crate::html) struct SummaryFootprintGroupView {
     pub(in crate::html) index: usize,
     pub(in crate::html) label: String,
     pub(in crate::html) reach: FootprintReachView,
-    pub(in crate::html) profile: ProfileView,
+    pub(in crate::html) goal_distance_rows: Vec<SummaryGoalDistanceRowView>,
+}
+
+#[derive(Debug, Clone)]
+pub(in crate::html) struct SummaryGoalDistanceRowView {
+    pub(in crate::html) label: &'static str,
+    pub(in crate::html) left: usize,
+    pub(in crate::html) right: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -169,9 +158,4 @@ pub(in crate::html) struct SummaryFootprintView {
     pub(in crate::html) no_groups: bool,
     pub(in crate::html) groups: Vec<SummaryFootprintGroupView>,
     pub(in crate::html) unavailable: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub(in crate::html) struct ObservedPathAuditView {
-    pub(in crate::html) rows: Vec<ObservedPathAuditRowView>,
 }

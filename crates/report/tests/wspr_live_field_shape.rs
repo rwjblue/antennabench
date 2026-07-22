@@ -200,9 +200,15 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
             if error.diagnostic.code == "resource.operation.cancelled"
     ));
     for html in [&full, &summary] {
-        let document = ReportDocument::parse(html);
         assert!(!html.contains("0 usable"));
         assert!(!html.contains("No matched paths"));
+        assert!(!html.contains("0–1 Mm"));
+        assert!(!html.contains("3–8 Mm"));
+        assert!(!html.contains("<script"));
+    }
+    {
+        let html = &full;
+        let document = ReportDocument::parse(html);
         assert!(html.contains("Which antenna was heard more often by the same active receivers?"));
         assert!(html.contains("This section asks a narrower question than raw path counts"));
         assert!(html.contains("Each receiver-block is one shared opportunity"));
@@ -243,9 +249,6 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         ] {
             assert!(html.contains(category));
         }
-        assert!(!html.contains("0–1 Mm"));
-        assert!(!html.contains("3–8 Mm"));
-        assert!(!html.contains("<script"));
     }
     assert!(full.contains("Coverage overlap and repeatability"));
     assert!(full.contains("Observed complementarity"));
@@ -257,7 +260,6 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         .assert_table_row_contains("Observed unique-path overlap", &["112", "33", "10", "155"]);
     assert!(summary.contains("Observed footprint"));
     assert!(!summary.contains("<h2 id=\"coverage-overlap-title\">"));
-    assert!(summary.contains("Review whether observed paths repeated across blocks"));
     assert!(!summary.contains("Observed complementarity"));
     assert_common_visual_has_accessible_rows(&full, common);
     assert!(full.contains("activity-summary-field-shape"));
@@ -266,14 +268,13 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert!(full.contains("coverage-grid-view"));
     assert!(full.contains("coverage-polar-view"));
     assert!(full.contains("@media print"));
-    assert_common_visual_has_accessible_rows(&summary, common);
     assert_eq!(
         summary
             .matches("class=\"common-opportunity-rate-cell")
             .count(),
-        64
+        0
     );
-    assert!(summary.contains("Common-opportunity distance and bearing cells"));
+    assert!(!summary.contains("Common-opportunity distance and bearing cells"));
     assert!(!summary.contains("<svg class=\"coverage-world\""));
     let summary_document = ReportDocument::parse(&summary);
     summary_document.assert_count(".summary-finding", 3);
@@ -411,17 +412,21 @@ fn zero_matched_paths_still_render_useful_common_opportunity_geography() {
         (145, 0, 10, 155)
     );
 
-    for html in [
-        render_standalone_html(&report).unwrap(),
-        render_summary_html(&report).unwrap(),
-    ] {
+    let full = render_standalone_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
+    for html in [&full, &summary] {
         assert!(html.contains("No same-path SNR comparison: no matched paths"));
+    }
+    {
+        let html = &full;
         assert!(html.contains("Common-opportunity detection"));
         assert!(html.contains("Most pronounced recorded cell"));
         assert!(html.contains("session-scoped common-opportunity evidence"));
         assert!(html.contains("Separate antenna detection-rate maps"));
     }
-    let summary = render_summary_html(&report).unwrap();
+    assert!(summary.contains("Controlled common-opportunity detection"));
+    assert!(!summary.contains("Most pronounced recorded cell"));
+    assert!(!summary.contains("Separate antenna detection-rate maps"));
     assert!(summary.contains("Observed footprint"));
     assert!(summary.contains("<strong>145</strong><small>"));
     assert!(summary.contains("<strong>10</strong><small>"));
@@ -456,7 +461,10 @@ fn truncated_census_caveat_qualifies_each_cycle_and_paired_rate() {
         .common_opportunity_maps
         .iter()
         .all(|group| group.coverage == antennabench_analysis::ReporterActivityCoverage::Truncated));
-    assert!(summary.contains("Truncated census — capture limit may reduce the denominator"));
+    assert!(summary.contains(
+        "Activity coverage was partial or truncated; rates use only retained known opportunities."
+    ));
+    assert!(!summary.contains("Truncated census — capture limit may reduce the denominator"));
 }
 
 #[test]
@@ -487,25 +495,28 @@ fn paired_rate_heatmap_states_are_distinct_and_keyboard_accessible() {
     cells[2].facts.left_detection_rate = Some(1.0 / 3.0);
     cells[2].facts.right_detection_rate = Some(2.0 / 3.0);
 
-    let summary = render_summary_html(&report).unwrap();
-    let document = ReportDocument::parse(&summary);
+    let full = render_standalone_html(&report).unwrap();
+    let document = ReportDocument::parse(&full);
     for state in [
         "rate-zero",
         "zero-opportunities",
         "low-support",
         "rate-unavailable",
     ] {
-        assert!(summary.contains(state), "missing heatmap state: {state}");
+        assert!(full.contains(state), "missing heatmap state: {state}");
     }
     document.assert_count(".common-opportunity-rate-cell", 64);
     document.assert_count(
         ".common-opportunity-rate-cell[tabindex=\"0\"][aria-label]",
         64,
     );
-    assert!(summary.contains("Rate unavailable; not zero detection"));
-    assert!(summary.contains("no located common-opportunity cell"));
-    assert!(summary.contains("@media (max-width: 760px)"));
-    assert!(summary.contains("@media print"));
+    assert!(full.contains("Rate unavailable; not zero detection"));
+    assert!(full.contains("no located common-opportunity cell"));
+    assert!(full.contains("@media (max-width: 760px)"));
+    assert!(full.contains("@media print"));
+    let summary = render_summary_html(&report).unwrap();
+    assert!(!summary.contains("class=\"common-opportunity-rate-cell"));
+    assert!(!summary.contains("Rate unavailable; not zero detection"));
 }
 
 fn field_shape_fixture() -> BundleV3Contents {

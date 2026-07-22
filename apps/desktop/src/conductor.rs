@@ -1365,13 +1365,20 @@ mod tests {
             .report_html
             .contains("Unknown — antenna changed during transmission"));
         assert!(exported.summary_html.contains("AntennaBench Summary"));
-        assert!(exported.summary_html.contains(&format!(
-            "committed revision <strong>{}</strong>",
-            ended.revision
-        )));
+        let summary_document = scraper::Html::parse_document(&exported.summary_html);
+        let summary_fact_selector =
+            scraper::Selector::parse(".summary-provenance-facts .fact").unwrap();
+        assert!(summary_document.select(&summary_fact_selector).any(|fact| {
+            let rendered_text = fact.text().collect::<String>();
+            rendered_text.contains("Committed revision")
+                && rendered_text.contains(&ended.revision.to_string())
+        }));
         assert!(exported
             .summary_html
-            .contains("full evidence report and lossless session bundle"));
+            .contains("Full evidence retains the complete human-readable audit"));
+        assert!(exported
+            .summary_html
+            .contains("lossless session bundle remains the durable record"));
         assert!(!exported
             .summary_html
             .contains("Complete operator note and correction history"));

@@ -23,18 +23,6 @@ pub(in super::super) fn render_overlap_repeatability_section(
     )
 }
 
-pub(in super::super) fn render_summary_repeatability_disclosure(
-    out: &mut CheckedHtmlWriter<'_>,
-    report: &SessionReport,
-) -> Result<(), ReportError> {
-    render_template(
-        out,
-        &OverlapQuestionTemplate {
-            view: overlap_view(report, true),
-        },
-    )
-}
-
 fn overlap_view(report: &SessionReport, summary: bool) -> OverlapQuestionView {
     let render = !summary
         || report

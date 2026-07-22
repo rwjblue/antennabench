@@ -1,12 +1,8 @@
 {% if summary %}
   {% if single_antenna %}
-    <p class="footnote">
-      Generated locally from deterministic report data. This Summary describes only recorded evidence from the named antenna.
-    </p>
+    <p class="footnote">Generated locally from the same committed report facts as Full evidence.</p>
   {% else %}
-    <p class="footnote">
-      Generated locally from deterministic report data. This Summary is descriptive and does not select an antenna winner.
-    </p>
+    <p class="footnote">Generated locally from the same committed report facts as Full evidence.</p>
   {% endif %}
 {% else if single_antenna %}
   <p class="footnote">

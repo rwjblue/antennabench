@@ -31,18 +31,6 @@ pub(in super::super) fn render_coverage_map_section(
     )
 }
 
-pub(in super::super) fn render_summary_coverage_map_section(
-    out: &mut CheckedHtmlWriter<'_>,
-    report: &SessionReport,
-) -> Result<(), ReportError> {
-    render_template(
-        out,
-        &CoverageTemplate {
-            view: coverage_view(report, true),
-        },
-    )
-}
-
 fn coverage_view(report: &SessionReport, summary: bool) -> CoverageView {
     let AntennaLabels {
         left: left_label,

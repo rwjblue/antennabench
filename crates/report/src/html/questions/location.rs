@@ -1,16 +1,15 @@
-use super::super::geometry::geometry_class;
 use super::*;
 use crate::html::{
     templates::{
         render_template, GeographyBeforeSolarTemplate, GeographyEndTemplate, GeographyTemplate,
-        SummaryFootprintCloseTemplate, SummaryFootprintEndTemplate, SummaryFootprintTemplate,
+        SummaryFootprintCloseTemplate, SummaryFootprintTemplate,
     },
     view::{
         CompositionRowView, ContextCellView, ContextSectionView, FootprintReachView,
         FullProfileGroupView, GeographyView, LocationPathAuditView, ObservedPathAuditRowView,
-        ObservedPathAuditView, PathContextGroupView, PathContextView, ProfileBarChartView,
-        ProfileBarRowView, ProfileDistributionRowView, ProfileDistributionView, ProfileTotalView,
-        ProfileView, SummaryFootprintGroupView, SummaryFootprintView,
+        PathContextGroupView, PathContextView, ProfileDistributionRowView, ProfileDistributionView,
+        ProfileTotalView, ProfileView, SummaryFootprintGroupView, SummaryFootprintView,
+        SummaryGoalDistanceRowView,
     },
 };
 
@@ -39,13 +38,7 @@ pub(in super::super) fn render_summary_observed_footprint_section(
     if no_groups {
         return render_template(out, &SummaryFootprintCloseTemplate);
     }
-    render_summary_repeatability_disclosure(out, report)?;
-    render_template(
-        out,
-        &SummaryFootprintEndTemplate {
-            audit: observed_path_audit_view(report),
-        },
-    )
+    render_template(out, &SummaryFootprintCloseTemplate)
 }
 
 fn geography_view(report: &SessionReport) -> GeographyView {
@@ -78,7 +71,7 @@ fn geography_view(report: &SessionReport) -> GeographyView {
                 index,
                 label: comparison_group_label(&stratum.stratum),
                 dominant_summary,
-                profile: profile_view(profile, false),
+                profile: profile_view(profile),
             }
         })
         .collect::<Vec<_>>();
@@ -108,7 +101,7 @@ fn summary_footprint_view(report: &SessionReport) -> SummaryFootprintView {
             index,
             label: comparison_group_label(&stratum.stratum),
             reach: footprint_reach_view(report, &stratum.reach),
-            profile: profile_view(&stratum.observed_profile, true),
+            goal_distance_rows: summary_goal_distance_rows(report, &stratum.observed_profile),
         })
         .collect::<Vec<_>>();
     let unavailable_message = (!unavailable.is_empty()).then(|| {
@@ -128,6 +121,32 @@ fn summary_footprint_view(report: &SessionReport) -> SummaryFootprintView {
     }
 }
 
+fn summary_goal_distance_rows(
+    report: &SessionReport,
+    profile: &crate::ReportOverviewObservedProfile,
+) -> Vec<SummaryGoalDistanceRowView> {
+    report
+        .overview
+        .goal_lens
+        .as_ref()
+        .into_iter()
+        .flat_map(|lens| lens.emphasized_distance_bins.iter())
+        .map(|bin| SummaryGoalDistanceRowView {
+            label: bin.label(),
+            left: profile
+                .left
+                .as_ref()
+                .and_then(|side| side.distance_bins.iter().find(|cell| cell.category == *bin))
+                .map_or(0, |cell| cell.unique_path_count),
+            right: profile
+                .right
+                .as_ref()
+                .and_then(|side| side.distance_bins.iter().find(|cell| cell.category == *bin))
+                .map_or(0, |cell| cell.unique_path_count),
+        })
+        .collect()
+}
+
 fn goal_focus(report: &SessionReport) -> Option<String> {
     let bins = &report.overview.goal_lens.as_ref()?.emphasized_distance_bins;
     (!bins.is_empty()).then(|| {
@@ -138,40 +157,16 @@ fn goal_focus(report: &SessionReport) -> Option<String> {
     })
 }
 
-fn profile_view(profile: &crate::ReportOverviewObservedProfile, summary: bool) -> ProfileView {
-    let distance_caption = if summary {
-        "Exact unique-path distance counts and observation support"
-    } else {
-        "Side-by-side observed distance distribution"
-    };
-    let azimuth_caption = if summary {
-        "Exact unique-path direction counts and observation support"
-    } else {
-        "Side-by-side observed azimuth distribution"
-    };
+fn profile_view(profile: &crate::ReportOverviewObservedProfile) -> ProfileView {
     let distance_distribution = profile_distribution_view(
-        distance_caption,
+        "Side-by-side observed distance distribution",
         profile.left.as_ref(),
         profile.right.as_ref(),
         |value| &value.distance_bins,
         |cell| cell.category.label(),
     );
     let azimuth_distribution = profile_distribution_view(
-        azimuth_caption,
-        profile.left.as_ref(),
-        profile.right.as_ref(),
-        |value| &value.azimuth_sectors,
-        |cell| fixed_azimuth_sector_label(cell.category),
-    );
-    let distance_bars = profile_bar_chart_view(
-        "Observed unique paths by distance",
-        profile.left.as_ref(),
-        profile.right.as_ref(),
-        |value| &value.distance_bins,
-        |cell| cell.category.label(),
-    );
-    let azimuth_bars = profile_bar_chart_view(
-        "Observed unique paths by direction",
+        "Side-by-side observed azimuth distribution",
         profile.left.as_ref(),
         profile.right.as_ref(),
         |value| &value.azimuth_sectors,
@@ -200,7 +195,6 @@ fn profile_view(profile: &crate::ReportOverviewObservedProfile, summary: bool) -
         left_label,
         right_label,
         distributions: vec![distance_distribution, azimuth_distribution],
-        bar_charts: vec![distance_bars, azimuth_bars],
         composition: profile
             .distance_composition
             .iter()
@@ -244,57 +238,6 @@ fn profile_distribution_view<T: Copy>(
                     label: label(category),
                     left: observed_profile_cell_text(left_cell),
                     right: observed_profile_cell_text(right_cell),
-                }
-            })
-            .collect(),
-    }
-}
-
-fn profile_bar_chart_view<T: Copy>(
-    heading: &'static str,
-    left: Option<&ReportObservedAntennaProfile>,
-    right: Option<&ReportObservedAntennaProfile>,
-    cells: impl Fn(&ReportObservedAntennaProfile) -> &[ReportObservedProfileCell<T>],
-    label: impl Fn(&ReportObservedProfileCell<T>) -> &'static str,
-) -> ProfileBarChartView {
-    let left_label = left.map_or("First antenna", |profile| profile.antenna_label.as_str());
-    let right_label = right.map_or("Second antenna", |profile| profile.antenna_label.as_str());
-    let row_count = left
-        .map(|profile| cells(profile).len())
-        .or_else(|| right.map(|profile| cells(profile).len()))
-        .unwrap_or_default();
-    let maximum = (0..row_count)
-        .flat_map(|index| {
-            [
-                left.and_then(|profile| cells(profile).get(index))
-                    .map_or(0, |cell| cell.unique_path_count),
-                right
-                    .and_then(|profile| cells(profile).get(index))
-                    .map_or(0, |cell| cell.unique_path_count),
-            ]
-        })
-        .max()
-        .unwrap_or(0)
-        .max(1) as f64;
-    ProfileBarChartView {
-        heading,
-        rows: (0..row_count)
-            .map(|index| {
-                let left_cell = left.and_then(|profile| cells(profile).get(index));
-                let right_cell = right.and_then(|profile| cells(profile).get(index));
-                let category = left_cell
-                    .or(right_cell)
-                    .expect("observed profile category exists");
-                let left_count = left_cell.map_or(0, |cell| cell.unique_path_count);
-                let right_count = right_cell.map_or(0, |cell| cell.unique_path_count);
-                ProfileBarRowView {
-                    label: label(category),
-                    left_label: left_label.to_string(),
-                    left_count,
-                    left_class: geometry_class(left_count as f64 / maximum * 100.0),
-                    right_label: right_label.to_string(),
-                    right_count,
-                    right_class: geometry_class(right_count as f64 / maximum * 100.0),
                 }
             })
             .collect(),
@@ -347,12 +290,6 @@ fn footprint_reach_view(report: &SessionReport, reach: &ReportOverviewReach) -> 
         left_total: presentation.left_total,
         right_total: presentation.right_total,
         bar: presentation.bar,
-    }
-}
-
-fn observed_path_audit_view(report: &SessionReport) -> ObservedPathAuditView {
-    ObservedPathAuditView {
-        rows: observed_path_audit_rows(report),
     }
 }
 

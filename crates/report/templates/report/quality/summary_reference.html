@@ -1,9 +1,34 @@
-<section class="panel summary-reference" aria-labelledby="source-reference-title">
-  <h2 id="source-reference-title">Source reference</h2>
-  <p>
-    Full evidence report and lossless session bundle: session <code>{{ view.session_id }}</code>, committed revision <strong>{{ view.revision }}</strong>.
-  </p>
-  <p class="muted">
-    Use those authoritative local outputs for the complete audit appendix and durable session evidence.
-  </p>
-</section>
+<details class="panel summary-reference">
+  <summary>Report source and provenance</summary>
+  <div class="disclosure-body">
+    <dl class="facts summary-provenance-facts">
+      <div class="fact">
+        <dt>Session</dt>
+        <dd>
+          <code>{{ view.session_id }}</code>
+        </dd>
+      </div>
+      <div class="fact">
+        <dt>Committed revision</dt>
+        <dd>
+          {{ view.revision }}
+        </dd>
+      </div>
+      <div class="fact">
+        <dt>Lifecycle</dt>
+        <dd>
+          {{ view.lifecycle }}
+        </dd>
+      </div>
+      <div class="fact">
+        <dt>Evidence collection</dt>
+        <dd>
+          {{ view.acquisition }}
+        </dd>
+      </div>
+    </dl>
+    <p class="muted summary-omission">
+      This Summary deterministically includes aggregate findings only; Full evidence retains the complete human-readable audit, and the lossless session bundle remains the durable record. No rows are sampled.
+    </p>
+  </div>
+</details>

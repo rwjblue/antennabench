@@ -6,7 +6,7 @@ use crate::{
         templates::{
             render_template, PathQuestionSectionEndTemplate, ReachAuditStartTemplate,
             ReachSectionStartTemplate, ReachTemplate, SamePathAuditStartTemplate,
-            SamePathSectionStartTemplate, SamePathTemplate,
+            SamePathSectionStartTemplate, SamePathTemplate, SummarySamePathTemplate,
         },
         view::{
             ExactPathView, PathDistributionView, PathDotView, PathStratumView, PathTickView,
@@ -55,6 +55,18 @@ pub(in super::super) fn render_same_path_view(
         out,
         &SamePathTemplate {
             view: same_path_view(report, summary),
+        },
+    )
+}
+
+pub(in super::super) fn render_summary_same_path_section(
+    out: &mut CheckedHtmlWriter<'_>,
+    report: &SessionReport,
+) -> Result<(), ReportError> {
+    render_template(
+        out,
+        &SummarySamePathTemplate {
+            view: same_path_view(report, true),
         },
     )
 }
@@ -234,13 +246,18 @@ fn path_distribution_view(
         })
         .collect();
     let dots = path_dots(&paths, maximum_absolute);
+    let first_quartile = interpolated_quantile(&values, 0.25);
+    let third_quartile = interpolated_quantile(&values, 0.75);
     Some(PathDistributionView {
         negative_count: values.iter().filter(|value| **value < 0.0).count(),
         tied_count: values.iter().filter(|value| **value == 0.0).count(),
         positive_count: values.iter().filter(|value| **value > 0.0).count(),
         median: format_signed(median),
-        first_quartile: format_signed(interpolated_quantile(&values, 0.25)),
-        third_quartile: format_signed(interpolated_quantile(&values, 0.75)),
+        first_quartile: format_signed(first_quartile),
+        third_quartile: format_signed(third_quartile),
+        first_quartile_x: format!("{:.2}", path_x(first_quartile, maximum_absolute)),
+        median_x: format!("{:.2}", path_x(median, maximum_absolute)),
+        third_quartile_x: format!("{:.2}", path_x(third_quartile, maximum_absolute)),
         aria_label: format!(
             "Distribution of {} signed path-median SNR differences. Negative values favor {negative_label}; positive values favor {positive_label}.",
             paths.len()

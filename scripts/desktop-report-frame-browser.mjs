@@ -624,6 +624,17 @@ try {
             populationCount: document.querySelectorAll(".summary-finding-population").length,
             exactDetailOpen: document.querySelector(".summary-condition-detail").open,
             methodsOpen: document.querySelector(".answerability-disclosure").open,
+            primarySectionCount: document.querySelectorAll("main.summary > section.panel").length,
+            aggregateCount: document.querySelectorAll(".summary-path-aggregate svg").length,
+            rawTabStopCount: document.querySelectorAll('[tabindex="0"]').length,
+            auditVisualCount: document.querySelectorAll([
+              ".path-distribution-dot-group",
+              ".common-opportunity-rate-cell",
+              ".coverage-world",
+              ".coverage-polar",
+            ].join(",")).length,
+            readingRuleCount: document.querySelectorAll(".summary-reading-rules li").length,
+            provenanceOpen: document.querySelector(".summary-reference").open,
           };
         })() : null,
       };
@@ -640,6 +651,12 @@ try {
       assert.equal(styles.summaryOpening.populationCount, 3);
       assert.equal(styles.summaryOpening.exactDetailOpen, false);
       assert.equal(styles.summaryOpening.methodsOpen, false);
+      assert.ok(styles.summaryOpening.primarySectionCount <= 4);
+      assert.ok(styles.summaryOpening.aggregateCount > 0);
+      assert.equal(styles.summaryOpening.rawTabStopCount, 0);
+      assert.equal(styles.summaryOpening.auditVisualCount, 0);
+      assert.equal(styles.summaryOpening.readingRuleCount, 2);
+      assert.equal(styles.summaryOpening.provenanceOpen, false);
       assert.ok(styles.summaryOpening.overviewTop >= 0);
       assert.ok(
         styles.summaryOpening.limitationBottom <= styles.summaryOpening.viewportHeight,
@@ -704,7 +721,6 @@ try {
             "what-run-show",
             "same-path-signal",
             "observed-footprint",
-            "run-quality",
           ],
     );
     const outerScrollBefore = (await browser([

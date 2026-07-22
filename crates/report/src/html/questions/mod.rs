@@ -19,22 +19,22 @@ mod overlap;
 mod overview;
 mod paths;
 mod quality;
+mod summary_navigation;
 
 pub(super) use activity::{coverage_text, render_reporter_activity_section};
-pub(super) use coverage::{render_coverage_map_section, render_summary_coverage_map_section};
+pub(super) use coverage::render_coverage_map_section;
 
 pub(super) use location::{render_distance_section, render_summary_observed_footprint_section};
-pub(super) use overlap::{
-    render_overlap_repeatability_section, render_summary_repeatability_disclosure,
-};
+pub(super) use overlap::render_overlap_repeatability_section;
 pub(super) use overview::{
-    overview_lifecycle_label, render_answer_first_overview, render_how_to_read,
-    render_question_navigation, render_summary_answer_first_overview,
+    render_answer_first_overview, render_how_to_read, render_question_navigation,
+    render_summary_answer_first_overview,
 };
 pub(super) use paths::{
-    plural_suffix, render_reach_section, render_same_path_section, render_same_path_view,
+    plural_suffix, render_reach_section, render_same_path_section, render_summary_same_path_section,
 };
 pub(super) use quality::render_run_quality_section;
+pub(super) use summary_navigation::{render_summary_how_to_read, render_summary_navigation};
 
 pub(super) fn ordered_question_families(report: &SessionReport) -> Vec<ReportQuestionFamily> {
     let priority = report

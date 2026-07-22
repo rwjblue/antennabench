@@ -15,6 +15,12 @@ pub(in crate::html) struct ReadingGuideTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "report/overview/summary_reading_guide.html")]
+pub(in crate::html) struct SummaryReadingGuideTemplate {
+    pub(in crate::html) single_antenna: bool,
+}
+
+#[derive(Template)]
 #[template(path = "report/overview/answer_first.html")]
 pub(in crate::html) struct AnswerFirstTemplate {
     pub(in crate::html) view: OverviewView,
@@ -28,6 +34,4 @@ pub(in crate::html) struct SummaryAnswerFirstTemplate {
 
 #[derive(Template)]
 #[template(path = "report/overview/summary_header.html")]
-pub(in crate::html) struct SummaryHeaderTemplate<'a> {
-    pub(in crate::html) session_id: &'a str,
-}
+pub(in crate::html) struct SummaryHeaderTemplate;

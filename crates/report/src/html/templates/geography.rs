@@ -1,6 +1,6 @@
 use askama::Template;
 
-use super::super::view::{GeographyView, ObservedPathAuditView, SummaryFootprintView};
+use super::super::view::{GeographyView, SummaryFootprintView};
 
 #[derive(Template)]
 #[template(path = "report/geography/full.html")]
@@ -27,9 +27,3 @@ pub(in crate::html) struct SummaryFootprintTemplate {
 #[derive(Template)]
 #[template(path = "report/geography/summary_close.html")]
 pub(in crate::html) struct SummaryFootprintCloseTemplate;
-
-#[derive(Template)]
-#[template(path = "report/geography/summary_end.html")]
-pub(in crate::html) struct SummaryFootprintEndTemplate {
-    pub(in crate::html) audit: ObservedPathAuditView,
-}

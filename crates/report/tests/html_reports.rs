@@ -252,12 +252,7 @@ fn summary_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
     assert!(first.contains("class=\"summary-context-line\""));
     assert!(first.contains(&report.overview.scope.station.callsign));
     assert!(first.contains(&report.overview.scope.station.grid));
-    for shared_fact in [
-        "Signed values:",
-        "Shared-path signal",
-        "Observed reach",
-        "Run quality and answerability",
-    ] {
+    for shared_fact in ["Signed values:", "Shared-path signal", "Observed reach"] {
         assert!(full.contains(shared_fact), "full output lost {shared_fact}");
         assert!(
             first.contains(shared_fact),
@@ -265,7 +260,9 @@ fn summary_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
         );
     }
     assert!(full.contains("Supported by this run"));
-    assert!(first.contains("committed revision <strong>27</strong>"));
+    assert!(first.contains("Report source and provenance"));
+    summary_document
+        .assert_any_rendered_text(".summary-provenance-facts .fact", "Committed revision 27");
     let stratum = &report.overview.strata[0];
     let count_fact = format!(
         "{} / {}",
@@ -273,7 +270,7 @@ fn summary_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
     );
     assert!(full.contains(&count_fact));
     assert!(first.contains(&count_fact));
-    assert!(first.contains("no rows are sampled here"));
+    assert!(first.contains("No rows are sampled"));
     assert_full_summary_policy(&full_document, &summary_document, "#what-run-show", true);
     assert_full_summary_policy(&full_document, &summary_document, "#audit-appendix", false);
     assert_full_summary_policy(
@@ -311,18 +308,15 @@ fn semantic_text_assertions_preserve_inline_flow_and_optional_spacing() {
     );
     summary.assert_rendered_text(
         "header.hero > p.muted",
-        &format!(
-            "Not the Full evidence report · Session {}",
-            report.overview.scope.session_id
-        ),
+        "Answer-first reading and sharing view · Not the Full evidence report",
     );
     full.assert_rendered_text(
         "#same-path-signal .path-view-note",
         "Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale; a 0 dB dot is retained as a true zero.",
     );
     summary.assert_rendered_text(
-        "#same-path-signal .path-view-note",
-        "Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale.",
+        "#same-path-signal .summary-method-note",
+        "Each remote path contributes one median regardless of its paired-observation count. Full evidence retains the exact paths, per-path medians, and block-level audit rows.",
     );
     full.assert_rendered_text(
         "section[aria-labelledby=\"acquisition-quality-title\"] > p",
@@ -400,18 +394,24 @@ fn consolidates_standing_caveats_in_one_shared_reading_panel() {
     summary_document.assert_present("details.panel.reading-guide");
     summary_document.assert_any_rendered_text(
         "details.panel.reading-guide > summary",
-        "How to read this report",
+        "Two rules for reading this Summary",
     );
     summary_document.assert_absent("details.panel.reading-guide[open]");
-    for html in [&full, &summary] {
-        for caveat in [
+    for caveat in [
             "A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.",
             "This report describes evidence; it does not select a winner or prove one antenna is better.",
             "Each comparison group (direction × band × mode × kind × source) is analyzed separately and never combined.",
             "Alternating antennas reduces but does not eliminate time and propagation effects.",
-        ] {
-            assert_eq!(html.matches(caveat).count(), 1, "repeated caveat: {caveat}");
-        }
+    ] {
+        assert_eq!(full.matches(caveat).count(), 1, "repeated caveat: {caveat}");
+    }
+    for caveat in [
+        "Missing public evidence is not a zero-strength measurement unless active-receiver evidence establishes a listening opportunity.",
+        "Results describe this recorded run and do not establish a universal antenna ranking.",
+    ] {
+        assert_eq!(summary.matches(caveat).count(), 1, "repeated Summary rule: {caveat}");
+    }
+    for html in [&full, &summary] {
         assert!(!html.contains("Unmatched paths are not zero-SNR measurements"));
         assert!(!html.contains("Adjacent switched slots reduce elapsed time"));
         assert!(!html.contains("strata are not pooled"));
@@ -434,8 +434,8 @@ fn summary_escapes_unavailable_and_bounded_reports() {
     bounded.completeness = antennabench_report::ReportCompleteness::BoundedOverview;
     bounded.comparison.paired_rows.clear();
     let bounded_html = render_summary_html(&bounded).unwrap();
-    assert!(bounded_html.contains("Bounded overview"));
-    assert!(bounded_html.contains("no rows are sampled"));
+    assert!(bounded_html.contains("Bounded report"));
+    assert!(bounded_html.contains("No rows are sampled"));
 }
 
 #[test]
@@ -607,17 +607,19 @@ fn acquisition_workflow_gap_and_provider_completeness_render_as_independent_fact
                 match workflow_status {
                     ReportAcquisitionWorkflowStatus::NotConfigured => {
                         assert!(full.contains("No acquisition workflow was configured"));
-                        assert!(summary.contains("No configured acquisition"));
+                        assert!(summary.contains(
+                            "Imported or locally recorded evidence; live collection was not configured"
+                        ));
                     }
                     ReportAcquisitionWorkflowStatus::Incomplete => {
                         assert!(full.contains("Recorded acquisition is incomplete"));
-                        assert!(summary.contains("Recorded acquisition incomplete"));
+                        assert!(summary.contains("Recorded live collection did not complete"));
                     }
                     ReportAcquisitionWorkflowStatus::Completed => {
                         assert!(full.contains("Collection completed"));
-                        assert!(summary.contains("Collection completed"));
+                        assert!(summary.contains("Live collection completed"));
                         assert!(!full.contains("Recorded acquisition is incomplete"));
-                        assert!(!summary.contains("Recorded acquisition incomplete"));
+                        assert!(!summary.contains("Recorded live collection did not complete"));
                         let provider_text = match provider_completeness {
                             ReportProviderCompleteness::Known => {
                                 "provider completeness is recorded as known"
@@ -1310,62 +1312,60 @@ fn goal_lenses_reorder_the_same_facts_in_full_and_summary_reports() {
         assert_eq!(candidate.overview.strata, general.overview.strata);
     }
 
-    for summary in [false, true] {
-        let render = |report: &SessionReport| {
-            if summary {
-                render_summary_html(report)
-            } else {
-                render_standalone_html(report)
-            }
-        };
-        let general_html = render(&general).unwrap();
-        let dx_html = render(&dx).unwrap();
-        let (general_sections, dx_sections): (&[&str], &[&str]) = if summary {
-            (
-                &["same-path-signal", "observed-footprint"],
-                &["observed-footprint", "same-path-signal"],
-            )
-        } else {
-            (
-                &[
-                    "same-path-signal",
-                    "reach-unique-paths",
-                    "distance-direction",
-                    "coverage-overlap",
-                ],
-                &[
-                    "distance-direction",
-                    "same-path-signal",
-                    "coverage-overlap",
-                    "reach-unique-paths",
-                ],
-            )
-        };
-        let general_positions = section_positions(&general_html, general_sections);
-        let dx_positions = section_positions(&dx_html, dx_sections);
-        assert!(general_positions.is_sorted());
-        assert!(dx_positions.is_sorted());
-        for section in general_sections {
-            assert!(general_html.contains(&format!("id=\"{section}\"")));
-            assert!(dx_html.contains(&format!("id=\"{section}\"")));
-        }
-        assert!(dx_html.contains("DX-oriented (3000 km and above)"));
-        assert!(dx_html.contains("Every other available distance category remains visible"));
+    let general_full = render_standalone_html(&general).unwrap();
+    let dx_full = render_standalone_html(&dx).unwrap();
+    let general_sections = [
+        "same-path-signal",
+        "reach-unique-paths",
+        "distance-direction",
+        "coverage-overlap",
+    ];
+    let dx_sections = [
+        "distance-direction",
+        "same-path-signal",
+        "coverage-overlap",
+        "reach-unique-paths",
+    ];
+    assert!(section_positions(&general_full, &general_sections).is_sorted());
+    assert!(section_positions(&dx_full, &dx_sections).is_sorted());
+    assert!(dx_full.contains("DX-oriented (3000 km and above)"));
+    assert!(dx_full.contains("Every other available distance category remains visible"));
+
+    let general_summary = render_summary_html(&general).unwrap();
+    let dx_summary = render_summary_html(&dx).unwrap();
+    for html in [&general_summary, &dx_summary] {
+        assert!(section_positions(html, &["same-path-signal", "observed-footprint"]).is_sorted());
+    }
+    assert!(!general_summary.contains("class=\"summary-goal-distance\""));
+    assert!(dx_summary.contains("class=\"summary-goal-distance\""));
+    assert!(dx_summary.contains("DX-oriented (3000 km and above)"));
+    assert!(dx_summary.contains("Full evidence retains every other available distance category"));
+    assert!(dx_summary.contains("This is the one distance view selected by the recorded goal"));
+    for section in ["same-path-signal", "observed-footprint"] {
+        assert!(general_summary.contains(&format!("id=\"{section}\"")));
+        assert!(dx_summary.contains(&format!("id=\"{section}\"")));
     }
 }
 
 #[test]
 fn nvis_and_single_profile_wording_stays_within_the_predeclared_contract() {
     let nvis = paired_report_for_goal(true, SessionGoal::NvisLocal);
-    for html in [
-        render_standalone_html(&nvis).unwrap(),
-        render_summary_html(&nvis).unwrap(),
-    ] {
+    let nvis_full = render_standalone_html(&nvis).unwrap();
+    let nvis_summary = render_summary_html(&nvis).unwrap();
+    for html in [&nvis_full, &nvis_summary] {
         assert!(html.contains("NVIS-oriented distance proxy"));
         assert!(html.contains("Distance does not establish NVIS propagation"));
-        for bin in ReportDistanceBin::ALL {
-            assert!(html.contains(bin.label()));
-        }
+    }
+    for bin in ReportDistanceBin::ALL {
+        assert!(nvis_full.contains(bin.label()));
+    }
+    assert!(nvis_summary.contains(ReportDistanceBin::Under500Km.label()));
+    for bin in [
+        ReportDistanceBin::Km500To1499,
+        ReportDistanceBin::Km1500To2999,
+        ReportDistanceBin::Km3000AndAbove,
+    ] {
+        assert!(!nvis_summary.contains(bin.label()));
     }
 
     let single = single_antenna_report();
@@ -1507,10 +1507,20 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
         summary
             .matches("class=\"path-distribution-dot-group\"")
             .count(),
-        3
+        0
     );
-    assert!(summary.contains("Review exact remote paths and matched-pair counts"));
-    summary_document.assert_any_rendered_text("#same-path-signal tbody tr", "K2SPARSE 1 0 dB");
+    assert!(!summary.contains("K1PAIR"));
+    assert!(!summary.contains("K2SPARSE"));
+    assert!(!summary.contains("K3NEGATIVE"));
+    assert!(!summary.contains("Review exact remote paths and matched-pair counts"));
+    summary_document.assert_absent("#same-path-signal [tabindex=\"0\"]");
+    summary_document.assert_present("#same-path-signal .summary-path-aggregate svg[role=\"img\"]");
+    summary_document.assert_any_rendered_text(
+        "#same-path-signal .path-distribution-summary .fact",
+        "Tied at 0 dB 1",
+    );
+    assert!(summary.contains("3 unique shared paths"));
+    assert!(summary.contains("Full evidence retains the exact paths"));
 }
 
 #[test]
@@ -1609,7 +1619,7 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
     assert!(summary_html.contains("No path delta in 1 comparison group"));
     assert!(summary_html.contains("No usable same-path path-median delta in 1 of 2"));
     assert!(summary_html.contains("No usable observed footprint in 1 of 2 comparison groups"));
-    assert!(summary_html.contains("never combined"));
+    assert!(summary_html.contains("separate conditions"));
 }
 
 #[test]
@@ -1708,35 +1718,76 @@ fn renders_all_path_profiles_in_full_and_summary_without_overclaiming() {
     assert!(!full.contains("measured NVIS"));
     assert!(!full.contains("universal advantage"));
     for expected in [
-        "Observed footprint",
-        "Observed unique paths by distance",
-        "Observed unique paths by direction",
-        "Paired bars share one scale",
-        "Unlike common-active receiver detection",
-        "Review observed distance and direction profile",
-        "Review exact unique observed-path rows",
+        "Observed paths",
+        "uncontrolled unique-path counts",
+        "Heard by both",
+        "total unique paths",
     ] {
         assert!(
             summary.contains(expected),
-            "missing summary footprint: {expected}"
+            "missing Summary aggregate: {expected}"
         );
     }
-    let profile_disclosure = summary
-        .find("<summary>Review observed distance and direction profile</summary>")
-        .expect("observed profile is disclosed");
-    assert!(
-        profile_disclosure
-            < summary
-                .find("Observed unique paths by distance")
-                .expect("distance profile remains available")
-    );
+    for omitted in [
+        "Observed unique paths by distance",
+        "Observed unique paths by direction",
+        "Paired bars share one scale",
+        "Review observed distance and direction profile",
+        "Review exact unique observed-path rows",
+        "Exact unique observed-path records",
+    ] {
+        assert!(
+            !summary.contains(omitted),
+            "Summary leaked audit detail: {omitted}"
+        );
+    }
     assert!(!summary.contains("Observed complementarity"));
     assert!(!summary.contains("<h2 id=\"coverage-overlap-title\">"));
-    assert!(summary.contains("Review whether observed paths repeated across blocks"));
+    assert!(!summary.contains("Review whether observed paths repeated across blocks"));
     assert!(full.contains("Exact unique observed-path records"));
     assert!(full.contains("Review shared-path distance and direction context"));
-    assert!(summary.contains("Exact unique observed-path records"));
     assert!(!summary.contains("Review exact paired-row distance"));
+}
+
+#[test]
+fn summary_omits_audit_level_evidence_and_keeps_aggregate_equivalents() {
+    let mut report = paired_report_for_goal(true, SessionGoal::GeneralCoverage);
+    report.evidence.overall.observation_counts.excluded = 0;
+    report.overview.lifecycle.state =
+        antennabench_report::ReportOverviewLifecycleState::Recorded(SessionLifecycleV2::Ended);
+    report.notices.clear();
+
+    let summary = render_summary_html(&report).unwrap();
+    let document = ReportDocument::parse(&summary);
+    document.assert_count("section.summary-finding-section", 2);
+    document.assert_present("#same-path-signal .summary-path-aggregate svg[role=\"img\"]");
+    document.assert_present("#same-path-signal .path-distribution-summary");
+    document.assert_present("#observed-footprint .footprint-overlap-counts");
+    document.assert_present("details.summary-reference:not([open])");
+    document.assert_absent("#run-quality");
+    document.assert_absent("[tabindex=\"0\"]");
+    for omitted in [
+        "K1PAIR",
+        "K2SPARSE",
+        "Review exact remote paths",
+        "Exact unique observed-path records",
+        "Per-block joint detection outcome audit",
+        "Receiver-level joint outcome audit",
+        "Hearing-rate-given-active",
+        "Common-opportunity distance and bearing cells",
+        "Data-quality timeline details",
+        "Antenna-control command attempts",
+        "Complete operator note and correction history",
+    ] {
+        assert!(!summary.contains(omitted), "Summary leaked {omitted}");
+    }
+    assert!(!summary.contains("class=\"summary-goal-distance\""));
+    assert!(summary.contains("No rows are sampled"));
+
+    report.evidence.overall.observation_counts.excluded = 2;
+    let material = render_summary_html(&report).unwrap();
+    assert!(material.contains("Run quality that affects interpretation"));
+    assert!(material.contains("2 observation(s) were excluded"));
 }
 
 #[test]

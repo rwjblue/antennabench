@@ -7,12 +7,10 @@ use super::super::view::{ReachView, SamePathView};
 pub(in crate::html) struct SamePathSectionStartTemplate;
 
 #[derive(Template)]
-#[template(path = "report/paths/summary_same_path_start.html")]
-pub(in crate::html) struct SummarySamePathStartTemplate;
-
-#[derive(Template)]
-#[template(path = "report/paths/summary_same_path_end.html")]
-pub(in crate::html) struct SummarySamePathEndTemplate;
+#[template(path = "report/paths/summary_same_path.html")]
+pub(in crate::html) struct SummarySamePathTemplate {
+    pub(in crate::html) view: SamePathView,
+}
 
 #[derive(Template)]
 #[template(path = "report/paths/same_path_audit_start.html")]

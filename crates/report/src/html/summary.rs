@@ -1,24 +1,24 @@
 use crate::{
-    check_cancelled, ReportAcquisitionWorkflowStatus, ReportCancellationToken, ReportCompleteness,
-    ReportError, ReportProviderCompleteness, ReportQuestionFamily, ReportResourceLimits,
-    ReportResourceStage, SessionReport, REPORT_RESOURCE_LIMITS,
+    check_cancelled, ReportCancellationToken, ReportCompleteness, ReportError, ReportNotice,
+    ReportOverviewLifecycleState, ReportResourceLimits, ReportResourceStage, SessionReport,
+    REPORT_RESOURCE_LIMITS,
 };
+use antennabench_core::v2::SessionLifecycleV2;
 
 use super::{
+    audit::lifecycle,
     questions::{
-        is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
-        render_how_to_read, render_question_navigation, render_reporter_activity_section,
-        render_same_path_view, render_summary_answer_first_overview,
-        render_summary_coverage_map_section, render_summary_observed_footprint_section,
+        is_single_antenna_lens, render_summary_answer_first_overview, render_summary_how_to_read,
+        render_summary_navigation, render_summary_observed_footprint_section,
+        render_summary_same_path_section,
     },
     shared::*,
     styles::{stylesheet_csp_source, write_stylesheet_to_html, StylesheetVariant},
     templates::{
         render_template, BodyStartTemplate, DocumentEndTemplate, DocumentStartTemplate,
         SummaryHeaderTemplate, SummaryQualityTemplate, SummaryReferenceTemplate,
-        SummarySamePathEndTemplate, SummarySamePathStartTemplate,
     },
-    view::{SummaryQualityView, SummaryReferenceView},
+    view::{SummaryQualityFactView, SummaryQualityView, SummaryReferenceView},
 };
 
 /// Renders a concise, deterministic, standalone HTML summary from the same
@@ -68,46 +68,24 @@ pub fn render_summary_html_with_resources(
             main_class: summary_main_class,
         },
     )?;
-    render_template(
-        &mut out,
-        &SummaryHeaderTemplate {
-            session_id: &report.overview.scope.session_id,
-        },
-    )?;
+    render_template(&mut out, &SummaryHeaderTemplate)?;
     render_summary_answer_first_overview(&mut out, report)?;
-    render_question_navigation(&mut out, report, false)?;
-    render_how_to_read(&mut out, report, true)?;
-    let mut rendered_observed_footprint = false;
-    for family in ordered_question_families(report) {
-        match family {
-            ReportQuestionFamily::SharedPathSignal => {
-                render_template(&mut out, &SummarySamePathStartTemplate)?;
-                render_same_path_view(&mut out, report, true)?;
-                render_template(&mut out, &SummarySamePathEndTemplate)?;
-            }
-            ReportQuestionFamily::CommonOpportunityDetection => {
-                render_reporter_activity_section(&mut out, report)?;
-                render_summary_coverage_map_section(&mut out, report)?;
-            }
-            ReportQuestionFamily::ObservedReach => {
-                if !rendered_observed_footprint {
-                    render_summary_observed_footprint_section(&mut out, report)?;
-                    rendered_observed_footprint = true;
-                }
-            }
-            ReportQuestionFamily::GeographicProfile => {
-                if !rendered_observed_footprint {
-                    render_summary_observed_footprint_section(&mut out, report)?;
-                    rendered_observed_footprint = true;
-                }
-            }
-            ReportQuestionFamily::Repeatability => {
-                if !rendered_observed_footprint {
-                    render_summary_observed_footprint_section(&mut out, report)?;
-                    rendered_observed_footprint = true;
-                }
-            }
-        }
+    let has_shared_path = report.overview.answerability.same_path_signal
+        == crate::SamePathSignalAnswerability::Available;
+    let has_observed_paths = report.overview.strata.iter().any(|row| {
+        row.reach.left_only_unique_path_count
+            + row.reach.both_unique_path_count
+            + row.reach.right_only_unique_path_count
+            > 0
+    });
+    let has_material_quality = summary_has_material_quality(report);
+    render_summary_navigation(&mut out, report, has_material_quality)?;
+    render_summary_how_to_read(&mut out, report)?;
+    if has_shared_path {
+        render_summary_same_path_section(&mut out, report)?;
+    }
+    if has_observed_paths {
+        render_summary_observed_footprint_section(&mut out, report)?;
     }
     render_summary_run_quality(&mut out, report)?;
     render_summary_reference(&mut out, report)?;
@@ -125,46 +103,62 @@ pub(super) fn render_summary_run_quality(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
-    let overall = &report.evidence.overall;
-    let availability = comparison_availability_label(report.overview.comparison_availability);
-    let lifecycle = overview_lifecycle_label(report.overview.lifecycle.state);
-    let evidence = &report.snapshot.adapter_evidence;
-    let acquisition = if evidence.gap_count > 0 {
-        format!("{} recorded acquisition gap(s)", evidence.gap_count)
-    } else {
-        match (evidence.workflow_status, evidence.provider_completeness) {
-            (ReportAcquisitionWorkflowStatus::Incomplete, _) => {
-                "Recorded acquisition incomplete".to_string()
-            }
-            (ReportAcquisitionWorkflowStatus::NotConfigured, _) => {
-                "No configured acquisition".to_string()
-            }
-            (ReportAcquisitionWorkflowStatus::Completed, ReportProviderCompleteness::Known) => {
-                "Collection completed; provider completeness is recorded as known".to_string()
-            }
-            (ReportAcquisitionWorkflowStatus::Completed, ReportProviderCompleteness::Unknown) => {
-                "Collection completed; upstream completeness is not independently guaranteed"
-                    .to_string()
-            }
-            (
-                ReportAcquisitionWorkflowStatus::Completed,
-                ReportProviderCompleteness::Unsupported,
-            ) => "Collection completed; provider completeness is unsupported".to_string(),
-        }
+    let Some(view) = summary_quality_view(report) else {
+        return Ok(());
     };
-    render_template(
-        out,
-        &SummaryQualityTemplate {
-            view: SummaryQualityView {
-                comparison_state: availability,
-                lifecycle,
-                usable: overall.observation_counts.usable,
-                excluded: overall.observation_counts.excluded,
-                acquisition,
-                bounded: report.completeness == ReportCompleteness::BoundedOverview,
-            },
-        },
-    )
+    render_template(out, &SummaryQualityTemplate { view })
+}
+
+fn summary_has_material_quality(report: &SessionReport) -> bool {
+    summary_quality_view(report).is_some()
+}
+
+fn summary_quality_view(report: &SessionReport) -> Option<SummaryQualityView> {
+    let excluded = report.evidence.overall.observation_counts.excluded;
+    let mut facts = Vec::new();
+    if excluded > 0 {
+        facts.push(SummaryQualityFactView {
+            label: "Excluded evidence",
+            value: format!(
+                "{excluded} observation(s) were excluded from reported results; Full evidence records every reason."
+            ),
+        });
+    }
+    let lifecycle_fact = match report.overview.lifecycle.state {
+        ReportOverviewLifecycleState::Recorded(SessionLifecycleV2::Interrupted) => Some(
+            "The run was interrupted; interpret only the evidence recorded before interruption.",
+        ),
+        ReportOverviewLifecycleState::Recorded(SessionLifecycleV2::Abandoned) => {
+            Some("The run was abandoned; its recorded evidence may not cover the planned session.")
+        }
+        ReportOverviewLifecycleState::Recorded(SessionLifecycleV2::Draft) => {
+            Some("The session remained a draft and did not reach a completed run state.")
+        }
+        ReportOverviewLifecycleState::Recorded(SessionLifecycleV2::Ready) => {
+            Some("The session was ready but did not reach a completed run state.")
+        }
+        ReportOverviewLifecycleState::Recorded(SessionLifecycleV2::Running) => {
+            Some("The session was still running at this committed revision.")
+        }
+        ReportOverviewLifecycleState::NotRecorded
+        | ReportOverviewLifecycleState::Recorded(SessionLifecycleV2::Ended) => None,
+    };
+    if let Some(value) = lifecycle_fact {
+        facts.push(SummaryQualityFactView {
+            label: "Run status",
+            value: value.to_string(),
+        });
+    }
+    let bounded = report.completeness == ReportCompleteness::BoundedOverview;
+    let detail_omitted = report
+        .notices
+        .iter()
+        .any(|notice| matches!(notice, ReportNotice::DetailOmitted { .. }));
+    (bounded || detail_omitted || !facts.is_empty()).then_some(SummaryQualityView {
+        facts,
+        bounded,
+        detail_omitted,
+    })
 }
 
 pub(super) fn render_summary_reference(
@@ -176,12 +170,50 @@ pub(super) fn render_summary_reference(
         .checkpoint_revision
         .or(report.overview.lifecycle.checkpoint_revision)
         .map_or_else(not_recorded, |value| value.to_string());
+    let lifecycle = match report.overview.lifecycle.state {
+        ReportOverviewLifecycleState::NotRecorded => {
+            "Lifecycle unavailable for this session".to_string()
+        }
+        ReportOverviewLifecycleState::Recorded(value) => lifecycle(value).to_string(),
+    };
+    let evidence = &report.snapshot.adapter_evidence;
+    let acquisition = match (
+        evidence.workflow_status,
+        evidence.provider_completeness,
+        evidence.gap_count,
+    ) {
+        (_, _, gaps) if gaps > 0 => format!("{gaps} recorded acquisition gap(s)"),
+        (crate::ReportAcquisitionWorkflowStatus::Incomplete, _, _) => {
+            "Recorded live collection did not complete".to_string()
+        }
+        (crate::ReportAcquisitionWorkflowStatus::NotConfigured, _, _) => {
+            "Imported or locally recorded evidence; live collection was not configured".to_string()
+        }
+        (
+            crate::ReportAcquisitionWorkflowStatus::Completed,
+            crate::ReportProviderCompleteness::Known,
+            _,
+        ) => "Live collection completed; provider completeness is recorded as known".to_string(),
+        (
+            crate::ReportAcquisitionWorkflowStatus::Completed,
+            crate::ReportProviderCompleteness::Unknown,
+            _,
+        ) => "Live collection completed; upstream completeness is not independently guaranteed"
+            .to_string(),
+        (
+            crate::ReportAcquisitionWorkflowStatus::Completed,
+            crate::ReportProviderCompleteness::Unsupported,
+            _,
+        ) => "Live collection completed; provider completeness is unsupported".to_string(),
+    };
     render_template(
         out,
         &SummaryReferenceTemplate {
             view: SummaryReferenceView {
                 session_id: report.overview.scope.session_id.clone(),
                 revision,
+                lifecycle,
+                acquisition,
             },
         },
     )
