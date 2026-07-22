@@ -326,7 +326,7 @@ test("managed opening obeys explicit report and work intents from the fresh summ
     assert.deepEqual(reportOnly.navigations, ["report"]);
     assert.deepEqual(reportOnly.calls, [
       ["open_managed_session", { locatorId: `locator-${lifecycle}` }],
-      ["refresh_active_session_report", undefined],
+      ["refresh_active_session_report", { displayedPresentationId: 1 }],
     ]);
     assert.equal(reportOnly.controller.state.conductor, null);
   }
@@ -670,6 +670,7 @@ test("WSPR.live, WSJT-X, and report failures preserve coherent state", async () 
       format: "full_evidence_html",
       controllerEvidence: "omitted_at_export",
       operationalHistory: "omitted",
+      displayedPresentationId: 1,
     },
   );
 
@@ -870,15 +871,21 @@ test("report background checks are silent, change-aware, and bounded by lifecycl
     revision: 10,
   }));
   let presentationId = 10;
+  let holdRefresh = false;
+  let releaseRefresh;
   const running = harness({
-    refresh_active_session_report: () => ({
-      presentationId,
-      reportHtml: `<p>revision ${presentationId}</p>`,
-      summaryHtml: `<p>summary revision ${presentationId}</p>`,
-      revision: presentationId,
-      lifecycle: "running",
-      completeness: "full_detail",
-    }),
+    refresh_active_session_report: () => {
+      const presentation = {
+        presentationId,
+        reportHtml: `<p>revision ${presentationId}</p>`,
+        summaryHtml: `<p>summary revision ${presentationId}</p>`,
+        revision: presentationId,
+        lifecycle: "running",
+        completeness: "full_detail",
+      };
+      if (!holdRefresh) return presentation;
+      return new Promise((resolve) => { releaseRefresh = () => resolve(presentation); });
+    },
   }, { state: runningState });
 
   running.controller.periodicRefresh();
@@ -890,13 +897,44 @@ test("report background checks are silent, change-aware, and bounded by lifecycl
   presentationId = 11;
   running.controller.periodicRefresh();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(running.controller.state.reportPresentationId, 11);
-  assert.equal(running.controller.state.session.reportHtml, "<p>revision 11</p>");
-  assert.equal(running.renders.length, 1, "a new coherent presentation is committed once");
+  assert.equal(running.controller.state.reportPresentationId, 10);
+  assert.equal(running.controller.state.session.reportHtml, "<p>prior</p>");
+  assert.equal(running.controller.state.pendingReportPresentation.presentationId, 11);
+  assert.equal(running.renders.length, 1, "a newer coherent presentation is announced once");
 
   running.controller.periodicRefresh();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(running.renders.length, 1, "subsequent no-op checks stay silent");
+
+  running.controller.selectReportMode("full_evidence");
+  assert.equal(running.controller.state.pendingReportPresentation.presentationId, 11);
+  presentationId = 12;
+  running.controller.periodicRefresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(running.controller.state.reportPresentationId, 10);
+  assert.equal(running.controller.state.pendingReportPresentation.presentationId, 12);
+  const callsBeforeApply = running.calls.length;
+  presentationId = 13;
+  holdRefresh = true;
+  const background = running.controller.refreshReport(true);
+  await new Promise((resolve) => setImmediate(resolve));
+  const apply = running.controller.applyReportUpdate();
+  assert.equal(
+    running.controller.state.reportPresentationId,
+    10,
+    "the displayed snapshot stays stable while a newer background check is in flight",
+  );
+  releaseRefresh();
+  await Promise.all([background, apply]);
+  assert.equal(running.controller.state.reportPresentationId, 13);
+  assert.equal(running.controller.state.session.reportHtml, "<p>revision 13</p>");
+  assert.equal(running.controller.state.reportMode, "full_evidence");
+  assert.equal(running.controller.state.pendingReportPresentation, null);
+  assert.equal(
+    running.calls.length,
+    callsBeforeApply + 1,
+    "applying a pending update adds no backend call beyond the in-flight check",
+  );
 
   const failed = harness({
     refresh_active_session_report: new Error("externally changed bundle is invalid"),

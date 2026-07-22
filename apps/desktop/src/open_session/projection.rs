@@ -782,6 +782,7 @@ pub(super) fn build_active_session(
             operational_history: snapshot.operational_history.clone(),
         },
         presentation,
+        retained_presentation: None,
     }
 }
 

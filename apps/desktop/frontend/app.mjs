@@ -160,6 +160,7 @@ export function mount(root, browserWindow) {
     reportActiveRunButton,
     reportSummaryModeButton,
     reportFullModeButton,
+    reportUpdateButton,
     reportRefreshButton,
     reportDiagnosticsButton,
     reportDiagnosticsDialog,
@@ -713,6 +714,7 @@ export function mount(root, browserWindow) {
   });
 
   reportRefreshButton.addEventListener("click", () => controller.refreshReport());
+  reportUpdateButton.addEventListener("click", () => { void controller.applyReportUpdate(); });
   reportSummaryModeButton.addEventListener("click", () => controller.selectReportMode("summary"));
   reportFullModeButton.addEventListener(
     "click",

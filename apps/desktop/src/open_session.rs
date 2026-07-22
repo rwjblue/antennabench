@@ -90,9 +90,11 @@ use state::{
 #[cfg(test)]
 use commands::{
     active_session_report_for, cancel_pending_report_export_for,
-    confirm_pending_report_export_with, export_active_report_with_selection,
-    export_active_report_with_selection_and_disclosure, export_active_session_with_selection,
-    export_bundle, open_session_with_selection, refresh_active_session_report_for,
+    confirm_pending_report_export_with,
+    export_active_report_for_presentation_with_selection_and_disclosure,
+    export_active_report_with_selection, export_active_report_with_selection_and_disclosure,
+    export_active_session_with_selection, export_bundle, open_session_with_selection,
+    refresh_active_session_report_for, refresh_active_session_report_for_displayed,
     suggested_report_name, suggested_summary_name, ReportReplacePort, SystemReportReplacePort,
 };
 #[cfg(test)]
@@ -231,10 +233,12 @@ mod tests {
     use super::{
         active_session_report_for, cancel_pending_report_export_for, check_ipc_payload,
         confirm_pending_report_export_with, copy_error_payload,
+        export_active_report_for_presentation_with_selection_and_disclosure,
         export_active_report_with_selection, export_active_report_with_selection_and_disclosure,
         export_active_session_with_selection, export_bundle, open_bundle,
-        open_session_with_selection, refresh_active_session_report_for, report_error_payload,
-        suggested_report_name, suggested_summary_name, with_suspended_foreground_operation,
+        open_session_with_selection, refresh_active_session_report_for,
+        refresh_active_session_report_for_displayed, report_error_payload, suggested_report_name,
+        suggested_summary_name, with_suspended_foreground_operation,
         with_waiting_foreground_operation, ActiveSession, ActiveSessionState,
         ControllerEvidenceHandling, ExportReportOutcome, ExportSessionOutcome, OpenSessionOutcome,
         OpenedSession, OperationalHistoryHandling, ReportCompleteness, ReportExportFormat,
@@ -708,6 +712,128 @@ mod tests {
     }
 
     #[test]
+    fn displayed_report_export_stays_on_the_operator_selected_presentation() {
+        let temp = TempDir::new().unwrap();
+        let state = ActiveSessionState::default();
+        open_session_with_selection(&state, || Ok(Some(canonical_fixture()))).unwrap();
+        let displayed = active_session_report_for(&state).unwrap();
+        let mut pending = displayed.clone();
+        pending.presentation_id = displayed.presentation_id + 1;
+        pending.report_html = "<p>pending full evidence</p>".into();
+        pending.summary_html = "<p>pending Summary</p>".into();
+        {
+            let mut active = state.0.lock().unwrap();
+            let session = active.active.as_mut().unwrap();
+            session.retained_presentation = Some(displayed.clone());
+            session.presentation = Some(pending.clone());
+            active.next_presentation_id = pending.presentation_id;
+        }
+
+        let displayed_destination = temp.path().join("displayed-summary.html");
+        let displayed_export = export_active_report_for_presentation_with_selection_and_disclosure(
+            &state,
+            Some(displayed.presentation_id),
+            ReportExportFormat::SummaryHtml,
+            ControllerEvidenceHandling::Complete,
+            OperationalHistoryHandling::Omitted,
+            |_| Ok(Some(displayed_destination.clone())),
+        )
+        .unwrap();
+        assert_eq!(
+            displayed_export,
+            ExportReportOutcome::Exported {
+                file_name: "displayed-summary.html".into(),
+                revision: displayed.revision,
+                format: ReportExportFormat::SummaryHtml,
+            }
+        );
+        assert_eq!(
+            fs::read_to_string(&displayed_destination).unwrap(),
+            displayed.summary_html
+        );
+        fs::write(&displayed_destination, "prior displayed bytes").unwrap();
+        let replacement = export_active_report_for_presentation_with_selection_and_disclosure(
+            &state,
+            Some(displayed.presentation_id),
+            ReportExportFormat::SummaryHtml,
+            ControllerEvidenceHandling::Complete,
+            OperationalHistoryHandling::Omitted,
+            |_| Ok(Some(displayed_destination.clone())),
+        )
+        .unwrap();
+        let ExportReportOutcome::ConfirmationRequired {
+            pending_export_id, ..
+        } = replacement
+        else {
+            panic!("displayed presentation replacement did not request confirmation");
+        };
+        confirm_pending_report_export_with(&state, &pending_export_id, &SystemReportReplacePort)
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(&displayed_destination).unwrap(),
+            displayed.summary_html
+        );
+
+        let pending_destination = temp.path().join("pending-full.html");
+        export_active_report_for_presentation_with_selection_and_disclosure(
+            &state,
+            Some(pending.presentation_id),
+            ReportExportFormat::FullEvidenceHtml,
+            ControllerEvidenceHandling::Complete,
+            OperationalHistoryHandling::Omitted,
+            |_| Ok(Some(pending_destination.clone())),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(&pending_destination).unwrap(),
+            pending.report_html
+        );
+
+        let refreshed =
+            refresh_active_session_report_for_displayed(&state, Some(displayed.presentation_id))
+                .unwrap();
+        assert_eq!(refreshed.presentation_id, pending.presentation_id);
+        assert!(state
+            .0
+            .lock()
+            .unwrap()
+            .active
+            .as_ref()
+            .unwrap()
+            .retained_presentation
+            .is_some());
+        assert_eq!(
+            refresh_active_session_report_for_displayed(&state, Some(u64::MAX))
+                .unwrap_err()
+                .kind,
+            SessionErrorKind::Conflict,
+        );
+        assert_eq!(
+            export_active_report_for_presentation_with_selection_and_disclosure(
+                &state,
+                Some(u64::MAX),
+                ReportExportFormat::SummaryHtml,
+                ControllerEvidenceHandling::Complete,
+                OperationalHistoryHandling::Omitted,
+                |_| panic!("invalid displayed presentations fail before destination selection"),
+            )
+            .unwrap_err()
+            .kind,
+            SessionErrorKind::Conflict,
+        );
+        refresh_active_session_report_for_displayed(&state, Some(pending.presentation_id)).unwrap();
+        assert!(state
+            .0
+            .lock()
+            .unwrap()
+            .active
+            .as_ref()
+            .unwrap()
+            .retained_presentation
+            .is_none());
+    }
+
+    #[test]
     fn cancelling_report_replacement_preserves_existing_bytes() {
         let temp = TempDir::new().unwrap();
         let destination = temp.path().join("cancelled.html");
@@ -1092,6 +1218,7 @@ mod tests {
             live_projection: None,
             summary,
             presentation: Some(presentation),
+            retained_presentation: None,
         });
 
         let omitted_path = temp.path().join("omitted.html");

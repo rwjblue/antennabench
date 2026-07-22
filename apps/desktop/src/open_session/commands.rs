@@ -217,8 +217,30 @@ where
     )
 }
 
+#[cfg(test)]
 pub(super) fn export_active_report_with_selection_and_disclosure<F>(
     state: &ActiveSessionState,
+    format: ReportExportFormat,
+    controller_evidence: ControllerEvidenceHandling,
+    operational_history: OperationalHistoryHandling,
+    select: F,
+) -> Result<ExportReportOutcome, SessionErrorPayload>
+where
+    F: FnOnce(&Path) -> Result<Option<PathBuf>, SessionErrorPayload>,
+{
+    export_active_report_for_presentation_with_selection_and_disclosure(
+        state,
+        None,
+        format,
+        controller_evidence,
+        operational_history,
+        select,
+    )
+}
+
+pub(super) fn export_active_report_for_presentation_with_selection_and_disclosure<F>(
+    state: &ActiveSessionState,
+    displayed_presentation_id: Option<u64>,
     format: ReportExportFormat,
     controller_evidence: ControllerEvidenceHandling,
     operational_history: OperationalHistoryHandling,
@@ -236,9 +258,18 @@ where
         let session = active.active.as_ref().ok_or_else(|| {
             SessionErrorPayload::report_pipeline("no active session report is available")
         })?;
-        let presentation = session.presentation.clone().ok_or_else(|| {
-            SessionErrorPayload::report_pipeline("no coherent report snapshot is available")
-        })?;
+        let presentation = match displayed_presentation_id {
+            Some(presentation_id) => presentation_for_id(session, presentation_id)
+                .cloned()
+                .ok_or_else(|| {
+                    stale_pending_report_error(
+                        "the displayed report presentation does not belong to the active session",
+                    )
+                })?,
+            None => session.presentation.clone().ok_or_else(|| {
+                SessionErrorPayload::report_pipeline("no coherent report snapshot is available")
+            })?,
+        };
         (session.source.clone(), presentation)
     };
     let Some(destination) = select(&source)? else {
@@ -309,11 +340,9 @@ where
             let current = active
                 .active
                 .as_ref()
-                .and_then(|session| session.presentation.as_ref());
+                .and_then(|session| presentation_for_id(session, presentation_id));
             if !current.is_some_and(|current| {
-                current.presentation_id == presentation_id
-                    && current.session_id == session_id
-                    && current.revision == revision
+                current.session_id == session_id && current.revision == revision
             }) {
                 return Err(stale_pending_report_error(
                     "the active report presentation changed during destination selection",
@@ -338,6 +367,22 @@ where
             })
         }
     }
+}
+
+fn presentation_for_id(
+    session: &ActiveSession,
+    presentation_id: u64,
+) -> Option<&ReportPresentation> {
+    session
+        .presentation
+        .as_ref()
+        .filter(|presentation| presentation.presentation_id == presentation_id)
+        .or_else(|| {
+            session
+                .retained_presentation
+                .as_ref()
+                .filter(|presentation| presentation.presentation_id == presentation_id)
+        })
 }
 
 const REPORT_DISPLAY_FILE_NAME_CHARS: usize = 160;
@@ -642,11 +687,9 @@ pub(super) fn confirm_pending_report_export_with(
     let presentation = active
         .active
         .as_ref()
-        .and_then(|session| session.presentation.as_ref());
+        .and_then(|session| presentation_for_id(session, pending.presentation_id));
     if !presentation.is_some_and(|presentation| {
-        presentation.presentation_id == pending.presentation_id
-            && presentation.session_id == pending.session_id
-            && presentation.revision == pending.revision
+        presentation.session_id == pending.session_id && presentation.revision == pending.revision
     }) {
         return Err(stale_pending_report_error(
             "the active report presentation changed before replacement was confirmed",
@@ -739,8 +782,16 @@ pub(super) fn active_session_report_for(
     Ok(presentation.clone())
 }
 
+#[cfg(test)]
 pub(super) fn refresh_active_session_report_for(
     state: &ActiveSessionState,
+) -> Result<ReportPresentation, SessionErrorPayload> {
+    refresh_active_session_report_for_displayed(state, None)
+}
+
+pub(super) fn refresh_active_session_report_for_displayed(
+    state: &ActiveSessionState,
+    displayed_presentation_id: Option<u64>,
 ) -> Result<ReportPresentation, SessionErrorPayload> {
     const MAX_REFRESH_ATTEMPTS: usize = 3;
     let _foreground = state.begin_foreground()?;
@@ -756,22 +807,46 @@ pub(super) fn refresh_active_session_report_for(
 
     for _ in 0..MAX_REFRESH_ATTEMPTS {
         let snapshot = load_snapshot(&source, &bundle_name).map_err(SessionErrorPayload::from)?;
-        if let Some(existing) = state
-            .0
-            .lock()
-            .map_err(|_| {
+        let existing = {
+            let mut active = state.0.lock().map_err(|_| {
                 SessionErrorPayload::report_pipeline("active session state is unavailable")
-            })?
-            .active
-            .as_ref()
-            .filter(|session| session.source == source)
-            .and_then(|session| session.presentation.as_ref())
-            .filter(|presentation| {
-                presentation.revision == snapshot.revision
-                    && presentation.session_id == snapshot.bundle.manifest.session_id
-            })
-            .cloned()
-        {
+            })?;
+            let session = active
+                .active
+                .as_mut()
+                .filter(|session| session.source == source);
+            let session = session.ok_or_else(|| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::Conflict,
+                    "The active session changed while its report was refreshing.",
+                    "the prior coherent presentation remains visible",
+                )
+            })?;
+            let current = session.presentation.as_ref();
+            if let Some(displayed_id) = displayed_presentation_id {
+                let displayed_is_current = current
+                    .is_some_and(|presentation| presentation.presentation_id == displayed_id);
+                let displayed_is_retained = session
+                    .retained_presentation
+                    .as_ref()
+                    .is_some_and(|presentation| presentation.presentation_id == displayed_id);
+                if !displayed_is_current && !displayed_is_retained {
+                    return Err(stale_pending_report_error(
+                        "the displayed report presentation does not belong to the active session",
+                    ));
+                }
+                if displayed_is_current {
+                    session.retained_presentation = None;
+                }
+            }
+            current
+                .filter(|presentation| {
+                    presentation.revision == snapshot.revision
+                        && presentation.session_id == snapshot.bundle.manifest.session_id
+                })
+                .cloned()
+        };
+        if let Some(existing) = existing {
             check_ipc_payload(&existing, REPORT_DOCUMENT_IPC_BYTES, "report_presentation")?;
             return Ok(existing);
         }
@@ -812,6 +887,25 @@ pub(super) fn refresh_active_session_report_for(
                 "The active session changed while its report was refreshing.",
                 "the prior coherent presentation remains visible",
             ));
+        }
+        if let Some(displayed_id) = displayed_presentation_id {
+            let current = session.presentation.as_ref();
+            let displayed_is_current =
+                current.is_some_and(|presentation| presentation.presentation_id == displayed_id);
+            let displayed_is_retained = session
+                .retained_presentation
+                .as_ref()
+                .is_some_and(|presentation| presentation.presentation_id == displayed_id);
+            if !displayed_is_current && !displayed_is_retained {
+                return Err(stale_pending_report_error(
+                    "the displayed report presentation does not belong to the active session",
+                ));
+            }
+            if displayed_is_current {
+                session.retained_presentation = current.cloned();
+            }
+        } else {
+            session.retained_presentation = None;
         }
         presentation.presentation_id = next_id;
         session.summary = summary;
@@ -857,10 +951,12 @@ pub(crate) async fn export_active_session_report(
     format: Option<ReportExportFormat>,
     controller_evidence: Option<ControllerEvidenceHandling>,
     operational_history: Option<OperationalHistoryHandling>,
+    displayed_presentation_id: Option<u64>,
 ) -> Result<ExportReportOutcome, SessionErrorPayload> {
     let format = format.unwrap_or_default();
-    let result = export_active_report_with_selection_and_disclosure(
+    let result = export_active_report_for_presentation_with_selection_and_disclosure(
         state.inner(),
+        displayed_presentation_id,
         format,
         controller_evidence.unwrap_or_default(),
         operational_history.unwrap_or_default(),
@@ -941,16 +1037,19 @@ pub(crate) fn active_session_report(
 #[tauri::command]
 pub(crate) fn refresh_active_session_report(
     state: State<'_, ActiveSessionState>,
+    displayed_presentation_id: Option<u64>,
 ) -> Result<ReportPresentation, SessionErrorPayload> {
-    refresh_active_session_report_for(state.inner()).map_err(|payload| {
-        persist_active_operation_failure(
-            state.inner(),
-            DiagnosticOperationV6::ReportRender,
-            DiagnosticPhaseV6::Render,
-            "report.render_failed",
-            payload,
-        )
-    })
+    refresh_active_session_report_for_displayed(state.inner(), displayed_presentation_id).map_err(
+        |payload| {
+            persist_active_operation_failure(
+                state.inner(),
+                DiagnosticOperationV6::ReportRender,
+                DiagnosticPhaseV6::Render,
+                "report.render_failed",
+                payload,
+            )
+        },
+    )
 }
 
 fn persist_active_operation_failure(

@@ -37,6 +37,7 @@ export function initialState(workflow = "saved") {
       session: null,
       reportPresentationId: 0,
       reportMode: "summary",
+      pendingReportPresentation: null,
       reportStatus: "idle",
       reportError: null,
       reportExportStatus: "idle",
@@ -196,6 +197,7 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     openStatus: "ready",
     session,
     reportMode: reportModeForSession(state, session),
+    pendingReportPresentation: null,
     reportPresentationId: session.presentationId
       ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
     reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
@@ -256,6 +258,7 @@ export function openSessionSucceeded(
     openIntent: intent,
     session,
     reportMode: reportModeForSession(state, session),
+    pendingReportPresentation: null,
     reportPresentationId: session.presentationId
       ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
     reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
@@ -541,6 +544,7 @@ export function wsprLiveImportSucceeded(state, outcome) {
       reportHtml: null,
       summaryHtml: null,
     },
+    pendingReportPresentation: null,
     reportStatus: "unavailable",
     reportError: null,
   };
@@ -904,6 +908,7 @@ export function reportRefreshSucceeded(state, presentation) {
     ...state,
     reportStatus: "ready",
     reportError: null,
+    pendingReportPresentation: null,
     reportPresentationId: presentation.presentationId,
     reportExportStatus: presentationChanged ? "idle" : state.reportExportStatus,
     reportExportPending: presentationChanged ? null : state.reportExportPending,
@@ -922,6 +927,35 @@ export function reportRefreshSucceeded(state, presentation) {
       reportAvailable: true,
     } : state.session,
   };
+}
+
+export function reportRefreshPending(state, presentation) {
+  if (!hasCoherentReport(presentation)) {
+    throw new TypeError("A pending report presentation must contain both immutable document variants.");
+  }
+  if (
+    presentation.sessionId !== undefined
+    && state.session?.sessionId !== undefined
+    && presentation.sessionId !== state.session.sessionId
+  ) {
+    throw new RangeError("A pending report presentation cannot cross active-session identity.");
+  }
+  if (String(presentation.presentationId) === String(state.reportPresentationId)) return state;
+  const existing = state.pendingReportPresentation;
+  if (
+    existing
+    && Number(presentation.presentationId) <= Number(existing.presentationId)
+  ) return state;
+  return {
+    ...state,
+    pendingReportPresentation: presentation,
+    reportError: null,
+  };
+}
+
+export function applyPendingReportPresentation(state) {
+  if (!state.pendingReportPresentation) return state;
+  return reportRefreshSucceeded(state, state.pendingReportPresentation);
 }
 
 export function selectReportMode(state, reportMode) {

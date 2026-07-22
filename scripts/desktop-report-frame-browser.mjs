@@ -408,6 +408,39 @@ try {
   assert.equal(reportHierarchy.sidebarVisible, false);
   assert.equal(reportHierarchy.frameBeginsInReadingPath, true,
     `report frame began at ${reportHierarchy.frameTop}px after the ${reportHierarchy.contentBottom}px reading path`);
+  const pendingUpdate = (await browser(["eval", `(() => {
+    const frame = document.querySelector("[data-report-frame]");
+    const sourceBefore = frame.getAttribute("src");
+    const control = document.querySelector("[data-report-update]");
+    document.querySelector("[data-report-update-revision]").textContent = "Revision 17";
+    control.hidden = false;
+    const toolbarRect = document.querySelector(".report-toolbar").getBoundingClientRect();
+    const controlRect = control.getBoundingClientRect();
+    return {
+      sourceBefore,
+      sourceAfter: frame.getAttribute("src"),
+      controlVisible: control.getClientRects().length > 0,
+      controlWithinToolbar: controlRect.left >= toolbarRect.left
+        && controlRect.right <= toolbarRect.right
+        && controlRect.top >= toolbarRect.top
+        && controlRect.bottom <= toolbarRect.bottom,
+      revision: document.querySelector("[data-report-update-revision]").textContent,
+      action: document.querySelector("[data-report-update-button]").textContent.trim(),
+      summarySelected: document.querySelector('[data-report-mode="summary"]')
+        .getAttribute("aria-pressed"),
+      fullSelected: document.querySelector('[data-report-mode="full_evidence"]')
+        .getAttribute("aria-pressed"),
+    };
+  })()`], { json: true })).result;
+  assert.equal(pendingUpdate.sourceAfter, pendingUpdate.sourceBefore);
+  assert.equal(pendingUpdate.controlVisible, true);
+  assert.equal(pendingUpdate.controlWithinToolbar, true);
+  assert.equal(pendingUpdate.revision, "Revision 17");
+  assert.equal(pendingUpdate.action, "Update report");
+  assert.equal(pendingUpdate.summarySelected, "true");
+  assert.equal(pendingUpdate.fullSelected, "false");
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-pending-update-1120x760.png")]);
+  await browser(["eval", `document.querySelector("[data-report-update]").hidden = true`], { json: true });
   await browser(["wait", "1000"]);
   await browser(["eval", `(() => {
     document.querySelector("[data-report-diagnostics-dialog]").showModal();
@@ -469,8 +502,29 @@ try {
   await browser(["eval", `(() => {
     document.querySelector("[data-report-export-dialog]").close();
     document.querySelector("[data-operational-history-alert]").hidden = true;
+    document.querySelector("[data-report-update]").hidden = false;
   })()`], { json: true });
   await browser(["set", "viewport", "820", "620"]);
+  const compactPendingUpdate = (await browser(["eval", `(() => {
+    const control = document.querySelector("[data-report-update]").getBoundingClientRect();
+    const toolbar = document.querySelector(".report-toolbar").getBoundingClientRect();
+    return {
+      withinToolbar: control.left >= toolbar.left
+        && control.right <= toolbar.right
+        && control.top >= toolbar.top
+        && control.bottom <= toolbar.bottom,
+      withinViewport: control.left >= 0 && control.right <= innerWidth,
+      summarySelected: document.querySelector('[data-report-mode="summary"]')
+        .getAttribute("aria-pressed"),
+    };
+  })()`], { json: true })).result;
+  assert.deepEqual(compactPendingUpdate, {
+    withinToolbar: true,
+    withinViewport: true,
+    summarySelected: "true",
+  });
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-pending-update-820x620.png")]);
+  await browser(["eval", `document.querySelector("[data-report-update]").hidden = true`], { json: true });
   await browser(["screenshot", resolve("target/desktop-report-browser/report-workspace-820x620.png")]);
   const narrowHistory = (await browser(["eval", `(() => {
     const diagnostics = document.querySelector("[data-report-diagnostics-dialog]");

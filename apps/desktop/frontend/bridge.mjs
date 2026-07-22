@@ -46,8 +46,9 @@ export function invokeActiveSessionReport(invoke) {
   return invoke("active_session_report");
 }
 
-export function invokeRefreshActiveSessionReport(invoke) {
-  return invoke("refresh_active_session_report");
+export function invokeRefreshActiveSessionReport(invoke, displayedPresentationId) {
+  if (displayedPresentationId === undefined) return invoke("refresh_active_session_report");
+  return invoke("refresh_active_session_report", { displayedPresentationId });
 }
 
 export function invokeExportActiveSessionReport(
@@ -55,8 +56,17 @@ export function invokeExportActiveSessionReport(
   format,
   controllerEvidence = "complete",
   operationalHistory = "omitted",
+  displayedPresentationId,
 ) {
-  return invoke("export_active_session_report", { format, controllerEvidence, operationalHistory });
+  const payload = {
+    format,
+    controllerEvidence,
+    operationalHistory,
+  };
+  if (displayedPresentationId !== undefined) {
+    payload.displayedPresentationId = displayedPresentationId;
+  }
+  return invoke("export_active_session_report", payload);
 }
 
 export function invokeConfirmReportExport(invoke, pendingExportId) {

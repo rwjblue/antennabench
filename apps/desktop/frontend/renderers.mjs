@@ -868,6 +868,7 @@ export function renderReport(elements, state, reportDocuments) {
     reportStatus, reportPanelHeading, reportPlaceholder, reportViewer, reportFrame,
     reportSavedButton, reportActiveRunButton, reportRefreshButton,
     reportSummaryModeButton, reportFullModeButton,
+    reportUpdateControl, reportUpdateRevision, reportUpdateButton,
     reportSummaryExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
     reportBundleName, reportRevision, reportExportRevision, reportSummary, reportControllerOptions,
     reportControllerHandling,
@@ -885,6 +886,12 @@ export function renderReport(elements, state, reportDocuments) {
   reportPanelHeading.hidden = readingActive;
   const reportBusy = state.reportStatus === "refreshing"
     || ["loading", "confirming", "replacing", "cancelling"].includes(state.reportExportStatus);
+  const pendingPresentation = state.pendingReportPresentation;
+  reportUpdateControl.hidden = !pendingPresentation;
+  reportUpdateRevision.textContent = pendingPresentation
+    ? `Revision ${pendingPresentation.revision ?? "legacy"}`
+    : "";
+  reportUpdateButton.disabled = reportBusy || !pendingPresentation;
   reportStatus.textContent = state.reportStatus === "refreshing"
     ? "Refreshing"
     : hasReport

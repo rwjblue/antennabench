@@ -163,6 +163,7 @@ pub(super) struct ActiveSession {
     pub(super) live_projection: Option<BundleV3Contents>,
     pub(super) summary: OpenedSession,
     pub(super) presentation: Option<ReportPresentation>,
+    pub(super) retained_presentation: Option<ReportPresentation>,
 }
 
 pub(crate) fn active_session_live_projection(

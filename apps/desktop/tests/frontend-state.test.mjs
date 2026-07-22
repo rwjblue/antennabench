@@ -89,6 +89,7 @@ import {
   beginWsjtxAction,
   beginWsprLiveAcquisition,
   beginWsprLiveImport,
+  applyPendingReportPresentation,
   conductorLoadSucceeded,
   conductorMutationFailed,
   conductorPollSucceeded,
@@ -117,6 +118,7 @@ import {
   reportExportConfirmationRequired,
   reportExportSucceeded,
   reportRefreshFailed,
+  reportRefreshPending,
   reportRefreshSucceeded,
   reportRefreshSuperseded,
   rbnImportCancelled,
@@ -275,6 +277,7 @@ test("the shell starts in saved sessions", () => {
     session: null,
     reportPresentationId: 0,
     reportMode: "summary",
+    pendingReportPresentation: null,
     reportStatus: "idle",
     reportError: null,
     reportExportStatus: "idle",
@@ -1584,6 +1587,58 @@ test("report mode switching carries a bounded reading-position hint", () => {
   };
   restore();
   assert.equal(focused, true);
+});
+
+test("background report presentations coalesce and apply atomically", () => {
+  const displayed = openSessionSucceeded(initialState("report"), {
+    sessionId: "session-1",
+    presentationId: 10,
+    revision: 10,
+    reportHtml: "full 10",
+    summaryHtml: "summary 10",
+  });
+  const revision11 = {
+    sessionId: "session-1",
+    presentationId: 11,
+    revision: 11,
+    reportHtml: "full 11",
+    summaryHtml: "summary 11",
+  };
+  const revision12 = {
+    ...revision11,
+    presentationId: 12,
+    revision: 12,
+    reportHtml: "full 12",
+    summaryHtml: "summary 12",
+  };
+
+  const pending11 = reportRefreshPending(displayed, revision11);
+  assert.equal(pending11.reportPresentationId, 10);
+  assert.equal(pending11.session.reportHtml, "full 10");
+  assert.equal(pending11.pendingReportPresentation, revision11);
+  assert.equal(reportRefreshPending(pending11, revision11), pending11);
+  const pending12 = reportRefreshPending(pending11, revision12);
+  assert.equal(pending12.pendingReportPresentation, revision12);
+  assert.equal(
+    reportRefreshPending(pending12, revision11),
+    pending12,
+    "an older background result cannot replace the newest pending presentation",
+  );
+
+  const fullMode = selectReportMode(pending12, "full_evidence");
+  assert.equal(fullMode.pendingReportPresentation, revision12);
+  const applied = applyPendingReportPresentation(fullMode);
+  assert.equal(applied.reportPresentationId, 12);
+  assert.equal(applied.session.reportHtml, "full 12");
+  assert.equal(applied.session.summaryHtml, "summary 12");
+  assert.equal(applied.reportMode, "full_evidence");
+  assert.equal(applied.pendingReportPresentation, null);
+  assert.equal(applyPendingReportPresentation(applied), applied);
+
+  assert.throws(
+    () => reportRefreshPending(displayed, { ...revision11, sessionId: "session-2" }),
+    /cannot cross active-session identity/u,
+  );
 });
 
 test("revision-keyed report refresh retains coherent prior output on failure and export state", () => {

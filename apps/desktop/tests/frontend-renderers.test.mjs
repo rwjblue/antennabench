@@ -736,6 +736,18 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.reportControllerOptions.hidden, true);
   assert.equal(e.reportControllerHandling.value, "complete");
 
+  state.pendingReportPresentation = {
+    presentationId: 4,
+    revision: 4,
+    reportHtml: "<p>four full</p>",
+    summaryHtml: "<p>four summary</p>",
+  };
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportUpdateControl.hidden, false);
+  assert.equal(e.reportUpdateRevision.textContent, "Revision 4");
+  assert.equal(e.reportUpdateButton.disabled, false);
+  assert.equal(e.reportFrame.getAttribute("src"), "blob:report-1");
+
   state.reportMode = "full_evidence";
   renderReport(e, state, reportDocuments);
   assert.equal(e.reportFrame.getAttribute("src"), "blob:report-2");

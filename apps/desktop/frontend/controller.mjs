@@ -88,7 +88,9 @@ import {
   reportExportConfirmationRequired,
   reportExportFailed,
   reportExportSucceeded,
+  applyPendingReportPresentation,
   reportRefreshFailed,
+  reportRefreshPending,
   reportRefreshSucceeded,
   reportRefreshSuperseded,
   requestSkipCycle,
@@ -227,6 +229,19 @@ export function createDesktopController(options = {}) {
       if (!state.session?.reportHtml || !state.session?.summaryHtml) return state;
       const nextState = transitionReportMode(state, reportMode);
       if (nextState !== state) commit(nextState);
+      return state;
+    },
+
+    async applyReportUpdate() {
+      if (reportPollInFlight) await reportPollInFlight;
+      if (
+        !state.pendingReportPresentation
+        || state.reportStatus === "refreshing"
+        || ["loading", "confirming", "replacing", "cancelling"].includes(
+          state.reportExportStatus,
+        )
+      ) return state;
+      commit(applyPendingReportPresentation(state));
       return state;
     },
 
@@ -568,13 +583,18 @@ export function createDesktopController(options = {}) {
             }), REPORT_REFRESH_WATCHDOG_MS);
           });
           const presentation = await Promise.race([
-            invokeRefreshActiveSessionReport(invoke()),
+            invokeRefreshActiveSessionReport(invoke(), state.reportPresentationId),
             timeout,
           ]);
           if (!isApplicable()) return;
           const changed = String(presentation.presentationId)
             !== String(request.previousPresentationId);
-          if (!silent || changed) commit(reportRefreshSucceeded(state, presentation));
+          if (!silent) {
+            commit(reportRefreshSucceeded(state, presentation));
+          } else if (changed) {
+            const nextState = reportRefreshPending(state, presentation);
+            if (nextState !== state) commit(nextState);
+          }
         } catch (error) {
           if (isApplicable()) commit(reportRefreshFailed(state, error));
         } finally {
@@ -609,7 +629,7 @@ export function createDesktopController(options = {}) {
       commit(beginReportExport(state));
       try {
         const outcome = await invokeExportActiveSessionReport(
-          invoke(), format, controllerEvidence, operationalHistory,
+          invoke(), format, controllerEvidence, operationalHistory, state.reportPresentationId,
         );
         if (outcome.status === "cancelled") {
           commit(reportExportCancelled(state));
