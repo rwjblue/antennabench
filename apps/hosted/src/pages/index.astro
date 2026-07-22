@@ -23,7 +23,7 @@ const description = "AntennaBench is a local-first macOS app for repeatable WSPR
           keeps the limits visible beside the result.
         </p>
         <div class="button-row">
-          <a class="button button-primary" href="/sample-report/">Explore the sample report</a>
+          <a class="button button-primary" href="/sample-report/summary/">Read the Summary</a>
           <a class="button button-secondary" href="/how-it-works/">See how it works</a>
         </div>
         <ul class="trust-list" aria-label="Product boundaries">
@@ -109,24 +109,28 @@ const description = "AntennaBench is a local-first macOS app for repeatable WSPR
     <div class="shell report-grid">
       <div class="report-copy">
         <p class="eyebrow">A real generated report</p>
-        <h2 id="report-title">The result and the reasons to trust—or limit—it</h2>
+        <h2 id="report-title">Start with the answer. Keep the evidence close.</h2>
         <p>
-          Reports compare the same remote paths, separate unmatched reach evidence, show
-          switching and timing context, and retain excluded or conflicting records. A
-          missing decode never quietly becomes a zero-strength measurement.
+          Summary is the ordinary reading and sharing path. It leads with what the run
+          showed, keeps each evidence population separate, and puts support counts and the
+          principal limitation beside the result.
         </p>
         <ul class="check-list">
-          <li>One median difference per unique matched path</li>
-          <li>Coverage, imbalance, and acquisition limitations</li>
-          <li>Complete audit evidence in the full report and bundle</li>
-          <li>No automatic winner or universal gain claim</li>
+          <li>Paired shared-path signal with explicit support</li>
+          <li>Common-opportunity detection kept separate from observed reach</li>
+          <li>Uncontrolled paths described without turning missing spots into zeroes</li>
+          <li>Full evidence available for the complete human-readable audit</li>
         </ul>
-        <a class="button button-dark" href="/sample-report/">Open the canonical sample</a>
+        <div class="button-row report-actions">
+          <a class="button button-dark" href="/sample-report/summary/">Read the Summary</a>
+          <a class="button button-secondary" href="/sample-report/">Open Full evidence</a>
+        </div>
         <p class="fine-print">
-          Generated from a real, sanitized station session by the same trusted Rust renderer
-          used for local reports. <a href="/sample-report/summary/">Read the Summary</a>
-          or review an <a href="/sample-report/inconclusive/">honest inconclusive run</a> with
-          no matched paths.
+          Both documents are generated from one real, sanitized station session. They are
+          derived views; the lossless session bundle remains the durable record. This site
+          does not accept uploads or host operator reports. You can also
+          <a href="/sample-report/inconclusive/">see an inconclusive example</a> with no
+          shared paths.
         </p>
       </div>
       <ReportPreview />

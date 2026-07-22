@@ -15,15 +15,20 @@ const inconclusiveFixture = join(
 const samples = [
   {
     relativeOutput: join("sample-report", "index.html"),
-    rendererArguments: [],
+    rendererArguments: ["--public-metadata", "full"],
   },
   {
     relativeOutput: join("sample-report", "summary", "index.html"),
-    rendererArguments: ["--summary"],
+    rendererArguments: ["--summary", "--public-metadata", "summary"],
   },
   {
     relativeOutput: join("sample-report", "inconclusive", "index.html"),
-    rendererArguments: ["--bundle", inconclusiveFixture],
+    rendererArguments: [
+      "--bundle",
+      inconclusiveFixture,
+      "--public-metadata",
+      "inconclusive",
+    ],
   },
 ];
 const check = process.argv.slice(2).includes("--check");

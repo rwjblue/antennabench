@@ -108,6 +108,9 @@ for (const expected of [
   "how-it-works/index.html",
   "why-wspr/index.html",
   "sample-report/index.html",
+  "sample-report/summary/index.html",
+  "sample-report/compact/index.html",
+  "sample-report/inconclusive/index.html",
   "robots.txt",
   "sitemap.xml",
   "favicon.svg",
@@ -169,8 +172,33 @@ assertInternalLinks(htmlFiles);
 const home = readFileSync(join(outputRoot, "index.html"), "utf8");
 invariant(home.includes('class="skip-link"'), "Home page is missing its keyboard skip link");
 invariant(home.includes('aria-label="Main navigation"'), "Home page is missing its navigation label");
-invariant(home.includes('title="AntennaBench canonical sample evidence report"'), "Report preview is missing its accessible title");
+invariant(home.includes('href="/sample-report/summary/">Read the Summary</a>'), "Home primary report action does not open Summary");
+invariant(home.includes('src="/sample-report/summary/"'), "Home report preview does not show Summary");
+invariant(home.includes('title="AntennaBench canonical sample Summary"'), "Summary preview is missing its accessible title");
+invariant(home.includes('href="/sample-report/">Open Full evidence</a>'), "Home page is missing prominent Full evidence access");
+invariant(home.includes('href="/sample-report/inconclusive/">see an inconclusive example</a>'), "Home page is missing the inconclusive teaching example");
+for (const boundary of [
+  "Local-first",
+  "No account required",
+  "does not accept uploads or host operator reports",
+  "Early preview",
+  "session bundle remains the durable record",
+]) {
+  invariant(home.includes(boundary), `Home page is missing its product boundary: ${boundary}`);
+}
 invariant(home.includes('href="/why-wspr/"'), "Home page is missing the WSPR and RBN explanation link");
+
+const sitemap = readFileSync(join(outputRoot, "sitemap.xml"), "utf8");
+invariant(
+  sitemap.includes("https://antennabench.com/sample-report/summary/") &&
+    sitemap.includes("https://antennabench.com/sample-report/") &&
+    sitemap.includes("https://antennabench.com/sample-report/inconclusive/"),
+  "Sitemap is missing a public sample route",
+);
+invariant(
+  !sitemap.includes("https://antennabench.com/sample-report/compact/"),
+  "Summary compatibility route must not appear in the sitemap",
+);
 
 const whyWspr = readFileSync(join(outputRoot, "why-wspr", "index.html"), "utf8");
 for (const networkChoiceContract of [
@@ -283,7 +311,7 @@ invariant(
   "React is reserved for the later authenticated application",
 );
 
-const canonicalSample = read("apps/hosted/public/sample-report/index.html");
+const fullEvidenceSample = read("apps/hosted/public/sample-report/index.html");
 for (const reportContract of [
   "What did the run show?",
   "Answered by this run: Shared-path signal",
@@ -295,16 +323,16 @@ for (const reportContract of [
   "does not select an antenna winner",
 ]) {
   invariant(
-    canonicalSample.includes(reportContract),
-    `Canonical sample is missing the report contract: ${reportContract}`,
+    fullEvidenceSample.includes(reportContract),
+    `Full evidence sample is missing the report contract: ${reportContract}`,
   );
 }
 invariant(
-  canonicalSample.includes('id="same-path-signal"') &&
-    canonicalSample.includes('href="#same-path-signal"'),
-  "Available shared-path evidence must lead canonical sample navigation",
+  fullEvidenceSample.includes('id="same-path-signal"') &&
+    fullEvidenceSample.includes('href="#same-path-signal"'),
+  "Available shared-path evidence must lead Full evidence navigation",
 );
-invariant(!/<script\b/i.test(canonicalSample), "Canonical sample must remain standalone and script-free");
+invariant(!/<script\b/i.test(fullEvidenceSample), "Full evidence sample must remain standalone and script-free");
 
 const summarySample = read("apps/hosted/public/sample-report/summary/index.html");
 for (const reportContract of [
@@ -319,6 +347,29 @@ for (const reportContract of [
   );
 }
 invariant(!/<script\b/i.test(summarySample), "Summary sample must remain standalone and script-free");
+for (const [name, html, canonicalUrl, socialTitle] of [
+  [
+    "Full evidence",
+    fullEvidenceSample,
+    "https://antennabench.com/sample-report/",
+    "AntennaBench Full evidence — Canonical sample",
+  ],
+  [
+    "Summary",
+    summarySample,
+    "https://antennabench.com/sample-report/summary/",
+    "AntennaBench Summary — Canonical sample",
+  ],
+]) {
+  invariant(
+    html.includes(`<link rel="canonical" href="${canonicalUrl}">`) &&
+      html.includes(`<meta property="og:url" content="${canonicalUrl}">`) &&
+      html.includes(`<meta property="og:title" content="${socialTitle}">`) &&
+      html.includes('<meta name="twitter:card" content="summary_large_image">') &&
+      html.includes('content="https://antennabench.com/social-card.png"'),
+    `${name} sample is missing canonical or social metadata`,
+  );
+}
 const summaryCompatibilityRedirect = read("apps/hosted/public/sample-report/compact/index.html");
 invariant(
   summaryCompatibilityRedirect.includes("url=/sample-report/summary/") &&
@@ -351,6 +402,14 @@ invariant(
 invariant(
   !/<script\b/i.test(inconclusiveSample),
   "Inconclusive sample must remain standalone and script-free",
+);
+invariant(
+  inconclusiveSample.includes(
+    '<link rel="canonical" href="https://antennabench.com/sample-report/inconclusive/">',
+  ) && inconclusiveSample.includes(
+    '<meta property="og:title" content="AntennaBench Full evidence — Inconclusive sample">',
+  ),
+  "Inconclusive sample is missing canonical or social metadata",
 );
 
 const deployedMark = read("apps/hosted/public/mark.svg");

@@ -4,8 +4,8 @@ const paths = [
   "/",
   "/how-it-works/",
   "/why-wspr/",
-  "/sample-report/",
   "/sample-report/summary/",
+  "/sample-report/",
   "/sample-report/inconclusive/",
 ];
 

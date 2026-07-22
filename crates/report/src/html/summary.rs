@@ -16,19 +16,36 @@ use super::{
     styles::{stylesheet_csp_source, write_stylesheet_to_html, StylesheetVariant},
     templates::{
         render_template, BodyStartTemplate, DocumentEndTemplate, DocumentStartTemplate,
-        SummaryHeaderTemplate, SummaryQualityTemplate, SummaryReferenceTemplate,
+        PublicDocumentStartTemplate, SummaryHeaderTemplate, SummaryQualityTemplate,
+        SummaryReferenceTemplate,
     },
     view::{SummaryQualityFactView, SummaryQualityView, SummaryReferenceView},
+    HtmlDocumentMetadata,
 };
 
 /// Renders a concise, deterministic, standalone HTML summary from the same
 /// renderer-neutral report revision as the full evidence report. It intentionally
 /// omits the audit appendix and never recomputes or reinterprets report facts.
 pub fn render_summary_html(report: &SessionReport) -> Result<String, ReportError> {
-    render_summary_html_with_resources(
+    render_summary_html_document(
         report,
         REPORT_RESOURCE_LIMITS,
         &ReportCancellationToken::default(),
+        None,
+    )
+}
+
+/// Renders the same standalone Summary with optional public-page discovery
+/// metadata while preserving the script-free and offline document boundary.
+pub fn render_summary_html_with_metadata(
+    report: &SessionReport,
+    metadata: &HtmlDocumentMetadata,
+) -> Result<String, ReportError> {
+    render_summary_html_document(
+        report,
+        REPORT_RESOURCE_LIMITS,
+        &ReportCancellationToken::default(),
+        Some(metadata),
     )
 }
 
@@ -37,17 +54,41 @@ pub fn render_summary_html_with_resources(
     limits: ReportResourceLimits,
     cancellation: &ReportCancellationToken,
 ) -> Result<String, ReportError> {
+    render_summary_html_document(report, limits, cancellation, None)
+}
+
+fn render_summary_html_document(
+    report: &SessionReport,
+    limits: ReportResourceLimits,
+    cancellation: &ReportCancellationToken,
+    metadata: Option<&HtmlDocumentMetadata>,
+) -> Result<String, ReportError> {
     check_cancelled(cancellation, ReportResourceStage::Render, "summary_html")?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
     let stylesheet_variant = StylesheetVariant::Summary;
     let style_source = stylesheet_csp_source(stylesheet_variant);
-    render_template(
-        &mut out,
-        &DocumentStartTemplate {
-            title: "AntennaBench Summary",
-            style_source: &style_source,
-        },
-    )?;
+    if let Some(metadata) = metadata {
+        render_template(
+            &mut out,
+            &PublicDocumentStartTemplate {
+                title: "AntennaBench Summary",
+                style_source: &style_source,
+                canonical_url: &metadata.canonical_url,
+                description: &metadata.description,
+                social_title: &metadata.social_title,
+                social_image_url: &metadata.social_image_url,
+                social_image_alt: &metadata.social_image_alt,
+            },
+        )?;
+    } else {
+        render_template(
+            &mut out,
+            &DocumentStartTemplate {
+                title: "AntennaBench Summary",
+                style_source: &style_source,
+            },
+        )?;
+    }
     let summary_main_class = if report.overview.strata.len() <= 2
         && report
             .overview

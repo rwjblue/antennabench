@@ -34,6 +34,18 @@ pub(super) struct DocumentStartTemplate<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "report/public_document_start.html")]
+pub(super) struct PublicDocumentStartTemplate<'a> {
+    pub(super) title: &'a str,
+    pub(super) style_source: &'a str,
+    pub(super) canonical_url: &'a str,
+    pub(super) description: &'a str,
+    pub(super) social_title: &'a str,
+    pub(super) social_image_url: &'a str,
+    pub(super) social_image_alt: &'a str,
+}
+
+#[derive(Template)]
 #[template(path = "report/body_start.html")]
 pub(super) struct BodyStartTemplate<'a> {
     pub(super) main_class: &'a str,

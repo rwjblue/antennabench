@@ -113,4 +113,21 @@ describe("public project site contracts", () => {
     expect(doc).toContain("BEGIN GENERATED RECEIVER SNAPSHOT");
     expect(doc).toContain("END GENERATED RECEIVER SNAPSHOT");
   });
+
+  it("makes Summary the public entry while retaining the evidence paths", () => {
+    const home = read("../src/pages/index.astro");
+    const preview = read("../src/components/ReportPreview.astro");
+    const sitemap = read("../src/pages/sitemap.xml.ts");
+
+    expect(home).toContain('href="/sample-report/summary/">Read the Summary</a>');
+    expect(home).toContain('href="/sample-report/">Open Full evidence</a>');
+    expect(home).toContain('href="/sample-report/inconclusive/"');
+    expect(home).toContain("session bundle remains the durable record");
+    expect(home).toContain("does not accept uploads or host operator reports");
+    expect(preview).toContain('src="/sample-report/summary/"');
+    expect(preview).toContain("Real canonical sample · Summary");
+    expect(sitemap).toContain('"/sample-report/summary/"');
+    expect(sitemap).toContain('"/sample-report/"');
+    expect(sitemap).toContain('"/sample-report/inconclusive/"');
+  });
 });

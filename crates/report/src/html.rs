@@ -15,7 +15,9 @@ mod summary;
 mod templates;
 mod view;
 
-pub use summary::{render_summary_html, render_summary_html_with_resources};
+pub use summary::{
+    render_summary_html, render_summary_html_with_metadata, render_summary_html_with_resources,
+};
 
 use audit::render_audit_appendix;
 use questions::{
@@ -28,7 +30,7 @@ use shared::CheckedHtmlWriter;
 use styles::{stylesheet_csp_source, write_stylesheet_to_html, StylesheetVariant};
 use templates::{
     render_template, BodyStartTemplate, DocumentEndTemplate, DocumentStartTemplate,
-    FullHeaderTemplate, OperationalHistoryTemplate,
+    FullHeaderTemplate, OperationalHistoryTemplate, PublicDocumentStartTemplate,
 };
 use view::{FullHeaderView, OperationalHistoryView};
 
@@ -45,6 +47,15 @@ pub struct StandaloneHtmlOptions {
     pub controller_evidence: ControllerEvidenceHandling,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HtmlDocumentMetadata {
+    pub canonical_url: String,
+    pub description: String,
+    pub social_title: String,
+    pub social_image_url: String,
+    pub social_image_alt: String,
+}
+
 /// Renders a deterministic, standalone HTML document from renderer-neutral
 /// report data. The output contains no scripts, external resources, or
 /// unescaped report strings.
@@ -54,6 +65,24 @@ pub fn render_standalone_html(report: &SessionReport) -> Result<String, ReportEr
         StandaloneHtmlOptions::default(),
         REPORT_RESOURCE_LIMITS,
         &ReportCancellationToken::default(),
+    )
+}
+
+/// Renders the same standalone Full evidence document with optional public-page
+/// discovery metadata. Metadata is escaped as inert head content and does not
+/// change the report facts, stylesheet authorization, or runtime-resource
+/// boundary.
+pub fn render_standalone_html_with_metadata(
+    report: &SessionReport,
+    metadata: &HtmlDocumentMetadata,
+) -> Result<String, ReportError> {
+    render_standalone_html_document(
+        report,
+        StandaloneHtmlOptions::default(),
+        REPORT_RESOURCE_LIMITS,
+        &ReportCancellationToken::default(),
+        None,
+        Some(metadata),
     )
 }
 
@@ -85,6 +114,7 @@ pub fn render_standalone_html_with_operational_history(
         REPORT_RESOURCE_LIMITS,
         &ReportCancellationToken::default(),
         Some(redacted_support_summary),
+        None,
     )
 }
 
@@ -107,7 +137,7 @@ pub fn render_standalone_html_with_options_and_resources(
     limits: ReportResourceLimits,
     cancellation: &ReportCancellationToken,
 ) -> Result<String, ReportError> {
-    render_standalone_html_document(report, options, limits, cancellation, None)
+    render_standalone_html_document(report, options, limits, cancellation, None, None)
 }
 
 fn render_standalone_html_document(
@@ -116,18 +146,34 @@ fn render_standalone_html_document(
     limits: ReportResourceLimits,
     cancellation: &ReportCancellationToken,
     operational_history: Option<&str>,
+    metadata: Option<&HtmlDocumentMetadata>,
 ) -> Result<String, ReportError> {
     check_cancelled(cancellation, ReportResourceStage::Render, "standalone_html")?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
     let stylesheet_variant = StylesheetVariant::Full;
     let style_source = stylesheet_csp_source(stylesheet_variant);
-    render_template(
-        &mut out,
-        &DocumentStartTemplate {
-            title: "AntennaBench session report",
-            style_source: &style_source,
-        },
-    )?;
+    if let Some(metadata) = metadata {
+        render_template(
+            &mut out,
+            &PublicDocumentStartTemplate {
+                title: "AntennaBench session report",
+                style_source: &style_source,
+                canonical_url: &metadata.canonical_url,
+                description: &metadata.description,
+                social_title: &metadata.social_title,
+                social_image_url: &metadata.social_image_url,
+                social_image_alt: &metadata.social_image_alt,
+            },
+        )?;
+    } else {
+        render_template(
+            &mut out,
+            &DocumentStartTemplate {
+                title: "AntennaBench session report",
+                style_source: &style_source,
+            },
+        )?;
+    }
     write_stylesheet_to_html(&mut out, stylesheet_variant);
     render_template(&mut out, &BodyStartTemplate { main_class: "" })?;
 

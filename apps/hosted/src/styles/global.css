@@ -621,6 +621,10 @@ p {
   font-size: 0.77rem;
 }
 
+.report-actions {
+  margin-top: 1.45rem;
+}
+
 .report-preview {
   overflow: hidden;
   border: 1px solid rgb(16 43 43 / 18%);

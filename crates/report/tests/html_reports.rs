@@ -12,15 +12,16 @@ use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
 };
 use antennabench_report::{
-    build_report, render_standalone_html, render_standalone_html_with_operational_history,
-    render_standalone_html_with_options, render_summary_html, ControllerEvidenceHandling,
-    ReportAcquisitionWorkflowStatus, ReportAdapterEvidence, ReportAntennaControlAttempt,
-    ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection, ReportEventCorrectionAction,
-    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
-    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLimitation,
-    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportProviderCompleteness,
-    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
-    SamePathSignalAnswerability, SessionReport, StandaloneHtmlOptions,
+    build_report, render_standalone_html, render_standalone_html_with_metadata,
+    render_standalone_html_with_operational_history, render_standalone_html_with_options,
+    render_summary_html, render_summary_html_with_metadata, ControllerEvidenceHandling,
+    HtmlDocumentMetadata, ReportAcquisitionWorkflowStatus, ReportAdapterEvidence,
+    ReportAntennaControlAttempt, ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection,
+    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
+    ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
+    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
+    ReportProviderCompleteness, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
+    ReportWsprReadinessBasis, SamePathSignalAnswerability, SessionReport, StandaloneHtmlOptions,
 };
 use antennabench_storage::BundleStore;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -114,6 +115,47 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
     document.assert_present("details.audit-disclosure");
     assert!(first.contains("details:not([open]) > :not(summary) {\n    display: none !important;"));
     assert!(first.contains("break-after: page"));
+}
+
+#[test]
+fn public_discovery_metadata_is_optional_escaped_and_fact_neutral() {
+    let report = canonical_report();
+    let metadata = HtmlDocumentMetadata {
+        canonical_url: "https://antennabench.com/sample-report/summary/".to_string(),
+        description: "Answer first & keep <limits> visible.".to_string(),
+        social_title: "AntennaBench Summary".to_string(),
+        social_image_url: "https://antennabench.com/social-card.png".to_string(),
+        social_image_alt: "AntennaBench evidence".to_string(),
+    };
+
+    let plain_full = render_standalone_html(&report).unwrap();
+    let public_full = render_standalone_html_with_metadata(&report, &metadata).unwrap();
+    let plain_summary = render_summary_html(&report).unwrap();
+    let public_summary = render_summary_html_with_metadata(&report, &metadata).unwrap();
+
+    for plain in [&plain_full, &plain_summary] {
+        assert!(!plain.contains("rel=\"canonical\""));
+        assert!(!plain.contains("property=\"og:title\""));
+    }
+    for public in [&public_full, &public_summary] {
+        assert!(public.contains(
+            "<link rel=\"canonical\" href=\"https://antennabench.com/sample-report/summary/\">"
+        ));
+        assert!(public.contains("<meta property=\"og:title\" content=\"AntennaBench Summary\">"));
+        assert!(public.contains("Answer first &#38; keep &#60;limits&#62; visible."));
+        assert!(!public.contains("<limits>"));
+        assert!(!public.contains("<script"));
+    }
+    assert_eq!(
+        plain_full.split("<style>").nth(1),
+        public_full.split("<style>").nth(1),
+        "public metadata must not change Full evidence body or styles"
+    );
+    assert_eq!(
+        plain_summary.split("<style>").nth(1),
+        public_summary.split("<style>").nth(1),
+        "public metadata must not change Summary body or styles"
+    );
 }
 
 #[test]
