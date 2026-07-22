@@ -1,0 +1,75 @@
+:root {
+  color: #173131;
+  background: #e7ece8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+
+body { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+
+.reader-identity {
+  display: grid;
+  grid-template-columns: minmax(190px, .7fr) minmax(360px, 1.3fr);
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #c6d3cc;
+  background: #f3f7f4;
+  box-shadow: 0 3px 14px rgba(34, 59, 54, .08);
+}
+
+.reader-heading p,
+.reader-heading h1,
+.reader-identity dl,
+.reader-identity dd { margin: 0; }
+
+.reader-heading p,
+.reader-identity dt {
+  color: #688078;
+  font-size: .63rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.reader-heading h1 { margin-top: 3px; color: #214e4b; font-size: 1.25rem; }
+
+.reader-identity dl { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(100px, .7fr) minmax(125px, .8fr); gap: 15px; }
+.reader-identity dl div { min-width: 0; }
+.reader-identity dd { margin-top: 3px; overflow: hidden; font-size: .76rem; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
+
+main { position: relative; min-height: 0; }
+iframe { display: block; width: 100%; height: 100%; border: 0; background: #f5f7fb; }
+
+.reader-error {
+  position: absolute;
+  z-index: 1;
+  inset: 24px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  border: 1px solid #dfaaa4;
+  border-radius: 14px;
+  color: #872f28;
+  background: #fff6f4;
+  text-align: center;
+}
+
+[hidden] { display: none !important; }
+
+@media (max-width: 760px) {
+  .reader-identity { grid-template-columns: 1fr; gap: 10px; }
+  .reader-identity dl { grid-template-columns: minmax(0, 1.3fr) minmax(95px, .7fr); }
+  .reader-identity dl div:last-child { grid-column: 1 / -1; }
+}
+
+@media print {
+  body { display: block; overflow: visible; }
+  .reader-identity { display: none; }
+  main, iframe { width: 100%; height: 100%; }
+}

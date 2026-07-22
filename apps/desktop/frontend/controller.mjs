@@ -19,6 +19,7 @@ import {
   invokeListManagedSessions,
   invokeMutateSessionConductor,
   invokeOpenManagedSession,
+  invokeOpenReportWindow,
   invokeRefreshActiveSessionReport,
   invokeRevealManagedSession,
   invokeRevealManagedSessionsDirectory,
@@ -50,6 +51,7 @@ import {
   beginReportExportCancellation,
   beginReportReplacement,
   beginReportRefresh,
+  beginReportWindowOpen,
   beginSkipCycleMutation,
   beginSupportSummaryCopy,
   beginRbnImport,
@@ -93,6 +95,8 @@ import {
   reportRefreshPending,
   reportRefreshSucceeded,
   reportRefreshSuperseded,
+  reportWindowOpenFailed,
+  reportWindowOpenSucceeded,
   requestSkipCycle,
   selectReportMode as transitionReportMode,
   selectWorkflow,
@@ -646,6 +650,29 @@ export function createDesktopController(options = {}) {
         }
       } catch (error) {
         commit(reportExportFailed(state, error));
+      }
+      return state;
+    },
+
+    async openReportWindow() {
+      if (
+        !state.session?.reportHtml
+        || !state.session?.summaryHtml
+        || state.reportWindowStatus === "loading"
+      ) return state;
+      commit(beginReportWindowOpen(state));
+      try {
+        const outcome = await invokeOpenReportWindow(
+          invoke(),
+          state.reportPresentationId,
+          state.reportMode,
+        );
+        if (!["created", "focused"].includes(outcome.status) || !outcome.windowLabel) {
+          throw unexpectedResponse();
+        }
+        commit(reportWindowOpenSucceeded(state, outcome));
+      } catch (error) {
+        commit(reportWindowOpenFailed(state, error));
       }
       return state;
     },

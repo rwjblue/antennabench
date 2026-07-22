@@ -139,6 +139,8 @@ fn main() {
         "export_active_session_report",
         "active_session_report",
         "refresh_active_session_report",
+        "open_report_window",
+        "report_window_document",
         "active_session_conductor",
         "mutate_active_session_conductor",
         "active_session_wsjtx_status",

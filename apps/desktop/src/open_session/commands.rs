@@ -369,7 +369,7 @@ where
     }
 }
 
-fn presentation_for_id(
+pub(super) fn presentation_for_id(
     session: &ActiveSession,
     presentation_id: u64,
 ) -> Option<&ReportPresentation> {

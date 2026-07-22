@@ -38,6 +38,9 @@ export function initialState(workflow = "saved") {
       reportPresentationId: 0,
       reportMode: "summary",
       pendingReportPresentation: null,
+      reportWindowStatus: "idle",
+      reportWindowError: null,
+      reportWindowNotice: null,
       reportStatus: "idle",
       reportError: null,
       reportExportStatus: "idle",
@@ -198,6 +201,9 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     session,
     reportMode: reportModeForSession(state, session),
     pendingReportPresentation: null,
+    reportWindowStatus: "idle",
+    reportWindowError: null,
+    reportWindowNotice: null,
     reportPresentationId: session.presentationId
       ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
     reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
@@ -259,6 +265,9 @@ export function openSessionSucceeded(
     session,
     reportMode: reportModeForSession(state, session),
     pendingReportPresentation: null,
+    reportWindowStatus: "idle",
+    reportWindowError: null,
+    reportWindowNotice: null,
     reportPresentationId: session.presentationId
       ?? (hasCoherentReport(session) ? state.reportPresentationId + 1 : state.reportPresentationId),
     reportStatus: hasCoherentReport(session) ? "ready" : "unavailable",
@@ -545,6 +554,9 @@ export function wsprLiveImportSucceeded(state, outcome) {
       summaryHtml: null,
     },
     pendingReportPresentation: null,
+    reportWindowStatus: "idle",
+    reportWindowError: null,
+    reportWindowNotice: null,
     reportStatus: "unavailable",
     reportError: null,
   };
@@ -909,6 +921,9 @@ export function reportRefreshSucceeded(state, presentation) {
     reportStatus: "ready",
     reportError: null,
     pendingReportPresentation: null,
+    reportWindowStatus: "idle",
+    reportWindowError: null,
+    reportWindowNotice: null,
     reportPresentationId: presentation.presentationId,
     reportExportStatus: presentationChanged ? "idle" : state.reportExportStatus,
     reportExportPending: presentationChanged ? null : state.reportExportPending,
@@ -958,12 +973,45 @@ export function applyPendingReportPresentation(state) {
   return reportRefreshSucceeded(state, state.pendingReportPresentation);
 }
 
+export function beginReportWindowOpen(state) {
+  return {
+    ...state,
+    reportWindowStatus: "loading",
+    reportWindowError: null,
+    reportWindowNotice: null,
+  };
+}
+
+export function reportWindowOpenSucceeded(state, outcome) {
+  return {
+    ...state,
+    reportWindowStatus: "ready",
+    reportWindowError: null,
+    reportWindowNotice: outcome,
+  };
+}
+
+export function reportWindowOpenFailed(state, error) {
+  return {
+    ...state,
+    reportWindowStatus: "error",
+    reportWindowError: normalizeOpenError(error),
+    reportWindowNotice: null,
+  };
+}
+
 export function selectReportMode(state, reportMode) {
   if (!["summary", "full_evidence"].includes(reportMode)) {
     throw new RangeError(`Unknown report mode: ${reportMode}`);
   }
   if (state.reportMode === reportMode) return state;
-  return { ...state, reportMode };
+  return {
+    ...state,
+    reportMode,
+    reportWindowStatus: "idle",
+    reportWindowError: null,
+    reportWindowNotice: null,
+  };
 }
 
 export function beginSupportSummaryCopy(state) {

@@ -519,8 +519,12 @@
                 <p class="report-toolbar-summary" data-report-summary></p>
                 <div class="report-toolbar-actions">
                   <button type="button" data-report-refresh>Refresh</button>
+                  <button type="button" data-report-window>Open in separate window</button>
                   <button type="button" data-report-diagnostics aria-haspopup="dialog" aria-controls="report-diagnostics-dialog">Diagnostics</button>
                   <button type="button" data-report-export aria-haspopup="dialog" aria-controls="report-export-dialog">Export</button>
+                </div>
+                <div class="report-window-feedback" data-report-window-feedback hidden role="status" aria-live="polite">
+                  <span data-report-window-feedback-message></span>
                 </div>
               </header>
               <div class="report-notices">

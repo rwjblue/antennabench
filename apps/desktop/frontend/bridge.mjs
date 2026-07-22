@@ -51,6 +51,14 @@ export function invokeRefreshActiveSessionReport(invoke, displayedPresentationId
   return invoke("refresh_active_session_report", { displayedPresentationId });
 }
 
+export function invokeOpenReportWindow(invoke, displayedPresentationId, documentKind) {
+  return invoke("open_report_window", { displayedPresentationId, documentKind });
+}
+
+export function invokeReportWindowDocument(invoke) {
+  return invoke("report_window_document");
+}
+
 export function invokeExportActiveSessionReport(
   invoke,
   format,

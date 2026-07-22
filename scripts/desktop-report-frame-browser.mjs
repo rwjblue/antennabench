@@ -14,6 +14,10 @@ const reports = {
 const desktopHtml = readFileSync(resolve("apps/desktop/frontend/index.html"), "utf8");
 const desktopStyles = readFileSync(resolve("apps/desktop/frontend/styles.css"), "utf8");
 const models = readFileSync(resolve("apps/desktop/frontend/models.mjs"), "utf8");
+const bridge = readFileSync(resolve("apps/desktop/frontend/bridge.mjs"), "utf8");
+const reportWindowHtml = readFileSync(resolve("apps/desktop/frontend/report-window.html"), "utf8");
+const reportWindowScript = readFileSync(resolve("apps/desktop/frontend/report-window.mjs"), "utf8");
+const reportWindowStyles = readFileSync(resolve("apps/desktop/frontend/report-window.css"), "utf8");
 const embeddedStyles = {
   full: readFileSync(resolve("apps/desktop/frontend/report.css"), "utf8"),
   summary: readFileSync(resolve("apps/desktop/frontend/report-summary.css"), "utf8"),
@@ -152,6 +156,79 @@ const server = createServer((request, response) => {
   if (url.pathname === "/frontend/models.mjs") {
     response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
     response.end(models);
+    return;
+  }
+  if (url.pathname === "/models.mjs") {
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(models);
+    return;
+  }
+  if (url.pathname === "/bridge.mjs") {
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(bridge);
+    return;
+  }
+  if (url.pathname === "/report-window.mjs") {
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(reportWindowScript);
+    return;
+  }
+  if (url.pathname === "/report-window.css") {
+    response.writeHead(200, { "content-type": "text/css; charset=utf-8" });
+    response.end(reportWindowStyles);
+    return;
+  }
+  if (url.pathname === "/report-window-mock.mjs") {
+    const kind = url.searchParams.get("kind") === "full_evidence" ? "full_evidence" : "summary";
+    const revision = Number(url.searchParams.get("revision") ?? "16");
+    const fail = url.searchParams.get("fail") === "1";
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(`
+      const originalRevoke = URL.revokeObjectURL.bind(URL);
+      window.__reportWindowRevoked = [];
+      URL.revokeObjectURL = (url) => {
+        window.__reportWindowRevoked.push(url);
+        originalRevoke(url);
+      };
+      window.__TAURI__ = { core: { invoke(command) {
+        if (command !== "report_window_document") throw new Error("restricted mock command denied");
+        if (${JSON.stringify(fail)}) return Promise.reject({ detail: "bounded native reader failure" });
+        return Promise.resolve({
+          windowLabel: "report-browser-${kind}-${revision}",
+          presentationId: ${revision},
+          sessionId: "session-${revision}",
+          bundleName: "canonical-${revision}.session.wsprabundle",
+          revision: ${revision},
+          lifecycle: "ended",
+          documentKind: ${JSON.stringify(kind)},
+          html: ${JSON.stringify(reports[kind === "summary" ? "summary" : "full"])},
+        });
+      } } };
+    `);
+    return;
+  }
+  if (url.pathname === "/report-window.html") {
+    response.writeHead(200, {
+      "content-security-policy": csp,
+      "content-type": "text/html; charset=utf-8",
+    });
+    response.end(reportWindowHtml.replace(
+      '<script type="module" src="report-window.mjs"></script>',
+      `<script type="module" src="/report-window-mock.mjs${url.search}"></script><script type="module" src="report-window.mjs"></script>`,
+    ));
+    return;
+  }
+  if (url.pathname === "/report-window-comparison") {
+    response.writeHead(200, {
+      "content-security-policy": csp,
+      "content-type": "text/html; charset=utf-8",
+    });
+    response.end(`<!doctype html><html><head><meta charset="utf-8"><title>Immutable report-window comparison</title><link rel="stylesheet" href="/comparison.css"></head><body><iframe title="Summary revision 16" src="/report-window.html?kind=summary&revision=16"></iframe><iframe title="Full evidence revision 17" src="/report-window.html?kind=full_evidence&revision=17"></iframe></body></html>`);
+    return;
+  }
+  if (url.pathname === "/comparison.css") {
+    response.writeHead(200, { "content-type": "text/css; charset=utf-8" });
+    response.end("html,body{width:100%;height:100%;margin:0;overflow:hidden}body{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;background:#dfe6e1}iframe{width:100%;height:100%;min-width:0;border:1px solid #afbeb6;border-radius:12px;background:#fff}");
     return;
   }
   if (url.pathname === "/shell.css") {
@@ -624,6 +701,93 @@ try {
   assert.equal(compactShell.navigationColumns.trim().split(/\s+/).length, 4);
   assert.equal(compactShell.brandDisplay, "none");
   assert.equal(compactShell.topbarCount, 0);
+
+  const summaryReaderUrl = `http://127.0.0.1:${port}/report-window.html?kind=summary&revision=16`;
+  await browser(["set", "viewport", "980", "780"]);
+  await browser(["open", summaryReaderUrl], { json: true });
+  await browser(["wait", "iframe[src^='blob:']"]);
+  const immutableReader = (await browser(["eval", `(() => {
+    const frame = document.querySelector("[data-report-window-frame]");
+    const embedded = frame.contentDocument;
+    return {
+      title: document.title,
+      kind: document.querySelector("[data-report-window-kind]").textContent,
+      session: document.querySelector("[data-report-window-session]").textContent,
+      lifecycle: document.querySelector("[data-report-window-lifecycle]").textContent,
+      revision: document.querySelector("[data-report-window-revision]").textContent,
+      sandbox: frame.getAttribute("sandbox"),
+      source: frame.getAttribute("src"),
+      embeddedScripts: embedded.scripts.length,
+      embeddedSummary: embedded.querySelector(".summary") !== null,
+      topLevelOverflow: getComputedStyle(document.body).overflow,
+    };
+  })()`], { json: true })).result;
+  assert.equal(immutableReader.title, "AntennaBench Summary · revision 16");
+  assert.equal(immutableReader.kind, "Summary");
+  assert.equal(immutableReader.session, "canonical-16.session.wsprabundle");
+  assert.equal(immutableReader.lifecycle, "Ended");
+  assert.equal(immutableReader.revision, "Revision 16");
+  assert.equal(immutableReader.sandbox, "allow-same-origin");
+  assert.match(immutableReader.source, /^blob:http:\/\/127\.0\.0\.1:/u);
+  assert.equal(immutableReader.embeddedScripts, 0);
+  assert.equal(immutableReader.embeddedSummary, true);
+  assert.equal(immutableReader.topLevelOverflow, "hidden");
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-window-summary-980x780.png")]);
+
+  await browser(["set", "viewport", "700", "620"]);
+  const compactReader = (await browser(["eval", `(() => {
+    const identity = document.querySelector(".reader-identity").getBoundingClientRect();
+    const frame = document.querySelector("[data-report-window-frame]").getBoundingClientRect();
+    return {
+      identityWithinViewport: identity.left >= 0 && identity.right <= innerWidth,
+      frameWithinViewport: frame.left >= 0 && frame.right <= innerWidth && frame.bottom <= innerHeight,
+      metadataColumns: getComputedStyle(document.querySelector(".reader-identity dl")).gridTemplateColumns,
+    };
+  })()`], { json: true })).result;
+  assert.equal(compactReader.identityWithinViewport, true);
+  assert.equal(compactReader.frameWithinViewport, true);
+  assert.equal(compactReader.metadataColumns.trim().split(/\s+/u).length, 2);
+
+  await browser(["set", "viewport", "1600", "900"]);
+  await browser(["open", `http://127.0.0.1:${port}/report-window-comparison`], { json: true });
+  await browser(["wait", "1500"]);
+  const comparison = (await browser(["eval", `(() => [...document.querySelectorAll("body > iframe")].map((reader) => {
+    const shell = reader.contentDocument;
+    const report = shell.querySelector("[data-report-window-frame]");
+    return {
+      outerTitle: reader.title,
+      kind: shell.querySelector("[data-report-window-kind]").textContent,
+      revision: shell.querySelector("[data-report-window-revision]").textContent,
+      source: report.getAttribute("src"),
+      scripts: report.contentDocument.scripts.length,
+    };
+  }))()`], { json: true })).result;
+  assert.deepEqual(comparison.map(({ kind, revision }) => ({ kind, revision })), [
+    { kind: "Summary", revision: "Revision 16" },
+    { kind: "Full evidence", revision: "Revision 17" },
+  ]);
+  assert.ok(comparison.every(({ source }) => source.startsWith("blob:http://127.0.0.1:")));
+  assert.ok(comparison.every(({ scripts }) => scripts === 0));
+  await browser(["screenshot", resolve("target/desktop-report-browser/report-windows-side-by-side-1600x900.png")]);
+
+  await browser(["open", summaryReaderUrl], { json: true });
+  await browser(["wait", "iframe[src^='blob:']"]);
+  const released = (await browser(["eval", `(() => {
+    window.dispatchEvent(new Event("pagehide"));
+    return {
+      revoked: window.__reportWindowRevoked.length,
+      source: document.querySelector("[data-report-window-frame]").getAttribute("src"),
+    };
+  })()`], { json: true })).result;
+  assert.deepEqual(released, { revoked: 1, source: null });
+
+  await browser(["open", `${summaryReaderUrl}&fail=1`], { json: true });
+  await browser(["wait", "[data-report-window-error]:not([hidden])"]);
+  const readerFailure = (await browser(["eval", `(() => ({
+    detail: document.querySelector("[data-report-window-error-detail]").textContent,
+    frameHidden: document.querySelector("[data-report-window-frame]").hidden,
+  }))()`], { json: true })).result;
+  assert.deepEqual(readerFailure, { detail: "bounded native reader failure", frameHidden: true });
 
   await browser(["set", "viewport", "1200", "900"]);
   for (const mode of ["full", "summary"]) {

@@ -385,6 +385,8 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .report-mode-control button[aria-pressed="true"] { color: #fff; background: #245451; box-shadow: 0 1px 3px rgba(28, 64, 61, .2); }
 .report-update-control { display: flex; grid-column: 1 / -1; align-items: center; justify-content: flex-end; gap: 10px; color: #704a19; font-size: .7rem; font-weight: 700; }
 .report-update-control button { border-color: #b87520; color: #704a19; background: #fff8ea; }
+.report-window-feedback { display: flex; grid-column: 1 / -1; justify-content: flex-end; color: #315d57; font-size: .7rem; font-weight: 700; }
+.report-window-feedback[data-kind="error"] { color: #9b342c; }
 .report-toolbar-identity { display: flex; grid-area: identity; align-items: center; gap: 16px; min-width: 0; }
 .report-toolbar-identity div { display: grid; gap: 2px; min-width: 0; }
 .report-toolbar-identity div > span { color: #77857f; font-size: .58rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
@@ -437,9 +439,9 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 [hidden] { display: none !important; }
 
 @media (max-width: 1200px) {
-  .report-toolbar { grid-template-areas: "navigation mode identity actions"; grid-template-columns: auto auto minmax(0, 1fr) auto; }
+  .report-toolbar { grid-template-areas: "navigation mode actions" "identity identity identity"; grid-template-columns: auto auto minmax(0, 1fr); }
   .report-toolbar-summary { display: none; }
-  .report-toolbar-identity strong { max-width: 24vw; }
+  .report-toolbar-identity strong { max-width: 38vw; }
 }
 
 @media (max-width: 900px) {
@@ -454,7 +456,8 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
   .content { min-height: auto; overflow: visible; overscroll-behavior-y: auto; scrollbar-gutter: auto; }
   .workspace.report-reading-active { height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 0; overflow: hidden; }
   .content.report-reading-active { min-height: 0; overflow: hidden; }
-  .report-toolbar { grid-template-areas: "navigation identity actions" "mode mode mode"; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .report-toolbar { grid-template-areas: "navigation actions" "mode mode" "identity identity"; grid-template-columns: auto minmax(0, 1fr); }
+  .report-toolbar-identity strong { max-width: 42vw; }
   .setup-grid { grid-template-columns: 1fr; }
   .card { min-height: 190px; }
   .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

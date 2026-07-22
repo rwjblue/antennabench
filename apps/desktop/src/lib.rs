@@ -28,8 +28,9 @@ use managed_sessions::{
     ManagedSessionsState,
 };
 use open_session::{
-    active_session_report, cancel_report_export, confirm_report_export,
-    export_active_session_report, refresh_active_session_report, ActiveSessionState,
+    active_session_report, cancel_report_export, close_report_windows, confirm_report_export,
+    export_active_session_report, open_report_window, refresh_active_session_report,
+    report_window_document, ActiveSessionState, ReportWindowState,
 };
 use rbn_import::import_active_session_rbn;
 use setup::{
@@ -45,9 +46,11 @@ use wspr_live_import::import_active_session_wspr_live;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let report_windows = ReportWindowState::default();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ActiveSessionState::default())
+        .manage(report_windows)
         .manage(AntennaControllerState::default())
         .manage(ConductorSessionState::default())
         .manage(LocationState::default())
@@ -72,6 +75,8 @@ pub fn run() {
             cancel_report_export,
             active_session_report,
             refresh_active_session_report,
+            open_report_window,
+            report_window_document,
             active_session_conductor,
             mutate_active_session_conductor,
             active_session_wsjtx_status,
@@ -94,6 +99,7 @@ pub fn run() {
                 event,
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
+                close_report_windows(app, &app.state::<ReportWindowState>());
                 app.state::<AntennaControllerState>().revoke();
             }
         });

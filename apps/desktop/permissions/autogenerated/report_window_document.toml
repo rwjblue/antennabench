@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-report-window-document"
+description = "Enables the report_window_document command without any pre-configured scope."
+commands.allow = ["report_window_document"]
+
+[[permission]]
+identifier = "deny-report-window-document"
+description = "Denies the report_window_document command without any pre-configured scope."
+commands.deny = ["report_window_document"]

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "report-reader",
+  "description": "Restricted immutable report reader with no setup, run, filesystem, network, opener, updater, or shell authority.",
+  "windows": ["report-*"],
+  "permissions": ["allow-report-window-document"]
+}

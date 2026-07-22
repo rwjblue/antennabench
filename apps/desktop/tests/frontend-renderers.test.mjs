@@ -735,6 +735,26 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.reportExportRevision.textContent, "revision 3");
   assert.equal(e.reportControllerOptions.hidden, true);
   assert.equal(e.reportControllerHandling.value, "complete");
+  assert.equal(e.reportWindowButton.disabled, false);
+  assert.equal(e.reportWindowFeedback.hidden, true);
+
+  state.reportWindowStatus = "loading";
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportWindowButton.disabled, true);
+  assert.equal(e.reportWindowButton.textContent, "Opening…");
+  assert.match(e.reportWindowFeedbackMessage.textContent, /Opening immutable Summary/);
+  state.reportWindowStatus = "ready";
+  state.reportWindowNotice = {
+    status: "created",
+    windowLabel: "report-summary-3",
+    revision: 3,
+    documentKind: "summary",
+  };
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportWindowFeedback.hidden, false);
+  assert.equal(e.reportWindowFeedbackMessage.textContent, "Opened Summary · revision 3");
+  state.reportWindowStatus = "idle";
+  state.reportWindowNotice = null;
 
   state.pendingReportPresentation = {
     presentationId: 4,

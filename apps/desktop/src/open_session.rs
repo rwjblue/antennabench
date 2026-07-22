@@ -52,6 +52,7 @@ mod commands;
 mod diagnostics;
 mod errors;
 mod projection;
+mod report_window;
 mod state;
 
 #[cfg(test)]
@@ -65,6 +66,9 @@ pub(crate) use commands::{
 pub(crate) use errors::{
     copy_error_payload, storage_error_payload, OpenSessionOutcome, OpenedSession, SessionErrorKind,
     SessionErrorPayload,
+};
+pub(crate) use report_window::{
+    close_report_windows, open_report_window, report_window_document, ReportWindowState,
 };
 pub(crate) use state::{
     activate_created_bundle, active_session_live_projection, active_session_source,

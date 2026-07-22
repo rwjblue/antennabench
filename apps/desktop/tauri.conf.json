@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "capabilities": ["main-shell"],
+      "capabilities": ["main-shell", "report-reader"],
       "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'self' blob:; base-uri 'none'; form-action 'none'"
     }
   },

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AntennaBench report</title>
+    <link rel="stylesheet" href="report-window.css">
+  </head>
+  <body>
+    <header class="reader-identity" aria-label="Immutable report identity">
+      <div class="reader-heading">
+        <p>AntennaBench committed report</p>
+        <h1 data-report-window-kind>Report</h1>
+      </div>
+      <dl>
+        <div><dt>Session</dt><dd data-report-window-session></dd></div>
+        <div><dt>Lifecycle</dt><dd data-report-window-lifecycle></dd></div>
+        <div><dt>Committed snapshot</dt><dd data-report-window-revision></dd></div>
+      </dl>
+    </header>
+    <main>
+      <div class="reader-error" data-report-window-error hidden role="alert">
+        <strong>The immutable report could not be opened.</strong>
+        <span data-report-window-error-detail></span>
+      </div>
+      <iframe
+        data-report-window-frame
+        title="AntennaBench committed report"
+        sandbox="allow-same-origin"
+        referrerpolicy="no-referrer"
+      ></iframe>
+    </main>
+    <script type="module" src="report-window.mjs"></script>
+  </body>
+</html>

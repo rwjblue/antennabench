@@ -18,6 +18,7 @@
     "allow-export-active-session-report",
     "allow-active-session-report",
     "allow-refresh-active-session-report",
+    "allow-open-report-window",
     "allow-active-session-conductor",
     "allow-mutate-active-session-conductor",
     "allow-active-session-wsjtx-status",

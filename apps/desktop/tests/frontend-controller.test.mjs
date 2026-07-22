@@ -946,6 +946,53 @@ test("report background checks are silent, change-aware, and bounded by lifecycl
   assert.equal(failed.renders.length, 1, "background failures remain visible and typed");
 });
 
+test("separate report windows open the exact displayed document and report focus or failure", async () => {
+  const state = openSessionSucceeded(initialState("report"), session({
+    presentationId: 9,
+    revision: 9,
+  }));
+  const created = harness({
+    open_report_window: {
+      status: "created",
+      windowLabel: "report-summary-9",
+      revision: 9,
+      documentKind: "summary",
+    },
+  }, { state });
+  await created.controller.openReportWindow();
+  assert.deepEqual(created.calls, [["open_report_window", {
+    displayedPresentationId: 9,
+    documentKind: "summary",
+  }]]);
+  assert.equal(created.controller.state.reportWindowStatus, "ready");
+  assert.equal(created.controller.state.reportWindowNotice.status, "created");
+
+  created.controller.selectReportMode("full_evidence");
+  await created.controller.openReportWindow();
+  assert.deepEqual(created.calls.at(-1), ["open_report_window", {
+    displayedPresentationId: 9,
+    documentKind: "full_evidence",
+  }]);
+
+  const focused = harness({
+    open_report_window: {
+      status: "focused",
+      windowLabel: "report-summary-9",
+      revision: 9,
+      documentKind: "summary",
+    },
+  }, { state });
+  await focused.controller.openReportWindow();
+  assert.equal(focused.controller.state.reportWindowNotice.status, "focused");
+
+  const failed = harness({
+    open_report_window: new Error("native reader unavailable"),
+  }, { state });
+  await failed.controller.openReportWindow();
+  assert.equal(failed.controller.state.reportWindowStatus, "error");
+  assert.match(failed.controller.state.reportWindowError.detail, /native reader unavailable/);
+});
+
 test("manual report refresh retains visible progress and queues behind a silent check", async () => {
   const state = openSessionSucceeded(initialState("report"), session({
     lifecycle: "running",

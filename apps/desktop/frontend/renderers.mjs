@@ -869,6 +869,7 @@ export function renderReport(elements, state, reportDocuments) {
     reportSavedButton, reportActiveRunButton, reportRefreshButton,
     reportSummaryModeButton, reportFullModeButton,
     reportUpdateControl, reportUpdateRevision, reportUpdateButton,
+    reportWindowButton, reportWindowFeedback, reportWindowFeedbackMessage,
     reportSummaryExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
     reportBundleName, reportRevision, reportExportRevision, reportSummary, reportControllerOptions,
     reportControllerHandling,
@@ -892,6 +893,21 @@ export function renderReport(elements, state, reportDocuments) {
     ? `Revision ${pendingPresentation.revision ?? "legacy"}`
     : "";
   reportUpdateButton.disabled = reportBusy || !pendingPresentation;
+  reportWindowButton.disabled = reportBusy || !hasReport || state.reportWindowStatus === "loading";
+  reportWindowButton.textContent = state.reportWindowStatus === "loading"
+    ? "Opening…"
+    : "Open in separate window";
+  const reportWindowMessage = state.reportWindowStatus === "loading"
+    ? `Opening immutable ${state.reportMode === "summary" ? "Summary" : "Full evidence"}…`
+    : state.reportWindowError
+      ? `${state.reportWindowError.message} ${state.reportWindowError.detail}`
+      : state.reportWindowNotice
+        ? `${state.reportWindowNotice.status === "focused" ? "Focused" : "Opened"} ${humanizeIdentifier(state.reportWindowNotice.documentKind)} · revision ${state.reportWindowNotice.revision ?? "legacy"}`
+        : "";
+  reportWindowFeedback.hidden = reportWindowMessage === "";
+  reportWindowFeedback.dataset.kind = state.reportWindowError ? "error" : "ready";
+  reportWindowFeedback.setAttribute("role", state.reportWindowError ? "alert" : "status");
+  reportWindowFeedbackMessage.textContent = reportWindowMessage;
   reportStatus.textContent = state.reportStatus === "refreshing"
     ? "Refreshing"
     : hasReport

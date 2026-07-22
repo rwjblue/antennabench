@@ -24,6 +24,8 @@ import {
   invokeListManagedSessions,
   invokeMutateSessionConductor,
   invokeOpenManagedSession,
+  invokeOpenReportWindow,
+  invokeReportWindowDocument,
   invokeRefreshActiveSessionReport,
   invokeRevealManagedSession,
   invokeRevealManagedSessionsDirectory,
@@ -82,6 +84,7 @@ import {
   beginReportExportCancellation,
   beginReportReplacement,
   beginReportRefresh,
+  beginReportWindowOpen,
   beginRbnImport,
   beginSkipCycleMutation,
   beginSetupCreation,
@@ -121,6 +124,8 @@ import {
   reportRefreshPending,
   reportRefreshSucceeded,
   reportRefreshSuperseded,
+  reportWindowOpenFailed,
+  reportWindowOpenSucceeded,
   rbnImportCancelled,
   rbnImportFailed,
   rbnImportSucceeded,
@@ -200,6 +205,9 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     "models.mjs",
     "renderers.mjs",
     "report-summary.css",
+    "report-window.css",
+    "report-window.html",
+    "report-window.mjs",
     "report.css",
     "state.mjs",
     "styles.css",
@@ -278,6 +286,9 @@ test("the shell starts in saved sessions", () => {
     reportPresentationId: 0,
     reportMode: "summary",
     pendingReportPresentation: null,
+    reportWindowStatus: "idle",
+    reportWindowError: null,
+    reportWindowNotice: null,
     reportStatus: "idle",
     reportError: null,
     reportExportStatus: "idle",
@@ -1641,6 +1652,45 @@ test("background report presentations coalesce and apply atomically", () => {
   );
 });
 
+test("separate report-window feedback is bounded to one displayed document identity", () => {
+  const displayed = openSessionSucceeded(initialState("report"), {
+    sessionId: "session-1",
+    presentationId: 10,
+    revision: 10,
+    reportHtml: "full 10",
+    summaryHtml: "summary 10",
+  });
+  const loading = beginReportWindowOpen(displayed);
+  const opened = reportWindowOpenSucceeded(loading, {
+    status: "created",
+    windowLabel: "report-abc",
+    revision: 10,
+    documentKind: "summary",
+  });
+  assert.equal(loading.reportWindowStatus, "loading");
+  assert.equal(opened.reportWindowStatus, "ready");
+  assert.equal(opened.reportWindowNotice.windowLabel, "report-abc");
+  assert.equal(selectReportMode(opened, "full_evidence").reportWindowNotice, null);
+
+  const failed = reportWindowOpenFailed(loading, {
+    kind: "report_pipeline",
+    message: "Window unavailable",
+    detail: "creation failed",
+  });
+  assert.equal(failed.reportWindowStatus, "error");
+  assert.equal(failed.reportWindowError.detail, "creation failed");
+  assert.equal(
+    reportRefreshSucceeded(opened, {
+      sessionId: "session-1",
+      presentationId: 11,
+      revision: 11,
+      reportHtml: "full 11",
+      summaryHtml: "summary 11",
+    }).reportWindowNotice,
+    null,
+  );
+});
+
 test("revision-keyed report refresh retains coherent prior output on failure and export state", () => {
   const frame = { dataset: {}, src: "", removeAttribute() {} };
   const reportDocuments = reportDocumentHarness();
@@ -1938,6 +1988,8 @@ test("the frontend invokes only the narrow session commands", async () => {
   const exportedSession = await invokeExportManagedSession(invoke, "locator-1");
   const report = await invokeActiveSessionReport(invoke);
   const refreshed = await invokeRefreshActiveSessionReport(invoke);
+  const reportWindow = await invokeOpenReportWindow(invoke, 7, "summary");
+  const reportWindowDocument = await invokeReportWindowDocument(invoke);
   const reportExported = await invokeExportActiveSessionReport(invoke, "full_evidence_html");
   const reportReplacementConfirmed = await invokeConfirmReportExport(invoke, "pending-1");
   const reportReplacementCancelled = await invokeCancelReportExport(invoke, "pending-2");
@@ -1954,6 +2006,8 @@ test("the frontend invokes only the narrow session commands", async () => {
     ["export_managed_session", { locatorId: "locator-1" }],
     ["active_session_report"],
     ["refresh_active_session_report"],
+    ["open_report_window", { displayedPresentationId: 7, documentKind: "summary" }],
+    ["report_window_document"],
     ["export_active_session_report", {
       format: "full_evidence_html",
       controllerEvidence: "complete",
@@ -1973,6 +2027,8 @@ test("the frontend invokes only the narrow session commands", async () => {
   assert.equal(exportedSession.status, "exported");
   assert.equal(report, "<!doctype html>");
   assert.equal(refreshed.status, "exported");
+  assert.equal(reportWindow.status, "exported");
+  assert.equal(reportWindowDocument.status, "exported");
   assert.equal(reportExported.status, "exported");
   assert.equal(reportReplacementConfirmed.status, "exported");
   assert.equal(reportReplacementCancelled.status, "exported");
