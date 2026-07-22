@@ -24,7 +24,7 @@ Callsigns, grids, exact locations, station details, schedules, screenshots,
 logs, session bundles, HTML reports, and contact details are optional. They are
 never required to report a problem.
 
-Compact/public report output omits operational diagnostics. Full evidence HTML
+Summary and public report output omit operational diagnostics. Full evidence HTML
 does too unless the exporter separately chooses **Include redacted support
 history**; hosted sharing must not silently broaden that disclosure policy.
 

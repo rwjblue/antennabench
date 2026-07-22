@@ -93,7 +93,7 @@ outcome when the recorded session cannot support a comparison.
 
 Use [How To Read Your AntennaBench Report](reading-your-report.md) for a
 section-by-section walkthrough of the full report, all five availability states,
-the compact summary, and the lossless bundle boundary. AntennaBench currently
+the Summary, and the lossless bundle boundary. AntennaBench currently
 provides descriptive evidence, not an automatic verdict.
 
 ## Local-First By Design

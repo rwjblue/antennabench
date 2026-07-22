@@ -1,6 +1,6 @@
 use askama::Template;
 
-use super::super::view::{CompactQualityView, CompactReferenceView, QualityView};
+use super::super::view::{QualityView, SummaryQualityView, SummaryReferenceView};
 
 #[derive(Template)]
 #[template(path = "report/quality/start.html")]
@@ -27,13 +27,13 @@ pub(in crate::html) struct QualityAccountingBetweenTemplate;
 pub(in crate::html) struct QualityEndTemplate;
 
 #[derive(Template)]
-#[template(path = "report/quality/compact.html")]
-pub(in crate::html) struct CompactQualityTemplate {
-    pub(in crate::html) view: CompactQualityView,
+#[template(path = "report/quality/summary.html")]
+pub(in crate::html) struct SummaryQualityTemplate {
+    pub(in crate::html) view: SummaryQualityView,
 }
 
 #[derive(Template)]
-#[template(path = "report/quality/compact_reference.html")]
-pub(in crate::html) struct CompactReferenceTemplate {
-    pub(in crate::html) view: CompactReferenceView,
+#[template(path = "report/quality/summary_reference.html")]
+pub(in crate::html) struct SummaryReferenceTemplate {
+    pub(in crate::html) view: SummaryReferenceView,
 }

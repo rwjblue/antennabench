@@ -102,13 +102,13 @@ pub(in super::super) fn render_question_navigation(
 pub(in super::super) fn render_how_to_read(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-    compact: bool,
+    summary: bool,
 ) -> Result<(), ReportError> {
     render_template(
         out,
         &ReadingGuideTemplate {
             view: ReadingGuideView {
-                compact,
+                summary,
                 single_antenna: is_single_antenna_lens(report),
             },
         },
@@ -124,17 +124,17 @@ pub(in super::super) fn render_answer_first_overview_with_reference(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
     audit_reference: &str,
-    compact: bool,
+    summary: bool,
 ) -> Result<(), ReportError> {
     render_template(
         out,
         &AnswerFirstTemplate {
-            view: overview_view(report, audit_reference, compact),
+            view: overview_view(report, audit_reference, summary),
         },
     )
 }
 
-fn overview_view(report: &SessionReport, audit_reference: &str, compact: bool) -> OverviewView {
+fn overview_view(report: &SessionReport, audit_reference: &str, summary: bool) -> OverviewView {
     let overview = &report.overview;
     let scope = &overview.scope;
     let antennas = if scope.antenna_labels.is_empty() {
@@ -242,7 +242,7 @@ fn overview_view(report: &SessionReport, audit_reference: &str, compact: bool) -
     };
 
     OverviewView {
-        compact,
+        summary,
         answerability_headline: answerability_headline(report),
         plain_answer: plain_language_answer(report),
         headline_groups,
@@ -266,7 +266,7 @@ fn overview_view(report: &SessionReport, audit_reference: &str, compact: bool) -
         lifecycle: lifecycle_label,
         orientation_label,
         orientation,
-        show_delta_scale: !compact
+        show_delta_scale: !summary
             && overview
                 .strata
                 .iter()

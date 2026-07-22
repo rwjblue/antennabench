@@ -25,12 +25,12 @@ use antennabench_core::{
     SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, SCHEMA_VERSION_V5, SCHEMA_VERSION_V6,
 };
 use antennabench_report::{
-    build_report_with_snapshot_and_activity, render_compact_summary_html, render_standalone_html,
+    build_report_with_snapshot_and_activity, render_standalone_html,
     render_standalone_html_with_operational_history, render_standalone_html_with_options,
-    ControllerEvidenceHandling, ReportAcquisitionWorkflowStatus, ReportAdapterEvidence,
-    ReportAntennaControlAttempt, ReportCompleteness, ReportError, ReportEventCorrection,
-    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
-    ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind,
+    render_summary_html, ControllerEvidenceHandling, ReportAcquisitionWorkflowStatus,
+    ReportAdapterEvidence, ReportAntennaControlAttempt, ReportCompleteness, ReportError,
+    ReportEventCorrection, ReportEventCorrectionAction, ReportImportedEvidence,
+    ReportLifecycleEvent, ReportLifecycleEventKind, ReportOperatorEvent, ReportOperatorEventKind,
     ReportProviderCompleteness, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
     ReportWsprReadinessBasis, StandaloneHtmlOptions,
 };
@@ -93,19 +93,18 @@ use commands::{
     confirm_pending_report_export_with, export_active_report_with_selection,
     export_active_report_with_selection_and_disclosure, export_active_session_with_selection,
     export_bundle, open_session_with_selection, refresh_active_session_report_for,
-    suggested_compact_summary_name, suggested_report_name, ReportReplacePort,
-    SystemReportReplacePort,
+    suggested_report_name, suggested_summary_name, ReportReplacePort, SystemReportReplacePort,
 };
 #[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct E2eExportedSnapshots {
     pub(crate) report_path: PathBuf,
-    pub(crate) compact_summary_path: PathBuf,
+    pub(crate) summary_path: PathBuf,
     pub(crate) bundle_path: PathBuf,
     pub(crate) revision: u64,
     pub(crate) presentation_id: u64,
     pub(crate) report_html: String,
-    pub(crate) compact_summary_html: String,
+    pub(crate) summary_html: String,
 }
 
 #[cfg(test)]
@@ -126,7 +125,7 @@ pub(crate) fn export_e2e_snapshots(
     let presentation = refresh_active_session_report_for(state).expect("coherent report refresh");
     let revision = presentation.revision.expect("schema-v2 report revision");
     let report_path = root.join("complete-workflow-report.html");
-    let compact_summary_path = root.join("complete-workflow-compact-summary.html");
+    let summary_path = root.join("complete-workflow-summary.html");
     let bundle_path = root.join(format!("complete-workflow-export{V2_BUNDLE_SUFFIX}"));
     let report_outcome = export_active_report_with_selection(
         state,
@@ -158,36 +157,36 @@ pub(crate) fn export_e2e_snapshots(
     };
     confirm_pending_report_export_with(state, &pending_export_id, &SystemReportReplacePort)
         .expect("replace an existing report through the desktop boundary");
-    let compact_summary_outcome = export_active_report_with_selection(
+    let summary_outcome = export_active_report_with_selection(
         state,
-        ReportExportFormat::CompactSummaryHtml,
+        ReportExportFormat::SummaryHtml,
         ControllerEvidenceHandling::Complete,
-        |_| Ok(Some(compact_summary_path.clone())),
+        |_| Ok(Some(summary_path.clone())),
     )
-    .expect("compact share summary export");
+    .expect("Summary export");
     assert!(matches!(
-        compact_summary_outcome,
+        summary_outcome,
         ExportReportOutcome::Exported {
             revision: Some(exported),
-            format: ReportExportFormat::CompactSummaryHtml,
+            format: ReportExportFormat::SummaryHtml,
             ..
         } if exported == revision
     ));
-    let compact_replacement = export_active_report_with_selection(
+    let summary_replacement = export_active_report_with_selection(
         state,
-        ReportExportFormat::CompactSummaryHtml,
+        ReportExportFormat::SummaryHtml,
         ControllerEvidenceHandling::Complete,
-        |_| Ok(Some(compact_summary_path.clone())),
+        |_| Ok(Some(summary_path.clone())),
     )
-    .expect("existing compact report requests replacement confirmation");
+    .expect("existing Summary requests replacement confirmation");
     let ExportReportOutcome::ConfirmationRequired {
         pending_export_id, ..
-    } = compact_replacement
+    } = summary_replacement
     else {
-        panic!("existing compact report did not request replacement confirmation");
+        panic!("existing Summary did not request replacement confirmation");
     };
     confirm_pending_report_export_with(state, &pending_export_id, &SystemReportReplacePort)
-        .expect("replace an existing compact report through the desktop boundary");
+        .expect("replace an existing Summary through the desktop boundary");
     let bundle_outcome =
         export_active_session_with_selection(state, |_| Ok(Some(bundle_path.clone())))
             .expect("lossless checkpoint export");
@@ -206,17 +205,17 @@ pub(crate) fn export_e2e_snapshots(
         presentation.report_html
     );
     assert_eq!(
-        std::fs::read_to_string(&compact_summary_path).expect("exported compact HTML"),
-        presentation.compact_summary_html
+        std::fs::read_to_string(&summary_path).expect("exported Summary HTML"),
+        presentation.summary_html
     );
     E2eExportedSnapshots {
         report_path,
-        compact_summary_path,
+        summary_path,
         bundle_path,
         revision,
         presentation_id: presentation.presentation_id,
         report_html: presentation.report_html,
-        compact_summary_html: presentation.compact_summary_html,
+        summary_html: presentation.summary_html,
     }
 }
 
@@ -235,7 +234,7 @@ mod tests {
         export_active_report_with_selection, export_active_report_with_selection_and_disclosure,
         export_active_session_with_selection, export_bundle, open_bundle,
         open_session_with_selection, refresh_active_session_report_for, report_error_payload,
-        suggested_compact_summary_name, suggested_report_name, with_suspended_foreground_operation,
+        suggested_report_name, suggested_summary_name, with_suspended_foreground_operation,
         with_waiting_foreground_operation, ActiveSession, ActiveSessionState,
         ControllerEvidenceHandling, ExportReportOutcome, ExportSessionOutcome, OpenSessionOutcome,
         OpenedSession, OperationalHistoryHandling, ReportCompleteness, ReportExportFormat,
@@ -441,7 +440,7 @@ mod tests {
         let presentation = active_session_report_for(&state).unwrap();
         let serialized = serde_json::to_value(&presentation).unwrap();
         assert!(serialized.get("reportHtml").is_some());
-        assert!(serialized.get("compactSummaryHtml").is_none());
+        assert!(serialized.get("summaryHtml").is_none());
         state
             .0
             .lock()
@@ -511,19 +510,13 @@ mod tests {
     }
 
     #[test]
-    fn compact_and_full_html_suggested_names_are_unambiguous() {
+    fn summary_and_full_evidence_html_suggested_names_are_unambiguous() {
         let bundle = Path::new("/tmp/field-day.session.wsprabundle");
         assert_eq!(suggested_report_name(bundle), "field-day-report.html");
-        assert_eq!(
-            suggested_compact_summary_name(bundle),
-            "field-day-compact-summary.html"
-        );
+        assert_eq!(suggested_summary_name(bundle), "field-day-summary.html");
         let unknown = Path::new("/tmp/no-recognized-suffix");
         assert_eq!(suggested_report_name(unknown), "antennabench-report.html");
-        assert_eq!(
-            suggested_compact_summary_name(unknown),
-            "antennabench-compact-summary.html"
-        );
+        assert_eq!(suggested_summary_name(unknown), "antennabench-summary.html");
     }
 
     #[test]
@@ -618,45 +611,45 @@ mod tests {
             "a pending replacement is single-use",
         );
 
-        let compact_destination = temp.path().join("snapshot-compact-summary.html");
-        let compact_exported = export_active_report_with_selection(
+        let summary_destination = temp.path().join("snapshot-summary.html");
+        let summary_exported = export_active_report_with_selection(
             &state,
-            ReportExportFormat::CompactSummaryHtml,
+            ReportExportFormat::SummaryHtml,
             ControllerEvidenceHandling::Complete,
-            |_| Ok(Some(compact_destination.clone())),
+            |_| Ok(Some(summary_destination.clone())),
         )
         .unwrap();
         assert_eq!(
-            compact_exported,
+            summary_exported,
             ExportReportOutcome::Exported {
-                file_name: "snapshot-compact-summary.html".into(),
+                file_name: "snapshot-summary.html".into(),
                 revision: first.revision,
-                format: ReportExportFormat::CompactSummaryHtml,
+                format: ReportExportFormat::SummaryHtml,
             }
         );
         assert_eq!(
-            fs::read_to_string(&compact_destination).unwrap(),
-            first.compact_summary_html
+            fs::read_to_string(&summary_destination).unwrap(),
+            first.summary_html
         );
-        fs::write(&compact_destination, "prior compact report bytes").unwrap();
+        fs::write(&summary_destination, "prior Summary bytes").unwrap();
         let replacement = export_active_report_with_selection(
             &state,
-            ReportExportFormat::CompactSummaryHtml,
+            ReportExportFormat::SummaryHtml,
             ControllerEvidenceHandling::Complete,
-            |_| Ok(Some(compact_destination.clone())),
+            |_| Ok(Some(summary_destination.clone())),
         )
-        .expect("existing compact report requests confirmation");
+        .expect("existing Summary requests confirmation");
         let ExportReportOutcome::ConfirmationRequired {
             pending_export_id, ..
         } = replacement
         else {
-            panic!("existing compact report did not request confirmation");
+            panic!("existing Summary did not request confirmation");
         };
         confirm_pending_report_export_with(&state, &pending_export_id, &SystemReportReplacePort)
-            .expect("atomically replace compact report");
+            .expect("atomically replace Summary");
         assert_eq!(
-            fs::read_to_string(&compact_destination).unwrap(),
-            first.compact_summary_html
+            fs::read_to_string(&summary_destination).unwrap(),
+            first.summary_html
         );
 
         let bundle_destination = temp.path().join("snapshot.session.antennabundle");
@@ -716,7 +709,7 @@ mod tests {
         let pending_export_id = expect_pending_export_id(
             export_active_report_with_selection(
                 &state,
-                ReportExportFormat::CompactSummaryHtml,
+                ReportExportFormat::SummaryHtml,
                 ControllerEvidenceHandling::Complete,
                 |_| Ok(Some(destination.clone())),
             )
@@ -814,7 +807,7 @@ mod tests {
 
         for format in [
             ReportExportFormat::FullEvidenceHtml,
-            ReportExportFormat::CompactSummaryHtml,
+            ReportExportFormat::SummaryHtml,
         ] {
             let error = export_active_report_with_selection(
                 &state,
@@ -1037,7 +1030,7 @@ mod tests {
             has_controller_evidence: true,
             operational_history: super::legacy_diagnostics_presentation(SCHEMA_VERSION_V5),
             report_html: "<p>complete sensitive controller details</p>".into(),
-            compact_summary_html: "<p>compact</p>".into(),
+            summary_html: "<p>summary</p>".into(),
             controller_omitted_report_html: Some(
                 "<p>Omitted at export — retained in the session bundle</p>".into(),
             ),

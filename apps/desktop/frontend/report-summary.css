@@ -1434,152 +1434,152 @@ thead th {
 body {
   font-size: 14px;
 }
-main.compact-summary {
+main.summary {
   width: min(900px, calc(100% - 2rem));
   margin: 1rem auto;
 }
-.compact-summary .hero {
+.summary .hero {
   display: block;
 }
-.compact-summary .hero .muted {
+.summary .hero .muted {
   margin-top: 0.2rem;
 }
-.compact-summary .panel {
+.summary .panel {
   margin-top: 0.55rem;
   padding: 0.75rem;
 }
-.compact-summary .overview {
+.summary .overview {
   border-top-width: 0.25rem;
 }
-.compact-summary .headline-facts {
+.summary .headline-facts {
   margin: 0.35rem 0;
 }
-.compact-summary .overview-support {
+.summary .overview-support {
   margin-top: 0.35rem;
 }
-.compact-summary .overview-support ul {
+.summary .overview-support ul {
   font-size: 0.8rem;
 }
-.compact-summary .path-strip {
+.summary .path-strip {
   padding: 0.55rem;
   margin: 0.35rem 0;
 }
-.compact-summary .path-strip-row {
+.summary .path-strip-row {
   grid-template-columns: minmax(6rem, 13rem) 1fr 4rem;
 }
-.compact-summary .reach-strip {
+.summary .reach-strip {
   margin: 0.35rem 0;
 }
-.compact-summary .run-summary {
+.summary .run-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.45rem;
   margin: 0.35rem 0;
 }
-.compact-summary .run-summary div {
+.summary .run-summary div {
   padding: 0.45rem 0.55rem;
   background: var(--soft);
   border-radius: 0.45rem;
 }
-.compact-summary .run-summary strong,
-.compact-summary .run-summary span {
+.summary .run-summary strong,
+.summary .run-summary span {
   display: block;
 }
-.compact-summary .run-summary span {
+.summary .run-summary span {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
 }
-.compact-summary .compact-reference {
+.summary .summary-reference {
   font-size: 0.84rem;
 }
-.compact-summary .compact-omission {
+.summary .summary-omission {
   font-size: 0.84rem;
 }
 @media print {
-  .compact-summary {
+  .summary {
     width: 100%;
     margin: 0;
   }
-  .compact-summary .hero,
-  .compact-summary .panel {
+  .summary .hero,
+  .summary .panel {
     box-shadow: none;
   }
-  .compact-summary .hero {
+  .summary .hero {
     padding: 0.55rem 0.7rem;
   }
-  .compact-summary .panel {
+  .summary .panel {
     margin-top: 0.4rem;
     padding: 0.55rem;
   }
-  .compact-summary .overview {
+  .summary .overview {
     break-after: auto;
   }
-  .compact-summary .headline-facts {
+  .summary .headline-facts {
     gap: 0.3rem;
     margin: 0.3rem 0;
   }
-  .compact-summary .fact {
+  .summary .fact {
     padding: 0.3rem 0.4rem;
   }
-  .compact-summary .overview-support {
+  .summary .overview-support {
     gap: 0.35rem;
     margin-top: 0.3rem;
   }
-  .compact-summary .overview-support section {
+  .summary .overview-support section {
     padding: 0.3rem 0.45rem;
   }
-  .compact-summary .orientation,
-  .compact-summary .overview .answer {
+  .summary .orientation,
+  .summary .overview .answer {
     padding: 0.3rem 0.4rem;
     margin: 0.3rem 0;
   }
-  .compact-summary h2 {
+  .summary h2 {
     font-size: 1.05rem;
   }
-  .compact-summary h3 {
+  .summary h3 {
     font-size: 0.9rem;
     margin: 0.55rem 0 0.2rem;
   }
-  .compact-summary p {
+  .summary p {
     margin: 0.3rem 0;
   }
-  .compact-summary table {
+  .summary table {
     font-size: 8pt;
   }
-  .compact-summary .path-strip-row {
+  .summary .path-strip-row {
     gap: 0.35rem;
   }
-  .compact-summary .run-summary {
+  .summary .run-summary {
     gap: 0.3rem;
     margin: 0.3rem 0;
   }
-  .compact-summary .run-summary div {
+  .summary .run-summary div {
     padding: 0.3rem 0.4rem;
   }
-  .compact-summary .path-strip,
-  .compact-summary .reach-strip,
-  .compact-summary table,
-  .compact-summary .overview-support,
-  .compact-summary .run-summary {
+  .summary .path-strip,
+  .summary .reach-strip,
+  .summary table,
+  .summary .overview-support,
+  .summary .run-summary {
     break-inside: avoid;
   }
-  .compact-summary .panel {
+  .summary .panel {
     break-inside: avoid;
   }
-  .compact-summary .footnote {
+  .summary .footnote {
     margin-top: 0.35rem;
   }
-  .compact-summary .question-section {
+  .summary .question-section {
     break-before: auto;
   }
 }
 @media (max-width: 620px) {
-  .compact-summary .run-summary {
+  .summary .run-summary {
     grid-template-columns: 1fr 1fr;
   }
-  .compact-summary .path-strip-row {
+  .summary .path-strip-row {
     grid-template-columns: 1fr;
   }
 }
@@ -1587,43 +1587,43 @@ main.compact-summary {
   @page {
     margin: 5mm;
   }
-  .compact-summary.compact-small {
+  .summary.summary-small {
     font-size: 8pt;
     line-height: 1.12;
   }
-  .compact-summary.compact-small .panel {
+  .summary.summary-small .panel {
     padding: 0.25rem;
     margin-top: 0.15rem;
     break-inside: auto;
   }
-  .compact-summary.compact-small .hero {
+  .summary.summary-small .hero {
     padding: 0.3rem 0.4rem;
   }
-  .compact-summary.compact-small h1 {
+  .summary.summary-small h1 {
     font-size: 1.3rem;
   }
-  .compact-summary.compact-small h2 {
+  .summary.summary-small h2 {
     font-size: 0.9rem;
   }
-  .compact-summary.compact-small h3 {
+  .summary.summary-small h3 {
     font-size: 0.8rem;
     margin: 0.2rem 0 0.08rem;
   }
-  .compact-summary.compact-small .headline-facts,
-  .compact-summary.compact-small .overview-support,
-  .compact-summary.compact-small .run-summary {
+  .summary.summary-small .headline-facts,
+  .summary.summary-small .overview-support,
+  .summary.summary-small .run-summary {
     gap: 0.15rem;
   }
-  .compact-summary.compact-small .fact,
-  .compact-summary.compact-small .run-summary div {
+  .summary.summary-small .fact,
+  .summary.summary-small .run-summary div {
     padding: 0.15rem 0.25rem;
   }
-  .compact-summary.compact-small .orientation,
-  .compact-summary.compact-small .overview .answer {
+  .summary.summary-small .orientation,
+  .summary.summary-small .overview .answer {
     padding: 0.15rem 0.25rem;
     margin: 0.15rem 0;
   }
-  .compact-summary.compact-small p {
+  .summary.summary-small p {
     margin: 0.15rem 0;
   }
 }

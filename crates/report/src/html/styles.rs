@@ -5,14 +5,14 @@ use super::{geometry::write_geometry_styles, shared::CheckedHtmlWriter};
 
 const REPORT_CSS: &str = include_str!("../../styles/report.css");
 const COVERAGE_CSS: &str = include_str!("../../styles/coverage.css");
-const COMPACT_CSS: &str = include_str!("../../styles/compact.css");
-const COMPACT_SMALL_PRINT_CSS: &str = include_str!("../../styles/compact-small-print.css");
+const SUMMARY_CSS: &str = include_str!("../../styles/summary.css");
+const SUMMARY_SMALL_PRINT_CSS: &str = include_str!("../../styles/summary-small-print.css");
 const MODULE_SEPARATOR: &str = "\n";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum StylesheetVariant {
     Full,
-    Compact,
+    Summary,
 }
 
 pub(super) fn write_stylesheet(variant: StylesheetVariant, write: &mut impl FnMut(&str)) {
@@ -20,9 +20,9 @@ pub(super) fn write_stylesheet(variant: StylesheetVariant, write: &mut impl FnMu
     write_geometry_styles(write);
     write(MODULE_SEPARATOR);
     write(COVERAGE_CSS);
-    if variant == StylesheetVariant::Compact {
-        write(COMPACT_CSS);
-        write(COMPACT_SMALL_PRINT_CSS);
+    if variant == StylesheetVariant::Summary {
+        write(SUMMARY_CSS);
+        write(SUMMARY_SMALL_PRINT_CSS);
     }
 }
 
@@ -52,18 +52,18 @@ mod tests {
     #[test]
     fn canonical_stylesheets_preserve_explicit_assembly_order() {
         let full = render_stylesheet(StylesheetVariant::Full);
-        let compact = render_stylesheet(StylesheetVariant::Compact);
+        let summary = render_stylesheet(StylesheetVariant::Summary);
 
         assert!(full.starts_with(":root {"));
         assert!(full.contains(".geometry-left"));
         assert!(full.contains(".g0{--g:0%}"));
         assert!(full.contains(".g1000{--g:100%}"));
         assert!(full.contains("--coverage-both"));
-        assert!(!full.contains("main.compact-summary"));
+        assert!(!full.contains("main.summary"));
 
-        assert!(compact.starts_with(&full));
-        assert!(compact.contains("main.compact-summary"));
-        assert!(compact.contains(".compact-summary.compact-small"));
+        assert!(summary.starts_with(&full));
+        assert!(summary.contains("main.summary"));
+        assert!(summary.contains(".summary.summary-small"));
     }
 
     #[test]
@@ -71,8 +71,8 @@ mod tests {
         for (name, css) in [
             ("report.css", REPORT_CSS),
             ("coverage.css", COVERAGE_CSS),
-            ("compact.css", COMPACT_CSS),
-            ("compact-small-print.css", COMPACT_SMALL_PRINT_CSS),
+            ("summary.css", SUMMARY_CSS),
+            ("summary-small-print.css", SUMMARY_SMALL_PRINT_CSS),
         ] {
             assert!(!css.contains('\r'), "{name} must use LF line endings");
             assert!(css.ends_with('\n'), "{name} must end with LF");

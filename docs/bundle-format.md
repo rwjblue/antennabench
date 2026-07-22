@@ -9,12 +9,12 @@ Bundles are ordinary directories ending in `.session.antennabundle`. You can cop
 one to another computer, archive it with station records, or reopen it in a later
 version of AntennaBench.
 
-## Bundle, Compact Summary, Or Full HTML Report?
+## Bundle, Summary, Or Full Evidence?
 
 Export the **session bundle** when you want the reusable experiment record. It can
 be reopened, rechecked, and used to regenerate reports.
 
-Export the **compact summary HTML** for a printable one- or two-page local
+Export the **Summary HTML** for a printable one- or two-page local
 share summary. It carries the scoped descriptive answer, same-path and reach
 facts, run quality, limitations, and the committed session revision, while
 intentionally directing readers to the complete audit evidence.
@@ -108,10 +108,10 @@ rather than editing bundle files by hand.
   persistence-gap states instead of claiming a clean history.
 - A full HTML report with controller attempts offers an explicit choice to omit
   command details with visible markers. That choice changes only the exported
-  report; it does not sanitize or modify the lossless bundle. The compact summary
+  report; it does not sanitize or modify the lossless bundle. The Summary
   already omits controller output and identifies that omission.
-- Operational history is also omitted from full evidence HTML by default. Its
-  separate explicit inclusion choice adds the redacted support view; compact
+- Operational history is also omitted from Full evidence HTML by default. Its
+  separate explicit inclusion choice adds the redacted support view; Summary
   HTML cannot include it. Neither report choice changes the lossless bundle.
 - A damaged or ambiguous record may receive an
   [exclusion](glossary.md#exclusion) while the report still explains the

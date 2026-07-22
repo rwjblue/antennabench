@@ -48,7 +48,7 @@ four categories above, and exact distances remain available in audit detail.
 ### Goal Lenses
 
 The immutable schedule goal selects one renderer-neutral presentation lens.
-The lens is projected from Rust and is identical in full and compact reports.
+The lens is projected from Rust and is identical in Full evidence and Summary reports.
 It may reorder available question families, name one or more prespecified
 distance categories for emphasis, choose bounded explanatory wording and
 next-run advice, and choose which secondary disclosure begins expanded. It

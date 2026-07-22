@@ -10,6 +10,6 @@ mkdir -p "$report_dir"
 cargo run -q -p antennabench-report --example render_canonical_sample -- \
   "$report_dir/full.html"
 cargo run -q -p antennabench-report --example render_canonical_sample -- \
-  "$report_dir/compact.html" --compact-summary
+  "$report_dir/summary.html" --summary
 node scripts/desktop-report-frame-browser.mjs \
-  "$report_dir/full.html" "$report_dir/compact.html"
+  "$report_dir/full.html" "$report_dir/summary.html"

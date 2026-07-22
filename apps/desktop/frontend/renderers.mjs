@@ -867,7 +867,7 @@ export function renderReport(elements, state, reportDocuments) {
   const {
     reportStatus, reportPanelHeading, reportPlaceholder, reportViewer, reportFrame,
     reportSavedButton, reportActiveRunButton, reportRefreshButton,
-    reportCompactExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
+    reportSummaryExportButton, reportFullExportButton, reportFeedback, reportFeedbackMessage, reportFeedbackDetail,
     reportBundleName, reportRevision, reportExportRevision, reportSummary, reportControllerOptions,
     reportControllerHandling,
     reportOperationalOptions, reportOperationalHandling,
@@ -896,7 +896,7 @@ export function renderReport(elements, state, reportDocuments) {
     state.session?.lifecycle,
   );
   reportRefreshButton.disabled = reportBusy;
-  reportCompactExportButton.disabled = reportBusy || !hasReport;
+  reportSummaryExportButton.disabled = reportBusy || !hasReport;
   reportFullExportButton.disabled = reportBusy || !hasReport;
   const hasControllerEvidence = hasReport && state.session.hasControllerEvidence === true;
   reportControllerOptions.hidden = !hasControllerEvidence;
@@ -918,8 +918,8 @@ export function renderReport(elements, state, reportDocuments) {
     : state.reportExportStatus === "replacing"
       ? "Replacing…"
       : null;
-  reportCompactExportButton.textContent = exportAction ?? "Export compact summary HTML";
-  reportFullExportButton.textContent = exportAction ?? "Export full evidence HTML";
+  reportSummaryExportButton.textContent = exportAction ?? "Save Summary HTML";
+  reportFullExportButton.textContent = exportAction ?? "Save Full evidence HTML";
   renderFeedback(reportFeedback, reportFeedbackMessage, reportFeedbackDetail, reportFeedbackModel(state));
   renderReportReplaceDialog({
     reportReplaceDialog, reportReplaceTitle, reportReplaceDescription,

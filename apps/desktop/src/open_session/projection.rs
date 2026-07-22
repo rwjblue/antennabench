@@ -805,7 +805,7 @@ pub(super) fn prepare_presentation(
     )?;
     let has_controller_evidence = !report.snapshot.antenna_control_attempts.is_empty();
     let report_html = render_standalone_html(&report)?;
-    let compact_summary_html = render_compact_summary_html(&report)?;
+    let summary_html = render_summary_html(&report)?;
     let controller_omitted_report_html = has_controller_evidence
         .then(|| {
             render_standalone_html_with_options(
@@ -839,7 +839,7 @@ pub(super) fn prepare_presentation(
         has_controller_evidence,
         operational_history: snapshot.operational_history.clone(),
         report_html,
-        compact_summary_html,
+        summary_html,
         controller_omitted_report_html,
         operational_history_report_html,
         operational_history_controller_omitted_report_html,

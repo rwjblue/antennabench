@@ -194,7 +194,8 @@ Direct writes are limited to the checked sink, its Askama adapter, static
 embedded CSS assembly, and deterministic geometry CSS generated from
 renderer-owned numeric values. Authored declarations are readable LF-only files
 under `crates/report/styles/`, embedded with `include_str!` and assembled in one
-explicit full/compact order. Standalone reports inline that complete assembly;
+explicit Full evidence/Summary order. Standalone reports inline that complete
+assembly;
 the desktop packages deterministic generated mirrors and performs no runtime
 stylesheet lookup.
 
@@ -428,7 +429,7 @@ material storage and desktop operation seams; historical presentation remains
 the sequenced #179 work. The streams are modeled portable metadata for validation, recovery,
 resource accounting, and lossless copy, but are invisible to observation
 alignment and scientific conclusions. Full report disclosure is explicit and
-off by default; compact/public/hosted output excludes the streams. Older bundles
+off by default; Summary, public, and hosted output excludes the streams. Older bundles
 surface legacy/unknown history until a non-destructive schema-v6 upgrade. The
 implementation sequence is build/runtime contexts (#180), durable outcomes
 (#181), then local presentation and a whitelisted support summary (#179).

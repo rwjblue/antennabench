@@ -275,9 +275,9 @@ Standalone report-renderer tests use the same canonical sample to verify
 determinism, offline-only document structure, answer-first section order,
 question anchors, native audit disclosures, closed-disclosure print rules,
 responsive text alternatives, accessible chart tables, and all report sections.
-The compact-summary renderer consumes that same committed `SessionReport`
+The summary renderer consumes that same committed `SessionReport`
 instance and is separately pinned for displayed-fact equivalence, omission of
-audit-only detail, compact print rules, escaping, unavailable, and
+audit-only detail, Summary print rules, escaping, unavailable, and
 bounded-overview behavior. Separate hostile-string, single-antenna/unavailable,
 bounded-overview, and empty-data cases pin escaping, visible limitations and
 omissions, and honest unavailable states without making network requests.
@@ -290,7 +290,7 @@ Report markup tests choose the narrowest assertion that owns the behavior:
 
 - Use a semantic selector assertion for stable structure such as sections,
   anchors, headings, `aria-labelledby` targets, disclosure boundaries, table
-  captions and headers, and full-versus-compact inclusion policy.
+  captions and headers, and Full-evidence-versus-Summary inclusion policy.
 - Use a rendered-text assertion when inline elements, interpolation,
   punctuation, or conditional Askama blocks could join or separate visible
   words. The helper applies ordinary HTML whitespace collapsing but preserves
@@ -325,15 +325,15 @@ formatted with the exact root-workspace Prettier pin. Use `mise run
 report:css-format` to update those sources and `mise run
 report:css-format-check` for CI's non-mutating check. Generated desktop assets
 are not formatter inputs: `mise run desktop:report-style-update` regenerates
-`report.css` and `report-compact.css` from the production Rust renderer, and
+`report.css` and `report-summary.css` from the production Rust renderer, and
 `mise run desktop:report-style-check` rejects byte drift.
 
 The run-quality state matrix additionally pins ordinary, late, unknown-
 occupancy, missed, bad, corrected, interrupted/resumed, abandoned,
 command-verified, explicit acquisition-gap, malformed/conflict/duplicate, and
-bounded-overview presentation. Every compact state is asserted against its
+bounded-overview presentation. Every Summary presentation state is asserted against its
 exact textual timeline detail and retained audit inventory. Bounded overview
-keeps the compact planned-versus-actual rows complete while reporting exact
+keeps the Summary planned-versus-actual rows complete while reporting exact
 omission-family counts for full operator-event and exclusion-record tables.
 Mixed-quality analysis/report tests pair malformed and contradictory observations
 with valid evidence, assert stable eligibility code/category/scope counts, and
@@ -356,7 +356,7 @@ To generate the canonical sample as an untracked verification artifact:
 
 ```bash
 cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-sample.html
-cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-compact-summary.html --compact-summary
+cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-summary.html --summary
 cargo run -p antennabench-report --example render_canonical_sample -- /tmp/antennabench-inconclusive.html --bundle fixtures/session-bundles/inconclusive-sample-report.session.wsprabundle
 ```
 
@@ -466,7 +466,7 @@ the production manual conductor through start, a lost-response retry, explicit
 actual-antenna confirmation, missed/bad/note/correction evidence, an operator
 interruption/resume, synthetic WSJT-X raw evidence plus observation, a bounded
 adapter gap, a torn-write failpoint, process recovery, final resume/end, report
-refresh, exact full-evidence and compact-summary HTML exports from one
+refresh, exact Full evidence and Summary HTML exports from one
 presentation, checkpointed bundle export, collision rejection, and reopen. It
 asserts revision identity, retry idempotency, raw hex,
 effective corrections, explicit gap disclosure, terminal lifecycle, exported
@@ -539,8 +539,9 @@ reproducible defect crosses one of those real-webview boundaries and cannot be
 represented through the current element or platform ports; one such defect is
 evidence for a focused decision, not automatic permission to add WebDriver or
 a desktop production dependency. The blocked embedded-report stylesheet was
-such a boundary defect, so `desktop:report-browser` now renders generated full
-and compact reports in a real browser under both their standalone meta CSP and
+such a boundary defect, so `desktop:report-browser` now renders generated Full
+evidence and Summary reports in a real browser under both their standalone meta
+CSP and
 the exact desktop CSP. It verifies exact inline hashes retain standalone styles,
 the sandboxed blob frame has no scripts or top-navigation authority, byte-checks
 the generated same-origin stylesheet assets against renderer output, activates native

@@ -12,7 +12,7 @@ pub(crate) struct ReportPresentation {
     pub(crate) operational_history: BundleDiagnosticsPresentation,
     pub(super) report_html: String,
     #[serde(skip)]
-    pub(super) compact_summary_html: String,
+    pub(super) summary_html: String,
     #[serde(skip)]
     pub(super) controller_omitted_report_html: Option<String>,
     #[serde(skip)]
@@ -82,7 +82,7 @@ pub(crate) enum ExportReportOutcome {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ReportExportFormat {
-    CompactSummaryHtml,
+    SummaryHtml,
     #[default]
     FullEvidenceHtml,
 }

@@ -126,11 +126,11 @@ switch the radio or antenna for this manual run.
 12. **Save the output you need.** Open **Export** in the report toolbar. The
     three portable choices serve different purposes:
 
-    - **Export full evidence HTML** saves a standalone report with the result,
+    - **Save Full evidence HTML** saves a standalone report with the result,
       supporting detail, and audit material. Operational support history is
       omitted by default; explicitly include only its redacted bounded view when
       the recipient needs it.
-    - **Export compact summary HTML** saves a shorter standalone overview for a
+    - **Save Summary HTML** saves a shorter standalone overview for a
       quick review or share.
     - In **Saved sessions**, the row action **Export bundle…** saves the
       checkpoint-coherent lossless durable record from which reports can be

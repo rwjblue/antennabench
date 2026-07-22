@@ -2,16 +2,15 @@ use super::super::geometry::geometry_class;
 use super::*;
 use crate::html::{
     templates::{
-        render_template, CompactFootprintCloseTemplate, CompactFootprintEndTemplate,
-        CompactFootprintTemplate, GeographyBeforeSolarTemplate, GeographyEndTemplate,
-        GeographyTemplate,
+        render_template, GeographyBeforeSolarTemplate, GeographyEndTemplate, GeographyTemplate,
+        SummaryFootprintCloseTemplate, SummaryFootprintEndTemplate, SummaryFootprintTemplate,
     },
     view::{
-        CompactFootprintGroupView, CompactFootprintView, CompositionRowView, ContextCellView,
-        ContextSectionView, FootprintReachView, FullProfileGroupView, GeographyView,
-        LocationPathAuditView, ObservedPathAuditRowView, ObservedPathAuditView,
-        PathContextGroupView, PathContextView, ProfileBarChartView, ProfileBarRowView,
-        ProfileDistributionRowView, ProfileDistributionView, ProfileTotalView, ProfileView,
+        CompositionRowView, ContextCellView, ContextSectionView, FootprintReachView,
+        FullProfileGroupView, GeographyView, LocationPathAuditView, ObservedPathAuditRowView,
+        ObservedPathAuditView, PathContextGroupView, PathContextView, ProfileBarChartView,
+        ProfileBarRowView, ProfileDistributionRowView, ProfileDistributionView, ProfileTotalView,
+        ProfileView, SummaryFootprintGroupView, SummaryFootprintView,
     },
 };
 
@@ -30,20 +29,20 @@ pub(in super::super) fn render_distance_section(
     render_template(out, &GeographyEndTemplate)
 }
 
-pub(in super::super) fn render_compact_observed_footprint_section(
+pub(in super::super) fn render_summary_observed_footprint_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
-    let view = compact_footprint_view(report);
+    let view = summary_footprint_view(report);
     let no_groups = view.no_groups;
-    render_template(out, &CompactFootprintTemplate { view })?;
+    render_template(out, &SummaryFootprintTemplate { view })?;
     if no_groups {
-        return render_template(out, &CompactFootprintCloseTemplate);
+        return render_template(out, &SummaryFootprintCloseTemplate);
     }
-    render_compact_repeatability_disclosure(out, report)?;
+    render_summary_repeatability_disclosure(out, report)?;
     render_template(
         out,
-        &CompactFootprintEndTemplate {
+        &SummaryFootprintEndTemplate {
             audit: observed_path_audit_view(report),
         },
     )
@@ -93,7 +92,7 @@ fn geography_view(report: &SessionReport) -> GeographyView {
     }
 }
 
-fn compact_footprint_view(report: &SessionReport) -> CompactFootprintView {
+fn summary_footprint_view(report: &SessionReport) -> SummaryFootprintView {
     let (available, unavailable): (Vec<_>, Vec<_>) =
         report.overview.strata.iter().partition(|stratum| {
             stratum.observed_profile.left.is_some()
@@ -105,7 +104,7 @@ fn compact_footprint_view(report: &SessionReport) -> CompactFootprintView {
     let groups = available
         .into_iter()
         .enumerate()
-        .map(|(index, stratum)| CompactFootprintGroupView {
+        .map(|(index, stratum)| SummaryFootprintGroupView {
             index,
             label: comparison_group_label(&stratum.stratum),
             reach: footprint_reach_view(report, &stratum.reach),
@@ -120,7 +119,7 @@ fn compact_footprint_view(report: &SessionReport) -> CompactFootprintView {
             raw_comparison_strata_list(&unavailable)
         )
     });
-    CompactFootprintView {
+    SummaryFootprintView {
         single_antenna: is_single_antenna_lens(report),
         goal_focus: goal_focus(report),
         no_groups: groups.is_empty(),
@@ -139,13 +138,13 @@ fn goal_focus(report: &SessionReport) -> Option<String> {
     })
 }
 
-fn profile_view(profile: &crate::ReportOverviewObservedProfile, compact: bool) -> ProfileView {
-    let distance_caption = if compact {
+fn profile_view(profile: &crate::ReportOverviewObservedProfile, summary: bool) -> ProfileView {
+    let distance_caption = if summary {
         "Exact unique-path distance counts and observation support"
     } else {
         "Side-by-side observed distance distribution"
     };
-    let azimuth_caption = if compact {
+    let azimuth_caption = if summary {
         "Exact unique-path direction counts and observation support"
     } else {
         "Side-by-side observed azimuth distribution"

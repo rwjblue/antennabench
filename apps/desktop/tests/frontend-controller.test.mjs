@@ -729,11 +729,11 @@ test("report replacement confirmation is single-submit and cancellation is norma
       pendingExportId: "pending-cancel",
       fileName: "existing.html",
       revision: 3,
-      format: "compact_summary_html",
+      format: "summary_html",
     },
     cancel_report_export: { status: "cancelled" },
   }, { state });
-  await cancelled.controller.exportReport("compact_summary_html");
+  await cancelled.controller.exportReport("summary_html");
   await cancelled.controller.cancelReportReplacement();
   assert.equal(cancelled.controller.state.reportExportStatus, "idle");
   assert.equal(cancelled.controller.state.reportExportPending, null);

@@ -1,7 +1,7 @@
 {% if view.no_groups %}
   <p class="empty">
     No comparison group has same-path evidence available. This is not a
-    {% if view.compact %}
+    {% if view.summary %}
       0 dB
     {% else %}
       zero-delta
@@ -18,7 +18,7 @@
   {% endif %}
   <p class="path-view-note">
     Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale
-    {%- if !view.compact %}; a 0 dB dot is retained as a true zero{% endif -%}
+    {%- if !view.summary %}; a 0 dB dot is retained as a true zero{% endif -%}
     .
   </p>
   {% for group in view.strata %}

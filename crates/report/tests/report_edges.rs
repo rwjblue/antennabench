@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use antennabench_core::{normalize_bundle, validate_bundle_report};
 use antennabench_report::{
-    build_report, build_report_with_resources, render_compact_summary_html,
-    render_compact_summary_html_with_resources, render_standalone_html,
-    render_standalone_html_with_resources, ReportCancellationToken, ReportCompleteness,
-    ReportError, ReportNotice, ReportResourceLimits, REPORT_RESOURCE_LIMITS,
+    build_report, build_report_with_resources, render_standalone_html,
+    render_standalone_html_with_resources, render_summary_html, render_summary_html_with_resources,
+    ReportCancellationToken, ReportCompleteness, ReportError, ReportNotice, ReportResourceLimits,
+    REPORT_RESOURCE_LIMITS,
 };
 use antennabench_storage::BundleStore;
 
@@ -126,13 +126,13 @@ fn report_model_html_and_cancellation_boundaries_are_typed_and_never_partial() {
 }
 
 #[test]
-fn compact_summary_has_the_same_typed_resource_and_cancellation_boundaries() {
+fn summary_has_the_same_typed_resource_and_cancellation_boundaries() {
     let report = build_report(&minimal_fixture_bundle()).unwrap();
-    let html = render_compact_summary_html(&report).unwrap();
-    assert!(html.contains("class=\"compact-summary compact-small\""));
+    let html = render_summary_html(&report).unwrap();
+    assert!(html.contains("class=\"summary summary-small\""));
     let bytes = html.len() as u64;
     assert_eq!(
-        render_compact_summary_html_with_resources(
+        render_summary_html_with_resources(
             &report,
             ReportResourceLimits::testing(25_000, 8 * 1024 * 1024, bytes),
             &ReportCancellationToken::default(),
@@ -141,7 +141,7 @@ fn compact_summary_has_the_same_typed_resource_and_cancellation_boundaries() {
         html
     );
     assert!(matches!(
-        render_compact_summary_html_with_resources(
+        render_summary_html_with_resources(
             &report,
             ReportResourceLimits::testing(25_000, 8 * 1024 * 1024, bytes - 1),
             &ReportCancellationToken::default(),
@@ -152,7 +152,7 @@ fn compact_summary_has_the_same_typed_resource_and_cancellation_boundaries() {
     let cancellation = ReportCancellationToken::default();
     cancellation.cancel();
     assert!(matches!(
-        render_compact_summary_html_with_resources(&report, REPORT_RESOURCE_LIMITS, &cancellation),
+        render_summary_html_with_resources(&report, REPORT_RESOURCE_LIMITS, &cancellation),
         Err(ReportError::Resource(ref error))
             if error.diagnostic.code == "resource.operation.cancelled"
     ));

@@ -53,7 +53,7 @@ pub(in crate::html) struct PathStratumView {
 
 #[derive(Debug, Clone)]
 pub(in crate::html) struct SamePathView {
-    pub(in crate::html) compact: bool,
+    pub(in crate::html) summary: bool,
     pub(in crate::html) no_groups: bool,
     pub(in crate::html) all_unavailable: Option<String>,
     pub(in crate::html) orientation: Option<String>,

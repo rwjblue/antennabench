@@ -12,15 +12,15 @@ use antennabench_core::{
     AlignedSlotStatus, Band, ExperimentMode, ObservationKind, RecordSource, SessionGoal,
 };
 use antennabench_report::{
-    build_report, render_compact_summary_html, render_standalone_html,
-    render_standalone_html_with_operational_history, render_standalone_html_with_options,
-    ControllerEvidenceHandling, ReportAcquisitionWorkflowStatus, ReportAdapterEvidence,
-    ReportAntennaControlAttempt, ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection,
-    ReportEventCorrectionAction, ReportImportedEvidence, ReportLifecycleEvent,
-    ReportLifecycleEventKind, ReportNotice, ReportOperatorEvent, ReportOperatorEventKind,
-    ReportOverviewLimitation, ReportOverviewLocationCell, ReportOverviewPathDelta,
-    ReportProviderCompleteness, ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle,
-    ReportWsprReadinessBasis, SamePathSignalAnswerability, SessionReport, StandaloneHtmlOptions,
+    build_report, render_standalone_html, render_standalone_html_with_operational_history,
+    render_standalone_html_with_options, render_summary_html, ControllerEvidenceHandling,
+    ReportAcquisitionWorkflowStatus, ReportAdapterEvidence, ReportAntennaControlAttempt,
+    ReportAzimuthSector, ReportDistanceBin, ReportEventCorrection, ReportEventCorrectionAction,
+    ReportImportedEvidence, ReportLifecycleEvent, ReportLifecycleEventKind, ReportNotice,
+    ReportOperatorEvent, ReportOperatorEventKind, ReportOverviewLimitation,
+    ReportOverviewLocationCell, ReportOverviewPathDelta, ReportProviderCompleteness,
+    ReportSnapshotContext, ReportWsprAttribution, ReportWsprCycle, ReportWsprReadinessBasis,
+    SamePathSignalAnswerability, SessionReport, StandaloneHtmlOptions,
 };
 use antennabench_storage::BundleStore;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -29,7 +29,7 @@ use sha2::{Digest, Sha256};
 
 mod support;
 
-use support::{assert_full_compact_policy, ReportDocument};
+use support::{assert_full_summary_policy, ReportDocument};
 
 #[test]
 fn renders_the_canonical_report_as_deterministic_offline_html() {
@@ -120,10 +120,10 @@ fn renders_the_canonical_report_as_deterministic_offline_html() {
 fn standalone_styles_are_authorized_by_their_exact_csp_hashes() {
     let report = canonical_report();
     let full = render_standalone_html(&report).unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
     let mut sources = Vec::new();
 
-    for (variant, html) in [("full", &full), ("compact", &compact)] {
+    for (variant, html) in [("full", &full), ("summary", &summary)] {
         let style = inline_stylesheet(html);
         let source = independent_style_source(style.as_bytes());
         assert!(
@@ -150,7 +150,7 @@ fn standalone_styles_are_authorized_by_their_exact_csp_hashes() {
 
     assert_ne!(
         sources[0], sources[1],
-        "full and compact stylesheet hashes must differ"
+        "full and summary stylesheet hashes must differ"
     );
 }
 
@@ -173,7 +173,7 @@ fn operational_history_requires_explicit_full_report_inclusion_and_is_escaped() 
     let report = canonical_report();
     let support = r#"{"schema":"antennabench_support_summary.v1","code":"resource.jsonl_line_bytes","unsafe":"</pre><script>alert(1)</script>"}"#;
     let default_full = render_standalone_html(&report).unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
     let included = render_standalone_html_with_operational_history(
         &report,
         ControllerEvidenceHandling::Complete,
@@ -181,7 +181,7 @@ fn operational_history_requires_explicit_full_report_inclusion_and_is_escaped() 
     )
     .unwrap();
 
-    for private_default in [default_full, compact] {
+    for private_default in [default_full, summary] {
         assert!(!private_default.contains("Operational support history"));
         assert!(!private_default.contains("resource.jsonl_line_bytes"));
     }
@@ -193,14 +193,14 @@ fn operational_history_requires_explicit_full_report_inclusion_and_is_escaped() 
 }
 
 #[test]
-fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail() {
+fn summary_template_contexts_reuse_shared_facts_without_restricted_audit_detail() {
     let mut report = paired_report(true);
     report.snapshot.checkpoint_revision = Some(27);
     report
         .snapshot
         .antenna_control_attempts
         .push(ReportAntennaControlAttempt {
-            record_id: "compact-omitted-command".into(),
+            record_id: "summary-omitted-command".into(),
             role: AntennaControlRoleV5::Verification,
             controller_profile_name: "test switch".into(),
             controller_profile_revision: "v1".into(),
@@ -227,18 +227,18 @@ fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
         });
 
     let full = render_standalone_html(&report).unwrap();
-    let first = render_compact_summary_html(&report).unwrap();
-    let second = render_compact_summary_html(&report).unwrap();
+    let first = render_summary_html(&report).unwrap();
+    let second = render_summary_html(&report).unwrap();
     let full_document = ReportDocument::parse(&full);
-    let compact_document = ReportDocument::parse(&first);
+    let summary_document = ReportDocument::parse(&first);
 
-    assert_eq!(first, second, "compact bytes are deterministic");
-    assert!(first.contains("AntennaBench compact share summary"));
-    assert!(first.contains("Not the full audit report"));
+    assert_eq!(first, second, "summary bytes are deterministic");
+    assert!(first.contains("AntennaBench Summary"));
+    assert!(first.contains("Not the Full evidence report"));
     assert!(first.contains("Content-Security-Policy"));
     assert!(first.contains("default-src 'none'"));
-    assert!(first.contains(".compact-summary .overview {\n    break-after: auto;"));
-    assert!(first.contains(".compact-summary .question-section {\n    break-before: auto;"));
+    assert!(first.contains(".summary .overview {\n    break-after: auto;"));
+    assert!(first.contains(".summary .question-section {\n    break-before: auto;"));
     assert!(!first.contains("<script"));
     assert!(!first.contains("http://"));
     assert!(!first.contains("https://"));
@@ -260,7 +260,7 @@ fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
         assert!(full.contains(shared_fact), "full output lost {shared_fact}");
         assert!(
             first.contains(shared_fact),
-            "compact output lost {shared_fact}"
+            "summary output lost {shared_fact}"
         );
     }
     assert!(first.contains("committed revision <strong>27</strong>"));
@@ -272,11 +272,11 @@ fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
     assert!(full.contains(&count_fact));
     assert!(first.contains(&count_fact));
     assert!(first.contains("no rows are sampled here"));
-    assert_full_compact_policy(&full_document, &compact_document, "#what-run-show", true);
-    assert_full_compact_policy(&full_document, &compact_document, "#audit-appendix", false);
-    assert_full_compact_policy(
+    assert_full_summary_policy(&full_document, &summary_document, "#what-run-show", true);
+    assert_full_summary_policy(&full_document, &summary_document, "#audit-appendix", false);
+    assert_full_summary_policy(
         &full_document,
-        &compact_document,
+        &summary_document,
         "table.overview-table",
         true,
     );
@@ -291,7 +291,7 @@ fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
             full.contains(omitted),
             "full-report fixture did not exercise restricted value {omitted}"
         );
-        assert!(!first.contains(omitted), "compact output leaked {omitted}");
+        assert!(!first.contains(omitted), "summary output leaked {omitted}");
     }
 }
 
@@ -299,18 +299,18 @@ fn compact_template_contexts_reuse_shared_facts_without_restricted_audit_detail(
 fn semantic_text_assertions_preserve_inline_flow_and_optional_spacing() {
     let report = paired_report(true);
     let full_html = render_standalone_html(&report).unwrap();
-    let compact_html = render_compact_summary_html(&report).unwrap();
+    let summary_html = render_summary_html(&report).unwrap();
     let full = ReportDocument::parse(&full_html);
-    let compact = ReportDocument::parse(&compact_html);
+    let summary = ReportDocument::parse(&summary_html);
 
     full.assert_rendered_text(
         "header.hero > p.muted",
         &format!("Session {}", report.overview.scope.session_id),
     );
-    compact.assert_rendered_text(
+    summary.assert_rendered_text(
         "header.hero > p.muted",
         &format!(
-            "Not the full audit report · Session {}",
+            "Not the Full evidence report · Session {}",
             report.overview.scope.session_id
         ),
     );
@@ -318,7 +318,7 @@ fn semantic_text_assertions_preserve_inline_flow_and_optional_spacing() {
         "#same-path-signal .path-view-note",
         "Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale; a 0 dB dot is retained as a true zero.",
     );
-    compact.assert_rendered_text(
+    summary.assert_rendered_text(
         "#same-path-signal .path-view-note",
         "Each dot is one unique remote path’s median across its matched pairs. Hover or focus a dot for its path, median delta, and matched-pair support. Axis markers show the signed dB scale.",
     );
@@ -332,20 +332,20 @@ fn semantic_text_assertions_preserve_inline_flow_and_optional_spacing() {
 fn consolidates_standing_caveats_in_one_shared_reading_panel() {
     let report = paired_report(true);
     let full = render_standalone_html(&report).unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
-    let compact_document = ReportDocument::parse(&compact);
+    let summary = render_summary_html(&report).unwrap();
+    let summary_document = ReportDocument::parse(&summary);
     assert_eq!(full.matches("id=\"reading-guide-title\"").count(), 1);
     assert!(
         full.find("id=\"reading-guide-title\"").unwrap()
             < full.find("id=\"what-run-show-title\"").unwrap()
     );
-    compact_document.assert_present("details.panel.reading-guide");
-    compact_document.assert_any_rendered_text(
+    summary_document.assert_present("details.panel.reading-guide");
+    summary_document.assert_any_rendered_text(
         "details.panel.reading-guide > summary",
         "How to read this report",
     );
-    compact_document.assert_absent("details.panel.reading-guide[open]");
-    for html in [&full, &compact] {
+    summary_document.assert_absent("details.panel.reading-guide[open]");
+    for html in [&full, &summary] {
         for caveat in [
             "A missing public report is missing evidence, never a zero-strength signal, unless a band-qualified activity census proves that reporter was active for that cycle.",
             "This report describes evidence; it does not select a winner or prove one antenna is better.",
@@ -362,20 +362,20 @@ fn consolidates_standing_caveats_in_one_shared_reading_panel() {
 }
 
 #[test]
-fn compact_summary_escapes_unavailable_and_bounded_reports() {
+fn summary_escapes_unavailable_and_bounded_reports() {
     let mut unavailable = canonical_report();
-    unavailable.overview.scope.session_id = "<compact & session>".into();
+    unavailable.overview.scope.session_id = "<summary & session>".into();
     unavailable.overview.scope.station.callsign = "<call>".into();
     unavailable.overview.strata.clear();
-    let unavailable_html = render_compact_summary_html(&unavailable).unwrap();
-    assert!(unavailable_html.contains("&#60;compact &#38; session&#62;"));
+    let unavailable_html = render_summary_html(&unavailable).unwrap();
+    assert!(unavailable_html.contains("&#60;summary &#38; session&#62;"));
     assert!(unavailable_html.contains("No comparison groups are available"));
-    assert!(!unavailable_html.contains("<compact & session>"));
+    assert!(!unavailable_html.contains("<summary & session>"));
 
     let mut bounded = paired_report(true);
     bounded.completeness = antennabench_report::ReportCompleteness::BoundedOverview;
     bounded.comparison.paired_rows.clear();
-    let bounded_html = render_compact_summary_html(&bounded).unwrap();
+    let bounded_html = render_summary_html(&bounded).unwrap();
     assert!(bounded_html.contains("Bounded overview"));
     assert!(bounded_html.contains("no rows are sampled"));
 }
@@ -539,27 +539,27 @@ fn acquisition_workflow_gap_and_provider_completeness_render_as_independent_fact
                 report.snapshot.adapter_evidence.provider_completeness = provider_completeness;
 
                 let full = render_standalone_html(&report).unwrap();
-                let compact = render_compact_summary_html(&report).unwrap();
+                let summary = render_summary_html(&report).unwrap();
                 if gap_count > 0 {
                     assert!(full.contains("2 recorded acquisition gaps"));
-                    assert!(compact.contains("2 recorded acquisition gap(s)"));
+                    assert!(summary.contains("2 recorded acquisition gap(s)"));
                     continue;
                 }
 
                 match workflow_status {
                     ReportAcquisitionWorkflowStatus::NotConfigured => {
                         assert!(full.contains("No acquisition workflow was configured"));
-                        assert!(compact.contains("No configured acquisition"));
+                        assert!(summary.contains("No configured acquisition"));
                     }
                     ReportAcquisitionWorkflowStatus::Incomplete => {
                         assert!(full.contains("Recorded acquisition is incomplete"));
-                        assert!(compact.contains("Recorded acquisition incomplete"));
+                        assert!(summary.contains("Recorded acquisition incomplete"));
                     }
                     ReportAcquisitionWorkflowStatus::Completed => {
                         assert!(full.contains("Collection completed"));
-                        assert!(compact.contains("Collection completed"));
+                        assert!(summary.contains("Collection completed"));
                         assert!(!full.contains("Recorded acquisition is incomplete"));
-                        assert!(!compact.contains("Recorded acquisition incomplete"));
+                        assert!(!summary.contains("Recorded acquisition incomplete"));
                         let provider_text = match provider_completeness {
                             ReportProviderCompleteness::Known => {
                                 "provider completeness is recorded as known"
@@ -572,7 +572,7 @@ fn acquisition_workflow_gap_and_provider_completeness_render_as_independent_fact
                             }
                         };
                         assert!(full.to_ascii_lowercase().contains(provider_text));
-                        assert!(compact.contains(provider_text));
+                        assert!(summary.contains(provider_text));
                     }
                 }
             }
@@ -810,11 +810,11 @@ fn renders_distinct_escaped_antenna_labels_without_mutating_report_data() {
     let before = serde_json::to_vec(&report).unwrap();
 
     let full = render_standalone_html(&report).unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
     let full_document = ReportDocument::parse(&full);
 
     assert_eq!(serde_json::to_vec(&report).unwrap(), before);
-    for html in [&full, &compact] {
+    for html in [&full, &summary] {
         assert!(html.contains(
             "Positive values mean Loop &#62; Beam was stronger; negative values mean &#60;Vertical &#38; 1&#62; was stronger."
         ));
@@ -950,7 +950,7 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
 
         for html in [
             render_standalone_html(&report).unwrap(),
-            render_compact_summary_html(&report).unwrap(),
+            render_summary_html(&report).unwrap(),
         ] {
             let answer = plain_language_answer_from(&html);
             assert!(answer.contains(expected), "missing headline for {availability:?}");
@@ -970,7 +970,7 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
     let report = paired_report(true);
     for html in [
         render_standalone_html(&report).unwrap(),
-        render_compact_summary_html(&report).unwrap(),
+        render_summary_html(&report).unwrap(),
     ] {
         let answer = plain_language_answer_from(&html);
         assert!(answer.contains("For this General coverage run"));
@@ -981,13 +981,13 @@ fn renders_plain_language_headline_for_every_comparison_availability() {
     assert!(render_standalone_html(&report)
         .unwrap()
         .contains("For scale:</strong> a 3 dB difference"));
-    assert!(!render_compact_summary_html(&report)
+    assert!(!render_summary_html(&report)
         .unwrap()
         .contains("For scale:</strong> a 3 dB difference"));
 }
 
 #[test]
-fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_compact_reports() {
+fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_summary_reports() {
     let report = canonical_report();
     assert_eq!(
         report.overview.comparison_availability,
@@ -1000,11 +1000,11 @@ fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_compact_
     );
 
     let full = render_standalone_html(&report).unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
     let full_answer = plain_language_answer_from(&full);
-    let compact_answer = plain_language_answer_from(&compact);
-    assert_eq!(full_answer, compact_answer);
-    for html in [&full, &compact] {
+    let summary_answer = plain_language_answer_from(&summary);
+    assert_eq!(full_answer, summary_answer);
+    for html in [&full, &summary] {
         assert!(html.contains("Answered by this run: Observed reach"));
         assert!(html.contains("No same-path SNR comparison"));
         assert!(!html.contains("id=\"same-path-signal\""));
@@ -1029,7 +1029,7 @@ fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_compact_
                 > 0
         })
         .count();
-    for html in [&full, &compact] {
+    for html in [&full, &summary] {
         assert_eq!(
             html.matches("class=\"headline-group-answer\"").count(),
             supported_group_count
@@ -1064,9 +1064,9 @@ fn no_matched_paths_with_zero_usable_observations_does_not_claim_reach_evidence(
     assert_eq!(report.evidence.overall.observation_counts.usable, 0);
 
     let full = render_standalone_html(&report).unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
     let full_answer = plain_language_answer_from(&full);
-    assert_eq!(full_answer, plain_language_answer_from(&compact));
+    assert_eq!(full_answer, plain_language_answer_from(&summary));
     assert_eq!(
         full_answer,
         "No usable observations were recorded, so this run has no reach evidence and no same-path signal delta to summarize."
@@ -1223,7 +1223,7 @@ fn renders_answer_first_order_unavailable_states_and_visible_limitations() {
 }
 
 #[test]
-fn goal_lenses_reorder_the_same_facts_in_full_and_compact_reports() {
+fn goal_lenses_reorder_the_same_facts_in_full_and_summary_reports() {
     let general = paired_report_for_goal(true, SessionGoal::GeneralCoverage);
     let dx = paired_report_for_goal(true, SessionGoal::Dx);
     let weak_signal = paired_report_for_goal(true, SessionGoal::WeakSignalReliability);
@@ -1247,17 +1247,17 @@ fn goal_lenses_reorder_the_same_facts_in_full_and_compact_reports() {
         assert_eq!(candidate.overview.strata, general.overview.strata);
     }
 
-    for compact in [false, true] {
+    for summary in [false, true] {
         let render = |report: &SessionReport| {
-            if compact {
-                render_compact_summary_html(report)
+            if summary {
+                render_summary_html(report)
             } else {
                 render_standalone_html(report)
             }
         };
         let general_html = render(&general).unwrap();
         let dx_html = render(&dx).unwrap();
-        let (general_sections, dx_sections): (&[&str], &[&str]) = if compact {
+        let (general_sections, dx_sections): (&[&str], &[&str]) = if summary {
             (
                 &["same-path-signal", "observed-footprint"],
                 &["observed-footprint", "same-path-signal"],
@@ -1296,7 +1296,7 @@ fn nvis_and_single_profile_wording_stays_within_the_predeclared_contract() {
     let nvis = paired_report_for_goal(true, SessionGoal::NvisLocal);
     for html in [
         render_standalone_html(&nvis).unwrap(),
-        render_compact_summary_html(&nvis).unwrap(),
+        render_summary_html(&nvis).unwrap(),
     ] {
         assert!(html.contains("NVIS-oriented distance proxy"));
         assert!(html.contains("Distance does not establish NVIS propagation"));
@@ -1308,7 +1308,7 @@ fn nvis_and_single_profile_wording_stays_within_the_predeclared_contract() {
     let single = single_antenna_report();
     for html in [
         render_standalone_html(&single).unwrap(),
-        render_compact_summary_html(&single).unwrap(),
+        render_summary_html(&single).unwrap(),
     ] {
         assert!(html.contains("This session profiles one antenna."));
         assert!(html.contains("Comparative signal and detection questions do not apply"));
@@ -1438,16 +1438,16 @@ fn renders_bounded_same_path_and_reach_views_with_equivalent_tables() {
     assert!(html.contains("@media (max-width: 620px)"));
     assert!(html.contains("@media print"));
 
-    let compact = render_compact_summary_html(&report).unwrap();
-    let compact_document = ReportDocument::parse(&compact);
+    let summary = render_summary_html(&report).unwrap();
+    let summary_document = ReportDocument::parse(&summary);
     assert_eq!(
-        compact
+        summary
             .matches("class=\"path-distribution-dot-group\"")
             .count(),
         3
     );
-    assert!(compact.contains("Review exact remote paths and matched-pair counts"));
-    compact_document.assert_any_rendered_text("#same-path-signal tbody tr", "K2SPARSE 1 0 dB");
+    assert!(summary.contains("Review exact remote paths and matched-pair counts"));
+    summary_document.assert_any_rendered_text("#same-path-signal tbody tr", "K2SPARSE 1 0 dB");
 }
 
 #[test]
@@ -1542,11 +1542,11 @@ fn collapses_empty_strata_without_hiding_mixed_availability() {
     assert!(mixed_html.contains("RX path · 40 m · WSPR · Public report · WSPRnet"));
     assert!(mixed_html.contains("never combined"));
 
-    let compact_html = render_compact_summary_html(&mixed_report).unwrap();
-    assert!(compact_html.contains("No path delta in 1 comparison group"));
-    assert!(compact_html.contains("No usable same-path path-median delta in 1 of 2"));
-    assert!(compact_html.contains("No usable observed footprint in 1 of 2 comparison groups"));
-    assert!(compact_html.contains("never combined"));
+    let summary_html = render_summary_html(&mixed_report).unwrap();
+    assert!(summary_html.contains("No path delta in 1 comparison group"));
+    assert!(summary_html.contains("No usable same-path path-median delta in 1 of 2"));
+    assert!(summary_html.contains("No usable observed footprint in 1 of 2 comparison groups"));
+    assert!(summary_html.contains("never combined"));
 }
 
 #[test]
@@ -1629,10 +1629,10 @@ fn renders_fixed_path_context_tables_with_equivalent_visual_states() {
 }
 
 #[test]
-fn renders_all_path_profiles_in_full_and_compact_without_overclaiming() {
+fn renders_all_path_profiles_in_full_and_summary_without_overclaiming() {
     let report = canonical_report();
     let full = render_standalone_html(&report).unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
 
     assert!(full.contains("Observed distance and direction profile"));
     assert!(full.contains("Side-by-side observed distance distribution"));
@@ -1654,26 +1654,26 @@ fn renders_all_path_profiles_in_full_and_compact_without_overclaiming() {
         "Review exact unique observed-path rows",
     ] {
         assert!(
-            compact.contains(expected),
-            "missing compact footprint: {expected}"
+            summary.contains(expected),
+            "missing summary footprint: {expected}"
         );
     }
-    let profile_disclosure = compact
+    let profile_disclosure = summary
         .find("<summary>Review observed distance and direction profile</summary>")
         .expect("observed profile is disclosed");
     assert!(
         profile_disclosure
-            < compact
+            < summary
                 .find("Observed unique paths by distance")
                 .expect("distance profile remains available")
     );
-    assert!(!compact.contains("Observed complementarity"));
-    assert!(!compact.contains("<h2 id=\"coverage-overlap-title\">"));
-    assert!(compact.contains("Review whether observed paths repeated across blocks"));
+    assert!(!summary.contains("Observed complementarity"));
+    assert!(!summary.contains("<h2 id=\"coverage-overlap-title\">"));
+    assert!(summary.contains("Review whether observed paths repeated across blocks"));
     assert!(full.contains("Exact unique observed-path records"));
     assert!(full.contains("Review shared-path distance and direction context"));
-    assert!(compact.contains("Exact unique observed-path records"));
-    assert!(!compact.contains("Review exact paired-row distance"));
+    assert!(summary.contains("Exact unique observed-path records"));
+    assert!(!summary.contains("Review exact paired-row distance"));
 }
 
 #[test]

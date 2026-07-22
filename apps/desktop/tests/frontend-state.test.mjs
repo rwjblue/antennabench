@@ -196,7 +196,7 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     "mark.svg",
     "models.mjs",
     "renderers.mjs",
-    "report-compact.css",
+    "report-summary.css",
     "report.css",
     "state.mjs",
     "styles.css",
@@ -228,10 +228,10 @@ test("embedded reports narrowly replace the standalone style hash with same-orig
   const csp = `<meta data-antennabench-report-csp http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-YWJjZA=='; style-src-attr 'none'; base-uri 'none'; form-action 'none'">`;
 
   documents.create(`<!doctype html>${csp}<style>body{color:black}</style><main></main>`);
-  documents.create(`<!doctype html>${csp}<style>body{color:black}</style><main class="compact-summary"></main>`);
+  documents.create(`<!doctype html>${csp}<style>body{color:black}</style><main class="summary"></main>`);
 
   assert.equal(blobs.length, 2);
-  for (const [index, expectedStylesheet] of ["report.css", "report-compact.css"].entries()) {
+  for (const [index, expectedStylesheet] of ["report.css", "report-summary.css"].entries()) {
     const html = blobs[index].parts.join("");
     assert.match(html, new RegExp(`href="https://app\\.local/${expectedStylesheet}"`));
     assert.match(html, /style-src 'self'/u);
@@ -679,8 +679,8 @@ test("active run leads with task actions and hides implementation-oriented tools
   assert.doesNotMatch(runPanel, /Explicit operator evidence|Trusted boundary|Trusted time/);
   assert.doesNotMatch(html, /data-panel="transfer"|data-workflow="transfer"|>Import \/ export</);
   const reportPanel = html.match(/data-panel="report"[\s\S]*?<\/section>\s*<\/main>/u)?.[0] ?? "";
-  assert.match(reportPanel, /Export compact summary HTML/);
-  assert.match(reportPanel, /Export full evidence HTML/);
+  assert.match(reportPanel, /Save Summary HTML/);
+  assert.match(reportPanel, /Save Full evidence HTML/);
 });
 
 test("readiness is the only normal antenna-change action", () => {
@@ -1495,9 +1495,9 @@ test("revision-keyed report refresh retains coherent prior output on failure and
   const exported = reportExportSucceeded(exporting, {
     fileName: "snapshot.html",
     revision: 4,
-    format: "compact_summary_html",
+    format: "summary_html",
   });
-  assert.match(exported.reportExportNotice, /compact summary/);
+  assert.match(exported.reportExportNotice, /Summary/);
   assert.equal(updateReportFrame(frame, exporting, reportDocuments), false);
   assert.equal(updateReportFrame(frame, confirming, reportDocuments), false);
   assert.equal(updateReportFrame(frame, cancelled, reportDocuments), false);

@@ -1,9 +1,9 @@
 <section id="coverage-map"
-         class="panel question-section{% if view.compact %} compact-coverage{% endif %}"
+         class="panel question-section{% if view.summary %} compact-coverage{% endif %}"
          tabindex="-1"
          aria-labelledby="coverage-map-title">
   <h2 id="coverage-map-title">Common-opportunity detection by distance and bearing</h2>
-  {% if view.compact %}
+  {% if view.summary %}
     <p>
       This uses the same shared listening opportunities as the section above, now grouped by each active receiver’s location. Each antenna gets its own detection-rate map so its heard count is read against the same eligible denominator in every cell.
     </p>
@@ -363,7 +363,7 @@
         {% endfor %}
       </details>
     {% endif %}
-    {% if !view.compact %}
+    {% if !view.summary %}
       <p class="muted">
         Receiver locations use retained Maidenhead locators and station-centered great-circle geometry. Missing or inconsistent locators remain in explicit unavailable counts. These recorded opportunities do not establish gain, significance, a radiation pattern, NVIS propagation, or a universal DX advantage.
       </p>

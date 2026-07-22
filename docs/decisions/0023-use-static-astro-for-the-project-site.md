@@ -56,7 +56,7 @@ rule sends `www` to the apex while preserving path and query.
 
 The repository now has the root workspace from Decision 0022, the canonical
 sample and deterministic standalone renderer from #3 and #4, and the updated
-answer-first/compact report contract from #133. Those boundaries make the
+answer-first Summary contract from #133. Those boundaries make the
 finished site a small static consumer of maintained project facts instead of an
 independent product implementation.
 

@@ -18,7 +18,7 @@ as direct writer paths.
 
 AntennaBench already separates report projection from presentation. The
 renderer-neutral `SessionReport` owns the bounded facts, typed availability,
-disclosure inputs, and chart data. Full and compact renderers turn that model
+disclosure inputs, and chart data. Full evidence and Summary renderers turn that model
 into deterministic standalone HTML with no scripts or external resources.
 `CheckedHtmlWriter` enforces the local resource profile and cancellation
 boundary while rendering.
@@ -30,7 +30,7 @@ accessibility attributes, manual escaping, and hundreds of `write_html!` and
 attribute changes produce noisy Rust diffs, and every report-provided string
 requires a local escaping decision. This was reasonable while the renderer was
 small, but it now makes presentation work harder to review and increases the
-risk that structurally similar full and compact views drift.
+risk that structurally similar Full evidence and Summary views drift.
 
 Changing the presentation mechanism must not move analysis into a template,
 make generated reports depend on runtime files, weaken privacy boundaries, or
@@ -51,7 +51,7 @@ template registry.
 Templates are section-sized fragments rather than one template that owns the
 entire report pipeline. Rust continues to orchestrate:
 
-- full versus compact output;
+- Full evidence versus Summary output;
 - ordered question families and goal-lens priority;
 - audit and controller-evidence authorization;
 - complete versus bounded detail; and
@@ -79,10 +79,10 @@ HTML. Askama owns markup, iteration, and simple display conditionals; it does
 not recompute an estimand, interpret evidence, choose a favorable result, or
 mutate report data.
 
-Full and compact views share prepared facts when their evidence is the same.
-They may use separate templates when compact omission or disclosure behavior
+Full evidence and Summary views share prepared facts when their evidence is the same.
+They may use separate templates when Summary omission or disclosure behavior
 is intentionally different. Sharing a model must not cause audit-only data to
-enter the compact template context.
+enter the Summary template context.
 
 ### Escaping And Trusted Output
 
@@ -94,7 +94,7 @@ repository validation enforce this rule.
 Authored CSS lives in readable LF-only files under `crates/report/styles/`, is
 formatted by the exact root-workspace Prettier pin, and is embedded with
 `include_str!`. Rust assembles shared CSS, the bounded generated geometry table,
-coverage CSS, and compact overrides in one deterministic order. The same
+coverage CSS, and Summary overrides in one deterministic order. The same
 production assembly emits the standalone inline stylesheet and the generated
 desktop stylesheet mirrors; neither path performs runtime filesystem discovery.
 Static embedded CSS and Rust-generated geometry CSS remain an explicit trusted
@@ -133,7 +133,7 @@ runtime failures remain bounded and explicit.
 ### Incremental Migration
 
 Renderer families migrate one at a time. A migration change introduces the
-section view model and templates, switches full and compact call sites in its
+section view model and templates, switches Full evidence and Summary call sites in its
 scope, verifies the existing behavior contract, and removes the corresponding
 legacy markup renderer. AntennaBench does not maintain two complete renderers
 or postpone all switching to a flag day.

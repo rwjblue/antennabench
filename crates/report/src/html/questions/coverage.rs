@@ -31,7 +31,7 @@ pub(in super::super) fn render_coverage_map_section(
     )
 }
 
-pub(in super::super) fn render_compact_coverage_map_section(
+pub(in super::super) fn render_summary_coverage_map_section(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
@@ -43,12 +43,12 @@ pub(in super::super) fn render_compact_coverage_map_section(
     )
 }
 
-fn coverage_view(report: &SessionReport, compact: bool) -> CoverageView {
+fn coverage_view(report: &SessionReport, summary: bool) -> CoverageView {
     let AntennaLabels {
         left: left_label,
         right: right_label,
     } = antenna_labels(report);
-    let legacy_groups = if compact {
+    let legacy_groups = if summary {
         Vec::new()
     } else {
         report
@@ -59,14 +59,14 @@ fn coverage_view(report: &SessionReport, compact: bool) -> CoverageView {
             .collect()
     };
     CoverageView {
-        compact,
+        summary,
         no_groups: report.common_opportunity_maps.is_empty(),
         groups: report
             .common_opportunity_maps
             .iter()
             .enumerate()
             .map(|(index, group)| {
-                common_group_view(group, index, !compact, &left_label, &right_label)
+                common_group_view(group, index, !summary, &left_label, &right_label)
             })
             .collect(),
         left_label,

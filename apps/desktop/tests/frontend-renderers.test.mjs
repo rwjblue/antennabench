@@ -750,7 +750,7 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   state.reportStatus = "ready";
   state.reportExportStatus = "loading";
   renderReport(e, state, reportDocuments);
-  assert.equal(e.reportCompactExportButton.textContent, "Exporting…");
+  assert.equal(e.reportSummaryExportButton.textContent, "Exporting…");
   assert.equal(e.reportFullExportButton.textContent, "Exporting…");
   state.reportExportStatus = "confirming";
   state.reportExportPending = {

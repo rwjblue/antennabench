@@ -306,14 +306,26 @@ invariant(
 );
 invariant(!/<script\b/i.test(canonicalSample), "Canonical sample must remain standalone and script-free");
 
-const compactSample = read("apps/hosted/public/sample-report/compact/index.html");
+const summarySample = read("apps/hosted/public/sample-report/summary/index.html");
 for (const reportContract of ["+5 dB median", "83 shared paths", "327 matched pairs"]) {
   invariant(
-    compactSample.includes(reportContract),
-    `Compact sample is missing the report contract: ${reportContract}`,
+    summarySample.includes(reportContract),
+    `Summary sample is missing the report contract: ${reportContract}`,
   );
 }
-invariant(!/<script\b/i.test(compactSample), "Compact sample must remain standalone and script-free");
+invariant(!/<script\b/i.test(summarySample), "Summary sample must remain standalone and script-free");
+const summaryCompatibilityRedirect = read("apps/hosted/public/sample-report/compact/index.html");
+invariant(
+  summaryCompatibilityRedirect.includes("url=/sample-report/summary/") &&
+    summaryCompatibilityRedirect.includes(
+      'href="https://antennabench.com/sample-report/summary/"',
+    ),
+  "The former sample URL must redirect to the canonical Summary",
+);
+invariant(
+  !/<script\b/i.test(summaryCompatibilityRedirect),
+  "The Summary compatibility redirect must remain script-free",
+);
 
 const inconclusiveSample = read("apps/hosted/public/sample-report/inconclusive/index.html");
 for (const reportContract of [

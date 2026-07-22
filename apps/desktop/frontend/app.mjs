@@ -165,7 +165,7 @@ export function mount(root, browserWindow) {
     reportExportButton,
     reportExportDialog,
     reportExportClose,
-    reportCompactExportButton, reportFullExportButton, reportControllerHandling,
+    reportSummaryExportButton, reportFullExportButton, reportControllerHandling,
     reportOperationalHandling, copySupportSummary,
     reportReplaceDialog, reportReplaceCancel, reportReplaceConfirm,
     reportFeedback,
@@ -747,9 +747,9 @@ export function mount(root, browserWindow) {
     event.preventDefault();
     closeReportExport();
   });
-  reportCompactExportButton.addEventListener("click", async () => {
-    reportExportTrigger = reportCompactExportButton;
-    await controller.exportReport("compact_summary_html");
+  reportSummaryExportButton.addEventListener("click", async () => {
+    reportExportTrigger = reportSummaryExportButton;
+    await controller.exportReport("summary_html");
     if (state.reportExportStatus === "confirming") {
       Promise.resolve().then(() => reportReplaceCancel.focus());
     } else {

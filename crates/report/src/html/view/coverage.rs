@@ -125,7 +125,7 @@ pub(in crate::html) struct LegacyCoverageGroupView {
 
 #[derive(Debug, Clone)]
 pub(in crate::html) struct CoverageView {
-    pub(in crate::html) compact: bool,
+    pub(in crate::html) summary: bool,
     pub(in crate::html) no_groups: bool,
     pub(in crate::html) left_label: String,
     pub(in crate::html) right_label: String,

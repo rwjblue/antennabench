@@ -11,7 +11,7 @@ pub(in crate::html) struct NavigationView {
 
 #[derive(Debug, Clone, Copy)]
 pub(in crate::html) struct ReadingGuideView {
-    pub(in crate::html) compact: bool,
+    pub(in crate::html) summary: bool,
     pub(in crate::html) single_antenna: bool,
 }
 
@@ -64,7 +64,7 @@ pub(in crate::html) struct NoticeView {
 
 #[derive(Debug, Clone)]
 pub(in crate::html) struct OverviewView {
-    pub(in crate::html) compact: bool,
+    pub(in crate::html) summary: bool,
     pub(in crate::html) answerability_headline: String,
     pub(in crate::html) plain_answer: String,
     pub(in crate::html) headline_groups: Vec<HeadlineGroupView>,

@@ -45,9 +45,9 @@ whether to include controller command details or omit the programs, arguments,
 targets, and output. **Include** is the default. Choosing **Omit** leaves the
 attempt, role, controller identity, result, timing, and readiness chain visible,
 marks every hidden field as omitted at export, and points readers to the lossless
-bundle for the complete record. It does not alter the bundle. The compact summary
+bundle for the complete record. It does not alter the bundle. The Summary
 already omits controller output and says that the complete audit evidence remains
-in the full report or bundle.
+in the Full evidence report or bundle.
 
 ## Creating A Profile
 

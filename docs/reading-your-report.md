@@ -13,7 +13,7 @@ shows the equally honest case where both antennas produced evidence but no
 same-path comparison was available.
 
 This guide follows the full evidence report from top to bottom. The shorter
-compact summary uses the same result facts but omits most audit detail.
+Summary uses the same result facts but omits most audit detail.
 
 ## Start With The Reading Panel And Headline
 
@@ -51,8 +51,9 @@ question.
 
 The goal recorded in the reviewed plan appears beside the summary with a short
 description of its lens. It changes only the order of available question
-families and any distance categories marked as a prespecified focus. Full and
-compact reports use the same lens metadata. The goal does not change evidence,
+families and any distance categories marked as a prespecified focus. Full
+evidence and Summary reports use the same lens metadata. The goal does not
+change evidence,
 calculations, thresholds, comparison groups, or conclusion rules, and every
 other available family and distance category remains accessible.
 
@@ -88,7 +89,7 @@ five conditional question families separate:
   it does not turn repetition into a confidence or significance claim.
 
 An unavailable family is summarized once in the headline disclosure instead
-of receiving a full empty primary panel. Full and compact reports consume the
+of receiving a full empty primary panel. Full evidence and Summary reports consume the
 same typed availability facts, and primary navigation contains only question
 families with usable evidence. Shared-path signal remains the first comparison
 result only for lenses that give it first priority.
@@ -444,11 +445,11 @@ only the detail needed to check a result or explain a limitation. If controller
 command details were explicitly omitted during full-report export, the appendix
 says so; the lossless bundle still retains them.
 
-## Compact Summary, Full Report, Or Bundle?
+## Summary, Full Evidence, Or Bundle?
 
 All three outputs serve different purposes:
 
-- The **compact summary HTML** keeps the reading panel, headline, result table,
+- The **Summary HTML** keeps the reading panel, headline, result table,
   same-path and reach summaries, and a short run-quality reference. It omits
   detailed unmatched, missing-SNR, exclusion, duplicate, conflict, timeline,
   controller-output, import, solar, and raw-observation audit rows. It does not
@@ -467,8 +468,8 @@ All three outputs serve different purposes:
 The in-app **Build and operational history** panel is not part of the embedded
 scientific report. Its build SHA/version/channel, platform, failure/partial/
 recovery outcomes, evidence effects, and retry guidance exist to support the
-software and must not be read as antenna-performance conclusions. Compact/public
-HTML never carries these operational details.
+software and must not be read as antenna-performance conclusions. Summary and
+public HTML never carry these operational details.
 
 ## What This Report Will Never Tell You Yet
 

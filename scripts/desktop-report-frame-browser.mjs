@@ -4,19 +4,19 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { basename, resolve } from "node:path";
 
-const [fullPath, compactPath] = process.argv.slice(2).map((value) => resolve(value));
-assert.ok(fullPath && compactPath, "expected full and compact report HTML paths");
+const [fullPath, summaryPath] = process.argv.slice(2).map((value) => resolve(value));
+assert.ok(fullPath && summaryPath, "expected Full evidence and Summary HTML paths");
 
 const reports = {
   full: readFileSync(fullPath, "utf8"),
-  compact: readFileSync(compactPath, "utf8"),
+  summary: readFileSync(summaryPath, "utf8"),
 };
 const desktopHtml = readFileSync(resolve("apps/desktop/frontend/index.html"), "utf8");
 const desktopStyles = readFileSync(resolve("apps/desktop/frontend/styles.css"), "utf8");
 const models = readFileSync(resolve("apps/desktop/frontend/models.mjs"), "utf8");
 const embeddedStyles = {
   full: readFileSync(resolve("apps/desktop/frontend/report.css"), "utf8"),
-  compact: readFileSync(resolve("apps/desktop/frontend/report-compact.css"), "utf8"),
+  summary: readFileSync(resolve("apps/desktop/frontend/report-summary.css"), "utf8"),
 };
 const desktopConfig = JSON.parse(readFileSync(resolve("apps/desktop/tauri.conf.json"), "utf8"));
 const csp = desktopConfig.app.security.csp;
@@ -25,13 +25,13 @@ const session = `antennabench-report-frame-${process.pid}`;
 assert.match(csp, /style-src 'self'/);
 assert.doesNotMatch(csp, /style-src[^;]*'unsafe-inline'/);
 assert.match(csp, /frame-src 'self' blob:/);
-for (const mode of ["full", "compact"]) {
+for (const mode of ["full", "summary"]) {
   const styleStart = reports[mode].indexOf("<style>") + 7;
   const styleEnd = reports[mode].indexOf("</style>", styleStart);
   assert.equal(
     embeddedStyles[mode].trimEnd(),
     reports[mode].slice(styleStart, styleEnd).trimEnd(),
-    `apps/desktop/frontend/report${mode === "compact" ? "-compact" : ""}.css is stale`,
+    `apps/desktop/frontend/report${mode === "summary" ? "-summary" : ""}.css is stale`,
   );
 }
 
@@ -48,7 +48,7 @@ const geometryFixture = `<section data-geometry-regression aria-hidden="true">
     <div class="chart-row"><span>Range</span><span class="snr-track"><span class="snr-range-position geometry-left g100" data-geometry="range-position"><span class="snr-range geometry-width g600" data-geometry="range-width"></span></span></span><span>10–70%</span></div>
   </div>
 </section>`;
-for (const mode of ["full", "compact"]) {
+for (const mode of ["full", "summary"]) {
   reports[mode] = reports[mode].replace("</main>", `${geometryFixture}</main>`);
 }
 
@@ -172,8 +172,8 @@ const server = createServer((request, response) => {
     response.end(desktopHtml);
     return;
   }
-  if (url.pathname === "/report.css" || url.pathname === "/report-compact.css") {
-    const mode = url.pathname === "/report.css" ? "full" : "compact";
+  if (url.pathname === "/report.css" || url.pathname === "/report-summary.css") {
+    const mode = url.pathname === "/report.css" ? "full" : "summary";
     response.writeHead(200, { "content-type": "text/css; charset=utf-8" });
     response.end(embeddedStyles[mode]);
     return;
@@ -196,13 +196,13 @@ const server = createServer((request, response) => {
     `);
     return;
   }
-  if (url.pathname === "/standalone-full" || url.pathname === "/standalone-compact") {
-    const mode = url.pathname.endsWith("compact") ? "compact" : "full";
+  if (url.pathname === "/standalone-full" || url.pathname === "/standalone-summary") {
+    const mode = url.pathname.endsWith("summary") ? "summary" : "full";
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(reports[mode]);
     return;
   }
-  if (url.pathname === "/full" || url.pathname === "/compact") {
+  if (url.pathname === "/full" || url.pathname === "/summary") {
     response.writeHead(200, {
       "content-security-policy": csp,
       "content-type": "text/html; charset=utf-8",
@@ -435,7 +435,7 @@ try {
     return {
       open: dialog.open,
       labelledBy: dialog.getAttribute("aria-labelledby"),
-      compactAction: document.querySelector("[data-report-export-compact]").textContent.trim(),
+      summaryAction: document.querySelector("[data-report-export-summary]").textContent.trim(),
       fullAction: document.querySelector("[data-report-export-full]").textContent.trim(),
       focused: document.activeElement === document.querySelector("[data-report-export-close]"),
     };
@@ -443,8 +443,8 @@ try {
   assert.deepEqual(exportDialog, {
     open: true,
     labelledBy: "report-export-title",
-    compactAction: "Export compact summary HTML",
-    fullAction: "Export full evidence HTML",
+    summaryAction: "Save Summary HTML",
+    fullAction: "Save Full evidence HTML",
     focused: true,
   });
   await browser(["screenshot", resolve("target/desktop-report-browser/report-export-1120x760.png")]);
@@ -554,7 +554,7 @@ try {
   assert.equal(compactShell.topbarCount, 0);
 
   await browser(["set", "viewport", "1200", "900"]);
-  for (const mode of ["full", "compact"]) {
+  for (const mode of ["full", "summary"]) {
     const standaloneUrl = `http://127.0.0.1:${port}/standalone-${mode}`;
     await browser(["open", standaloneUrl], { json: true });
     await browser(["wait", ".panel"]);
@@ -582,12 +582,12 @@ try {
     assert.equal(standalone.inlineStyles, 0);
     assert.equal(standalone.bodyBackground, "rgb(245, 247, 251)");
     assert.equal(standalone.panelBackground, "rgb(255, 255, 255)");
-    assert.equal(standalone.heroDisplay, mode === "compact" ? "block" : "grid");
+    assert.equal(standalone.heroDisplay, mode === "summary" ? "block" : "grid");
     assert.ok(Math.abs(standalone.negative - 0.2) < 0.01);
     assert.ok(Math.abs(standalone.proportionalWidth - 0.25) < 0.01);
   }
 
-  for (const mode of ["full", "compact"]) {
+  for (const mode of ["full", "summary"]) {
     const pageUrl = `http://127.0.0.1:${port}/${mode}`;
     await browser(["open", pageUrl], { json: true });
     await browser(["wait", "body[data-report-loaded='true']"]);
@@ -621,7 +621,7 @@ try {
     assert.equal(styles.panelBackground, "rgb(255, 255, 255)");
     assert.equal(styles.panelBorderStyle, "solid");
     assert.equal(styles.tableCollapse, "collapse");
-    assert.equal(styles.heroDisplay, mode === "compact" ? "block" : "grid");
+    assert.equal(styles.heroDisplay, mode === "summary" ? "block" : "grid");
 
     const geometry = await evaluateReportFrame(pageUrl, `(() => {
       const ratio = (selector, dimension) => {
@@ -803,7 +803,7 @@ try {
     await browser(["set", "viewport", "1200", "900"]);
   }
   process.stdout.write(
-    `Standalone and embedded ${basename(fullPath)} and ${basename(compactPath)} retained report CSS under exact CSP boundaries.\n`,
+    `Standalone and embedded ${basename(fullPath)} and ${basename(summaryPath)} retained report CSS under exact CSP boundaries.\n`,
   );
 } finally {
   await browser(["close"]);

@@ -28,7 +28,7 @@
   {% endfor %}
   <div class="scope-line">
     Station <strong>{{ view.callsign }}</strong> at <strong>{{ view.grid }}</strong>; goal: <strong>{{ view.goal }}</strong>
-    {%- if view.goal_lens.is_some() && view.compact %}
+    {%- if view.goal_lens.is_some() && view.summary %}
       {% let lens = view.goal_lens.as_ref().unwrap() %}
       <details class="goal-help">
         <summary aria-label="About the recorded {{ lens.label }} goal lens">i</summary>
@@ -48,7 +48,7 @@
     {%- endif -%}
     .
   </div>
-  {% if view.goal_lens.is_some() && !view.compact %}
+  {% if view.goal_lens.is_some() && !view.summary %}
     {% let lens = view.goal_lens.as_ref().unwrap() %}
     <aside class="goal-lens" aria-label="Predeclared goal lens">
       <p>
@@ -98,7 +98,7 @@
       <strong>For scale:</strong> a 3 dB difference is the same change as doubling transmit power. Individual WSPR reports are whole-dB values that vary cycle to cycle.
     </p>
   {% endif %}
-  {% if view.compact %}
+  {% if view.summary %}
     <details class="audit-disclosure overview-group-disclosure">
       <summary>Review exact per-group headline evidence</summary>
       <div class="disclosure-body">
@@ -151,7 +151,7 @@
           </tbody>
         </table>
       </div>
-      {% if view.compact %}
+      {% if view.summary %}
       </div>
     </details>
   {% endif %}

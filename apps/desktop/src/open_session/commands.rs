@@ -11,14 +11,14 @@ pub(super) fn suggested_report_name(source: &Path) -> String {
         )
 }
 
-pub(super) fn suggested_compact_summary_name(source: &Path) -> String {
+pub(super) fn suggested_summary_name(source: &Path) -> String {
     source
         .file_name()
         .and_then(|name| name.to_str())
         .and_then(|name| bundle_suffix(name).map(|suffix| name.trim_end_matches(suffix)))
         .map_or_else(
-            || "antennabench-compact-summary.html".into(),
-            |stem| format!("{stem}-compact-summary.html"),
+            || "antennabench-summary.html".into(),
+            |stem| format!("{stem}-summary.html"),
         )
 }
 
@@ -260,7 +260,7 @@ where
         OperationalHistoryHandling::Omitted
     };
     let html = match (format, controller_evidence, operational_history) {
-        (ReportExportFormat::CompactSummaryHtml, _, _) => presentation.compact_summary_html,
+        (ReportExportFormat::SummaryHtml, _, _) => presentation.summary_html,
         (
             ReportExportFormat::FullEvidenceHtml,
             ControllerEvidenceHandling::Complete,
@@ -868,24 +868,22 @@ pub(crate) async fn export_active_session_report(
                 .dialog()
                 .file()
                 .set_title(match format {
-                    ReportExportFormat::CompactSummaryHtml => {
-                        "Export compact AntennaBench share summary (not the full audit report)"
+                    ReportExportFormat::SummaryHtml => {
+                        "Save AntennaBench Summary (not the Full evidence report)"
                     }
                     ReportExportFormat::FullEvidenceHtml => {
-                        "Export full AntennaBench evidence report snapshot"
+                        "Save AntennaBench Full evidence report snapshot"
                     }
                 })
                 .set_file_name(match format {
-                    ReportExportFormat::CompactSummaryHtml => {
-                        suggested_compact_summary_name(source)
-                    }
+                    ReportExportFormat::SummaryHtml => suggested_summary_name(source),
                     ReportExportFormat::FullEvidenceHtml => suggested_report_name(source),
                 })
                 .set_can_create_directories(true)
                 .add_filter(
                     match format {
-                        ReportExportFormat::CompactSummaryHtml => "Compact summary HTML",
-                        ReportExportFormat::FullEvidenceHtml => "Full evidence HTML report",
+                        ReportExportFormat::SummaryHtml => "Summary HTML",
+                        ReportExportFormat::FullEvidenceHtml => "Full evidence HTML",
                     },
                     &["html"],
                 );

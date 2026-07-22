@@ -8,7 +8,7 @@ use super::{
     view::{ReachBarView, ReachSegmentView},
 };
 
-/// The two comparison labels shared by full and compact presentation builders.
+/// The two comparison labels shared by full and summary presentation builders.
 /// These are display facts only; the type carries no report or audit access.
 pub(super) struct AntennaLabels {
     pub(super) left: String,
@@ -42,7 +42,7 @@ pub(super) fn comparison_group_label(value: &ComparisonStratum) -> String {
 }
 
 /// Identical observed-reach display facts shared by the full reach section and
-/// compact footprint. Consumer-specific prose and omission policy stay outside
+/// summary footprint. Consumer-specific prose and omission policy stay outside
 /// this value.
 pub(super) struct ReachPresentation {
     pub(super) left_only: usize,

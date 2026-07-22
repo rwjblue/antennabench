@@ -82,7 +82,7 @@ pub(in crate::html) struct FootprintReachView {
 }
 
 #[derive(Debug, Clone)]
-pub(in crate::html) struct CompactFootprintGroupView {
+pub(in crate::html) struct SummaryFootprintGroupView {
     pub(in crate::html) index: usize,
     pub(in crate::html) label: String,
     pub(in crate::html) reach: FootprintReachView,
@@ -163,11 +163,11 @@ pub(in crate::html) struct GeographyView {
 }
 
 #[derive(Debug, Clone)]
-pub(in crate::html) struct CompactFootprintView {
+pub(in crate::html) struct SummaryFootprintView {
     pub(in crate::html) single_antenna: bool,
     pub(in crate::html) goal_focus: Option<String>,
     pub(in crate::html) no_groups: bool,
-    pub(in crate::html) groups: Vec<CompactFootprintGroupView>,
+    pub(in crate::html) groups: Vec<SummaryFootprintGroupView>,
     pub(in crate::html) unavailable: Option<String>,
 }
 

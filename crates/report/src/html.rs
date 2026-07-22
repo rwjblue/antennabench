@@ -5,17 +5,17 @@ use crate::{
 
 // Keep the public rendering surface here; section ownership remains renderer-private.
 mod audit;
-mod compact;
 mod evidence;
 mod geometry;
 mod presentation;
 mod questions;
 mod shared;
 mod styles;
+mod summary;
 mod templates;
 mod view;
 
-pub use compact::{render_compact_summary_html, render_compact_summary_html_with_resources};
+pub use summary::{render_summary_html, render_summary_html_with_resources};
 
 use audit::render_audit_appendix;
 use questions::{
@@ -171,7 +171,7 @@ fn render_standalone_html_document(
     render_template(
         &mut out,
         &DocumentEndTemplate {
-            compact: false,
+            summary: false,
             single_antenna: is_single_antenna_lens(report),
         },
     )?;

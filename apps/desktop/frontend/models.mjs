@@ -417,9 +417,9 @@ export function viewModel(state) {
 export function createReportDocumentUrls(browserWindow = globalThis) {
   return {
     create(reportHtml) {
-      const compact = reportHtml.includes('<main class="compact-summary');
+      const summary = reportHtml.includes('<main class="summary');
       const stylesheetUrl = new browserWindow.URL(
-        compact ? "report-compact.css" : "report.css",
+        summary ? "report-summary.css" : "report.css",
         browserWindow.location.href,
       ).href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
       const cspMarker = "data-antennabench-report-csp";

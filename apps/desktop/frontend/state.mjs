@@ -965,8 +965,8 @@ export function beginReportExportCancellation(state) {
 }
 
 export function reportExportSucceeded(state, outcome) {
-  const label = outcome.format === "compact_summary_html"
-    ? "compact summary"
+  const label = outcome.format === "summary_html"
+    ? "Summary"
     : "full evidence report";
   return {
     ...state,

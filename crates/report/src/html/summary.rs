@@ -7,52 +7,48 @@ use crate::{
 use super::{
     questions::{
         is_single_antenna_lens, ordered_question_families, overview_lifecycle_label,
-        render_answer_first_overview_with_reference, render_compact_coverage_map_section,
-        render_compact_observed_footprint_section, render_how_to_read, render_question_navigation,
-        render_reporter_activity_section, render_same_path_view,
+        render_answer_first_overview_with_reference, render_how_to_read,
+        render_question_navigation, render_reporter_activity_section, render_same_path_view,
+        render_summary_coverage_map_section, render_summary_observed_footprint_section,
     },
     shared::*,
     styles::{stylesheet_csp_source, write_stylesheet_to_html, StylesheetVariant},
     templates::{
-        render_template, BodyStartTemplate, CompactHeaderTemplate, CompactQualityTemplate,
-        CompactReferenceTemplate, CompactSamePathEndTemplate, CompactSamePathStartTemplate,
-        DocumentEndTemplate, DocumentStartTemplate,
+        render_template, BodyStartTemplate, DocumentEndTemplate, DocumentStartTemplate,
+        SummaryHeaderTemplate, SummaryQualityTemplate, SummaryReferenceTemplate,
+        SummarySamePathEndTemplate, SummarySamePathStartTemplate,
     },
-    view::{CompactQualityView, CompactReferenceView},
+    view::{SummaryQualityView, SummaryReferenceView},
 };
 
 /// Renders a concise, deterministic, standalone HTML summary from the same
 /// renderer-neutral report revision as the full evidence report. It intentionally
 /// omits the audit appendix and never recomputes or reinterprets report facts.
-pub fn render_compact_summary_html(report: &SessionReport) -> Result<String, ReportError> {
-    render_compact_summary_html_with_resources(
+pub fn render_summary_html(report: &SessionReport) -> Result<String, ReportError> {
+    render_summary_html_with_resources(
         report,
         REPORT_RESOURCE_LIMITS,
         &ReportCancellationToken::default(),
     )
 }
 
-pub fn render_compact_summary_html_with_resources(
+pub fn render_summary_html_with_resources(
     report: &SessionReport,
     limits: ReportResourceLimits,
     cancellation: &ReportCancellationToken,
 ) -> Result<String, ReportError> {
-    check_cancelled(
-        cancellation,
-        ReportResourceStage::Render,
-        "compact_summary_html",
-    )?;
+    check_cancelled(cancellation, ReportResourceStage::Render, "summary_html")?;
     let mut out = CheckedHtmlWriter::new(limits.html_bytes, cancellation);
-    let stylesheet_variant = StylesheetVariant::Compact;
+    let stylesheet_variant = StylesheetVariant::Summary;
     let style_source = stylesheet_csp_source(stylesheet_variant);
     render_template(
         &mut out,
         &DocumentStartTemplate {
-            title: "AntennaBench compact share summary",
+            title: "AntennaBench Summary",
             style_source: &style_source,
         },
     )?;
-    let compact_main_class = if report.overview.strata.len() <= 2
+    let summary_main_class = if report.overview.strata.len() <= 2
         && report
             .overview
             .strata
@@ -61,20 +57,20 @@ pub fn render_compact_summary_html_with_resources(
             .sum::<usize>()
             <= 4
     {
-        "compact-summary compact-small"
+        "summary summary-small"
     } else {
-        "compact-summary"
+        "summary"
     };
     write_stylesheet_to_html(&mut out, stylesheet_variant);
     render_template(
         &mut out,
         &BodyStartTemplate {
-            main_class: compact_main_class,
+            main_class: summary_main_class,
         },
     )?;
     render_template(
         &mut out,
-        &CompactHeaderTemplate {
+        &SummaryHeaderTemplate {
             session_id: &report.overview.scope.session_id,
         },
     )?;
@@ -90,47 +86,47 @@ pub fn render_compact_summary_html_with_resources(
     for family in ordered_question_families(report) {
         match family {
             ReportQuestionFamily::SharedPathSignal => {
-                render_template(&mut out, &CompactSamePathStartTemplate)?;
+                render_template(&mut out, &SummarySamePathStartTemplate)?;
                 render_same_path_view(&mut out, report, true)?;
-                render_template(&mut out, &CompactSamePathEndTemplate)?;
+                render_template(&mut out, &SummarySamePathEndTemplate)?;
             }
             ReportQuestionFamily::CommonOpportunityDetection => {
                 render_reporter_activity_section(&mut out, report)?;
-                render_compact_coverage_map_section(&mut out, report)?;
+                render_summary_coverage_map_section(&mut out, report)?;
             }
             ReportQuestionFamily::ObservedReach => {
                 if !rendered_observed_footprint {
-                    render_compact_observed_footprint_section(&mut out, report)?;
+                    render_summary_observed_footprint_section(&mut out, report)?;
                     rendered_observed_footprint = true;
                 }
             }
             ReportQuestionFamily::GeographicProfile => {
                 if !rendered_observed_footprint {
-                    render_compact_observed_footprint_section(&mut out, report)?;
+                    render_summary_observed_footprint_section(&mut out, report)?;
                     rendered_observed_footprint = true;
                 }
             }
             ReportQuestionFamily::Repeatability => {
                 if !rendered_observed_footprint {
-                    render_compact_observed_footprint_section(&mut out, report)?;
+                    render_summary_observed_footprint_section(&mut out, report)?;
                     rendered_observed_footprint = true;
                 }
             }
         }
     }
-    render_compact_run_quality(&mut out, report)?;
-    render_compact_reference(&mut out, report)?;
+    render_summary_run_quality(&mut out, report)?;
+    render_summary_reference(&mut out, report)?;
     render_template(
         &mut out,
         &DocumentEndTemplate {
-            compact: true,
+            summary: true,
             single_antenna: is_single_antenna_lens(report),
         },
     )?;
     out.finish().map_err(ReportError::from)
 }
 
-pub(super) fn render_compact_run_quality(
+pub(super) fn render_summary_run_quality(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
@@ -163,8 +159,8 @@ pub(super) fn render_compact_run_quality(
     };
     render_template(
         out,
-        &CompactQualityTemplate {
-            view: CompactQualityView {
+        &SummaryQualityTemplate {
+            view: SummaryQualityView {
                 comparison_state: availability,
                 lifecycle,
                 usable: overall.observation_counts.usable,
@@ -176,7 +172,7 @@ pub(super) fn render_compact_run_quality(
     )
 }
 
-pub(super) fn render_compact_reference(
+pub(super) fn render_summary_reference(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
@@ -187,8 +183,8 @@ pub(super) fn render_compact_reference(
         .map_or_else(not_recorded, |value| value.to_string());
     render_template(
         out,
-        &CompactReferenceTemplate {
-            view: CompactReferenceView {
+        &SummaryReferenceTemplate {
+            view: SummaryReferenceView {
                 session_id: report.overview.scope.session_id.clone(),
                 revision,
             },

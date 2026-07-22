@@ -57,8 +57,8 @@ review remain the complete defaults.
 
 The local workflow can create and reopen sessions, conduct manual WSPR
 comparisons, collect optional WSJT-X and WSPR.live evidence, import bounded WSPR
-and Reverse Beacon Network data, render local reports, and export compact
-printable summaries, full evidence reports, and verified bundles. Automatic
+and Reverse Beacon Network data, render local reports, and export printable
+Summary HTML, Full evidence reports, and verified bundles. Automatic
 winner selection and hosted report publishing are not available.
 
 The public project site explains the workflow and serves a canonical report

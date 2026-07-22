@@ -42,7 +42,7 @@ pub(super) struct BodyStartTemplate<'a> {
 #[derive(Template)]
 #[template(path = "report/document_end.html")]
 pub(super) struct DocumentEndTemplate {
-    pub(super) compact: bool,
+    pub(super) summary: bool,
     pub(super) single_antenna: bool,
 }
 

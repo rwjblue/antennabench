@@ -88,7 +88,7 @@ pub(in crate::html) struct OverlapGroupView {
 
 #[derive(Debug, Clone)]
 pub(in crate::html) struct OverlapQuestionView {
-    pub(in crate::html) compact: bool,
+    pub(in crate::html) summary: bool,
     pub(in crate::html) render: bool,
     pub(in crate::html) no_groups: bool,
     pub(in crate::html) groups: Vec<OverlapGroupView>,

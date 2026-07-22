@@ -18,8 +18,8 @@ const samples = [
     rendererArguments: [],
   },
   {
-    relativeOutput: join("sample-report", "compact", "index.html"),
-    rendererArguments: ["--compact-summary"],
+    relativeOutput: join("sample-report", "summary", "index.html"),
+    rendererArguments: ["--summary"],
   },
   {
     relativeOutput: join("sample-report", "inconclusive", "index.html"),

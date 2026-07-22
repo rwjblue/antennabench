@@ -1,6 +1,6 @@
 use std::{env, error::Error, fs, io, path::PathBuf};
 
-use antennabench_report::{build_report, render_compact_summary_html, render_standalone_html};
+use antennabench_report::{build_report, render_standalone_html, render_summary_html};
 use antennabench_storage::BundleStore;
 
 fn stylesheet(html: &str) -> Result<&str, io::Error> {
@@ -33,8 +33,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             render_standalone_html(&report)?,
         ),
         (
-            repository.join("apps/desktop/frontend/report-compact.css"),
-            render_compact_summary_html(&report)?,
+            repository.join("apps/desktop/frontend/report-summary.css"),
+            render_summary_html(&report)?,
         ),
     ];
 

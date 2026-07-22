@@ -32,7 +32,7 @@ npm run site:dry-build --workspace @antennabench/hosted
 Worker tests, type drift check, strict TypeScript compilation, and prototype dry
 builds. The sample check reruns the real canonical fixture and the retained
 synthetic inconclusive fixture through the trusted Rust report renderer. It
-byte-compares the primary full report, primary compact summary, and
+byte-compares the primary Full evidence report, primary Summary, and
 inconclusive report with their committed files under `public/sample-report/`.
 The social-card check validates the committed PNG signature and dimensions
 together with its editable SVG design source. Astro adds no hydration or client

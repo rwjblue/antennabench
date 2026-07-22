@@ -277,7 +277,7 @@ allowed.
 
 Persisted diagnostics use an allowlist, not after-the-fact redaction:
 
-| Field family | Bundle default | Support summary | Full report | Compact/public/hosted default |
+| Field family | Bundle default | Support summary | Full evidence | Summary, public, or hosted default |
 | --- | --- | --- | --- | --- |
 | App version, source commit/state, channel, release tag | Included | Included | Explicit opt-in | Excluded |
 | Target triple, build/runtime architecture | Included | Included | Explicit opt-in | Excluded |
@@ -300,8 +300,8 @@ within the format's guarantees,” alongside the storage/process non-guarantees.
 
 Full evidence HTML excludes runtime/diagnostic history by default and may
 include the safe structured view only through a separate explicit choice.
-Compact summary HTML never includes it. Future hosted sharing follows the
-compact/public default unless a separately approved explicit disclosure
+Summary HTML never includes it. Future hosted sharing follows the Summary and
+public default unless a separately approved explicit disclosure
 contract is added. Existing controller-evidence inclusion remains a separate
 choice and never authorizes copying controller output into diagnostics.
 
@@ -440,7 +440,7 @@ Implementation follows the dependency order in tracking issue #177:
    retention matrix, transaction/idempotence behavior, saturation/gap state,
    the motivating field regression, and partial-success tests.
 3. #179 adds local historical presentation and the deterministic safe support
-   summary, with legacy/gap/saturation states and explicit full-report inclusion.
+   summary, with legacy/gap/saturation states and explicit Full evidence inclusion.
 
 Each slice updates the same bundle, architecture, event/resource, and operator
 references. No child may weaken the privacy allowlist, make contexts optional on

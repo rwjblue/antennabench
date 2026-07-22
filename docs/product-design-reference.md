@@ -78,7 +78,7 @@ both cycles, observed reach, observed distance and direction profile, and
 repeatability across blocks each retain a typed availability or limitation.
 The renderer names answered families in the headline, omits unavailable
 families from primary navigation and full empty panels, and keeps limitations
-in one secondary disclosure. Full and compact reports consume the same
+in one secondary disclosure. Full evidence and Summary reports consume the same
 renderer-neutral projection. The original paired-comparison availability field
 remains only as a compatibility view of finite-SNR shared-path analysis.
 
@@ -140,7 +140,7 @@ contract may reorder available question families and emphasize prespecified
 distance categories, but it does not change facts, estimands, thresholds,
 strata, or conclusion rules, and it leaves contrary evidence accessible.
 Rust projects the typed priority order, emphasized categories, and practical
-meaning once into the report model; full and compact renderers consume that
+meaning once into the report model; Full evidence and Summary renderers consume that
 same metadata rather than interpreting the goal independently.
 NVIS/local wording always calls near distance a proxy; single-antenna profiling
 uses no A/B conclusions. See [Decision
@@ -349,7 +349,7 @@ Every available Saved sessions row offers a native **Export bundle…** action
 without requiring activation. Progress, cancellation, and failure stay on that
 row. WSPR.live recovery and RBN archive imports remain lifecycle-constrained
 under the active run's **Add evidence** disclosure because they append evidence
-to one active experiment. Compact and full HTML exports remain in Local report;
+to one active experiment. Summary and Full evidence HTML exports remain in Local report;
 there is no separate numbered Import / export destination.
 
 Local report is a viewport-bounded reading workspace: a compact persistent
@@ -360,7 +360,7 @@ cards and chronological failed, partial, and recovery outcomes with explicit
 legacy, unavailable, retention-capped, and persistence-gap states. Material
 warnings remain visible outside that secondary dialog. Reopened running or
 interrupted sessions surface the latest relevant failure on Active run. One
-clipboard action copies deterministic redacted JSON; compact/public output omits
+clipboard action copies deterministic redacted JSON; Summary and public output omit
 the history, and full evidence export requires a separate explicit inclusion
 choice in the Export dialog.
 

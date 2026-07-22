@@ -159,7 +159,7 @@ export const REQUIRED_ELEMENT_SELECTORS = Object.freeze({
   reportExportButton: "[data-report-export]",
   reportExportDialog: "[data-report-export-dialog]",
   reportExportClose: "[data-report-export-close]",
-  reportCompactExportButton: "[data-report-export-compact]",
+  reportSummaryExportButton: "[data-report-export-summary]",
   reportFullExportButton: "[data-report-export-full]",
   reportReplaceDialog: "[data-report-replace-dialog]",
   reportReplaceTitle: "[data-report-replace-title]",

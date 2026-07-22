@@ -139,8 +139,8 @@ fn report_css_is_compile_time_authored_source() {
     for name in [
         "report.css",
         "coverage.css",
-        "compact.css",
-        "compact-small-print.css",
+        "summary.css",
+        "summary-small-print.css",
     ] {
         assert!(
             styles.contains(&format!("include_str!(\"../../styles/{name}\")")),

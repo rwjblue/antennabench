@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# -*- mode: sh; sh-shell: bash; -*-
+#MISE description="Reject deprecated report-summary terminology outside compatibility aliases"
+
+set -euo pipefail
+
+node scripts/check-summary-terminology.mjs

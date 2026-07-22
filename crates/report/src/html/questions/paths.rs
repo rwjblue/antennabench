@@ -49,20 +49,20 @@ pub(in super::super) fn render_reach_section(
 pub(in super::super) fn render_same_path_view(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
-    compact: bool,
+    summary: bool,
 ) -> Result<(), ReportError> {
     render_template(
         out,
         &SamePathTemplate {
-            view: same_path_view(report, compact),
+            view: same_path_view(report, summary),
         },
     )
 }
 
-fn same_path_view(report: &SessionReport, compact: bool) -> SamePathView {
+fn same_path_view(report: &SessionReport, summary: bool) -> SamePathView {
     if report.overview.strata.is_empty() {
         return SamePathView {
-            compact,
+            summary,
             no_groups: true,
             all_unavailable: None,
             orientation: None,
@@ -88,7 +88,7 @@ fn same_path_view(report: &SessionReport, compact: bool) -> SamePathView {
         .filter(|row| row.path_median_deltas.is_empty())
         .collect::<Vec<_>>();
     if available.is_empty() {
-        let all_unavailable = if compact {
+        let all_unavailable = if summary {
             format!(
                 "No usable same-path path-median delta is available across {} ({}). This is not a 0 dB result; availability remains explicit in the result table.",
                 comparison_groups_label(unavailable.len()),
@@ -103,7 +103,7 @@ fn same_path_view(report: &SessionReport, compact: bool) -> SamePathView {
             )
         };
         return SamePathView {
-            compact,
+            summary,
             no_groups: false,
             all_unavailable: Some(all_unavailable),
             orientation: None,
@@ -118,7 +118,7 @@ fn same_path_view(report: &SessionReport, compact: bool) -> SamePathView {
         )
     });
     let unavailable_message = (!unavailable.is_empty()).then(|| {
-        if compact {
+        if summary {
             format!(
                 "No usable same-path path-median delta in {} of {} comparison groups: {}. Availability remains explicit in the result table.",
                 unavailable.len(),
@@ -136,7 +136,7 @@ fn same_path_view(report: &SessionReport, compact: bool) -> SamePathView {
         }
     });
     SamePathView {
-        compact,
+        summary,
         no_groups: false,
         all_unavailable: None,
         orientation: orientation_text,

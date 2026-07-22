@@ -21,11 +21,11 @@ mod paths;
 mod quality;
 
 pub(super) use activity::{coverage_text, render_reporter_activity_section};
-pub(super) use coverage::{render_compact_coverage_map_section, render_coverage_map_section};
+pub(super) use coverage::{render_coverage_map_section, render_summary_coverage_map_section};
 
-pub(super) use location::{render_compact_observed_footprint_section, render_distance_section};
+pub(super) use location::{render_distance_section, render_summary_observed_footprint_section};
 pub(super) use overlap::{
-    render_compact_repeatability_disclosure, render_overlap_repeatability_section,
+    render_overlap_repeatability_section, render_summary_repeatability_disclosure,
 };
 pub(super) use overview::{
     overview_lifecycle_label, render_answer_first_overview,

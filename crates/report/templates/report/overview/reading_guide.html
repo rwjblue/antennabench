@@ -1,4 +1,4 @@
-{% if view.compact %}
+{% if view.summary %}
   <details class="panel reading-guide">
     <summary>How to read this report</summary>
     <div class="reading-guide-body">
@@ -32,7 +32,7 @@
           <li>Alternating antennas reduces but does not eliminate time and propagation effects.</li>
         </ul>
       {% endif %}
-      {% if view.compact %}
+      {% if view.summary %}
       </div>
     </details>
   {% else %}

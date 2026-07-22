@@ -252,17 +252,17 @@ impl ReportDocument {
     }
 }
 
-pub(crate) fn assert_full_compact_policy(
+pub(crate) fn assert_full_summary_policy(
     full: &ReportDocument,
-    compact: &ReportDocument,
+    summary: &ReportDocument,
     selector: &str,
-    included_in_compact: bool,
+    included_in_summary: bool,
 ) {
     full.assert_present(selector);
-    if included_in_compact {
-        compact.assert_present(selector);
+    if included_in_summary {
+        summary.assert_present(selector);
     } else {
-        compact.assert_absent(selector);
+        summary.assert_absent(selector);
     }
 }
 

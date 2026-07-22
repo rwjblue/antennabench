@@ -84,7 +84,7 @@ pub(in crate::html) struct QualityView {
 }
 
 #[derive(Debug, Clone)]
-pub(in crate::html) struct CompactQualityView {
+pub(in crate::html) struct SummaryQualityView {
     pub(in crate::html) comparison_state: &'static str,
     pub(in crate::html) lifecycle: &'static str,
     pub(in crate::html) usable: usize,
@@ -94,7 +94,7 @@ pub(in crate::html) struct CompactQualityView {
 }
 
 #[derive(Debug, Clone)]
-pub(in crate::html) struct CompactReferenceView {
+pub(in crate::html) struct SummaryReferenceView {
     pub(in crate::html) session_id: String,
     pub(in crate::html) revision: String,
 }

@@ -23,7 +23,7 @@ pub(in super::super) fn render_overlap_repeatability_section(
     )
 }
 
-pub(in super::super) fn render_compact_repeatability_disclosure(
+pub(in super::super) fn render_summary_repeatability_disclosure(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
 ) -> Result<(), ReportError> {
@@ -35,22 +35,22 @@ pub(in super::super) fn render_compact_repeatability_disclosure(
     )
 }
 
-fn overlap_view(report: &SessionReport, compact: bool) -> OverlapQuestionView {
-    let render = !compact
+fn overlap_view(report: &SessionReport, summary: bool) -> OverlapQuestionView {
+    let render = !summary
         || report
             .coverage_overlap
             .iter()
             .any(|group| group.observed.is_some());
     OverlapQuestionView {
-        compact,
+        summary,
         render,
         no_groups: report.coverage_overlap.is_empty(),
         groups: report
             .coverage_overlap
             .iter()
             .enumerate()
-            .filter(|(_, group)| !compact || group.observed.is_some())
-            .map(|(index, group)| group_view(group, index, !compact))
+            .filter(|(_, group)| !summary || group.observed.is_some())
+            .map(|(index, group)| group_view(group, index, !summary))
             .collect(),
     }
 }

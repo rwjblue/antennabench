@@ -19,10 +19,10 @@ use antennabench_core::{
     ExperimentMode, ObservationKind, SessionGoal, Station, SCHEMA_VERSION_V5,
 };
 use antennabench_report::{
-    build_report_with_snapshot_and_activity, render_compact_summary_html, render_standalone_html,
-    render_standalone_html_with_resources, ReportAzimuthSector, ReportCancellationToken,
-    ReportCommonOpportunityMapGroup, ReportDistanceBin, ReportError, ReportResourceLimits,
-    ReportSnapshotContext, REPORT_RESOURCE_LIMITS,
+    build_report_with_snapshot_and_activity, render_standalone_html,
+    render_standalone_html_with_resources, render_summary_html, ReportAzimuthSector,
+    ReportCancellationToken, ReportCommonOpportunityMapGroup, ReportDistanceBin, ReportError,
+    ReportResourceLimits, ReportSnapshotContext, REPORT_RESOURCE_LIMITS,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 
@@ -180,7 +180,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
                 .any(|cell| cell.state == antennabench_report::ReportCoverageState::ActiveNotHeard)
     }));
     let full = render_standalone_html(&report).expect("full report should render");
-    let compact = render_compact_summary_html(&report).expect("compact report should render");
+    let summary = render_summary_html(&report).expect("summary report should render");
     let resource_error = render_standalone_html_with_resources(
         &report,
         ReportResourceLimits::testing(25_000, 8 * 1024 * 1024, full.len() as u64 - 1),
@@ -199,7 +199,7 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
         Err(ReportError::Resource(ref error))
             if error.diagnostic.code == "resource.operation.cancelled"
     ));
-    for html in [&full, &compact] {
+    for html in [&full, &summary] {
         let document = ReportDocument::parse(html);
         assert!(!html.contains("0 usable"));
         assert!(!html.contains("No matched paths"));
@@ -255,10 +255,10 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     );
     ReportDocument::parse(&full)
         .assert_table_row_contains("Observed unique-path overlap", &["112", "33", "10", "155"]);
-    assert!(compact.contains("Observed footprint"));
-    assert!(!compact.contains("<h2 id=\"coverage-overlap-title\">"));
-    assert!(compact.contains("Review whether observed paths repeated across blocks"));
-    assert!(!compact.contains("Observed complementarity"));
+    assert!(summary.contains("Observed footprint"));
+    assert!(!summary.contains("<h2 id=\"coverage-overlap-title\">"));
+    assert!(summary.contains("Review whether observed paths repeated across blocks"));
+    assert!(!summary.contains("Observed complementarity"));
     assert_common_visual_has_accessible_rows(&full, common);
     assert!(full.contains("activity-summary-field-shape"));
     assert!(full.contains("activity-first-000"));
@@ -266,29 +266,29 @@ fn confirmed_source_cycles_survive_projection_analysis_and_both_reports() {
     assert!(full.contains("coverage-grid-view"));
     assert!(full.contains("coverage-polar-view"));
     assert!(full.contains("@media print"));
-    assert_common_visual_has_accessible_rows(&compact, common);
+    assert_common_visual_has_accessible_rows(&summary, common);
     assert_eq!(
-        compact
+        summary
             .matches("class=\"common-opportunity-rate-cell")
             .count(),
         64
     );
-    assert!(compact.contains("Common-opportunity distance and bearing cells"));
-    assert!(!compact.contains("<svg class=\"coverage-world\""));
-    assert!(compact.contains("For this General coverage run"));
-    assert!(compact.contains("detection among 180 common-active receiver opportunities"));
-    assert!(compact.contains("unique observed paths"));
+    assert!(summary.contains("Common-opportunity distance and bearing cells"));
+    assert!(!summary.contains("<svg class=\"coverage-world\""));
+    assert!(summary.contains("For this General coverage run"));
+    assert!(summary.contains("detection among 180 common-active receiver opportunities"));
+    assert!(summary.contains("unique observed paths"));
     assert!(
-        compact.contains("These results describe this session, not a universal antenna ranking.")
+        summary.contains("These results describe this session, not a universal antenna ranking.")
     );
     assert_eq!(
-        compact
+        summary
             .matches("<dl class=\"facts answer-metrics\">")
             .count(),
         1
     );
-    assert!(compact.contains("<details class=\"goal-help\">"));
-    assert!(compact.contains("Question availability and limits"));
+    assert!(summary.contains("<details class=\"goal-help\">"));
+    assert!(summary.contains("Question availability and limits"));
 }
 
 fn assert_common_visual_has_accessible_rows(html: &str, group: &ReportCommonOpportunityMapGroup) {
@@ -351,7 +351,7 @@ fn absent_census_renders_coverage_unknown_without_inventing_zero_activity() {
 
     for html in [
         render_standalone_html(&report).unwrap(),
-        render_compact_summary_html(&report).unwrap(),
+        render_summary_html(&report).unwrap(),
     ] {
         assert!(html.contains("Activity coverage unknown"));
         assert!(!html.contains("id=\"reporter-activity\""));
@@ -411,7 +411,7 @@ fn zero_matched_paths_still_render_useful_common_opportunity_geography() {
 
     for html in [
         render_standalone_html(&report).unwrap(),
-        render_compact_summary_html(&report).unwrap(),
+        render_summary_html(&report).unwrap(),
     ] {
         assert!(html.contains("No same-path SNR comparison: no matched paths"));
         assert!(html.contains("Common-opportunity detection"));
@@ -419,10 +419,10 @@ fn zero_matched_paths_still_render_useful_common_opportunity_geography() {
         assert!(html.contains("session-scoped common-opportunity evidence"));
         assert!(html.contains("Separate antenna detection-rate maps"));
     }
-    let compact = render_compact_summary_html(&report).unwrap();
-    assert!(compact.contains("Observed footprint"));
-    assert!(compact.contains("<strong>145</strong><small>"));
-    assert!(compact.contains("<strong>10</strong><small>"));
+    let summary = render_summary_html(&report).unwrap();
+    assert!(summary.contains("Observed footprint"));
+    assert!(summary.contains("<strong>145</strong><small>"));
+    assert!(summary.contains("<strong>10</strong><small>"));
 }
 
 #[test]
@@ -448,13 +448,13 @@ fn truncated_census_caveat_qualifies_each_cycle_and_paired_rate() {
         ReportSnapshotContext::default(),
     )
     .unwrap();
-    let compact = render_compact_summary_html(&report).unwrap();
+    let summary = render_summary_html(&report).unwrap();
 
     assert!(report
         .common_opportunity_maps
         .iter()
         .all(|group| group.coverage == antennabench_analysis::ReporterActivityCoverage::Truncated));
-    assert!(compact.contains("Truncated census — capture limit may reduce the denominator"));
+    assert!(summary.contains("Truncated census — capture limit may reduce the denominator"));
 }
 
 #[test]
@@ -485,25 +485,25 @@ fn paired_rate_heatmap_states_are_distinct_and_keyboard_accessible() {
     cells[2].facts.left_detection_rate = Some(1.0 / 3.0);
     cells[2].facts.right_detection_rate = Some(2.0 / 3.0);
 
-    let compact = render_compact_summary_html(&report).unwrap();
-    let document = ReportDocument::parse(&compact);
+    let summary = render_summary_html(&report).unwrap();
+    let document = ReportDocument::parse(&summary);
     for state in [
         "rate-zero",
         "zero-opportunities",
         "low-support",
         "rate-unavailable",
     ] {
-        assert!(compact.contains(state), "missing heatmap state: {state}");
+        assert!(summary.contains(state), "missing heatmap state: {state}");
     }
     document.assert_count(".common-opportunity-rate-cell", 64);
     document.assert_count(
         ".common-opportunity-rate-cell[tabindex=\"0\"][aria-label]",
         64,
     );
-    assert!(compact.contains("Rate unavailable; not zero detection"));
-    assert!(compact.contains("no located common-opportunity cell"));
-    assert!(compact.contains("@media (max-width: 760px)"));
-    assert!(compact.contains("@media print"));
+    assert!(summary.contains("Rate unavailable; not zero detection"));
+    assert!(summary.contains("no located common-opportunity cell"));
+    assert!(summary.contains("@media (max-width: 760px)"));
+    assert!(summary.contains("@media print"));
 }
 
 fn field_shape_fixture() -> BundleV3Contents {

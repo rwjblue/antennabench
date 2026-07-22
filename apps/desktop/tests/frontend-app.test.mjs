@@ -293,7 +293,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     export_active_session_report: ({ format }) => ({
       status: "confirmation_required",
       pendingExportId: `pending-${format}`,
-      fileName: format === "compact_summary_html" ? "existing-compact.html" : "existing-full.html",
+      fileName: format === "summary_html" ? "existing-summary.html" : "existing-full.html",
       revision: 9,
       format,
     }),
@@ -444,10 +444,10 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     elements.reportExportButton.click();
     await vi.waitFor(() => assert.equal(elements.reportExportDialog.open, true));
     assert.equal(document.activeElement, elements.reportExportClose);
-    elements.reportCompactExportButton.click();
+    elements.reportSummaryExportButton.click();
     await vi.waitFor(() => assert.equal(elements.reportReplaceDialog.open, true));
     assert.equal(document.activeElement, elements.reportReplaceCancel);
-    assert.equal(elements.reportReplaceIdentity.textContent, "existing-compact.html");
+    assert.equal(elements.reportReplaceIdentity.textContent, "existing-summary.html");
     elements.reportReplaceConfirm.focus();
     elements.reportReplaceDialog.dispatchEvent(new KeyboardEvent("keydown", {
       key: "Tab",
@@ -457,10 +457,10 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     elements.reportReplaceDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
     await vi.waitFor(() => {
       assert.equal(elements.reportReplaceDialog.open, false);
-      assert.equal(document.activeElement, elements.reportCompactExportButton);
+      assert.equal(document.activeElement, elements.reportSummaryExportButton);
     });
     assert.ok(calls.some(([command, payload]) => command === "cancel_report_export"
-      && payload.pendingExportId === "pending-compact_summary_html"));
+      && payload.pendingExportId === "pending-summary_html"));
 
     elements.reportFullExportButton.click();
     await vi.waitFor(() => assert.equal(elements.reportReplaceDialog.open, true));

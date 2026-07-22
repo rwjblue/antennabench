@@ -1,5 +1,5 @@
 {% if view.render %}
-  {% if view.compact %}
+  {% if view.summary %}
     <details class="audit-disclosure repeatability-disclosure">
       <summary>Review whether observed paths repeated across blocks</summary>
       <div class="disclosure-body">
@@ -21,15 +21,15 @@
         {% else %}
           {% for group in view.groups %}
             <article class="coverage-overlap-group"
-                     aria-labelledby="{% if view.compact %}repeatability{% else %}coverage-overlap{% endif %}-group-{{ group.index }}">
-              {% if view.compact %}
+                     aria-labelledby="{% if view.summary %}repeatability{% else %}coverage-overlap{% endif %}-group-{{ group.index }}">
+              {% if view.summary %}
                 <h4 id="repeatability-group-{{ group.index }}">{{ group.label }}</h4>
               {% else %}
                 <h3 id="coverage-overlap-group-{{ group.index }}">{{ group.label }}</h3>
               {% endif %}
               {% if group.observed.is_some() %}
                 {% let observed = group.observed.as_ref().unwrap() %}
-                {% if !view.compact %}
+                {% if !view.summary %}
                   <h4>Observed complementarity</h4>
                   <p>
                     Using both antennas produced <strong>{{ observed.total }}</strong> unique observed paths: {{ observed.left_only }} appeared only on {{ observed.left_label }}, {{ observed.shared }} appeared on both, and {{ observed.right_only }} appeared only on {{ observed.right_label }}. The incremental recorded contributions were {{ observed.incremental_left }} beyond {{ observed.right_label }} and {{ observed.incremental_right }} beyond {{ observed.left_label }}.
@@ -131,7 +131,7 @@
                   No observed-path overlap is available for this comparison group.
                 </p>
               {% endif %}
-              {% if !view.compact %}
+              {% if !view.summary %}
                 {% if group.common.is_some() %}
                   {% let common = group.common.as_ref().unwrap() %}
                   <h4>Opportunity-conditioned complementarity</h4>
@@ -245,7 +245,7 @@
             </article>
           {% endfor %}
         {% endif %}
-        {% if view.compact %}
+        {% if view.summary %}
         </div>
       </details>
     {% else %}
