@@ -91,10 +91,12 @@ and audit evidence available without combining unlike
 observation is not a zero-strength signal, and “insufficient data” is a useful
 outcome when the recorded session cannot support a comparison.
 
-Use [How To Read Your AntennaBench Report](reading-your-report.md) for a
-section-by-section walkthrough of the full report, all five availability states,
-the Summary, and the lossless bundle boundary. AntennaBench currently
-provides descriptive evidence, not an automatic verdict.
+Start with [Read An AntennaBench Summary In Two Minutes](read-summary-in-two-minutes.md)
+for the ordinary answer-first path. Use the
+[Full Evidence And Methodology Reference](reading-your-report.md) for a
+section-by-section walkthrough of every availability state, detailed audit
+view, and the lossless bundle boundary. AntennaBench currently provides
+descriptive evidence, not an automatic verdict.
 
 ## Local-First By Design
 

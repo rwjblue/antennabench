@@ -1,19 +1,22 @@
-# How To Read Your AntennaBench Report
+# Full Evidence And Methodology Reference
 
 An AntennaBench report describes what one recorded antenna experiment observed.
 It keeps missing evidence, comparison limits, and run problems visible instead
 of turning them into a cleaner-looking result.
 
-Open the [canonical sample report](https://antennabench.com/sample-report/) in
-another tab if you want a concrete report to follow. It is generated from a
-real, sanitized station session and contains 83 shared paths and 327
+If you are reading an ordinary Summary, start with
+[Read An AntennaBench Summary In Two Minutes](read-summary-in-two-minutes.md).
+This detailed reference follows
+[the canonical Full evidence report](https://antennabench.com/sample-report/)
+from top to bottom. It is generated from a real, sanitized station session and
+contains 83 shared paths and 327
 [matched pairs](glossary.md#matched-pair-internally-paired-row). A separate
 [inconclusive sample](https://antennabench.com/sample-report/inconclusive/)
 shows the equally honest case where both antennas produced evidence but no
 same-path comparison was available.
 
-This guide follows the full evidence report from top to bottom. The shorter
-Summary uses the same result facts but omits most audit detail.
+Summary uses the same result facts but keeps only aggregate findings, a short
+quality view, and the reference needed for an ordinary first read.
 
 ## Start With The Reading Panel And Headline
 
@@ -152,7 +155,7 @@ uses one of five states:
 - **No matched paths** means eligible blocks exist, but no
   [remote path](glossary.md#remote-path) had usable finite
   [SNR](glossary.md#snr) [observations](glossary.md#observation) for both
-  antennas inside the same comparison group. The canonical sample has this
+  antennas inside the same comparison group. The inconclusive sample has this
   state.
 - **Descriptive pairs available** means at least one usable
   [matched pair](glossary.md#matched-pair-internally-paired-row) exists. It
@@ -449,12 +452,13 @@ says so; the lossless bundle still retains them.
 
 All three outputs serve different purposes:
 
-- The **Summary HTML** keeps the reading panel, headline, result table,
-  same-path and reach summaries, and a short run-quality reference. It omits
+- The **Summary HTML** keeps the answer-first findings, aggregate shared-path
+  signal and observed-path views, a short run-quality view, and a committed-
+  snapshot reference. It omits
   detailed unmatched, missing-SNR, exclusion, duplicate, conflict, timeline,
   controller-output, import, solar, and raw-observation audit rows. It does not
   sample or recompute the retained facts.
-- The **full evidence HTML report** is the most detailed human-readable result
+- The **Full evidence HTML report** is the most detailed human-readable result
   and audit presentation for one committed revision. Controller details may be
   included or explicitly omitted at export. Operational history is a separate
   export choice: it is omitted by default and, when explicitly included, adds
@@ -464,6 +468,9 @@ All three outputs serve different purposes:
   record. Reports are derived from it and can be regenerated. Keep or share the
   bundle when another person needs the complete evidence rather than only a
   standalone presentation.
+
+The legacy `/sample-report/compact/` public URL is a compatibility redirect to
+the canonical Summary route. It is not a second report type or product name.
 
 The in-app **Build and operational history** panel is not part of the embedded
 scientific report. Its build SHA/version/channel, platform, failure/partial/

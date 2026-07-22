@@ -176,6 +176,7 @@ invariant(home.includes('href="/sample-report/summary/">Read the Summary</a>'), 
 invariant(home.includes('src="/sample-report/summary/"'), "Home report preview does not show Summary");
 invariant(home.includes('title="AntennaBench canonical sample Summary"'), "Summary preview is missing its accessible title");
 invariant(home.includes('href="/sample-report/">Open Full evidence</a>'), "Home page is missing prominent Full evidence access");
+invariant(home.includes('href="https://github.com/rwjblue/antennabench/blob/main/docs/read-summary-in-two-minutes.md">Read the two-minute guide</a>'), "Home page is missing the Summary reading guide");
 invariant(home.includes('href="/sample-report/inconclusive/">see an inconclusive example</a>'), "Home page is missing the inconclusive teaching example");
 for (const boundary of [
   "Local-first",

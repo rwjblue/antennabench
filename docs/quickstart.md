@@ -190,5 +190,8 @@ bundles open in **Local report**. Merely opening a report does not run crash
 recovery or load acquisition and controller services.
 
 For help interpreting the result, continue with
+[Read An AntennaBench Summary In Two Minutes](read-summary-in-two-minutes.md),
+then use the [Full Evidence And Methodology Reference](reading-your-report.md)
+when you need the detailed audit. See also
 [Reading The Report](product.md#reading-the-report). Use the
 [Operator Glossary](glossary.md) whenever a report or guide term is unfamiliar.

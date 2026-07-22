@@ -121,6 +121,8 @@ describe("public project site contracts", () => {
 
     expect(home).toContain('href="/sample-report/summary/">Read the Summary</a>');
     expect(home).toContain('href="/sample-report/">Open Full evidence</a>');
+    expect(home).toContain("read-summary-in-two-minutes.md");
+    expect(home).toContain("Read the two-minute guide");
     expect(home).toContain('href="/sample-report/inconclusive/"');
     expect(home).toContain("session bundle remains the durable record");
     expect(home).toContain("does not accept uploads or host operator reports");

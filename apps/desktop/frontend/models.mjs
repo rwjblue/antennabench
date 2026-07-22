@@ -86,6 +86,10 @@ export const CONTEXT_HELP = Object.freeze({
     title: "Local/offline WSJT-X receiver",
     text: "This direct UDP source is required before a receive-capable run only when WSPR.live is off. It can remain off for the default online path, or run alongside WSPR.live as separately attributed evidence.",
   },
+  report_documents: {
+    title: "Summary and Full evidence",
+    text: "Start with Summary for answer-first aggregate findings, support counts, and the principal limitation. Switch to Full evidence when you need the complete human-readable audit; the session bundle remains the durable record.",
+  },
 });
 
 export function installContextualHelp(root) {

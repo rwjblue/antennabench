@@ -8,7 +8,8 @@
 
 <p align="center">
   <a href="https://antennabench.com">Project site</a> ·
-  <a href="https://antennabench.com/sample-report/">Real sample report</a> ·
+  <a href="https://antennabench.com/sample-report/summary/">Summary sample</a> ·
+  <a href="https://antennabench.com/sample-report/">Full evidence sample</a> ·
   <a href="https://antennabench.com/sample-report/inconclusive/">Inconclusive sample</a> ·
   <a href="docs/README.md">Documentation</a>
 </p>
@@ -71,6 +72,8 @@ See the [roadmap](docs/roadmap.md) for the current direction.
 
 For operators and evaluators:
 
+- [Read an AntennaBench Summary in two minutes](docs/read-summary-in-two-minutes.md)
+- [Full evidence and methodology reference](docs/reading-your-report.md)
 - [How AntennaBench works](docs/product.md)
 - [Session bundles and exported reports](docs/bundle-format.md)
 - [Why WSPR is the default—and when to use RBN](docs/why-not-just-use-rbn.md)

@@ -16,6 +16,18 @@ A session bundle is the portable directory that holds the durable record of a
 session. After this full name is introduced, **bundle** is the preferred short
 form; it is not the same as an HTML report derived from the bundle.
 
+## Summary
+
+Summary is the concise, answer-first human-readable view derived from one
+committed session snapshot. It presents aggregate findings, their support, and
+the principal limitation; it is not the complete audit or the durable record.
+
+## Full Evidence
+
+Full evidence is the complete human-readable findings and audit view derived
+from one committed session snapshot. It preserves detailed tables, methods,
+diagnostics, and provenance, but the session bundle remains the durable record.
+
 ## Antenna Label
 
 An antenna label is the recorded name for an antenna in one session, such as
@@ -143,6 +155,26 @@ A matched pair contains usable signal observations for the same remote path in
 one eligible block and comparison group, one observation per antenna. Repeated
 matched pairs from one remote path are summarized before paths are summarized
 together.
+
+## Paired Shared-Path Signal
+
+Paired shared-path signal compares usable signal observations from both
+antennas for the same remote path within an eligible alternating block and
+comparison group. It reports a signed difference with explicit path, pair, and
+block support.
+
+## Controlled Common-Opportunity Detection
+
+Controlled common-opportunity detection compares detections only among remote
+receivers independently known to be active during both antenna cycles. Without
+a suitable activity census, this question is unavailable rather than inferred
+from missing public reports.
+
+## Uncontrolled Observed Paths
+
+Uncontrolled observed paths count the unique remote paths that appeared for
+each antenna in the collected evidence. They describe observed reach without
+claiming a controlled detection rate or complete coverage.
 
 ## Comparison Availability
 
