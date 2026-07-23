@@ -35,6 +35,7 @@ import {
   renderSavedSessions,
   renderSetup,
 } from "./renderers.mjs";
+import { createReportTransitionCoordinator } from "./transitions.mjs";
 
 export function mount(root, browserWindow) {
   const rootDocument = root.ownerDocument ?? root;
@@ -51,6 +52,7 @@ export function mount(root, browserWindow) {
   let controllerProfileReconciliationKey = null;
   let controllerProfileReconciliationAttempts = 0;
   let controllerProfileReconciliationTimer = null;
+  let reportTransitionCoordinator = null;
   const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const preferredScrollBehavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -323,9 +325,19 @@ export function mount(root, browserWindow) {
       reportExportDialog.removeAttribute("open");
       skipCycleTrigger = null;
       abortRunTriggerElement = null;
+      reportTransitionCoordinator?.cancel();
       releaseReportFrame(reportFrame, reportDocuments);
     },
   });
+  reportTransitionCoordinator = createReportTransitionCoordinator({
+    document: rootDocument,
+    browserWindow,
+    getActiveWorkflow: () => state.activeWorkflow,
+  });
+  const selectWorkflow = (workflow, options = {}) => reportTransitionCoordinator.navigate(
+    workflow,
+    () => controller.selectWorkflow(workflow, options),
+  );
 
   function scheduleControllerProfileReconciliation() {
     const catalogKey = state.antennaControllerCatalog?.profiles
@@ -377,7 +389,7 @@ export function mount(root, browserWindow) {
   for (const button of navigation) {
     button.addEventListener("click", async () => {
       const workflow = button.dataset.workflow;
-      await controller.selectWorkflow(workflow, {
+      await selectWorkflow(workflow, {
         focusTarget: workflow === "report" ? "report-navigation" : null,
       });
       if (state.activeWorkflow === workflow) focusActiveHeading(elements, workflow);
@@ -386,7 +398,7 @@ export function mount(root, browserWindow) {
 
   reportReturnButton.addEventListener("click", async () => {
     const returnModel = reportReturnModel(state);
-    await controller.selectWorkflow(returnModel.workflow);
+    await selectWorkflow(returnModel.workflow);
     if (state.activeWorkflow !== returnModel.workflow) return;
     const origin = returnModel.origin;
     if (
@@ -412,16 +424,16 @@ export function mount(root, browserWindow) {
     focusActiveHeading(elements, returnModel.workflow);
   });
   reportSavedButton.addEventListener("click", async () => {
-    await controller.selectWorkflow("saved");
+    await selectWorkflow("saved");
     if (state.activeWorkflow === "saved") focusActiveHeading(elements, "saved");
   });
   reportActiveRunButton.addEventListener("click", async () => {
-    await controller.selectWorkflow("run");
+    await selectWorkflow("run");
     if (state.activeWorkflow === "run") focusActiveHeading(elements, "run");
   });
 
   const startNewSession = async () => {
-    await controller.selectWorkflow("setup");
+    await selectWorkflow("setup");
     focusActiveHeading(elements, "setup");
   };
   savedNew.addEventListener("click", startNewSession);
@@ -474,7 +486,10 @@ export function mount(root, browserWindow) {
       return;
     }
     const intent = button.dataset.intent;
-    await controller.openManagedSession(button.dataset.locatorId, intent);
+    await reportTransitionCoordinator.navigate(
+      intent === "report" ? "report" : "run",
+      () => controller.openManagedSession(button.dataset.locatorId, intent),
+    );
     const expectedWorkflow = intent === "report" ? "report" : "run";
     if (state.activeWorkflow === expectedWorkflow) {
       focusActiveHeading(elements, expectedWorkflow);
@@ -631,11 +646,11 @@ export function mount(root, browserWindow) {
     await controller.submitAbortRun(abortRunReason.value);
   });
   abortRunReport.addEventListener("click", async () => {
-    await controller.selectWorkflow("report");
+    await selectWorkflow("report");
     if (state.activeWorkflow === "report") focusActiveHeading(elements, "report");
   });
   abortRunSaved.addEventListener("click", async () => {
-    await controller.selectWorkflow("saved");
+    await selectWorkflow("saved");
     if (state.activeWorkflow === "saved") focusActiveHeading(elements, "saved");
   });
 

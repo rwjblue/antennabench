@@ -4,6 +4,7 @@ import path from "node:path";
 import { test, vi } from "vitest";
 
 import { collectDesktopElements } from "../frontend/elements.mjs";
+import { createReportTransitionCoordinator } from "../frontend/transitions.mjs";
 
 const DESKTOP_HTML = readFileSync(
   path.join(process.cwd(), "frontend", "index.html"),
@@ -51,6 +52,72 @@ function conductorView(overrides = {}) {
     ...overrides,
   };
 }
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
+test("report transition coordinator handles normal, reduced, and interrupted navigation", async () => {
+  let activeWorkflow = "saved";
+  const documentElement = { dataset: {} };
+  const transitions = [];
+  const transitionDocument = {
+    documentElement,
+    startViewTransition(update) {
+      const finished = deferred();
+      const transition = {
+        skipped: false,
+        updateCallbackDone: Promise.resolve().then(update),
+        finished: finished.promise,
+        finish: finished.resolve,
+        skipTransition() {
+          this.skipped = true;
+          finished.resolve();
+        },
+      };
+      transitions.push(transition);
+      return transition;
+    },
+  };
+  const browserWindow = {
+    matchMedia: () => ({ matches: false }),
+  };
+  const coordinator = createReportTransitionCoordinator({
+    document: transitionDocument,
+    browserWindow,
+    getActiveWorkflow: () => activeWorkflow,
+  });
+
+  const entered = coordinator.navigate("report", () => { activeWorkflow = "report"; });
+  await transitions[0].updateCallbackDone;
+  assert.equal(documentElement.dataset.reportTransition, "enter");
+  assert.equal(activeWorkflow, "report");
+
+  const returned = coordinator.navigate("saved", () => { activeWorkflow = "saved"; });
+  await transitions[1].updateCallbackDone;
+  assert.equal(transitions[0].skipped, true);
+  assert.equal(documentElement.dataset.reportTransition, "exit");
+  transitions[1].finish();
+  await Promise.all([entered, returned]);
+  assert.equal(activeWorkflow, "saved");
+  assert.equal("reportTransition" in documentElement.dataset, false);
+
+  let reducedStarts = 0;
+  const reduced = createReportTransitionCoordinator({
+    document: {
+      documentElement: { dataset: {} },
+      startViewTransition() { reducedStarts += 1; },
+    },
+    browserWindow: { matchMedia: () => ({ matches: true }) },
+    getActiveWorkflow: () => "saved",
+  });
+  let reducedDestination = null;
+  await reduced.navigate("report", () => { reducedDestination = "report"; });
+  assert.equal(reducedStarts, 0);
+  assert.equal(reducedDestination, "report");
+});
 
 test("controller manual review keeps native checkbox, label, and help semantics", () => {
   const elements = loadDesktopDocument();

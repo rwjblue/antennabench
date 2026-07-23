@@ -357,7 +357,9 @@ toolbar leads with an ephemeral **Back to Saved sessions** or **Back to Active
 run** action based on the surface that opened the current session report. Return
 restores that surface's scroll position and initiating control when it remains
 available; a terminalized run falls back explicitly to Saved sessions. The
-toolbar also owns secondary navigation, coherent revision identity, refresh,
+ordinary workspace and reader exchange through a brief, reversible shell
+transition; a newer navigation interrupts it, and reduced-motion preference
+bypasses the spatial effect. The toolbar also owns secondary navigation, coherent revision identity, refresh,
 Diagnostics, and Export, while the sandboxed scientific report iframe is the
 sole routine vertical scroll owner. Diagnostics contains bounded creator/subsequent runtime
 cards and chronological failed, partial, and recovery outcomes with explicit

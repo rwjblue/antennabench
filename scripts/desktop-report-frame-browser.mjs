@@ -523,19 +523,23 @@ try {
   const reportHierarchy = (await browser(["eval", `(() => {
     const content = document.querySelector(".content");
     const workspace = document.querySelector(".workspace");
-    for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== "report";
     const viewer = document.querySelector("[data-report-viewer]");
-    document.querySelector("[data-report-panel-heading]").hidden = true;
     document.querySelector("[data-report-placeholder]").hidden = true;
     viewer.hidden = false;
     const history = document.querySelector("[data-operational-history]");
     const diagnostics = document.querySelector("[data-report-diagnostics-dialog]");
     const alert = document.querySelector("[data-operational-history-alert]");
     const frame = document.querySelector("[data-report-frame]");
-    const appShell = document.querySelector(".app-shell");
-    content.classList.add("report-reading-active");
-    workspace.classList.add("report-reading-active");
-    appShell.classList.add("report-reading-active");
+    window.__setReportWorkspaceActive = (active) => {
+      for (const panel of document.querySelectorAll("[data-panel]")) {
+        panel.hidden = panel.dataset.panel !== (active ? "report" : "setup");
+      }
+      document.querySelector("[data-report-panel-heading]").hidden = active;
+      content.classList.toggle("report-reading-active", active);
+      workspace.classList.toggle("report-reading-active", active);
+      document.querySelector(".app-shell").classList.toggle("report-reading-active", active);
+    };
+    window.__setReportWorkspaceActive(true);
     document.querySelector("[data-report-bundle]").textContent = "canonical-sample.session.wsprabundle";
     document.querySelector("[data-report-revision]").textContent = "Revision 16 · ended";
     const status = document.querySelector("[data-report-status]");
@@ -588,6 +592,103 @@ try {
   const standardReportGeometry = await reportWorkspaceGeometry();
   assert.deepEqual(standardReportGeometry.viewport, { width: 1120, height: 760 });
   assertBoundedReportWorkspace(standardReportGeometry, { noticesVisible: false });
+  const normalTransitions = (await browser(["eval", `(async () => {
+    if (typeof document.startViewTransition !== "function") {
+      return { supported: false };
+    }
+    const run = async (direction, active) => {
+      document.documentElement.dataset.reportTransition = direction;
+      const transition = document.startViewTransition(
+        () => window.__setReportWorkspaceActive(active),
+      );
+      await transition.ready;
+      const animations = document.getAnimations()
+        .map((animation) => ({
+          duration: Number(animation.effect?.getTiming?.().duration ?? 0),
+          pseudo: animation.effect?.target?.pseudoElement ?? "",
+        }));
+      await transition.finished;
+      return animations;
+    };
+    const exitAnimations = await run("exit", false);
+    const enterAnimations = await run("enter", true);
+    delete document.documentElement.dataset.reportTransition;
+    return {
+      supported: true,
+      exitAnimations,
+      enterAnimations,
+      activePanel: document.querySelector("[data-panel]:not([hidden])")?.dataset.panel,
+      transitionStateCleared: !("reportTransition" in document.documentElement.dataset),
+    };
+  })()`], { json: true })).result;
+  assert.equal(normalTransitions.supported, true);
+  assert.ok(normalTransitions.exitAnimations.some(({ duration }) => duration >= 120));
+  assert.ok(normalTransitions.enterAnimations.some(({ duration }) => duration >= 120));
+  assert.equal(
+    [...normalTransitions.exitAnimations, ...normalTransitions.enterAnimations]
+      .some(({ pseudo }) => pseudo.includes("report-document")),
+    false,
+    "the sandboxed report document must not participate in shell animation",
+  );
+  assert.equal(normalTransitions.activePanel, "report");
+  assert.equal(normalTransitions.transitionStateCleared, true);
+  assertBoundedReportWorkspace(await reportWorkspaceGeometry(), { noticesVisible: false });
+
+  const interruptedTransitions = (await browser(["eval", `(async () => {
+    document.documentElement.dataset.reportTransition = "exit";
+    const exiting = document.startViewTransition(
+      () => window.__setReportWorkspaceActive(false),
+    );
+    await exiting.updateCallbackDone;
+    exiting.skipTransition();
+    document.documentElement.dataset.reportTransition = "enter";
+    const entering = document.startViewTransition(
+      () => window.__setReportWorkspaceActive(true),
+    );
+    await Promise.allSettled([exiting.finished, entering.finished]);
+    delete document.documentElement.dataset.reportTransition;
+    return {
+      activePanel: document.querySelector("[data-panel]:not([hidden])")?.dataset.panel,
+      visiblePanels: [...document.querySelectorAll("[data-panel]")]
+        .filter((panel) => panel.getClientRects().length > 0).length,
+      classes: {
+        appShell: document.querySelector(".app-shell").classList.contains("report-reading-active"),
+        workspace: document.querySelector(".workspace").classList.contains("report-reading-active"),
+        content: document.querySelector(".content").classList.contains("report-reading-active"),
+      },
+      transitionStateCleared: !("reportTransition" in document.documentElement.dataset),
+    };
+  })()`], { json: true })).result;
+  assert.deepEqual(interruptedTransitions, {
+    activePanel: "report",
+    visiblePanels: 1,
+    classes: { appShell: true, workspace: true, content: true },
+    transitionStateCleared: true,
+  });
+  assertBoundedReportWorkspace(await reportWorkspaceGeometry(), { noticesVisible: false });
+
+  await browser(["set", "media", "light", "reduced-motion"]);
+  const reducedTransition = (await browser(["eval", `(async () => {
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.documentElement.dataset.reportTransition = "exit";
+    const transition = document.startViewTransition(
+      () => window.__setReportWorkspaceActive(false),
+    );
+    await transition.ready;
+    const durations = document.getAnimations()
+      .map((animation) => Number(animation.effect?.getTiming?.().duration ?? 0));
+    await transition.finished;
+    window.__setReportWorkspaceActive(true);
+    delete document.documentElement.dataset.reportTransition;
+    return { reduced, durations };
+  })()`], { json: true })).result;
+  assert.equal(reducedTransition.reduced, true);
+  assert.ok(
+    reducedTransition.durations.every((duration) => duration <= 1),
+    `reduced-motion transition durations were ${reducedTransition.durations.join(", ")}`,
+  );
+  await browser(["set", "media", "light"]);
+  assertBoundedReportWorkspace(await reportWorkspaceGeometry(), { noticesVisible: false });
   const pendingUpdate = (await browser(["eval", `(() => {
     const frame = document.querySelector("[data-report-frame]");
     const sourceBefore = frame.getAttribute("src");

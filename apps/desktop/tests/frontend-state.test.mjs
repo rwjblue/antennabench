@@ -223,6 +223,7 @@ test("the desktop serves checked-in native modules without frontend tooling", ()
     "report.css",
     "state.mjs",
     "styles.css",
+    "transitions.mjs",
   ]);
 });
 
