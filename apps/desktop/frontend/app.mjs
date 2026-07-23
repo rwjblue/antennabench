@@ -46,6 +46,7 @@ export function mount(root, browserWindow) {
   let controllerProfileDeleteTrigger = null;
   let reportExportTrigger = null;
   let skipCycleTrigger = null;
+  let abortRunTriggerElement = null;
   let hydratedControllerProfile = null;
   let controllerProfileReconciliationKey = null;
   let controllerProfileReconciliationAttempts = 0;
@@ -193,6 +194,14 @@ export function mount(root, browserWindow) {
     skipCycleReason,
     skipCycleCancel,
     skipCycleConfirm,
+    abortRunTrigger,
+    abortRunFeedback,
+    abortRunReport,
+    abortRunSaved,
+    abortRunDialog,
+    abortRunReason,
+    abortRunCancel,
+    abortRunConfirm,
   } = elements;
   installContextualHelp(root);
 
@@ -229,6 +238,7 @@ export function mount(root, browserWindow) {
     invoke: browserWindow.__TAURI__?.core?.invoke,
     render(nextState) {
       const hadSkipDialog = state.skipCycleDialog !== null;
+      const hadAbortRunDialog = state.abortRunDialog !== null;
       const hadControllerProfileDeleteDialog =
         state.antennaControllerProfileDeleteDialog !== null;
       state = nextState;
@@ -237,6 +247,17 @@ export function mount(root, browserWindow) {
         const trigger = skipCycleTrigger;
         skipCycleTrigger = null;
         Promise.resolve().then(() => trigger.isConnected && trigger.focus());
+      }
+      if (hadAbortRunDialog && state.abortRunDialog === null && abortRunTriggerElement) {
+        const trigger = abortRunTriggerElement;
+        abortRunTriggerElement = null;
+        const focusTarget = state.abortRunStatus === "succeeded"
+          || !trigger.isConnected || trigger.disabled
+          ? abortRunFeedback
+          : trigger;
+        Promise.resolve().then(() => {
+          if (state.activeWorkflow === "run") focusTarget.focus();
+        });
       }
       if (
         hadControllerProfileDeleteDialog
@@ -291,6 +312,8 @@ export function mount(root, browserWindow) {
       browserWindow.removeEventListener?.("focus", reconcileControllerProfileDomSelection);
       if (skipCycleDialog.open) skipCycleDialog.close?.();
       skipCycleDialog.removeAttribute("open");
+      if (abortRunDialog.open) abortRunDialog.close?.();
+      abortRunDialog.removeAttribute("open");
       if (controllerProfileDeleteDialog.open) controllerProfileDeleteDialog.close?.();
       controllerProfileDeleteDialog.removeAttribute("open");
       if (reportDiagnosticsDialog.open) reportDiagnosticsDialog.close?.();
@@ -298,6 +321,7 @@ export function mount(root, browserWindow) {
       if (reportExportDialog.open) reportExportDialog.close?.();
       reportExportDialog.removeAttribute("open");
       skipCycleTrigger = null;
+      abortRunTriggerElement = null;
       releaseReportFrame(reportFrame, reportDocuments);
     },
   });
@@ -502,7 +526,6 @@ export function mount(root, browserWindow) {
         await controller.submitConductorAction({ kind, note: null });
         return;
       }
-      if (kind === "abandon" && !controller.confirm("Abandon this session? Existing evidence will remain, but the lifecycle is terminal.")) return;
       const detail = controller.prompt(`Optional ${kind} reason:`, "");
       if (detail === null) return;
       await controller.submitConductorAction({ kind, reason: detail });
@@ -536,6 +559,49 @@ export function mount(root, browserWindow) {
   skipCycleConfirm.addEventListener("click", async () => {
     if (state.skipCycleStatus === "submitting") return;
     await controller.submitSkipCycle(skipCycleReason.value);
+  });
+
+  abortRunTrigger.addEventListener("click", () => {
+    if (state.abortRunStatus === "submitting") return;
+    abortRunTriggerElement = abortRunTrigger;
+    controller.requestAbortRun();
+    Promise.resolve().then(() => abortRunCancel.focus());
+  });
+  const cancelAbortRun = () => {
+    if (state.abortRunStatus === "submitting") return;
+    controller.cancelAbortRun();
+  };
+  abortRunCancel.addEventListener("click", cancelAbortRun);
+  abortRunDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    cancelAbortRun();
+  });
+  abortRunDialog.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [abortRunReason, abortRunCancel, abortRunConfirm]
+      .filter((control) => !control.disabled);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && rootDocument.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && rootDocument.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  abortRunConfirm.addEventListener("click", async () => {
+    if (state.abortRunStatus === "submitting") return;
+    await controller.submitAbortRun(abortRunReason.value);
+  });
+  abortRunReport.addEventListener("click", async () => {
+    await controller.selectWorkflow("report");
+    focusActiveHeading(elements, "report");
+  });
+  abortRunSaved.addEventListener("click", async () => {
+    await controller.selectWorkflow("saved");
+    focusActiveHeading(elements, "saved");
   });
 
   wsjtxReadinessAcknowledge.addEventListener("change", () => {

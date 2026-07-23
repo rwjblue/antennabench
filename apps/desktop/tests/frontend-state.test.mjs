@@ -72,6 +72,9 @@ import {
   wsjtxReadinessModel,
 } from "../frontend/models.mjs";
 import {
+  abortRunMutationFailed,
+  abortRunMutationSucceeded,
+  beginAbortRunMutation,
   beginConductorLoad,
   beginConductorMutation,
   beginManagedExport,
@@ -99,6 +102,7 @@ import {
   conductorMutationFailed,
   conductorPollSucceeded,
   cancelSkipCycle,
+  cancelAbortRun,
   editSessionSetup,
   initialState,
   managedCatalogLoadFailed,
@@ -120,6 +124,7 @@ import {
   openSessionSucceeded,
   requestManagedDelete,
   requestAntennaControllerProfileDelete,
+  requestAbortRun,
   requestSkipCycle,
   reportExportCancelled,
   reportExportConfirmationRequired,
@@ -321,6 +326,10 @@ test("the shell starts in saved sessions", () => {
     skipCycleStatus: "idle",
     skipCycleError: null,
     skipCycleNotice: null,
+    abortRunDialog: null,
+    abortRunStatus: "idle",
+    abortRunError: null,
+    abortRunNotice: null,
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
@@ -1037,6 +1046,68 @@ test("skip-cycle confirmation preserves exact authority and reconciles stale run
   assert.equal(stale.skipCycleError.kind, "stale_revision");
   assert.match(stale.skipCycleError.detail, /choose Skip this cycle again/);
   assert.equal(selectWorkflow(confirming, "saved").skipCycleDialog, null);
+});
+
+test("abort confirmation owns exact run authority and reconciles stale or failed submission", () => {
+  const conductor = {
+    bundleName: "field-run.antennabundle",
+    sessionId: "session-1",
+    revision: 8,
+    lifecycle: "interrupted",
+    phase: "finalizing",
+    actionToken: "mutation-8",
+    currentSlot: {
+      sequenceNumber: 4,
+      plannedAntenna: "Loop",
+      direction: "receive",
+      band: "40m",
+    },
+    nextIntent: null,
+  };
+  const ready = conductorLoadSucceeded(initialState("run"), conductor);
+  const confirming = requestAbortRun(ready);
+  assert.deepEqual(confirming.abortRunDialog, {
+    actionToken: "mutation-8",
+    expectedRevision: 8,
+    sessionId: "session-1",
+    sessionName: "field-run.antennabundle",
+    lifecycle: "interrupted",
+    cycleContext: "Cycle 4 · Loop · receive · 40m",
+  });
+  assert.equal(confirming.abortRunStatus, "confirming");
+  assert.equal(cancelAbortRun(confirming).abortRunDialog, null);
+
+  const unchanged = conductorPollSucceeded(confirming, { ...conductor, now: "later" });
+  assert.equal(unchanged.abortRunDialog.expectedRevision, 8);
+  const stale = conductorPollSucceeded(confirming, { ...conductor, revision: 9 });
+  assert.equal(stale.abortRunDialog, null);
+  assert.equal(stale.abortRunError.kind, "stale_revision");
+  assert.match(stale.abortRunError.detail, /choose Abort run again/);
+  assert.equal(selectWorkflow(confirming, "saved").abortRunDialog, null);
+
+  const submitting = beginAbortRunMutation(confirming);
+  assert.equal(submitting.conductorStatus, "mutating");
+  assert.equal(submitting.abortRunStatus, "submitting");
+  const failed = abortRunMutationFailed(submitting, {
+    kind: "filesystem",
+    message: "The terminal checkpoint could not be written.",
+    detail: "injected persistence fault",
+  });
+  assert.equal(failed.abortRunDialog, null);
+  assert.equal(failed.abortRunError.kind, "filesystem");
+  assert.equal(failed.conductor.lifecycle, "interrupted");
+
+  const succeeded = abortRunMutationSucceeded(submitting, {
+    ...conductor,
+    revision: 9,
+    actionToken: "mutation-9",
+    lifecycle: "abandoned",
+    phase: "abandoned",
+  });
+  assert.equal(succeeded.abortRunDialog, null);
+  assert.equal(succeeded.abortRunStatus, "succeeded");
+  assert.match(succeeded.abortRunNotice, /Preserved evidence/);
+  assert.equal(succeeded.conductor.lifecycle, "abandoned");
 });
 
 test("WSJT-X readiness acknowledgement is local, session-specific, and revision-scoped", () => {

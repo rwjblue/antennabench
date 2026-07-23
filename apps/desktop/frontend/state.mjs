@@ -70,6 +70,10 @@ export function initialState(workflow = "saved") {
       skipCycleStatus: "idle",
       skipCycleError: null,
       skipCycleNotice: null,
+      abortRunDialog: null,
+      abortRunStatus: "idle",
+      abortRunError: null,
+      abortRunNotice: null,
       wsjtxStatus: "idle",
       wsjtx: null,
       wsjtxError: null,
@@ -110,6 +114,10 @@ export function selectWorkflow(state, workflow) {
       skipCycleStatus: "idle",
       skipCycleError: null,
       skipCycleNotice: null,
+      abortRunDialog: null,
+      abortRunStatus: "idle",
+      abortRunError: null,
+      abortRunNotice: null,
     }),
   };
 }
@@ -236,6 +244,10 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     skipCycleStatus: "idle",
     skipCycleError: null,
     skipCycleNotice: null,
+    abortRunDialog: null,
+    abortRunStatus: "idle",
+    abortRunError: null,
+    abortRunNotice: null,
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
@@ -302,6 +314,10 @@ export function openSessionSucceeded(
     skipCycleStatus: "idle",
     skipCycleError: null,
     skipCycleNotice: null,
+    abortRunDialog: null,
+    abortRunStatus: "idle",
+    abortRunError: null,
+    abortRunNotice: null,
     wsjtxStatus: "idle",
     wsjtx: null,
     wsjtxError: null,
@@ -637,7 +653,7 @@ export function beginConductorLoad(state) {
 
 export function conductorLoadSucceeded(state, conductor) {
   const completedAction = state.conductorPendingAction;
-  return reconcileSkipCycleDialog({
+  return reconcileConductorDialogs({
     ...state,
     conductorStatus: "ready",
     conductor,
@@ -651,7 +667,7 @@ export function conductorLoadSucceeded(state, conductor) {
 }
 
 export function conductorPollSucceeded(state, conductor) {
-  return reconcileSkipCycleDialog({
+  return reconcileConductorDialogs({
     ...state,
     conductor,
     session: reconcileSessionWithConductor(state.session, conductor),
@@ -747,6 +763,107 @@ function reconcileSkipCycleDialog(state, conductor) {
   };
 }
 
+function abortCycleContext(conductor) {
+  const cycle = conductor.currentSlot ?? conductor.nextIntent;
+  if (!cycle) return "No current or next planned cycle";
+  return [
+    `Cycle ${cycle.sequenceNumber}`,
+    cycle.plannedAntenna ?? cycle.antennaLabel,
+    cycle.direction,
+    cycle.band,
+  ].filter(Boolean).join(" · ");
+}
+
+export function requestAbortRun(state) {
+  const conductor = state.conductor;
+  if (
+    !conductor
+    || !["running", "interrupted"].includes(conductor.lifecycle)
+    || state.abortRunStatus === "submitting"
+  ) return state;
+  return {
+    ...state,
+    abortRunDialog: {
+      actionToken: conductor.actionToken,
+      expectedRevision: conductor.revision,
+      sessionId: conductor.sessionId,
+      sessionName: conductor.bundleName ?? state.session?.bundleName ?? "Active session",
+      lifecycle: conductor.lifecycle,
+      cycleContext: abortCycleContext(conductor),
+    },
+    abortRunStatus: "confirming",
+    abortRunError: null,
+    abortRunNotice: null,
+  };
+}
+
+export function cancelAbortRun(state) {
+  if (state.abortRunStatus === "submitting") return state;
+  return {
+    ...state,
+    abortRunDialog: null,
+    abortRunStatus: "idle",
+    abortRunError: null,
+    abortRunNotice: null,
+  };
+}
+
+export function beginAbortRunMutation(state) {
+  if (!state.abortRunDialog || state.abortRunStatus === "submitting") return state;
+  return {
+    ...beginConductorMutation(state, "abandon"),
+    abortRunStatus: "submitting",
+    abortRunError: null,
+    abortRunNotice: null,
+  };
+}
+
+export function abortRunMutationSucceeded(state, conductor) {
+  return {
+    ...conductorLoadSucceeded({ ...state, abortRunDialog: null }, conductor),
+    abortRunDialog: null,
+    abortRunStatus: "succeeded",
+    abortRunError: null,
+    abortRunNotice: "Run aborted. Preserved evidence remains available.",
+  };
+}
+
+export function abortRunMutationFailed(state, error) {
+  return {
+    ...conductorMutationFailed(state, error),
+    abortRunDialog: null,
+    abortRunStatus: "error",
+    abortRunError: normalizeOpenError(error),
+    abortRunNotice: null,
+  };
+}
+
+function reconcileAbortRunDialog(state, conductor) {
+  const presented = state.abortRunDialog;
+  if (!presented || state.abortRunStatus === "submitting") return state;
+  const unchanged = ["running", "interrupted"].includes(conductor?.lifecycle)
+    && conductor.sessionId === presented.sessionId
+    && conductor.lifecycle === presented.lifecycle
+    && conductor.revision === presented.expectedRevision
+    && conductor.actionToken === presented.actionToken;
+  if (unchanged) return state;
+  return {
+    ...state,
+    abortRunDialog: null,
+    abortRunStatus: "error",
+    abortRunError: {
+      kind: "stale_revision",
+      message: "The run changed before Abort was confirmed.",
+      detail: "Review the current run state, then choose Abort run again if it is still appropriate.",
+    },
+    abortRunNotice: null,
+  };
+}
+
+function reconcileConductorDialogs(state, conductor) {
+  return reconcileAbortRunDialog(reconcileSkipCycleDialog(state, conductor), conductor);
+}
+
 function reconcileSessionWithConductor(session, conductor) {
   if (!session) return session;
   return {
@@ -774,6 +891,10 @@ export function beginConductorMutation(state, action = "operator_action") {
     ...(action === "skip_wspr_cycle" ? {} : {
       skipCycleError: null,
       skipCycleNotice: null,
+    }),
+    ...(action === "abandon" ? {} : {
+      abortRunError: null,
+      abortRunNotice: null,
     }),
   };
 }

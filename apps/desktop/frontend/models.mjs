@@ -68,15 +68,15 @@ export const CONTEXT_HELP = Object.freeze({
   },
   skip_cycle: {
     title: "Skip one cycle",
-    text: "Skip this cycle records only the named planned cycle as missed and advances to the next intention. To stop the remaining run, use End session under Run details and session controls.",
+    text: "Skip this cycle records only the named planned cycle as missed and advances to the next intention. To discontinue all remaining work, use the visible Abort run action.",
   },
   notes_corrections: {
     title: "Notes and corrections",
     text: "Add note records useful context, usually on the current or last cycle. Corrections append a visible replacement or retraction instead of erasing history.",
   },
   session_controls: {
-    title: "Pause, end, and abandon",
-    text: "Pause keeps the session available to resume, while End closes it normally. Abandon is terminal and marks the run as intentionally discontinued; existing evidence remains.",
+    title: "Pause and normal completion",
+    text: "Pause keeps the session available to resume, while End records normal completion and retains final-capture behavior. Abort run is the separate terminal action for intentionally discontinuing all remaining work while preserving committed evidence.",
   },
   wspr_live_status: {
     title: "Delayed/public WSPR.live collection",

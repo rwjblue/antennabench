@@ -43,6 +43,12 @@ auditable. Resume moves only `interrupted` to `running`. End is valid from
 and abandoned sessions reject every later lifecycle transition and operator
 fact.
 
+The desktop presents abandonment as **Abort run**. It is an explicit terminal
+choice for discontinuing all remaining planned work while retaining previously
+committed evidence; it is distinct from resumable interruption, normal End, and
+skipping one planned cycle. Process cancellation does not imply control over
+WSJT-X **Enable Tx**, PTT, or an active radio transmission.
+
 Mutation validation compares the caller's expected checkpoint revision before
 reducing a proposed event. A stale revision, duplicate start, resume without an
 interruption, duplicate ID, or post-terminal event fails without changing the

@@ -150,6 +150,9 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   let controllerProfileLoads = 0;
   let importedCatalog = false;
   let resolveSkipCycle;
+  let resolveAbortRun;
+  let rejectAbortRun;
+  let abortRunAttempts = 0;
   let resolveControllerProfileDelete;
   let controllerCatalog = {
     inputStyle: "one_line",
@@ -339,9 +342,19 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
         nextDirection: "transmit",
       },
     }),
-    mutate_active_session_conductor: (payload) => payload.request.action.kind === "skip_wspr_cycle"
-      ? new Promise((resolve) => { resolveSkipCycle = resolve; })
-      : conductorView({ revision: 2 }),
+    mutate_active_session_conductor: (payload) => {
+      if (payload.request.action.kind === "skip_wspr_cycle") {
+        return new Promise((resolve) => { resolveSkipCycle = resolve; });
+      }
+      if (payload.request.action.kind === "abandon") {
+        abortRunAttempts += 1;
+        return new Promise((resolve, reject) => {
+          resolveAbortRun = resolve;
+          rejectAbortRun = reject;
+        });
+      }
+      return conductorView({ revision: 2 });
+    },
     active_session_antenna_controller: {
       policy: "manual",
       attached: false,
@@ -778,7 +791,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     assert.equal(document.activeElement, elements.skipCycleReason);
     assert.match(elements.skipCycleIdentity.textContent, /Cycle 1 · DXC · Transmit · 20m/);
     assert.match(elements.skipCycleDescription.textContent, /this one planned cycle/);
-    assert.match(elements.skipCycleDescription.textContent, /End session/);
+    assert.match(elements.skipCycleDescription.textContent, /Abort run/);
     elements.skipCycleConfirm.focus();
     elements.skipCycleDialog.dispatchEvent(new KeyboardEvent("keydown", {
       key: "Tab",
@@ -825,6 +838,122 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       assert.equal(elements.skipCycleDialog.open, false);
       assert.equal(document.activeElement, skip);
       assert.match(elements.skipCycleFeedback.textContent, /Cycle skipped/);
+    });
+
+    const abortCalls = () => calls.filter(([command, payload]) =>
+      command === "mutate_active_session_conductor"
+      && payload.request.action.kind === "abandon");
+    assert.equal(elements.abortRunControl.hidden, false);
+    elements.abortRunTrigger.focus();
+    elements.abortRunTrigger.click();
+    await vi.waitFor(() => {
+      assert.equal(elements.abortRunDialog.open, true);
+      assert.equal(document.activeElement, elements.abortRunCancel);
+    });
+    assert.match(elements.abortRunTitle.textContent, /headless\.session\.antennabundle/);
+    assert.match(elements.abortRunIdentity.textContent, /headless\.session\.antennabundle · Running/);
+    assert.match(elements.abortRunContext.textContent, /Cycle 2 · Attic EFHW · receive · 20m/);
+    assert.match(elements.abortRunDialog.textContent, /cannot be resumed/);
+    assert.match(elements.abortRunDialog.textContent, /already committed evidence remains/);
+    assert.match(elements.abortRunDialog.textContent, /Enable Tx/);
+    assert.match(elements.abortRunDialog.textContent, /release PTT/);
+    elements.abortRunConfirm.focus();
+    elements.abortRunDialog.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+    }));
+    assert.equal(document.activeElement, elements.abortRunReason, "Abort modal traps focus");
+    elements.abortRunDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    await vi.waitFor(() => {
+      assert.equal(elements.abortRunDialog.open, false);
+      assert.equal(document.activeElement, elements.abortRunTrigger);
+    });
+    assert.equal(abortCalls().length, 0, "Escape submits no abandonment");
+
+    elements.abortRunTrigger.click();
+    await vi.waitFor(() => assert.equal(elements.abortRunDialog.open, true));
+    responses.active_session_conductor = conductorView({
+      revision: 4,
+      actionToken: "token-4",
+      phase: "finalizing",
+      guidance: "Final public collection needs attention",
+    });
+    elements.conductorRefreshButtons[0].click();
+    await vi.waitFor(() => {
+      assert.equal(elements.abortRunDialog.open, false);
+      assert.match(elements.abortRunFeedback.textContent, /run changed before Abort was confirmed/i);
+      assert.equal(document.activeElement, elements.abortRunTrigger);
+    });
+    assert.equal(elements.abortRunControl.hidden, false, "Abort remains visible during finalization");
+
+    elements.abortRunTrigger.click();
+    await vi.waitFor(() => assert.equal(elements.abortRunDialog.open, true));
+    elements.abortRunReason.value = "controller did not settle";
+    elements.abortRunConfirm.click();
+    elements.abortRunConfirm.click();
+    assert.equal(elements.abortRunConfirm.disabled, true);
+    assert.equal(elements.abortRunCancel.disabled, true);
+    assert.equal(elements.abortRunConfirm.textContent, "Aborting…");
+    assert.equal(elements.abortRunPending.hidden, false);
+    assert.equal(abortCalls().length, 1, "pending confirmation cannot submit twice");
+    assert.deepEqual(abortCalls()[0][1].request, {
+      actionToken: "token-4",
+      expectedRevision: 4,
+      action: {
+        kind: "abandon",
+        reason: "controller did not settle",
+      },
+    });
+    rejectAbortRun({
+      kind: "filesystem",
+      message: "The terminal checkpoint could not be written.",
+      detail: "injected persistence failure",
+    });
+    await vi.waitFor(() => {
+      assert.equal(elements.abortRunDialog.open, false);
+      assert.match(elements.abortRunFeedback.textContent, /terminal checkpoint could not be written/i);
+      assert.equal(document.activeElement, elements.abortRunTrigger);
+    });
+    assert.equal(
+      elements.abortRunControl.hidden,
+      false,
+      "typed adapter or persistence failure keeps Abort available",
+    );
+
+    elements.abortRunTrigger.click();
+    await vi.waitFor(() => assert.equal(elements.abortRunDialog.open, true));
+    elements.abortRunReason.value = "storm stopped field work";
+    elements.abortRunConfirm.click();
+    elements.abortRunConfirm.click();
+    assert.equal(abortRunAttempts, 2);
+    assert.equal(abortCalls().length, 2, "each confirmation submits exactly one request");
+    resolveAbortRun(conductorView({
+      revision: 5,
+      actionToken: "token-5",
+      lifecycle: "abandoned",
+      phase: "abandoned",
+      nextIntent: null,
+    }));
+    await vi.waitFor(() => {
+      assert.equal(elements.abortRunDialog.open, false);
+      assert.equal(elements.abortRunControl.hidden, true);
+      assert.match(elements.abortRunFeedback.textContent, /Preserved evidence remains available/);
+      assert.equal(document.activeElement, elements.abortRunFeedback);
+      assert.equal(elements.abortRunReport.hidden, false);
+      assert.equal(elements.abortRunSaved.hidden, false);
+    });
+    assert.deepEqual(abortCalls()[1][1].request, {
+      actionToken: "token-4",
+      expectedRevision: 4,
+      action: {
+        kind: "abandon",
+        reason: "storm stopped field work",
+      },
+    });
+    elements.abortRunReport.click();
+    await vi.waitFor(() => {
+      assert.equal(window.location.hash, "#report");
+      assert.equal(document.querySelector('[data-panel="report"]').hidden, false);
     });
     assert.deepEqual(uncaught, []);
   } finally {

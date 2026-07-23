@@ -145,6 +145,14 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .saved-delete-actions .danger-action { border-color: #b6543f; color: #fff; background: #9b432f; }
 .skip-cycle-feedback { max-width: 620px; margin: 10px auto 4px; }
 .skip-cycle-dialog .saved-delete-identity { margin-bottom: 14px; }
+.abort-run-control { display: grid; gap: 8px; padding: 16px 18px; border: 1px solid #d8a29b; border-radius: 14px; background: #fff8f6; }
+.abort-run-control[hidden] { display: none; }
+.abort-run-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.abort-run-heading h2, .abort-run-heading p, .abort-run-control > p, .abort-run-dialog p { margin: 0; }
+.abort-run-control > p { color: #66504d; font-size: .86rem; }
+.abort-run-dialog .saved-delete-content { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.abort-run-dialog [data-abort-run-description] { display: grid; gap: 10px; color: #4b5f5b; }
+.abort-run-feedback:focus { outline: 3px solid rgba(34, 110, 101, .3); outline-offset: 3px; }
 .skip-cycle-reason { display: grid; gap: 7px; color: #315d57; font-size: 0.76rem; font-weight: 800; }
 .skip-cycle-reason textarea { width: 100%; resize: vertical; border: 1px solid #bfcac3; border-radius: 9px; padding: 10px; color: #294440; background: #fff; font: inherit; font-weight: 500; }
 .skip-cycle-pending { margin-top: 12px; color: #75511f; font-size: 0.74rem; font-weight: 750; }

@@ -625,6 +625,7 @@ export function renderRun(elements, state, root, options = {}) {
     evidenceForm, conductorFeedback, conductorFeedbackMessage, conductorFeedbackDetail,
     conductorLifecycle, conductorAntennaInUse, conductorPhase, conductorGuidance,
     conductorCountdown, skipCycleControl, currentSlot, nextSlot, evidenceSlot, evidenceAntenna,
+    abortRunControl, abortRunTrigger,
     wsjtxReadiness, wsjtxReadinessItems, wsjtxReadinessAcknowledge,
     lifecycleButtons, conductorDiagnostics, conductorEvents, wsjtxForm, wsjtxStart,
     wsjtxStop, wsjtxRequirement, wsjtxPhase, wsjtxCounts, wsjtxSetupWarnings, wsjtxDiagnostic,
@@ -660,6 +661,7 @@ export function renderRun(elements, state, root, options = {}) {
     conductorFeedbackModel(state),
   );
   renderSkipCycleFlow(elements, state);
+  renderAbortRunFlow(elements, state);
   renderReopenedHistoricalDiagnostic(
     { runHistoricalDiagnostic, runHistoricalTitle, runHistoricalSummary, runHistoricalMeta },
     state,
@@ -667,6 +669,7 @@ export function renderRun(elements, state, root, options = {}) {
 
   if (!hasConductor) {
     skipCycleControl.hidden = true;
+    abortRunControl.hidden = true;
     wsjtxReadiness.hidden = true;
     lifecycleButtons.forEach((button) => { button.disabled = true; });
     conductorDiagnostics.replaceChildren();
@@ -789,6 +792,9 @@ export function renderRun(elements, state, root, options = {}) {
   });
   skipCycleControl.hidden = !lifecycleButtons.some((button) =>
     button.dataset.conductorAction === "skip_wspr_cycle" && !button.hidden);
+  const abortAvailable = ["running", "interrupted"].includes(view.lifecycle);
+  abortRunControl.hidden = !abortAvailable;
+  abortRunTrigger.disabled = conductorBusy || state.abortRunDialog !== null;
   conductorDiagnostics.replaceChildren(...view.diagnostics.map((diagnostic) => {
     const item = root.createElement("li");
     const code = root.createElement("strong");
@@ -866,7 +872,7 @@ function renderSkipCycleFlow(elements, state) {
     return;
   }
   skipCycleTitle.textContent = `Skip cycle ${presented.sequenceNumber}?`;
-  skipCycleDescription.textContent = "This records this one planned cycle as missed and advances to the next intention. To stop the remaining run, cancel and use End session under Run details and session controls.";
+  skipCycleDescription.textContent = "This records this one planned cycle as missed and advances to the next intention. To discontinue all remaining work, cancel and use Abort run.";
   skipCycleIdentity.textContent = [
     `Cycle ${presented.sequenceNumber}`,
     presented.antennaLabel,
@@ -883,6 +889,41 @@ function renderSkipCycleFlow(elements, state) {
     skipCycleReason.value = "";
     if (typeof skipCycleDialog.showModal === "function") skipCycleDialog.showModal();
     else skipCycleDialog.setAttribute("open", "");
+  }
+}
+
+function renderAbortRunFlow(elements, state) {
+  const {
+    abortRunFeedback, abortRunFeedbackMessage, abortRunFeedbackDetail,
+    abortRunSuccessActions, abortRunDialog, abortRunTitle, abortRunIdentity,
+    abortRunContext, abortRunReason, abortRunPending, abortRunCancel, abortRunConfirm,
+  } = elements;
+  renderFeedback(
+    abortRunFeedback,
+    abortRunFeedbackMessage,
+    abortRunFeedbackDetail,
+    abortRunFeedbackModel(state),
+  );
+  abortRunSuccessActions.hidden = state.abortRunStatus !== "succeeded";
+  const presented = state.abortRunDialog;
+  if (!presented) {
+    if (abortRunDialog.open) abortRunDialog.close?.();
+    abortRunDialog.removeAttribute("open");
+    return;
+  }
+  abortRunTitle.textContent = `Abort ${presented.sessionName}?`;
+  abortRunIdentity.textContent = `${presented.sessionName} · ${humanizeIdentifier(presented.lifecycle)}`;
+  abortRunContext.textContent = presented.cycleContext;
+  const pending = state.abortRunStatus === "submitting";
+  abortRunReason.disabled = pending;
+  abortRunPending.hidden = !pending;
+  abortRunCancel.disabled = pending;
+  abortRunConfirm.disabled = pending;
+  abortRunConfirm.textContent = pending ? "Aborting…" : "Abort run";
+  if (!abortRunDialog.open) {
+    abortRunReason.value = "";
+    if (typeof abortRunDialog.showModal === "function") abortRunDialog.showModal();
+    else abortRunDialog.setAttribute("open", "");
   }
 }
 
@@ -1253,6 +1294,27 @@ function skipCycleFeedbackModel(state) {
     kind: "ready",
     message: state.skipCycleNotice,
     detail: "The missed cycle is committed and the conductor has advanced to the next intention.",
+  };
+  return null;
+}
+
+function abortRunFeedbackModel(state) {
+  if (state.abortRunStatus === "submitting") return {
+    kind: "loading",
+    message: "Aborting this run…",
+    detail: "Stopping AntennaBench-owned work, preserving captured controller evidence, and committing terminal abandonment.",
+  };
+  if (state.abortRunError) return {
+    kind: "error",
+    message: state.abortRunError.message,
+    detail: [humanizeIdentifier(state.abortRunError.kind), state.abortRunError.detail]
+      .filter(Boolean)
+      .join(" · "),
+  };
+  if (state.abortRunNotice) return {
+    kind: "ready",
+    message: state.abortRunNotice,
+    detail: "The session is terminal and cannot resume. Open its report or return to Saved sessions.",
   };
   return null;
 }

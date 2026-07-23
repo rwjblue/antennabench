@@ -40,6 +40,9 @@ import {
   antennaControllerProfileSaveCommitted,
   antennaControllerRunSucceeded,
   antennaControllerViewSucceeded,
+  abortRunMutationFailed,
+  abortRunMutationSucceeded,
+  beginAbortRunMutation,
   beginAntennaControllerProfileDelete,
   beginAntennaControllerAction,
   beginConductorLoad,
@@ -82,6 +85,7 @@ import {
   managedRevealSucceeded,
   cancelManagedDelete,
   cancelAntennaControllerProfileDelete,
+  cancelAbortRun,
   cancelSkipCycle,
   openSessionCancelled,
   openSessionFailed,
@@ -102,6 +106,7 @@ import {
   reportWindowOpenFailed,
   reportWindowOpenSucceeded,
   requestAntennaControllerProfileDelete,
+  requestAbortRun,
   requestSkipCycle,
   selectAntennaControllerProfile,
   selectReportMode as transitionReportMode,
@@ -925,6 +930,41 @@ export function createDesktopController(options = {}) {
       if (state.conductorStatus === "ready") {
         await controller.refreshWsjtxStatus();
         await controller.advanceWsprLive();
+        await controller.refreshReport();
+      }
+      return state;
+    },
+
+    requestAbortRun() {
+      return commit(requestAbortRun(state));
+    },
+
+    cancelAbortRun() {
+      return commit(cancelAbortRun(state));
+    },
+
+    async submitAbortRun(reason = "") {
+      const presented = state.abortRunDialog;
+      if (!presented || state.abortRunStatus === "submitting") return state;
+      const request = {
+        actionToken: presented.actionToken,
+        expectedRevision: presented.expectedRevision,
+        action: {
+          kind: "abandon",
+          reason: String(reason).trim().slice(0, 4096),
+        },
+      };
+      commit(beginAbortRunMutation(state));
+      try {
+        commit(abortRunMutationSucceeded(
+          state,
+          await invokeMutateSessionConductor(invoke(), request),
+        ));
+      } catch (error) {
+        commit(abortRunMutationFailed(state, error));
+      }
+      if (state.conductorStatus === "ready") {
+        await controller.refreshWsjtxStatus();
         await controller.refreshReport();
       }
       return state;

@@ -378,6 +378,17 @@ durable evidence and reports. Receiver configuration, diagnostics, and action
 history use progressive disclosure. Every mutation shows a pending state
 followed by explicit success or typed failure.
 
+Running and interrupted sessions also keep a first-class **Abort run** action on
+the primary surface in every conductor phase, including finalization and
+adapter-error recovery. Its application-owned confirmation is bound to the
+presented session, Rust-issued action token, and revision; identifies the
+current or next cycle without exposing opaque IDs; starts on the safe action;
+and distinguishes terminal abandonment from resumable Pause, normal End, and
+single-cycle Skip. A confirmed Abort preserves committed evidence, preempts a
+matching AntennaBench-owned controller process, stops further local intake only
+after the terminal checkpoint commits, and never claims to disable WSJT-X
+**Enable Tx**, release PTT, or stop an active radio transmission.
+
 Selected setup and Active Run concepts use one restrained contextual-help
 pattern. A real `?` button exposes at most two short operator-facing sentences,
 advertises its controlled description to assistive technology, and supports

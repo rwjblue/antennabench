@@ -394,6 +394,44 @@
                 <button type="button" class="primary-action" data-conductor-action="arm_wspr_cycle">Antenna ready</button>
               </div>
 
+              <section class="abort-run-control" data-abort-run-control hidden>
+                <div class="abort-run-heading">
+                  <div><p class="eyebrow">Stop all remaining work</p><h2>Need to discontinue this run?</h2></div>
+                  <button type="button" class="danger-action" data-abort-run-trigger aria-haspopup="dialog" aria-controls="abort-run-dialog">Abort run</button>
+                </div>
+                <p>Abort is terminal. Pause remains resumable, End records normal completion, and Skip this cycle advances only one intention.</p>
+              </section>
+              <div class="open-feedback abort-run-feedback" data-abort-run-feedback hidden role="status" aria-live="polite" tabindex="-1">
+                <span class="feedback-mark" aria-hidden="true"></span>
+                <div>
+                  <strong data-abort-run-feedback-message></strong>
+                  <p data-abort-run-feedback-detail></p>
+                  <div class="conductor-actions" data-abort-run-success-actions hidden>
+                    <button type="button" data-abort-run-report>View preserved report</button>
+                    <button type="button" data-abort-run-saved>Saved sessions</button>
+                  </div>
+                </div>
+              </div>
+              <dialog class="saved-delete-dialog abort-run-dialog" id="abort-run-dialog" data-abort-run-dialog aria-labelledby="abort-run-title" aria-describedby="abort-run-description">
+                <div class="saved-delete-content">
+                  <p class="eyebrow">Stop all remaining work</p>
+                  <h2 id="abort-run-title" data-abort-run-title>Abort this run?</h2>
+                  <div id="abort-run-description" data-abort-run-description>
+                    <p>The session becomes terminal and cannot be resumed. All already committed evidence remains in the bundle and report, but remaining planned cycles and further automatic collection will not continue.</p>
+                    <p>AntennaBench-owned WSJT-X intake and controller authority stop after the terminal checkpoint commits. AntennaBench cannot disable WSJT-X <strong>Enable Tx</strong>, release PTT, or stop an active radio transmission. Stop transmission in WSJT-X or the radio controls when needed.</p>
+                    <p>Use Pause for a resumable stop, End for normal completion, or Skip this cycle to advance only one intention.</p>
+                  </div>
+                  <p class="saved-delete-identity" data-abort-run-identity></p>
+                  <p class="field-help" data-abort-run-context></p>
+                  <label class="skip-cycle-reason" for="abort-run-reason">Optional reason<textarea id="abort-run-reason" rows="3" maxlength="4096" data-abort-run-reason></textarea></label>
+                  <p class="skip-cycle-pending" data-abort-run-pending role="status" aria-live="polite" hidden>Stopping AntennaBench-owned work, preserving the controller result, and recording terminal abandonment…</p>
+                  <div class="saved-delete-actions">
+                    <button type="button" data-abort-run-cancel>Keep running</button>
+                    <button type="button" class="danger-action" data-abort-run-confirm>Abort run</button>
+                  </div>
+                </div>
+              </dialog>
+
               <div class="inline-help-action" data-skip-cycle-control hidden><button type="button" class="text-action skip-cycle-action" data-conductor-action="skip_wspr_cycle">Skip this cycle</button><button class="context-help" type="button" data-help-trigger="skip_cycle">?</button></div>
               <div class="open-feedback skip-cycle-feedback" data-skip-cycle-feedback hidden role="status" aria-live="polite">
                 <span class="feedback-mark" aria-hidden="true"></span>
@@ -403,7 +441,7 @@
                 <div class="saved-delete-content">
                   <p class="eyebrow">Skip one planned cycle</p>
                   <h2 id="skip-cycle-title" data-skip-cycle-title>Skip this cycle?</h2>
-                  <p id="skip-cycle-description" data-skip-cycle-description>This records this one planned cycle as missed and advances to the next intention. To stop the remaining run, cancel and use End session under Run details and session controls.</p>
+                  <p id="skip-cycle-description" data-skip-cycle-description>This records this one planned cycle as missed and advances to the next intention. To discontinue all remaining work, cancel and use Abort run.</p>
                   <p class="saved-delete-identity" data-skip-cycle-identity></p>
                   <label class="skip-cycle-reason" for="skip-cycle-reason">Optional reason<textarea id="skip-cycle-reason" rows="3" maxlength="4096" data-skip-cycle-reason></textarea></label>
                   <p class="skip-cycle-pending" data-skip-cycle-pending role="status" aria-live="polite" hidden>Recording this missed cycle before the run advances…</p>
@@ -435,7 +473,6 @@
                 <div class="conductor-actions" data-session-controls>
                   <button type="button" data-conductor-action="interrupt">Pause session</button>
                   <button type="button" data-conductor-action="end">End session</button>
-                  <button type="button" class="danger-action" data-conductor-action="abandon">Abandon session</button>
                   <button type="button" data-conductor-refresh>Refresh</button>
                 </div>
               </details>

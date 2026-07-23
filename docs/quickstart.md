@@ -90,20 +90,26 @@ switch the radio or antenna for this manual run.
 9. **Record what actually happens.** If you cannot conduct the upcoming cycle,
    select **Skip this cycle** and optionally enter a reason. That records the
    planned cycle as missed and advances to the next one; it does not pretend the
-   cycle occurred, and it does not stop the remaining run. To stop all remaining
-   cycles, open **Run details and session controls** and select **End session**.
+   cycle occurred, and it does not stop the remaining run. To discontinue all
+   remaining cycles, select the visible **Abort run** action and review its
+   terminal confirmation. Abort preserves committed evidence, stops further
+   AntennaBench-owned collection and controller authority, and cannot be
+   resumed. It cannot turn off WSJT-X **Enable Tx**, release PTT, or stop an
+   active transmission; use WSJT-X or the radio controls when needed.
    To preserve useful context, select **Add note**, type the
    text in **Note or reason**, and select **Save entry**. For example, record
    `Rain started; checked both feedline connections.` Both actions stay in the
    bundle's evidence history.
 
-10. **End the session.** After the final cycle, open **Run details and session
+10. **End the session normally.** After the final cycle, open **Run details and session
     controls** and select **End session**. AntennaBench completes the final
     automatic delayed/public WSPR.live collection before marking the session
     ended. Keep the app and WSJT-X online while it finishes. If collection
     reports an error, the run screen offers **Retry acquisition** or the explicit
     **End without public spots** choice; already recorded evidence remains in
-    the working session bundle.
+    the working session bundle. **Pause session** remains resumable, **Skip this
+    cycle** advances one intention, and **Abort run** intentionally discontinues
+    the incomplete run; these actions record different evidence meanings.
 
 11. **Open the report.** Select **Local report** in the sidebar. The embedded
     report is generated locally from the latest committed bundle revision. A
