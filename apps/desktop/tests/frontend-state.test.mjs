@@ -93,6 +93,7 @@ import {
   beginWsprLiveAcquisition,
   beginWsprLiveImport,
   applyPendingReportPresentation,
+  antennaControllerCatalogSucceeded,
   conductorLoadSucceeded,
   conductorMutationFailed,
   conductorPollSucceeded,
@@ -130,6 +131,7 @@ import {
   rbnImportFailed,
   rbnImportSucceeded,
   selectWorkflow,
+  selectAntennaControllerProfile,
   selectReportMode,
   setWsjtxReadinessAcknowledged,
   setupCreationCancelled,
@@ -331,7 +333,43 @@ test("the shell starts in saved sessions", () => {
     antennaControllerProfileNotice: null,
     antennaControllerProfileError: null,
     antennaControllerProfileRefreshError: null,
+    antennaControllerSelectedProfile: null,
   });
+});
+
+test("controller profile selection is state-owned and follows catalog revisions", () => {
+  const original = {
+    profileId: "profile-1",
+    revision: "revision-1",
+    name: "Bench Switch",
+  };
+  let state = antennaControllerCatalogSucceeded(initialState("setup"), {
+    inputStyle: "one_line",
+    profiles: [original],
+  });
+  state = selectAntennaControllerProfile(state, "profile-1");
+  assert.deepEqual(state.antennaControllerSelectedProfile, {
+    profileId: "profile-1",
+    normalizedName: "bench switch",
+    revision: "revision-1",
+  });
+
+  state = antennaControllerCatalogSucceeded(state, {
+    inputStyle: "structured",
+    profiles: [{
+      ...original,
+      revision: "revision-2",
+      name: " BENCH SWITCH ",
+    }],
+  });
+  assert.deepEqual(state.antennaControllerSelectedProfile, {
+    profileId: "profile-1",
+    normalizedName: "bench switch",
+    revision: "revision-2",
+  });
+
+  state = selectAntennaControllerProfile(state, "");
+  assert.equal(state.antennaControllerSelectedProfile, null);
 });
 
 test("setup review gates creation on a valid normalized Rust plan", () => {

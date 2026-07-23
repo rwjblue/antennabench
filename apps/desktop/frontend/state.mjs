@@ -85,6 +85,7 @@ export function initialState(workflow = "saved") {
       antennaControllerProfileNotice: null,
       antennaControllerProfileError: null,
       antennaControllerProfileRefreshError: null,
+      antennaControllerSelectedProfile: null,
     },
     workflow,
   );
@@ -807,6 +808,35 @@ function normalizedControllerProfileName(name) {
   return name.trim().toLowerCase();
 }
 
+function controllerProfileSelection(profile) {
+  return profile
+    ? {
+        profileId: profile.profileId,
+        normalizedName: normalizedControllerProfileName(profile.name),
+        revision: profile.revision,
+      }
+    : null;
+}
+
+function selectedProfileInCatalog(catalog, selection) {
+  if (!catalog || !selection) return null;
+  return catalog.profiles.find((profile) => profile.profileId === selection.profileId)
+    ?? catalog.profiles.find(
+      (profile) => normalizedControllerProfileName(profile.name) === selection.normalizedName,
+    )
+    ?? null;
+}
+
+export function selectAntennaControllerProfile(state, profileId) {
+  const profile = state.antennaControllerCatalog?.profiles.find(
+    (candidate) => candidate.profileId === profileId,
+  ) ?? null;
+  return {
+    ...state,
+    antennaControllerSelectedProfile: controllerProfileSelection(profile),
+  };
+}
+
 function catalogWithSavedControllerProfile(catalog, savedProfile) {
   const normalizedName = normalizedControllerProfileName(savedProfile.name);
   const profiles = (catalog?.profiles ?? []).filter((profile) => (
@@ -840,6 +870,7 @@ export function antennaControllerProfileSaveCommitted(state, savedProfile) {
     antennaControllerProfileNotice: { kind: "saved", profileId: savedProfile.profileId },
     antennaControllerProfileError: null,
     antennaControllerProfileRefreshError: null,
+    antennaControllerSelectedProfile: controllerProfileSelection(savedProfile),
   };
 }
 
@@ -859,6 +890,9 @@ export function antennaControllerProfileDeleteCommitted(state, profileId) {
     antennaControllerProfileNotice: { kind: "deleted", profileId: "" },
     antennaControllerProfileError: null,
     antennaControllerProfileRefreshError: null,
+    antennaControllerSelectedProfile: state.antennaControllerSelectedProfile?.profileId === profileId
+      ? null
+      : state.antennaControllerSelectedProfile,
   };
 }
 
@@ -889,12 +923,17 @@ export function antennaControllerProfileReconciliationFailed(state, error) {
 }
 
 export function antennaControllerCatalogSucceeded(state, catalog) {
+  const selectedProfile = selectedProfileInCatalog(
+    catalog,
+    state.antennaControllerSelectedProfile,
+  );
   return {
     ...state,
     antennaControllerStatus: "ready",
     antennaControllerCatalog: catalog,
     antennaControllerError: null,
     antennaControllerProfileRefreshError: null,
+    antennaControllerSelectedProfile: controllerProfileSelection(selectedProfile),
   };
 }
 

@@ -338,19 +338,18 @@ export function renderSetup(elements, state, root) {
   });
   const catalog = state.antennaControllerCatalog;
   if (catalog) {
-    const selected = state.antennaControllerProfileNotice?.profileId
-      ?? controllerProfileSelect.value;
+    const selected = state.antennaControllerSelectedProfile?.profileId ?? "";
     const signature = catalog.profiles.map((profile) => `${profile.profileId}:${profile.revision}`).join("|");
     if (controllerProfileSelect.dataset.catalogSignature !== signature) {
       replaceSelectOptions(controllerProfileSelect, [
         { value: "", label: "Create a new profile" },
         ...catalog.profiles.map((profile) => ({ value: profile.profileId, label: profile.name })),
       ]);
-      controllerProfileSelect.value = catalog.profiles.some((profile) => profile.profileId === selected)
-        ? selected
-        : "";
       controllerProfileSelect.dataset.catalogSignature = signature;
     }
+    controllerProfileSelect.value = catalog.profiles.some((profile) => profile.profileId === selected)
+      ? selected
+      : "";
     const structured = catalog.inputStyle === "structured";
     controllerOneLine.hidden = structured;
     controllerStructured.hidden = !structured;

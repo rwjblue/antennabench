@@ -84,11 +84,6 @@ test("controller manual review keeps native checkbox, label, and help semantics"
 test("the headless desktop relaunches into Saved sessions before creating a managed session", async () => {
   window.history.replaceState(null, "", "#saved");
   const elements = loadDesktopDocument();
-  const restoredControllerProfile = document.createElement("option");
-  restoredControllerProfile.value = "profile-1";
-  restoredControllerProfile.textContent = "Bench switch";
-  elements.controllerProfileSelect.append(restoredControllerProfile);
-  elements.controllerProfileSelect.value = restoredControllerProfile.value;
   elements.setupReviewPanel.scrollIntoView = vi.fn();
   const reportDocumentUrls = [];
   Object.defineProperty(window.URL, "createObjectURL", {
@@ -373,11 +368,21 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       assert.match(elements.savedCatalog.textContent, /W1AW/);
       assert.match(elements.savedCatalog.textContent, /View report/);
     });
+    await vi.waitFor(() => {
+      assert.ok(
+        [...elements.controllerProfileSelect.options]
+          .some((option) => option.value === "profile-1"),
+      );
+    });
+    elements.controllerProfileSelect.value = "profile-1";
+    window.dispatchEvent(new Event("pageshow"));
     const profileField = (name) => elements.setupForm.querySelector(
       `[data-setup-field="${name}"]`,
     );
+    await vi.waitFor(() => {
+      assert.equal(profileField("controllerProfileName").value, "Bench switch");
+    });
     assert.equal(elements.controllerProfileSelect.value, "profile-1");
-    assert.equal(profileField("controllerProfileName").value, "Bench switch");
     assert.equal(profileField("controllerTimeoutSeconds").value, "12");
     assert.equal(
       profileField("controllerSwitchCommand").value,
@@ -387,6 +392,21 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       profileField("controllerVerificationCommand").value,
       '"/usr/local/bin/check-antenna" "{target}"',
     );
+
+    const preservedTarget = elements.setupForm.querySelector("[data-controller-target]");
+    preservedTarget.value = "relay-preserved";
+    elements.controllerProfileSelect.value = "";
+    elements.controllerProfileSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => {
+      assert.equal(profileField("controllerProfileName").value, "");
+      assert.equal(profileField("controllerTimeoutSeconds").value, "10");
+    });
+    assert.equal(preservedTarget.value, "relay-preserved");
+    elements.controllerProfileSelect.value = "profile-1";
+    elements.controllerProfileSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => {
+      assert.equal(profileField("controllerProfileName").value, "Bench switch");
+    });
 
     profileField("controllerProfileName").value = "Unsaved local edit";
     profileField("controllerProfileName").dispatchEvent(new InputEvent("input", { bubbles: true }));

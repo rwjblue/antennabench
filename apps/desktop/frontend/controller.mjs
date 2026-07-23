@@ -100,6 +100,7 @@ import {
   reportWindowOpenFailed,
   reportWindowOpenSucceeded,
   requestSkipCycle,
+  selectAntennaControllerProfile,
   selectReportMode as transitionReportMode,
   selectWorkflow,
   setWsjtxReadinessAcknowledged,
@@ -261,6 +262,11 @@ export function createDesktopController(options = {}) {
       commit(setWsjtxReadinessAcknowledged(state, acknowledged));
     },
 
+    selectAntennaControllerProfile(profileId) {
+      commit(selectAntennaControllerProfile(state, profileId));
+      return state;
+    },
+
     async reviewSetup(draft) {
       if (["reviewing", "creating"].includes(state.setupStatus)) return state;
       commit(beginSetupReview(state));
@@ -276,9 +282,10 @@ export function createDesktopController(options = {}) {
       if (state.antennaControllerStatus === "loading") return state;
       commit(beginAntennaControllerAction(state));
       try {
+        const catalog = await invokeAntennaControllerProfiles(invoke());
         commit(antennaControllerCatalogSucceeded(
           state,
-          await invokeAntennaControllerProfiles(invoke()),
+          catalog,
         ));
       } catch (error) {
         commit(antennaControllerActionFailed(state, error));
@@ -435,7 +442,8 @@ export function createDesktopController(options = {}) {
       ) return state;
       commit(beginManagedCatalogLoad(state));
       try {
-        commit(managedCatalogLoadSucceeded(state, await invokeListManagedSessions(invoke())));
+        const catalog = await invokeListManagedSessions(invoke());
+        commit(managedCatalogLoadSucceeded(state, catalog));
       } catch (error) {
         commit(managedCatalogLoadFailed(state, error));
       }

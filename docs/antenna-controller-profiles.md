@@ -23,10 +23,13 @@ command, and timeout. Each session maps its
 targets such as `1`, `2`, `north`, or `loop`.
 
 The setup screen keeps profile selection, commands, behavior, and per-antenna
-target values together. It can save a new profile or update the selected one
-before a session is created. Deleting a profile removes it and its remembered
-session associations from this computer. Any affected session falls back to
-manual switching until another local profile is selected and allowed to run.
+target values together. Selecting a saved profile hydrates its exact reusable
+name, revision, timeout, switch command, and optional verification command;
+session-specific target values remain untouched. It can save a new profile or
+update the selected one before a session is created. Deleting a profile removes
+it and its remembered session associations from this computer. Any affected
+session falls back to manual switching until another local profile is selected
+and allowed to run.
 
 Portable session bundles never contain an executable profile, target mapping, or
 timeout. Enabling **Run a command to switch antennas** and reviewing a local

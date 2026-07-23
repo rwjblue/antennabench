@@ -45,7 +45,10 @@ export function mount(root, browserWindow) {
   let deleteTrigger = null;
   let reportExportTrigger = null;
   let skipCycleTrigger = null;
-  let synchronizedControllerProfile = null;
+  let hydratedControllerProfile = null;
+  let controllerProfileReconciliationKey = null;
+  let controllerProfileReconciliationAttempts = 0;
+  let controllerProfileReconciliationTimer = null;
   const workflowScrollMemory = createWorkflowScrollMemory(state.activeWorkflow);
   const monotonicNow = () => browserWindow.performance?.now?.() ?? Date.now();
   const preferredScrollBehavior = browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -196,12 +199,13 @@ export function mount(root, browserWindow) {
     renderNavigation(elements, state);
     renderSavedSessions(elements, state, root);
     renderSetup(elements, state, root);
-    synchronizedControllerProfile = syncControllerProfileDraft(
+    hydratedControllerProfile = syncControllerProfileDraft(
       setupForm,
-      controllerProfileSelect,
       state.antennaControllerCatalog,
-      synchronizedControllerProfile,
+      state.antennaControllerSelectedProfile,
+      hydratedControllerProfile,
     );
+    scheduleControllerProfileReconciliation();
     const countdown = renderRun(elements, state, root, {
       monotonicNow,
       countdownAnchor,
@@ -259,6 +263,12 @@ export function mount(root, browserWindow) {
       conductorCountdown.textContent = seconds === null ? "" : formatCountdown(seconds);
     },
     onDispose() {
+      if (controllerProfileReconciliationTimer !== null) {
+        browserWindow.clearTimeout?.(controllerProfileReconciliationTimer);
+        controllerProfileReconciliationTimer = null;
+      }
+      browserWindow.removeEventListener?.("pageshow", reconcileControllerProfileDomSelection);
+      browserWindow.removeEventListener?.("focus", reconcileControllerProfileDomSelection);
       if (skipCycleDialog.open) skipCycleDialog.close?.();
       skipCycleDialog.removeAttribute("open");
       if (reportDiagnosticsDialog.open) reportDiagnosticsDialog.close?.();
@@ -269,6 +279,52 @@ export function mount(root, browserWindow) {
       releaseReportFrame(reportFrame, reportDocuments);
     },
   });
+
+  function scheduleControllerProfileReconciliation() {
+    const catalogKey = state.antennaControllerCatalog?.profiles
+      .map((profile) => `${profile.profileId}:${profile.revision}`)
+      .join("|") ?? "";
+    if (catalogKey !== controllerProfileReconciliationKey) {
+      controllerProfileReconciliationKey = catalogKey;
+      controllerProfileReconciliationAttempts = 0;
+      if (controllerProfileReconciliationTimer !== null) {
+        browserWindow.clearTimeout?.(controllerProfileReconciliationTimer);
+        controllerProfileReconciliationTimer = null;
+      }
+    }
+    if (state.antennaControllerSelectedProfile) {
+      controllerProfileReconciliationAttempts = 80;
+      return;
+    }
+    if (!catalogKey || controllerProfileReconciliationAttempts >= 80
+      || controllerProfileReconciliationTimer !== null) return;
+    controllerProfileReconciliationTimer = browserWindow.setTimeout?.(() => {
+      controllerProfileReconciliationTimer = null;
+      controllerProfileReconciliationAttempts += 1;
+      if (reconcileControllerProfileDomSelection()) {
+        controllerProfileReconciliationAttempts = 80;
+        return;
+      }
+      scheduleControllerProfileReconciliation();
+    }, 25) ?? null;
+  }
+
+  function reconcileControllerProfileDomSelection() {
+    const restoredProfileId = controllerProfileSelect.value;
+    const selectedProfileId = state.antennaControllerSelectedProfile?.profileId ?? "";
+    if (
+      restoredProfileId === ""
+      || selectedProfileId !== ""
+      || !state.antennaControllerCatalog?.profiles.some(
+        (profile) => profile.profileId === restoredProfileId,
+      )
+    ) return false;
+    controller.selectAntennaControllerProfile(restoredProfileId);
+    return true;
+  }
+
+  browserWindow.addEventListener("pageshow", reconcileControllerProfileDomSelection);
+  browserWindow.addEventListener("focus", reconcileControllerProfileDomSelection);
 
 
   for (const button of navigation) {
@@ -561,13 +617,8 @@ export function mount(root, browserWindow) {
   });
 
   controllerProfileSelect.addEventListener("change", () => {
-    const profile = state.antennaControllerCatalog?.profiles?.find(
-      (candidate) => candidate.profileId === controllerProfileSelect.value,
-    );
-    applyControllerProfile(setupForm, profile ?? null);
-    synchronizedControllerProfile = controllerProfileKey(profile);
+    controller.selectAntennaControllerProfile(controllerProfileSelect.value);
     controller.editSetup();
-    render();
   });
 
   controllerProfileSave.addEventListener("click", async () => {
@@ -583,8 +634,6 @@ export function mount(root, browserWindow) {
     if (!controller.confirm(`Delete the controller profile “${profile.name}” from this computer? Existing sessions that used it will fall back to manual switching.`)) return;
     const deleted = await controller.deleteAntennaControllerProfile(profile.profileId);
     if (deleted) {
-      applyControllerProfile(setupForm, null);
-      synchronizedControllerProfile = controllerProfileKey(null);
       controller.editSetup();
     }
   });
@@ -878,9 +927,12 @@ function controllerProfileKey(profile) {
   return profile ? `${profile.profileId}:${profile.revision}` : "new";
 }
 
-function syncControllerProfileDraft(form, select, catalog, synchronizedProfile) {
+function syncControllerProfileDraft(form, catalog, selection, synchronizedProfile) {
   if (!catalog) return synchronizedProfile;
-  const profile = catalog.profiles.find((candidate) => candidate.profileId === select.value) ?? null;
+  const profile = catalog.profiles.find(
+    (candidate) => candidate.profileId === selection?.profileId
+      && candidate.revision === selection.revision,
+  ) ?? null;
   const nextProfile = controllerProfileKey(profile);
   if (profile && nextProfile !== synchronizedProfile) {
     applyControllerProfile(form, profile);

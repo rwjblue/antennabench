@@ -318,6 +318,11 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
     inputStyle: "one_line",
     profiles: [{ profileId: "profile-1", revision: "revision-1", name: "Bench switch" }],
   };
+  state.antennaControllerSelectedProfile = {
+    profileId: "profile-1",
+    normalizedName: "bench switch",
+    revision: "revision-1",
+  };
   state.antennaControllerProfileNotice = { kind: "saved", profileId: "profile-1" };
   renderSetup(e, state, document);
   assert.equal(e.controllerProfileSave.textContent, "Update profile");
