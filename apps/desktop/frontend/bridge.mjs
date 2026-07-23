@@ -127,8 +127,8 @@ export function invokeSaveAntennaControllerProfile(invoke, draft) {
   return invoke("save_antenna_controller_profile", { draft });
 }
 
-export function invokeDeleteAntennaControllerProfile(invoke, profileId) {
-  return invoke("delete_antenna_controller_profile", { profileId });
+export function invokeDeleteAntennaControllerProfile(invoke, profileId, profileRevision) {
+  return invoke("delete_antenna_controller_profile", { profileId, profileRevision });
 }
 
 export function invokeActiveSessionAntennaController(invoke) {

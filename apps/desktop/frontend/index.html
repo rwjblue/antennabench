@@ -234,8 +234,21 @@
                       <button type="button" class="secondary-action" data-controller-profile-save>Save profile</button>
                       <button type="button" class="danger-text-action" data-controller-profile-delete disabled>Delete profile</button>
                       <button type="button" class="secondary-action" data-controller-profile-refresh hidden>Refresh profiles</button>
-                      <span class="controller-profile-status" data-controller-profile-status role="status" aria-live="polite"></span>
+                      <span class="controller-profile-status" data-controller-profile-status role="status" aria-live="polite" tabindex="-1"></span>
                     </div>
+                    <dialog class="saved-delete-dialog controller-profile-delete-dialog" data-controller-profile-delete-dialog aria-labelledby="controller-profile-delete-title" aria-describedby="controller-profile-delete-description">
+                      <div class="saved-delete-content">
+                        <p class="eyebrow">Delete local controller profile</p>
+                        <h2 id="controller-profile-delete-title" data-controller-profile-delete-title>Delete this controller profile?</h2>
+                        <p id="controller-profile-delete-description" data-controller-profile-delete-description>Deletion removes this reusable profile and every remembered local session association that references it. Affected sessions fall back to manual switching until another local profile is selected and attached.</p>
+                        <p class="saved-delete-identity" data-controller-profile-delete-identity></p>
+                        <p class="skip-cycle-pending" data-controller-profile-delete-pending role="status" aria-live="polite" hidden>Deleting the profile and its remembered local associations…</p>
+                        <div class="saved-delete-actions">
+                          <button type="button" data-controller-profile-delete-cancel>Cancel</button>
+                          <button type="button" class="danger-action" data-controller-profile-delete-confirm>Delete profile</button>
+                        </div>
+                      </div>
+                    </dialog>
                     <p class="field-help controller-save-help">Creating the session also saves the reviewed profile on this computer. This temporary controller permission is revoked when the app closes or the run is paused.</p>
                   </div>
                 </div>

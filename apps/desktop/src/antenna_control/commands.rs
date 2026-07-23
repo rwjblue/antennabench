@@ -130,16 +130,22 @@ pub(crate) fn delete_antenna_controller_profile(
     app: AppHandle,
     controller_state: State<'_, AntennaControllerState>,
     profile_id: String,
+    profile_revision: String,
 ) -> Result<(), SessionErrorPayload> {
     let app_data_dir = resolved_app_data_dir(&app)?;
     let mut catalog = read_catalog(&app_data_dir)?;
-    if !remove_profile(&mut catalog, &profile_id) {
-        return Err(SessionErrorPayload::new(
+    remove_profile(&mut catalog, &profile_id, &profile_revision).map_err(|error| match error {
+        RemoveControllerProfileError::Missing => SessionErrorPayload::new(
             SessionErrorKind::Conflict,
             "The saved antenna-controller profile no longer exists.",
             "refresh the local controller profile list before deleting",
-        ));
-    }
+        ),
+        RemoveControllerProfileError::StaleRevision => SessionErrorPayload::new(
+            SessionErrorKind::Conflict,
+            "The selected antenna-controller profile changed before deletion.",
+            "review the current local profile revision before deleting",
+        ),
+    })?;
     write_catalog(&app_data_dir, &catalog)?;
     let should_revoke = controller_state.runtime.lock().ok().is_some_and(|runtime| {
         runtime

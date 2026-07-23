@@ -72,8 +72,12 @@ are case-insensitive. Saving a new draft with an existing name updates that
 profile. Renaming a selected profile preserves its local session associations;
 renaming it to another profile's name is rejected without changing the catalog.
 Select an existing profile to reuse or **Update profile**; use **Delete profile**
-to remove it from local application data. Target values belong to the session
-association rather than the reusable profile.
+to open an in-app confirmation for the exact selected name and revision. Cancel
+is the initial safe action. Confirmed deletion removes the reusable profile and
+its remembered local session associations from local application data, so
+affected sessions use manual switching until another profile is selected and
+attached. Target values belong to the session association rather than the
+reusable profile.
 
 Older local catalogs are upgraded atomically. Duplicate names with identical
 reusable commands and timeouts are consolidated while their session associations

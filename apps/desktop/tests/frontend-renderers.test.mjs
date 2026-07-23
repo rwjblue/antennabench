@@ -346,6 +346,37 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   assert.equal(e.controllerProfileRefresh.hidden, false);
   assert.match(e.controllerProfileStatus.textContent, /Profile save committed/);
   assert.match(e.controllerProfileStatus.textContent, /Catalog temporarily unavailable/);
+  state.antennaControllerProfileRefreshError = null;
+  state.antennaControllerProfileDeleteDialog = {
+    profileId: "profile-1",
+    normalizedName: "bench switch",
+    revision: "revision-1",
+    name: "Bench switch",
+  };
+  state.antennaControllerProfileDeleteStatus = "confirming";
+  renderSetup(e, state, document);
+  assert.equal(
+    e.controllerProfileDeleteDialog.getAttribute("aria-labelledby"),
+    "controller-profile-delete-title",
+  );
+  assert.equal(
+    e.controllerProfileDeleteDialog.getAttribute("aria-describedby"),
+    "controller-profile-delete-description",
+  );
+  assert.match(e.controllerProfileDeleteTitle.textContent, /Bench switch/);
+  assert.match(e.controllerProfileDeleteDescription.textContent, /remembered local session association/);
+  assert.match(e.controllerProfileDeleteDescription.textContent, /manual switching/);
+  assert.match(e.controllerProfileDeleteIdentity.textContent, /bench switch.*revision-1/);
+  assert.equal(e.controllerProfileDeleteCancel.disabled, false);
+  assert.equal(e.controllerProfileDeleteConfirm.textContent, "Delete profile");
+  state.antennaControllerProfileDeleteStatus = "submitting";
+  renderSetup(e, state, document);
+  assert.equal(e.controllerProfileDeletePending.hidden, false);
+  assert.equal(e.controllerProfileDeleteCancel.disabled, true);
+  assert.equal(e.controllerProfileDeleteConfirm.disabled, true);
+  assert.equal(e.controllerProfileDeleteConfirm.textContent, "Deleting…");
+  state.antennaControllerProfileDeleteDialog = null;
+  state.antennaControllerProfileDeleteStatus = "succeeded";
 
   state.setupStatus = "reviewing";
   renderSetup(e, state, document);

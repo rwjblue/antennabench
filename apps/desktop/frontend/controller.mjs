@@ -40,6 +40,7 @@ import {
   antennaControllerProfileSaveCommitted,
   antennaControllerRunSucceeded,
   antennaControllerViewSucceeded,
+  beginAntennaControllerProfileDelete,
   beginAntennaControllerAction,
   beginConductorLoad,
   beginConductorMutation,
@@ -80,6 +81,7 @@ import {
   managedRevealFailed,
   managedRevealSucceeded,
   cancelManagedDelete,
+  cancelAntennaControllerProfileDelete,
   cancelSkipCycle,
   openSessionCancelled,
   openSessionFailed,
@@ -99,11 +101,13 @@ import {
   reportRefreshSuperseded,
   reportWindowOpenFailed,
   reportWindowOpenSucceeded,
+  requestAntennaControllerProfileDelete,
   requestSkipCycle,
   selectAntennaControllerProfile,
   selectReportMode as transitionReportMode,
   selectWorkflow,
   setWsjtxReadinessAcknowledged,
+  finishAntennaControllerProfileDelete,
   setupCreationCancelled,
   setupCreationFailed,
   setupCreationSucceeded,
@@ -267,6 +271,29 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
+    requestAntennaControllerProfileDelete() {
+      return commit(requestAntennaControllerProfileDelete(state));
+    },
+
+    cancelAntennaControllerProfileDelete() {
+      return commit(cancelAntennaControllerProfileDelete(state));
+    },
+
+    async confirmAntennaControllerProfileDelete() {
+      if (state.antennaControllerProfileDeleteStatus === "submitting") return false;
+      commit(beginAntennaControllerProfileDelete(state));
+      const presented = state.antennaControllerProfileDeleteDialog;
+      if (state.antennaControllerProfileDeleteStatus !== "submitting" || !presented) {
+        return false;
+      }
+      const committed = await controller.deleteAntennaControllerProfile(
+        presented.profileId,
+        presented.revision,
+      );
+      commit(finishAntennaControllerProfileDelete(state, committed));
+      return committed;
+    },
+
     async reviewSetup(draft) {
       if (["reviewing", "creating"].includes(state.setupStatus)) return state;
       commit(beginSetupReview(state));
@@ -357,10 +384,14 @@ export function createDesktopController(options = {}) {
       return savedProfile;
     },
 
-    async deleteAntennaControllerProfile(profileId) {
+    async deleteAntennaControllerProfile(profileId, profileRevision = null) {
       commit(beginAntennaControllerAction(state, "deleting"));
       try {
-        await invokeDeleteAntennaControllerProfile(invoke(), profileId);
+        const revision = profileRevision
+          ?? state.antennaControllerCatalog?.profiles.find(
+            (profile) => profile.profileId === profileId,
+          )?.revision;
+        await invokeDeleteAntennaControllerProfile(invoke(), profileId, revision);
       } catch (error) {
         commit(antennaControllerProfileActionFailed(state, error));
         return false;

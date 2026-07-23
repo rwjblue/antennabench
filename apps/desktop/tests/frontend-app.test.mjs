@@ -150,6 +150,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   let controllerProfileLoads = 0;
   let importedCatalog = false;
   let resolveSkipCycle;
+  let resolveControllerProfileDelete;
   let controllerCatalog = {
     inputStyle: "one_line",
     profiles: [{
@@ -222,6 +223,12 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       };
       return controllerCatalog.profiles[0];
     },
+    delete_antenna_controller_profile: () => new Promise((resolve) => {
+      resolveControllerProfileDelete = () => {
+        controllerCatalog = { ...controllerCatalog, profiles: [] };
+        resolve();
+      };
+    }),
     list_managed_sessions: () => ({
       status: "complete",
       diagnostics: [],
@@ -430,6 +437,72 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       1,
       "refresh recovery never resubmits the committed mutation",
     );
+    elements.controllerProfileDelete.focus();
+    elements.controllerProfileDelete.click();
+    await vi.waitFor(() => assert.equal(elements.controllerProfileDeleteDialog.open, true));
+    assert.equal(
+      document.activeElement,
+      elements.controllerProfileDeleteCancel,
+      "profile deletion gives Cancel initial focus",
+    );
+    assert.match(elements.controllerProfileDeleteTitle.textContent, /Bench switch updated/);
+    assert.match(
+      elements.controllerProfileDeleteIdentity.textContent,
+      /bench switch updated.*revision-2/,
+    );
+    assert.match(
+      elements.controllerProfileDeleteDescription.textContent,
+      /remembered local session association/,
+    );
+    elements.controllerProfileDeleteConfirm.focus();
+    elements.controllerProfileDeleteDialog.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+    }));
+    assert.equal(
+      document.activeElement,
+      elements.controllerProfileDeleteCancel,
+      "profile deletion traps focus",
+    );
+    elements.controllerProfileDeleteDialog.dispatchEvent(
+      new Event("cancel", { cancelable: true }),
+    );
+    await vi.waitFor(() => assert.equal(elements.controllerProfileDeleteDialog.open, false));
+    assert.equal(document.activeElement, elements.controllerProfileDelete);
+    assert.equal(
+      calls.filter(([command]) => command === "delete_antenna_controller_profile").length,
+      0,
+      "cancellation invokes no native deletion",
+    );
+
+    elements.controllerProfileDelete.click();
+    await vi.waitFor(() => assert.equal(elements.controllerProfileDeleteDialog.open, true));
+    elements.controllerProfileDeleteConfirm.click();
+    elements.controllerProfileDeleteConfirm.click();
+    assert.equal(elements.controllerProfileDeletePending.hidden, false);
+    assert.equal(elements.controllerProfileDeleteCancel.disabled, true);
+    assert.equal(elements.controllerProfileDeleteConfirm.disabled, true);
+    assert.equal(elements.controllerProfileDeleteConfirm.textContent, "Deleting…");
+    assert.deepEqual(
+      calls.find(([command]) => command === "delete_antenna_controller_profile"),
+      ["delete_antenna_controller_profile", {
+        profileId: "profile-1",
+        profileRevision: "revision-2",
+      }],
+    );
+    assert.equal(
+      calls.filter(([command]) => command === "delete_antenna_controller_profile").length,
+      1,
+      "repeated confirmation cannot duplicate the request",
+    );
+    resolveControllerProfileDelete();
+    await vi.waitFor(() => assert.equal(elements.controllerProfileDeleteDialog.open, false));
+    assert.equal(elements.controllerProfileSelect.value, "");
+    assert.equal(profileField("controllerProfileName").value, "");
+    await vi.waitFor(() => {
+      assert.equal(document.activeElement, elements.controllerProfileStatus);
+    });
+    assert.match(elements.controllerProfileStatus.textContent, /Profile deleted/);
     elements.savedImport.click();
     await vi.waitFor(() => {
       assert.match(elements.savedImportFeedback.textContent, /imported\.session\.antennabundle was imported/);

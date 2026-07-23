@@ -94,6 +94,7 @@ import {
   beginWsprLiveImport,
   applyPendingReportPresentation,
   antennaControllerCatalogSucceeded,
+  beginAntennaControllerProfileDelete,
   conductorLoadSucceeded,
   conductorMutationFailed,
   conductorPollSucceeded,
@@ -113,10 +114,12 @@ import {
   managedRevealFailed,
   managedRevealSucceeded,
   cancelManagedDelete,
+  cancelAntennaControllerProfileDelete,
   openSessionCancelled,
   openSessionFailed,
   openSessionSucceeded,
   requestManagedDelete,
+  requestAntennaControllerProfileDelete,
   requestSkipCycle,
   reportExportCancelled,
   reportExportConfirmationRequired,
@@ -334,6 +337,8 @@ test("the shell starts in saved sessions", () => {
     antennaControllerProfileError: null,
     antennaControllerProfileRefreshError: null,
     antennaControllerSelectedProfile: null,
+    antennaControllerProfileDeleteDialog: null,
+    antennaControllerProfileDeleteStatus: "idle",
   });
 });
 
@@ -370,6 +375,44 @@ test("controller profile selection is state-owned and follows catalog revisions"
 
   state = selectAntennaControllerProfile(state, "");
   assert.equal(state.antennaControllerSelectedProfile, null);
+});
+
+test("controller profile deletion snapshots and revalidates the selected name and revision", () => {
+  const profile = {
+    profileId: "profile-1",
+    revision: "revision-1",
+    name: " Bench Switch ",
+  };
+  let state = antennaControllerCatalogSucceeded(initialState("setup"), {
+    inputStyle: "one_line",
+    profiles: [profile],
+  });
+  state = selectAntennaControllerProfile(state, "profile-1");
+  const confirming = requestAntennaControllerProfileDelete(state);
+  assert.deepEqual(confirming.antennaControllerProfileDeleteDialog, {
+    profileId: "profile-1",
+    normalizedName: "bench switch",
+    revision: "revision-1",
+    name: " Bench Switch ",
+  });
+  assert.equal(confirming.antennaControllerProfileDeleteStatus, "confirming");
+
+  const cancelled = cancelAntennaControllerProfileDelete(confirming);
+  assert.equal(cancelled.antennaControllerProfileDeleteDialog, null);
+  assert.equal(cancelled.antennaControllerProfileDeleteStatus, "cancelled");
+  assert.equal(cancelled.antennaControllerProfileNotice.kind, "delete_cancelled");
+
+  const submitting = beginAntennaControllerProfileDelete(confirming);
+  assert.equal(submitting.antennaControllerProfileDeleteStatus, "submitting");
+  assert.equal(cancelAntennaControllerProfileDelete(submitting), submitting);
+
+  const stale = antennaControllerCatalogSucceeded(confirming, {
+    inputStyle: "one_line",
+    profiles: [{ ...profile, revision: "revision-2" }],
+  });
+  assert.equal(stale.antennaControllerProfileDeleteDialog, null);
+  assert.equal(stale.antennaControllerProfileDeleteStatus, "error");
+  assert.equal(stale.antennaControllerProfileError.kind, "stale_revision");
 });
 
 test("setup review gates creation on a valid normalized Rust plan", () => {
@@ -1172,7 +1215,7 @@ test("antenna-controller bridge separates local profile writes from narrow activ
 
   await invokeAntennaControllerProfiles(invoke);
   await invokeSaveAntennaControllerProfile(invoke, draft);
-  await invokeDeleteAntennaControllerProfile(invoke, "profile-1");
+  await invokeDeleteAntennaControllerProfile(invoke, "profile-1", "revision-1");
   await invokeActiveSessionAntennaController(invoke);
   await invokeAttachSessionAntennaController(invoke, attach);
   await invokeRunSessionAntennaController(invoke, run);
@@ -1180,7 +1223,10 @@ test("antenna-controller bridge separates local profile writes from narrow activ
   assert.deepEqual(calls, [
     ["antenna_controller_profiles"],
     ["save_antenna_controller_profile", { draft }],
-    ["delete_antenna_controller_profile", { profileId: "profile-1" }],
+    ["delete_antenna_controller_profile", {
+      profileId: "profile-1",
+      profileRevision: "revision-1",
+    }],
     ["active_session_antenna_controller"],
     ["attach_active_session_antenna_controller", { request: attach }],
     ["run_active_session_antenna_controller", { request: run }],

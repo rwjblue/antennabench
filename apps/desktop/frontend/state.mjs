@@ -86,6 +86,8 @@ export function initialState(workflow = "saved") {
       antennaControllerProfileError: null,
       antennaControllerProfileRefreshError: null,
       antennaControllerSelectedProfile: null,
+      antennaControllerProfileDeleteDialog: null,
+      antennaControllerProfileDeleteStatus: "idle",
     },
     workflow,
   );
@@ -831,9 +833,85 @@ export function selectAntennaControllerProfile(state, profileId) {
   const profile = state.antennaControllerCatalog?.profiles.find(
     (candidate) => candidate.profileId === profileId,
   ) ?? null;
-  return {
+  return reconcileControllerProfileDeleteDialog({
     ...state,
     antennaControllerSelectedProfile: controllerProfileSelection(profile),
+  });
+}
+
+function staleControllerProfileDelete(state) {
+  return {
+    ...state,
+    antennaControllerProfileDeleteDialog: null,
+    antennaControllerProfileDeleteStatus: "error",
+    antennaControllerProfileError: {
+      kind: "stale_revision",
+      message: "The selected controller profile changed before deletion.",
+      detail: "Review the current profile name and revision, then choose Delete profile again.",
+    },
+    antennaControllerProfileNotice: null,
+  };
+}
+
+function reconcileControllerProfileDeleteDialog(state) {
+  const presented = state.antennaControllerProfileDeleteDialog;
+  if (!presented || state.antennaControllerProfileDeleteStatus === "submitting") return state;
+  const selected = state.antennaControllerSelectedProfile;
+  const current = selectedProfileInCatalog(state.antennaControllerCatalog, selected);
+  if (
+    current
+    && current.profileId === presented.profileId
+    && current.revision === presented.revision
+    && normalizedControllerProfileName(current.name) === presented.normalizedName
+  ) return state;
+  return staleControllerProfileDelete(state);
+}
+
+export function requestAntennaControllerProfileDelete(state) {
+  const selected = state.antennaControllerSelectedProfile;
+  const profile = selectedProfileInCatalog(state.antennaControllerCatalog, selected);
+  if (!profile || profile.revision !== selected?.revision) {
+    return staleControllerProfileDelete(state);
+  }
+  return {
+    ...state,
+    antennaControllerProfileDeleteDialog: {
+      profileId: profile.profileId,
+      normalizedName: normalizedControllerProfileName(profile.name),
+      revision: profile.revision,
+      name: profile.name,
+    },
+    antennaControllerProfileDeleteStatus: "confirming",
+    antennaControllerProfileError: null,
+    antennaControllerProfileNotice: null,
+  };
+}
+
+export function cancelAntennaControllerProfileDelete(state) {
+  if (state.antennaControllerProfileDeleteStatus === "submitting") return state;
+  return {
+    ...state,
+    antennaControllerProfileDeleteDialog: null,
+    antennaControllerProfileDeleteStatus: "cancelled",
+    antennaControllerProfileError: null,
+    antennaControllerProfileNotice: { kind: "delete_cancelled", profileId: "" },
+  };
+}
+
+export function beginAntennaControllerProfileDelete(state) {
+  const reconciled = reconcileControllerProfileDeleteDialog(state);
+  if (!reconciled.antennaControllerProfileDeleteDialog) return reconciled;
+  return {
+    ...reconciled,
+    antennaControllerProfileDeleteStatus: "submitting",
+  };
+}
+
+export function finishAntennaControllerProfileDelete(state, committed) {
+  return {
+    ...state,
+    antennaControllerProfileDeleteDialog: null,
+    antennaControllerProfileDeleteStatus: committed ? "succeeded" : "error",
   };
 }
 
@@ -927,14 +1005,14 @@ export function antennaControllerCatalogSucceeded(state, catalog) {
     catalog,
     state.antennaControllerSelectedProfile,
   );
-  return {
+  return reconcileControllerProfileDeleteDialog({
     ...state,
     antennaControllerStatus: "ready",
     antennaControllerCatalog: catalog,
     antennaControllerError: null,
     antennaControllerProfileRefreshError: null,
     antennaControllerSelectedProfile: controllerProfileSelection(selectedProfile),
-  };
+  });
 }
 
 export function antennaControllerViewSucceeded(state, controller) {

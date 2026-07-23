@@ -524,18 +524,32 @@ pub(super) fn existing_profile_for_draft<'a>(
     }
 }
 
-pub(super) fn remove_profile(catalog: &mut ControllerCatalog, profile_id: &str) -> bool {
-    let previous_len = catalog.profiles.len();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RemoveControllerProfileError {
+    Missing,
+    StaleRevision,
+}
+
+pub(super) fn remove_profile(
+    catalog: &mut ControllerCatalog,
+    profile_id: &str,
+    profile_revision: &str,
+) -> Result<(), RemoveControllerProfileError> {
+    let profile = catalog
+        .profiles
+        .iter()
+        .find(|profile| profile.profile_id == profile_id)
+        .ok_or(RemoveControllerProfileError::Missing)?;
+    if profile.revision != profile_revision {
+        return Err(RemoveControllerProfileError::StaleRevision);
+    }
     catalog
         .profiles
         .retain(|profile| profile.profile_id != profile_id);
-    if catalog.profiles.len() == previous_len {
-        return false;
-    }
     catalog
         .associations
         .retain(|association| association.profile_id != profile_id);
-    true
+    Ok(())
 }
 
 pub(super) fn write_catalog(

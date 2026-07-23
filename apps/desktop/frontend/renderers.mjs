@@ -379,11 +379,14 @@ export function renderSetup(elements, state, root) {
       ? `${profileNotice?.kind === "deleted" ? "Profile deletion" : "Profile save"} committed on this computer. ${profileRefreshError.detail}`
       : profileNotice?.kind === "deleted"
       ? "Profile deleted from this computer."
-      : profileNotice?.kind === "saved"
+        : profileNotice?.kind === "saved"
         ? "Profile saved on this computer."
+        : profileNotice?.kind === "delete_cancelled"
+          ? "Profile deletion cancelled. Nothing was changed."
         : catalog?.migrationNotice
           ? `AntennaBench repaired the local profile catalog: ${catalog.migrationNotice.consolidatedProfiles} duplicate profile(s) consolidated and ${catalog.migrationNotice.renamedProfiles} conflicting profile(s) renamed. Review migrated names before use.`
           : "";
+  renderControllerProfileDeleteDialog(elements, state);
 
   renderFeedback(
     setupFeedback,
@@ -474,6 +477,36 @@ export function renderSetup(elements, state, root) {
     }
     return row;
   }));
+}
+
+function renderControllerProfileDeleteDialog(elements, state) {
+  const {
+    controllerProfileDeleteDialog, controllerProfileDeleteTitle,
+    controllerProfileDeleteDescription, controllerProfileDeleteIdentity,
+    controllerProfileDeletePending, controllerProfileDeleteCancel,
+    controllerProfileDeleteConfirm,
+  } = elements;
+  const presented = state.antennaControllerProfileDeleteDialog;
+  if (!presented) {
+    if (controllerProfileDeleteDialog.open) controllerProfileDeleteDialog.close?.();
+    controllerProfileDeleteDialog.removeAttribute("open");
+    return;
+  }
+  controllerProfileDeleteTitle.textContent = `Delete “${presented.name.trim()}”?`;
+  controllerProfileDeleteDescription.textContent = "Deletion removes this reusable profile and every remembered local session association that references it. Affected sessions fall back to manual switching until another local profile is selected and attached.";
+  controllerProfileDeleteIdentity.textContent = `Normalized name “${presented.normalizedName}” · revision ${presented.revision}`;
+  const pending = state.antennaControllerProfileDeleteStatus === "submitting";
+  controllerProfileDeletePending.hidden = !pending;
+  controllerProfileDeleteCancel.disabled = pending;
+  controllerProfileDeleteConfirm.disabled = pending;
+  controllerProfileDeleteConfirm.textContent = pending ? "Deleting…" : "Delete profile";
+  if (!controllerProfileDeleteDialog.open) {
+    if (typeof controllerProfileDeleteDialog.showModal === "function") {
+      controllerProfileDeleteDialog.showModal();
+    } else {
+      controllerProfileDeleteDialog.setAttribute("open", "");
+    }
+  }
 }
 
 function renderSetupFieldDiagnostics(form, diagnostics, root) {

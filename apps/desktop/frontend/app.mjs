@@ -43,6 +43,7 @@ export function mount(root, browserWindow) {
   let countdownAnchorKey = null;
   let noteShortcutInitialized = false;
   let deleteTrigger = null;
+  let controllerProfileDeleteTrigger = null;
   let reportExportTrigger = null;
   let skipCycleTrigger = null;
   let hydratedControllerProfile = null;
@@ -100,6 +101,10 @@ export function mount(root, browserWindow) {
     controllerProfileSave,
     controllerProfileDelete,
     controllerProfileRefresh,
+    controllerProfileStatus,
+    controllerProfileDeleteDialog,
+    controllerProfileDeleteCancel,
+    controllerProfileDeleteConfirm,
     conductorPanel,
     conductorEmpty,
     conductorStatus,
@@ -224,12 +229,27 @@ export function mount(root, browserWindow) {
     invoke: browserWindow.__TAURI__?.core?.invoke,
     render(nextState) {
       const hadSkipDialog = state.skipCycleDialog !== null;
+      const hadControllerProfileDeleteDialog =
+        state.antennaControllerProfileDeleteDialog !== null;
       state = nextState;
       render();
       if (hadSkipDialog && state.skipCycleDialog === null && skipCycleTrigger) {
         const trigger = skipCycleTrigger;
         skipCycleTrigger = null;
         Promise.resolve().then(() => trigger.isConnected && trigger.focus());
+      }
+      if (
+        hadControllerProfileDeleteDialog
+        && state.antennaControllerProfileDeleteDialog === null
+        && controllerProfileDeleteTrigger
+      ) {
+        const trigger = controllerProfileDeleteTrigger;
+        controllerProfileDeleteTrigger = null;
+        const focusTarget = state.antennaControllerProfileDeleteStatus === "succeeded"
+          || !trigger.isConnected || trigger.disabled
+          ? controllerProfileStatus
+          : trigger;
+        Promise.resolve().then(() => focusTarget.focus());
       }
     },
     navigate(workflow) {
@@ -271,6 +291,8 @@ export function mount(root, browserWindow) {
       browserWindow.removeEventListener?.("focus", reconcileControllerProfileDomSelection);
       if (skipCycleDialog.open) skipCycleDialog.close?.();
       skipCycleDialog.removeAttribute("open");
+      if (controllerProfileDeleteDialog.open) controllerProfileDeleteDialog.close?.();
+      controllerProfileDeleteDialog.removeAttribute("open");
       if (reportDiagnosticsDialog.open) reportDiagnosticsDialog.close?.();
       reportDiagnosticsDialog.removeAttribute("open");
       if (reportExportDialog.open) reportExportDialog.close?.();
@@ -627,19 +649,47 @@ export function mount(root, browserWindow) {
   });
 
   controllerProfileDelete.addEventListener("click", async () => {
-    const profile = state.antennaControllerCatalog?.profiles?.find(
-      (candidate) => candidate.profileId === controllerProfileSelect.value,
-    );
-    if (!profile) return;
-    if (!controller.confirm(`Delete the controller profile “${profile.name}” from this computer? Existing sessions that used it will fall back to manual switching.`)) return;
-    const deleted = await controller.deleteAntennaControllerProfile(profile.profileId);
-    if (deleted) {
-      controller.editSetup();
+    controllerProfileDeleteTrigger = controllerProfileDelete;
+    const nextState = controller.requestAntennaControllerProfileDelete();
+    if (nextState.antennaControllerProfileDeleteDialog) {
+      Promise.resolve().then(() => controllerProfileDeleteCancel.focus());
+    } else {
+      controllerProfileDeleteTrigger = null;
     }
   });
 
   controllerProfileRefresh.addEventListener("click", async () => {
     await controller.refreshAntennaControllerProfiles();
+  });
+
+  const cancelControllerProfileDelete = () => {
+    if (state.antennaControllerProfileDeleteStatus === "submitting") return;
+    controller.cancelAntennaControllerProfileDelete();
+  };
+  controllerProfileDeleteCancel.addEventListener("click", cancelControllerProfileDelete);
+  controllerProfileDeleteDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    cancelControllerProfileDelete();
+  });
+  controllerProfileDeleteDialog.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [controllerProfileDeleteCancel, controllerProfileDeleteConfirm]
+      .filter((button) => !button.disabled);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && rootDocument.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && rootDocument.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  controllerProfileDeleteConfirm.addEventListener("click", async () => {
+    if (state.antennaControllerProfileDeleteStatus === "submitting") return;
+    const committed = await controller.confirmAntennaControllerProfileDelete();
+    if (committed) controller.editSetup();
   });
 
   antennaControllerAttach.addEventListener("click", async () => {

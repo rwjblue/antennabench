@@ -463,10 +463,22 @@ pub(crate) mod tests {
             migration_notice: None,
         };
 
-        assert!(remove_profile(&mut catalog, "profile-1"));
+        assert_eq!(
+            remove_profile(&mut catalog, "profile-1", "stale"),
+            Err(RemoveControllerProfileError::StaleRevision)
+        );
+        assert_eq!(catalog.profiles.len(), 1);
+        assert_eq!(catalog.associations.len(), 1);
+        assert_eq!(
+            remove_profile(&mut catalog, "profile-1", "revision-1"),
+            Ok(())
+        );
         assert!(catalog.profiles.is_empty());
         assert!(catalog.associations.is_empty());
-        assert!(!remove_profile(&mut catalog, "profile-1"));
+        assert_eq!(
+            remove_profile(&mut catalog, "profile-1", "revision-1"),
+            Err(RemoveControllerProfileError::Missing)
+        );
         assert!(validate_catalog(&catalog).is_ok());
     }
 
