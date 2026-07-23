@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "profileId": "profile-a",
+      "revision": "revision-a",
+      "name": " Bench switch ",
+      "switchCommand": {
+        "programTemplate": "switch",
+        "argumentTemplates": ["--target", "{target}"]
+      },
+      "verificationCommand": null,
+      "timeoutSeconds": 10
+    },
+    {
+      "profileId": "profile-b",
+      "revision": "revision-b",
+      "name": "bench SWITCH",
+      "switchCommand": {
+        "programTemplate": "switch",
+        "argumentTemplates": ["--target", "{target}"]
+      },
+      "verificationCommand": null,
+      "timeoutSeconds": 10
+    },
+    {
+      "profileId": "profile-c",
+      "revision": "revision-c",
+      "name": "BENCH SWITCH",
+      "switchCommand": {
+        "programTemplate": "different-switch",
+        "argumentTemplates": ["{target}"]
+      },
+      "verificationCommand": null,
+      "timeoutSeconds": 5
+    },
+    {
+      "profileId": "profile-d",
+      "revision": "revision-d",
+      "name": "Bench switch (migrated 2)",
+      "switchCommand": {
+        "programTemplate": "reserved-name-switch",
+        "argumentTemplates": []
+      },
+      "verificationCommand": null,
+      "timeoutSeconds": 10
+    }
+  ],
+  "associations": [
+    {
+      "source": "/tmp/one.antennabundle",
+      "sessionId": "session-a",
+      "profileId": "profile-a",
+      "profileRevision": "revision-a",
+      "targets": { "Dipole": "relay-a" }
+    },
+    {
+      "source": "/tmp/two.antennabundle",
+      "sessionId": "session-b",
+      "profileId": "profile-b",
+      "profileRevision": "revision-b",
+      "targets": { "Dipole": "relay-b" }
+    },
+    {
+      "source": "/tmp/three.antennabundle",
+      "sessionId": "session-c",
+      "profileId": "profile-c",
+      "profileRevision": "revision-c",
+      "targets": { "Dipole": "relay-c" }
+    }
+  ]
+}

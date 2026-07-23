@@ -116,6 +116,8 @@ pub(super) struct ControllerCatalog {
     pub(super) version: u16,
     pub(super) profiles: Vec<ControllerProfile>,
     pub(super) associations: Vec<PersistedAssociation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) migration_notice: Option<ControllerCatalogMigrationNotice>,
 }
 
 impl Default for ControllerCatalog {
@@ -124,8 +126,16 @@ impl Default for ControllerCatalog {
             version: CATALOG_VERSION,
             profiles: Vec::new(),
             associations: Vec::new(),
+            migration_notice: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ControllerCatalogMigrationNotice {
+    pub(super) consolidated_profiles: usize,
+    pub(super) renamed_profiles: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +153,7 @@ pub(super) struct PersistedAssociation {
 pub(crate) struct ControllerCatalogView {
     pub(super) input_style: &'static str,
     pub(super) profiles: Vec<ControllerProfile>,
+    pub(super) migration_notice: Option<ControllerCatalogMigrationNotice>,
 }
 pub(super) fn catalog_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("antenna-controller-profiles.json")
@@ -205,27 +216,42 @@ pub(super) fn read_catalog(app_data_dir: &Path) -> Result<ControllerCatalog, Ses
             "bytes",
         ));
     }
-    let catalog: ControllerCatalog = serde_json::from_slice(&bytes).map_err(|error| {
+    let mut catalog: ControllerCatalog = serde_json::from_slice(&bytes).map_err(|error| {
         SessionErrorPayload::new(
             SessionErrorKind::Validation,
             "Local antenna-controller profiles are not valid.",
             format!("{}: {error}", path.display()),
         )
     })?;
-    if catalog.version != CATALOG_VERSION {
-        return Err(SessionErrorPayload::new(
-            SessionErrorKind::Unsupported,
-            "Local antenna-controller profiles use an unsupported version.",
-            format!("catalog version {}", catalog.version),
-        ));
+    match catalog.version {
+        CATALOG_VERSION => {
+            validate_catalog(&catalog).map_err(|detail| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::Validation,
+                    "Local antenna-controller profiles are not valid.",
+                    detail,
+                )
+            })?;
+        }
+        1 => {
+            validate_catalog_contents(&catalog, false).map_err(|detail| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::Validation,
+                    "Local antenna-controller profiles are not valid.",
+                    detail,
+                )
+            })?;
+            catalog = migrate_v1_catalog(catalog)?;
+            write_catalog(app_data_dir, &catalog)?;
+        }
+        version => {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Unsupported,
+                "Local antenna-controller profiles use an unsupported version.",
+                format!("catalog version {version}"),
+            ));
+        }
     }
-    validate_catalog(&catalog).map_err(|detail| {
-        SessionErrorPayload::new(
-            SessionErrorKind::Validation,
-            "Local antenna-controller profiles are not valid.",
-            detail,
-        )
-    })?;
     Ok(catalog)
 }
 
@@ -251,7 +277,21 @@ pub(super) fn validate_command_template(
 }
 
 pub(super) fn validate_catalog(catalog: &ControllerCatalog) -> Result<(), String> {
+    if catalog.version != CATALOG_VERSION {
+        return Err(format!(
+            "controller catalog version {} is not writable",
+            catalog.version
+        ));
+    }
+    validate_catalog_contents(catalog, true)
+}
+
+fn validate_catalog_contents(
+    catalog: &ControllerCatalog,
+    require_unique_names: bool,
+) -> Result<(), String> {
     let mut profile_ids = BTreeSet::new();
+    let mut profile_names = BTreeSet::new();
     for profile in &catalog.profiles {
         if profile.profile_id.is_empty()
             || profile.profile_id.len() > PROFILE_IDENTITY_MAX_BYTES
@@ -267,6 +307,12 @@ pub(super) fn validate_catalog(catalog: &ControllerCatalog) -> Result<(), String
         }
         if profile.name.trim().is_empty() || profile.name.len() > PROFILE_NAME_MAX_BYTES {
             return Err("a controller profile name is empty or exceeds its fixed limit".into());
+        }
+        if require_unique_names && !profile_names.insert(normalized_profile_name(&profile.name)) {
+            return Err(
+                "controller profile names must be unique ignoring case and surrounding whitespace"
+                    .into(),
+            );
         }
         if !(PROFILE_TIMEOUT_MIN_SECONDS..=PROFILE_TIMEOUT_MAX_SECONDS)
             .contains(&profile.timeout_seconds)
@@ -305,6 +351,177 @@ pub(super) fn validate_catalog(catalog: &ControllerCatalog) -> Result<(), String
         }
     }
     Ok(())
+}
+
+pub(super) fn normalized_profile_name(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
+fn reusable_configuration_matches(left: &ControllerProfile, right: &ControllerProfile) -> bool {
+    left.switch_command == right.switch_command
+        && left.verification_command == right.verification_command
+        && left.timeout_seconds == right.timeout_seconds
+}
+
+fn migrated_profile_name(
+    base: &str,
+    mut ordinal: usize,
+    reserved_names: &BTreeSet<String>,
+    used_names: &BTreeSet<String>,
+) -> String {
+    loop {
+        let suffix = format!(" (migrated {ordinal})");
+        let available = PROFILE_NAME_MAX_BYTES.saturating_sub(suffix.len());
+        let mut end = base.len().min(available);
+        while !base.is_char_boundary(end) {
+            end -= 1;
+        }
+        let candidate = format!("{}{}", &base[..end], suffix);
+        let normalized = normalized_profile_name(&candidate);
+        if !reserved_names.contains(&normalized) && !used_names.contains(&normalized) {
+            return candidate;
+        }
+        ordinal += 1;
+    }
+}
+
+fn migrate_v1_catalog(
+    catalog: ControllerCatalog,
+) -> Result<ControllerCatalog, SessionErrorPayload> {
+    let reserved_names = catalog
+        .profiles
+        .iter()
+        .map(|profile| normalized_profile_name(&profile.name))
+        .collect::<BTreeSet<_>>();
+    let mut grouped = BTreeMap::<String, Vec<ControllerProfile>>::new();
+    for profile in catalog.profiles {
+        grouped
+            .entry(normalized_profile_name(&profile.name))
+            .or_default()
+            .push(profile);
+    }
+
+    let mut profiles = Vec::new();
+    let mut identity_map = BTreeMap::<String, (String, String)>::new();
+    let mut used_names = BTreeSet::new();
+    let mut consolidated_profiles = 0usize;
+    let mut renamed_profiles = 0usize;
+
+    for mut same_name in grouped.into_values() {
+        same_name.sort_by(|left, right| left.profile_id.cmp(&right.profile_id));
+        let mut configurations = Vec::<Vec<ControllerProfile>>::new();
+        for profile in same_name {
+            if let Some(matches) = configurations.iter_mut().find(|matches| {
+                reusable_configuration_matches(
+                    matches
+                        .first()
+                        .expect("a migration configuration group is nonempty"),
+                    &profile,
+                )
+            }) {
+                matches.push(profile);
+            } else {
+                configurations.push(vec![profile]);
+            }
+        }
+
+        for (configuration_index, mut matches) in configurations.into_iter().enumerate() {
+            matches.sort_by(|left, right| left.profile_id.cmp(&right.profile_id));
+            let mut retained = matches
+                .first()
+                .cloned()
+                .expect("a migration configuration group is nonempty");
+            retained.name = retained.name.trim().to_string();
+            if configuration_index > 0 {
+                retained.name = migrated_profile_name(
+                    &retained.name,
+                    configuration_index + 1,
+                    &reserved_names,
+                    &used_names,
+                );
+                renamed_profiles += 1;
+            }
+            used_names.insert(normalized_profile_name(&retained.name));
+            consolidated_profiles += matches.len().saturating_sub(1);
+            for profile in matches {
+                identity_map.insert(
+                    profile.profile_id,
+                    (retained.profile_id.clone(), retained.revision.clone()),
+                );
+            }
+            profiles.push(retained);
+        }
+    }
+
+    profiles.sort_by(|left, right| {
+        normalized_profile_name(&left.name)
+            .cmp(&normalized_profile_name(&right.name))
+            .then(left.name.cmp(&right.name))
+            .then(left.profile_id.cmp(&right.profile_id))
+    });
+    let associations = catalog
+        .associations
+        .into_iter()
+        .map(|mut association| {
+            let (profile_id, profile_revision) = identity_map
+                .get(&association.profile_id)
+                .expect("legacy catalog validation checked association identities");
+            association.profile_id.clone_from(profile_id);
+            association.profile_revision.clone_from(profile_revision);
+            association
+        })
+        .collect();
+    let migration_notice = (consolidated_profiles > 0 || renamed_profiles > 0).then_some(
+        ControllerCatalogMigrationNotice {
+            consolidated_profiles,
+            renamed_profiles,
+        },
+    );
+    let migrated = ControllerCatalog {
+        version: CATALOG_VERSION,
+        profiles,
+        associations,
+        migration_notice,
+    };
+    validate_catalog(&migrated).map_err(|detail| {
+        SessionErrorPayload::new(
+            SessionErrorKind::Validation,
+            "Local antenna-controller profiles could not be migrated safely.",
+            detail,
+        )
+    })?;
+    Ok(migrated)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ControllerProfileDraftConflict {
+    MissingSelected,
+    NameInUse,
+}
+
+pub(super) fn existing_profile_for_draft<'a>(
+    profiles: &'a [ControllerProfile],
+    draft: &ControllerProfileDraft,
+) -> Result<Option<&'a ControllerProfile>, ControllerProfileDraftConflict> {
+    let name_key = normalized_profile_name(&draft.name);
+    match draft.profile_id.as_deref() {
+        Some(profile_id) => {
+            let selected = profiles
+                .iter()
+                .find(|profile| profile.profile_id == profile_id)
+                .ok_or(ControllerProfileDraftConflict::MissingSelected)?;
+            if profiles.iter().any(|profile| {
+                profile.profile_id != profile_id
+                    && normalized_profile_name(&profile.name) == name_key
+            }) {
+                return Err(ControllerProfileDraftConflict::NameInUse);
+            }
+            Ok(Some(selected))
+        }
+        None => Ok(profiles
+            .iter()
+            .find(|profile| normalized_profile_name(&profile.name) == name_key)),
+    }
 }
 
 pub(super) fn remove_profile(catalog: &mut ControllerCatalog, profile_id: &str) -> bool {
@@ -541,14 +758,17 @@ pub(crate) fn prepare_setup_controller(
     catalog: &[ControllerProfile],
     new_id: impl Fn(&str) -> String + Copy,
 ) -> Result<(PreparedSetupController, SetupControllerReview), String> {
-    let existing = draft.profile.profile_id.as_deref().and_then(|profile_id| {
-        catalog
-            .iter()
-            .find(|profile| profile.profile_id == profile_id)
-    });
-    if draft.profile.profile_id.is_some() && existing.is_none() {
-        return Err("the selected saved controller profile no longer exists".into());
-    }
+    let existing = existing_profile_for_draft(catalog, &draft.profile).map_err(|conflict| {
+        match conflict {
+            ControllerProfileDraftConflict::MissingSelected => {
+                "the selected saved controller profile no longer exists"
+            }
+            ControllerProfileDraftConflict::NameInUse => {
+                "another saved controller profile already uses that name"
+            }
+        }
+        .to_string()
+    })?;
     let profile = normalize_profile(&draft.profile, existing, new_id)?;
     if !draft.manual_review_required && profile.verification_command.is_none() {
         return Err(
@@ -629,8 +849,9 @@ pub(super) fn persist_profile_and_association(
         .retain(|profile| profile.profile_id != prepared.profile.profile_id);
     catalog.profiles.push(prepared.profile.clone());
     catalog.profiles.sort_by(|left, right| {
-        left.name
-            .cmp(&right.name)
+        normalized_profile_name(&left.name)
+            .cmp(&normalized_profile_name(&right.name))
+            .then(left.name.cmp(&right.name))
             .then(left.profile_id.cmp(&right.profile_id))
     });
     catalog.associations.retain(|association| {

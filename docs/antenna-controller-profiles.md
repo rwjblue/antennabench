@@ -63,10 +63,20 @@ antenna in the session.
 Disabling manual review requires an independent verification command.
 
 Use **Save profile** to keep the entered commands for this and future sessions.
-Creating the session also saves the reviewed profile. Select an existing profile
-to reuse or **Update profile**; use **Delete profile** to remove it from local
-application data. Target values belong to the session association rather than
-the reusable profile.
+Creating the session also saves the reviewed profile. Profile names are the
+user-visible unique key: surrounding whitespace is ignored and name comparisons
+are case-insensitive. Saving a new draft with an existing name updates that
+profile. Renaming a selected profile preserves its local session associations;
+renaming it to another profile's name is rejected without changing the catalog.
+Select an existing profile to reuse or **Update profile**; use **Delete profile**
+to remove it from local application data. Target values belong to the session
+association rather than the reusable profile.
+
+Older local catalogs are upgraded atomically. Duplicate names with identical
+reusable commands and timeouts are consolidated while their session associations
+are retained. When duplicate names have different reusable configuration, every
+configuration and association is preserved under deterministic migrated names,
+and the app asks the operator to review those names before use.
 
 On macOS and Linux, the app accepts a command line and applies a small,
 predictable tokenizer for whitespace, quotes, and backslash escapes. On Windows,

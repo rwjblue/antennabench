@@ -60,6 +60,7 @@ pub(crate) fn antenna_controller_profiles(
             "one_line"
         },
         profiles: catalog.profiles,
+        migration_notice: catalog.migration_notice,
     };
     check_ipc_payload(&view, CONTROLLER_IPC_BYTES, "antenna_controller_profiles")?;
     Ok(view)
@@ -73,19 +74,21 @@ pub(crate) fn save_antenna_controller_profile(
 ) -> Result<ControllerProfile, SessionErrorPayload> {
     let app_data_dir = resolved_app_data_dir(&app)?;
     let mut catalog = read_catalog(&app_data_dir)?;
-    let existing = draft.profile_id.as_deref().and_then(|profile_id| {
-        catalog
-            .profiles
-            .iter()
-            .find(|profile| profile.profile_id == profile_id)
-    });
-    if draft.profile_id.is_some() && existing.is_none() {
-        return Err(SessionErrorPayload::new(
-            SessionErrorKind::Conflict,
-            "The saved antenna-controller profile changed. Refresh before saving.",
-            "the requested local profile identity no longer exists",
-        ));
-    }
+    let existing =
+        existing_profile_for_draft(&catalog.profiles, &draft).map_err(
+            |conflict| match conflict {
+                ControllerProfileDraftConflict::MissingSelected => SessionErrorPayload::new(
+                    SessionErrorKind::Conflict,
+                    "The saved antenna-controller profile changed. Refresh before saving.",
+                    "the requested local profile identity no longer exists",
+                ),
+                ControllerProfileDraftConflict::NameInUse => SessionErrorPayload::new(
+                    SessionErrorKind::Conflict,
+                    "Another saved antenna-controller profile already uses that name.",
+                    "choose a unique profile name before renaming the selected profile",
+                ),
+            },
+        )?;
     let profile = normalize_profile(&draft, existing, |prefix| {
         format!("{prefix}-{}", Uuid::new_v4())
     })
@@ -102,8 +105,9 @@ pub(crate) fn save_antenna_controller_profile(
         .retain(|candidate| candidate.profile_id != profile.profile_id);
     catalog.profiles.push(profile.clone());
     catalog.profiles.sort_by(|left, right| {
-        left.name
-            .cmp(&right.name)
+        normalized_profile_name(&left.name)
+            .cmp(&normalized_profile_name(&right.name))
+            .then(left.name.cmp(&right.name))
             .then(left.profile_id.cmp(&right.profile_id))
     });
     write_catalog(&app_data_dir, &catalog)?;

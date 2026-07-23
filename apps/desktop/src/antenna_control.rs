@@ -67,7 +67,7 @@ use crate::{
     },
 };
 
-const CATALOG_VERSION: u16 = 1;
+const CATALOG_VERSION: u16 = 2;
 const CONTROLLER_IPC_BYTES: u64 = 512 * 1024;
 const PROFILE_NAME_MAX_BYTES: usize = 256;
 const PROFILE_IDENTITY_MAX_BYTES: usize = 256;
@@ -429,6 +429,7 @@ pub(crate) mod tests {
                 profile_revision: "revision-1".into(),
                 targets: BTreeMap::from([("Dipole".into(), "relay-a".into())]),
             }],
+            migration_notice: None,
         };
         write_catalog(&app_data_dir, &catalog).unwrap();
         assert_eq!(read_catalog(&app_data_dir).unwrap(), catalog);
@@ -459,6 +460,7 @@ pub(crate) mod tests {
                 profile_revision: "revision-1".into(),
                 targets: BTreeMap::from([("Dipole".into(), "relay-a".into())]),
             }],
+            migration_notice: None,
         };
 
         assert!(remove_profile(&mut catalog, "profile-1"));
@@ -466,5 +468,119 @@ pub(crate) mod tests {
         assert!(catalog.associations.is_empty());
         assert!(!remove_profile(&mut catalog, "profile-1"));
         assert!(validate_catalog(&catalog).is_ok());
+    }
+
+    #[test]
+    fn normalized_profile_names_are_unique_and_drive_draft_matching() {
+        let profiles = vec![
+            ControllerProfile {
+                profile_id: "profile-1".into(),
+                revision: "revision-1".into(),
+                name: "Bench switch".into(),
+                switch_command: fake_template("exit-zero"),
+                verification_command: None,
+                timeout_seconds: 2,
+            },
+            ControllerProfile {
+                profile_id: "profile-2".into(),
+                revision: "revision-2".into(),
+                name: "Other switch".into(),
+                switch_command: fake_template("exit-zero"),
+                verification_command: None,
+                timeout_seconds: 2,
+            },
+        ];
+        let draft = |profile_id, name: &str| ControllerProfileDraft {
+            profile_id,
+            name: name.into(),
+            switch_command: ControllerCommandDraft {
+                one_line: "switch".into(),
+                program: String::new(),
+                arguments: Vec::new(),
+            },
+            verification_command: None,
+            timeout_seconds: 2,
+        };
+
+        let existing =
+            existing_profile_for_draft(&profiles, &draft(None, "  BENCH SWITCH ")).unwrap();
+        assert_eq!(existing.unwrap().profile_id, "profile-1");
+        assert_eq!(
+            existing_profile_for_draft(
+                &profiles,
+                &draft(Some("profile-1".into()), " other SWITCH ")
+            ),
+            Err(ControllerProfileDraftConflict::NameInUse)
+        );
+        assert_eq!(
+            existing_profile_for_draft(&profiles, &draft(Some("missing".into()), "Unique switch")),
+            Err(ControllerProfileDraftConflict::MissingSelected)
+        );
+
+        let duplicate_catalog = ControllerCatalog {
+            version: CATALOG_VERSION,
+            profiles: vec![
+                profiles[0].clone(),
+                ControllerProfile {
+                    profile_id: "profile-3".into(),
+                    name: " bench SWITCH ".into(),
+                    ..profiles[1].clone()
+                },
+            ],
+            associations: Vec::new(),
+            migration_notice: None,
+        };
+        assert!(validate_catalog(&duplicate_catalog).is_err());
+    }
+
+    #[test]
+    fn version_one_duplicate_names_migrate_without_losing_configuration_or_associations() {
+        let app_data_dir = std::env::temp_dir().join(format!(
+            "antennabench-controller-v1-migration-test-{}",
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(&app_data_dir).unwrap();
+        fs::write(
+            catalog_path(&app_data_dir),
+            include_bytes!("../tests/fixtures/controller-catalog-v1-duplicate-names.json"),
+        )
+        .unwrap();
+
+        let migrated = read_catalog(&app_data_dir).unwrap();
+        assert_eq!(migrated.version, CATALOG_VERSION);
+        assert_eq!(
+            migrated.migration_notice,
+            Some(ControllerCatalogMigrationNotice {
+                consolidated_profiles: 1,
+                renamed_profiles: 1,
+            })
+        );
+        assert_eq!(migrated.profiles.len(), 3);
+        assert!(migrated
+            .profiles
+            .iter()
+            .any(|profile| profile.profile_id == "profile-a" && profile.name == "Bench switch"));
+        assert!(migrated.profiles.iter().any(|profile| {
+            profile.profile_id == "profile-c"
+                && normalized_profile_name(&profile.name) == "bench switch (migrated 3)"
+                && profile.switch_command.program_template == "different-switch"
+        }));
+        let consolidated_association = migrated
+            .associations
+            .iter()
+            .find(|association| association.session_id == "session-b")
+            .unwrap();
+        assert_eq!(consolidated_association.profile_id, "profile-a");
+        assert_eq!(consolidated_association.profile_revision, "revision-a");
+        let divergent_association = migrated
+            .associations
+            .iter()
+            .find(|association| association.session_id == "session-c")
+            .unwrap();
+        assert_eq!(divergent_association.profile_id, "profile-c");
+        assert_eq!(divergent_association.profile_revision, "revision-c");
+        assert_eq!(read_catalog(&app_data_dir).unwrap(), migrated);
+
+        fs::remove_dir_all(&app_data_dir).unwrap();
     }
 }

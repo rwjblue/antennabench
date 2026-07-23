@@ -373,7 +373,9 @@ export function renderSetup(elements, state, root) {
       ? "Profile deleted from this computer."
       : profileNotice?.kind === "saved"
         ? "Profile saved on this computer."
-        : "";
+        : catalog?.migrationNotice
+          ? `AntennaBench repaired the local profile catalog: ${catalog.migrationNotice.consolidatedProfiles} duplicate profile(s) consolidated and ${catalog.migrationNotice.renamedProfiles} conflicting profile(s) renamed. Review migrated names before use.`
+          : "";
 
   renderFeedback(
     setupFeedback,

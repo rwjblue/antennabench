@@ -323,6 +323,13 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   assert.equal(e.controllerProfileSave.textContent, "Update profile");
   assert.equal(e.controllerProfileDelete.textContent, "Delete profile");
   state.antennaControllerProfileNotice = null;
+  state.antennaControllerCatalog.migrationNotice = {
+    consolidatedProfiles: 1,
+    renamedProfiles: 1,
+  };
+  renderSetup(e, state, document);
+  assert.match(e.controllerProfileStatus.textContent, /1 duplicate profile\(s\) consolidated/);
+  assert.match(e.controllerProfileStatus.textContent, /1 conflicting profile\(s\) renamed/);
 
   state.setupStatus = "reviewing";
   renderSetup(e, state, document);
