@@ -84,6 +84,7 @@ export function initialState(workflow = "saved") {
       antennaControllerOutcome: null,
       antennaControllerProfileNotice: null,
       antennaControllerProfileError: null,
+      antennaControllerProfileRefreshError: null,
     },
     workflow,
   );
@@ -796,17 +797,68 @@ export function beginAntennaControllerAction(state, status = "loading") {
     antennaControllerProfileError: ["saving", "deleting"].includes(status)
       ? null
       : state.antennaControllerProfileError,
+    antennaControllerProfileRefreshError: ["saving", "deleting"].includes(status)
+      ? null
+      : state.antennaControllerProfileRefreshError,
   };
 }
 
-export function antennaControllerProfileSucceeded(state, catalog, notice) {
+function normalizedControllerProfileName(name) {
+  return name.trim().toLowerCase();
+}
+
+function catalogWithSavedControllerProfile(catalog, savedProfile) {
+  const normalizedName = normalizedControllerProfileName(savedProfile.name);
+  const profiles = (catalog?.profiles ?? []).filter((profile) => (
+    profile.profileId !== savedProfile.profileId
+    && normalizedControllerProfileName(profile.name) !== normalizedName
+  ));
+  profiles.push(savedProfile);
+  profiles.sort((left, right) => {
+    const leftName = normalizedControllerProfileName(left.name);
+    const rightName = normalizedControllerProfileName(right.name);
+    if (leftName < rightName) return -1;
+    if (leftName > rightName) return 1;
+    return left.profileId < right.profileId ? -1 : left.profileId > right.profileId ? 1 : 0;
+  });
+  return {
+    inputStyle: catalog?.inputStyle ?? "one_line",
+    profiles,
+    ...(catalog?.migrationNotice ? { migrationNotice: catalog.migrationNotice } : {}),
+  };
+}
+
+export function antennaControllerProfileSaveCommitted(state, savedProfile) {
   return {
     ...state,
-    antennaControllerStatus: "ready",
-    antennaControllerCatalog: catalog,
+    antennaControllerStatus: "reconciling",
+    antennaControllerCatalog: catalogWithSavedControllerProfile(
+      state.antennaControllerCatalog,
+      savedProfile,
+    ),
     antennaControllerError: null,
-    antennaControllerProfileNotice: notice,
+    antennaControllerProfileNotice: { kind: "saved", profileId: savedProfile.profileId },
     antennaControllerProfileError: null,
+    antennaControllerProfileRefreshError: null,
+  };
+}
+
+export function antennaControllerProfileDeleteCommitted(state, profileId) {
+  return {
+    ...state,
+    antennaControllerStatus: "reconciling",
+    antennaControllerCatalog: state.antennaControllerCatalog
+      ? {
+          ...state.antennaControllerCatalog,
+          profiles: state.antennaControllerCatalog.profiles.filter(
+            (profile) => profile.profileId !== profileId,
+          ),
+        }
+      : null,
+    antennaControllerError: null,
+    antennaControllerProfileNotice: { kind: "deleted", profileId: "" },
+    antennaControllerProfileError: null,
+    antennaControllerProfileRefreshError: null,
   };
 }
 
@@ -817,6 +869,22 @@ export function antennaControllerProfileActionFailed(state, error) {
     antennaControllerStatus: "error",
     antennaControllerError: normalized,
     antennaControllerProfileError: normalized,
+    antennaControllerProfileRefreshError: null,
+  };
+}
+
+export function antennaControllerProfileReconciliationFailed(state, error) {
+  const normalized = normalizeOpenError(error);
+  return {
+    ...state,
+    antennaControllerStatus: "ready",
+    antennaControllerError: null,
+    antennaControllerProfileError: null,
+    antennaControllerProfileRefreshError: {
+      kind: "profile_refresh_failed_after_commit",
+      message: "The profile change is saved, but the profile list could not be refreshed.",
+      detail: normalized.detail ?? normalized.message,
+    },
   };
 }
 
@@ -826,6 +894,7 @@ export function antennaControllerCatalogSucceeded(state, catalog) {
     antennaControllerStatus: "ready",
     antennaControllerCatalog: catalog,
     antennaControllerError: null,
+    antennaControllerProfileRefreshError: null,
   };
 }
 

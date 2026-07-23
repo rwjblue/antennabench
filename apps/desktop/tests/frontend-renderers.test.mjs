@@ -330,6 +330,17 @@ test("setup renderer covers editing, review, diagnostics, creating, invalid, and
   renderSetup(e, state, document);
   assert.match(e.controllerProfileStatus.textContent, /1 duplicate profile\(s\) consolidated/);
   assert.match(e.controllerProfileStatus.textContent, /1 conflicting profile\(s\) renamed/);
+  state.antennaControllerCatalog.migrationNotice = null;
+  state.antennaControllerProfileNotice = { kind: "saved", profileId: "profile-1" };
+  state.antennaControllerProfileRefreshError = {
+    kind: "profile_refresh_failed_after_commit",
+    message: "The profile change is saved, but the profile list could not be refreshed.",
+    detail: "Catalog temporarily unavailable.",
+  };
+  renderSetup(e, state, document);
+  assert.equal(e.controllerProfileRefresh.hidden, false);
+  assert.match(e.controllerProfileStatus.textContent, /Profile save committed/);
+  assert.match(e.controllerProfileStatus.textContent, /Catalog temporarily unavailable/);
 
   state.setupStatus = "reviewing";
   renderSetup(e, state, document);

@@ -253,6 +253,133 @@ test("controller profiles can be explicitly saved and deleted during setup", asy
   ]);
 });
 
+test("committed profile saves remain authoritative when reconciliation fails", async () => {
+  const priorProfile = {
+    profileId: "profile-1",
+    revision: "revision-1",
+    name: "Bench switch",
+  };
+  const savedProfile = {
+    ...priorProfile,
+    revision: "revision-2",
+    name: " BENCH SWITCH ",
+  };
+  const recoveredCatalog = {
+    inputStyle: "one_line",
+    profiles: [savedProfile],
+  };
+  let profileLoads = 0;
+  const run = harness({
+    save_antenna_controller_profile: savedProfile,
+    antenna_controller_profiles: () => {
+      profileLoads += 1;
+      if (profileLoads === 1) throw new Error("catalog temporarily unavailable");
+      return recoveredCatalog;
+    },
+  }, {
+    state: {
+      ...initialState("setup"),
+      antennaControllerCatalog: {
+        inputStyle: "one_line",
+        profiles: [
+          priorProfile,
+          { profileId: "stale-duplicate", revision: "old", name: "bench SWITCH" },
+        ],
+      },
+    },
+  });
+
+  assert.equal(
+    await run.controller.saveAntennaControllerProfile({
+      profileId: "profile-1",
+      name: savedProfile.name,
+    }),
+    savedProfile,
+  );
+  assert.deepEqual(run.controller.state.antennaControllerCatalog.profiles, [savedProfile]);
+  assert.equal(
+    run.controller.state.antennaControllerProfileRefreshError.kind,
+    "profile_refresh_failed_after_commit",
+  );
+  assert.match(
+    run.controller.state.antennaControllerProfileRefreshError.message,
+    /profile change is saved/,
+  );
+  assert.equal(run.controller.state.antennaControllerProfileError, null);
+
+  await run.controller.refreshAntennaControllerProfiles();
+  assert.equal(run.controller.state.antennaControllerCatalog, recoveredCatalog);
+  assert.equal(run.controller.state.antennaControllerProfileRefreshError, null);
+  assert.deepEqual(run.calls.map(([command]) => command), [
+    "save_antenna_controller_profile",
+    "antenna_controller_profiles",
+    "antenna_controller_profiles",
+  ]);
+});
+
+test("committed profile deletes remain removed when reconciliation fails", async () => {
+  const retainedProfile = {
+    profileId: "profile-2",
+    revision: "revision-2",
+    name: "Other switch",
+  };
+  const run = harness({
+    delete_antenna_controller_profile: undefined,
+    antenna_controller_profiles: new Error("catalog temporarily unavailable"),
+  }, {
+    state: {
+      ...initialState("setup"),
+      antennaControllerCatalog: {
+        inputStyle: "one_line",
+        profiles: [
+          { profileId: "profile-1", revision: "revision-1", name: "Bench switch" },
+          retainedProfile,
+        ],
+      },
+    },
+  });
+
+  assert.equal(await run.controller.deleteAntennaControllerProfile("profile-1"), true);
+  assert.deepEqual(run.controller.state.antennaControllerCatalog.profiles, [retainedProfile]);
+  assert.deepEqual(run.controller.state.antennaControllerProfileNotice, {
+    kind: "deleted",
+    profileId: "",
+  });
+  assert.equal(
+    run.controller.state.antennaControllerProfileRefreshError.kind,
+    "profile_refresh_failed_after_commit",
+  );
+  assert.equal(
+    run.calls.filter(([command]) => command === "delete_antenna_controller_profile").length,
+    1,
+  );
+});
+
+test("profile mutation failures leave the known catalog unchanged", async () => {
+  const catalog = {
+    inputStyle: "one_line",
+    profiles: [{ profileId: "profile-1", revision: "revision-1", name: "Bench switch" }],
+  };
+  const run = harness({
+    save_antenna_controller_profile: new Error("native save rejected"),
+  }, {
+    state: {
+      ...initialState("setup"),
+      antennaControllerCatalog: catalog,
+    },
+  });
+
+  assert.equal(
+    await run.controller.saveAntennaControllerProfile({ profileId: null, name: "New switch" }),
+    null,
+  );
+  assert.equal(run.controller.state.antennaControllerCatalog, catalog);
+  assert.match(run.controller.state.antennaControllerProfileError.detail, /native save rejected/);
+  assert.deepEqual(run.calls.map(([command]) => command), [
+    "save_antenna_controller_profile",
+  ]);
+});
+
 test("saved sessions load on entry, retain stale rows, and own sessionless routing", async () => {
   const catalog = {
     status: "complete",

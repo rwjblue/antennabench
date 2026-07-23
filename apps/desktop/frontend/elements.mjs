@@ -60,6 +60,7 @@ export const REQUIRED_ELEMENT_SELECTORS = Object.freeze({
   controllerProfileSelect: '[data-setup-field="controllerProfileId"]',
   controllerProfileSave: "[data-controller-profile-save]",
   controllerProfileDelete: "[data-controller-profile-delete]",
+  controllerProfileRefresh: "[data-controller-profile-refresh]",
   controllerProfileStatus: "[data-controller-profile-status]",
   conductorPanel: "[data-conductor]",
   conductorEmpty: "[data-conductor-empty]",

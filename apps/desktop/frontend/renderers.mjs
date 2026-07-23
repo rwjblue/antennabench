@@ -315,7 +315,8 @@ export function renderSetup(elements, state, root) {
     setupReviewSequence, setupReviewCanDescribe, setupReviewCannotEstablish,
     setupPlanSummary,
     controllerOneLine, controllerStructured, controllerProfileSelect,
-    controllerProfileSave, controllerProfileDelete, controllerProfileStatus,
+    controllerProfileSave, controllerProfileDelete, controllerProfileRefresh,
+    controllerProfileStatus,
   } = elements;
   const setupBusy = ["reviewing", "creating"].includes(state.setupStatus);
   setupForm.setAttribute("aria-busy", String(setupBusy));
@@ -354,7 +355,9 @@ export function renderSetup(elements, state, root) {
     controllerOneLine.hidden = structured;
     controllerStructured.hidden = !structured;
   }
-  const profileBusy = ["saving", "deleting"].includes(state.antennaControllerStatus);
+  const profileBusy = ["saving", "deleting", "reconciling"].includes(
+    state.antennaControllerStatus,
+  );
   controllerProfileSave.disabled = profileBusy;
   controllerProfileSave.textContent = state.antennaControllerStatus === "saving"
     ? "Saving…"
@@ -365,11 +368,17 @@ export function renderSetup(elements, state, root) {
   controllerProfileDelete.textContent = state.antennaControllerStatus === "deleting"
     ? "Deleting…"
     : "Delete profile";
+  controllerProfileRefresh.hidden = state.antennaControllerProfileRefreshError === null;
+  controllerProfileRefresh.disabled = profileBusy;
   const profileNotice = state.antennaControllerProfileNotice;
-  controllerProfileStatus.dataset.kind = state.antennaControllerProfileError ? "error" : "ready";
+  const profileRefreshError = state.antennaControllerProfileRefreshError;
+  controllerProfileStatus.dataset.kind = state.antennaControllerProfileError
+    || profileRefreshError ? "error" : "ready";
   controllerProfileStatus.textContent = state.antennaControllerProfileError
     ? state.antennaControllerProfileError.detail ?? state.antennaControllerProfileError.message
-    : profileNotice?.kind === "deleted"
+    : profileRefreshError
+      ? `${profileNotice?.kind === "deleted" ? "Profile deletion" : "Profile save"} committed on this computer. ${profileRefreshError.detail}`
+      : profileNotice?.kind === "deleted"
       ? "Profile deleted from this computer."
       : profileNotice?.kind === "saved"
         ? "Profile saved on this computer."

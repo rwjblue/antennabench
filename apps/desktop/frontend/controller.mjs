@@ -34,8 +34,10 @@ import { OPEN_INTENTS, projectCountdown, sessionOpenDestination } from "./models
 import {
   antennaControllerActionFailed,
   antennaControllerCatalogSucceeded,
-  antennaControllerProfileSucceeded,
+  antennaControllerProfileDeleteCommitted,
   antennaControllerProfileActionFailed,
+  antennaControllerProfileReconciliationFailed,
+  antennaControllerProfileSaveCommitted,
   antennaControllerRunSucceeded,
   antennaControllerViewSucceeded,
   beginAntennaControllerAction,
@@ -284,6 +286,20 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
+    async refreshAntennaControllerProfiles() {
+      if (state.antennaControllerStatus === "reconciling") return state;
+      commit(beginAntennaControllerAction(state, "reconciling"));
+      try {
+        commit(antennaControllerCatalogSucceeded(
+          state,
+          await invokeAntennaControllerProfiles(invoke()),
+        ));
+      } catch (error) {
+        commit(antennaControllerProfileReconciliationFailed(state, error));
+      }
+      return state;
+    },
+
     async refreshAntennaController() {
       if (!state.session || state.antennaControllerStatus === "running") return state;
       commit(beginAntennaControllerAction(state));
@@ -314,36 +330,45 @@ export function createDesktopController(options = {}) {
 
     async saveAntennaControllerProfile(draft) {
       commit(beginAntennaControllerAction(state, "saving"));
+      let savedProfile;
       try {
-        const savedProfile = await invokeSaveAntennaControllerProfile(invoke(), draft);
-        commit(antennaControllerProfileSucceeded(
-          state,
-          await invokeAntennaControllerProfiles(invoke()),
-          { kind: "saved", profileId: savedProfile.profileId },
-        ));
-        if (state.session) await controller.refreshAntennaController();
-        return savedProfile;
+        savedProfile = await invokeSaveAntennaControllerProfile(invoke(), draft);
       } catch (error) {
         commit(antennaControllerProfileActionFailed(state, error));
         return null;
       }
+      commit(antennaControllerProfileSaveCommitted(state, savedProfile));
+      try {
+        commit(antennaControllerCatalogSucceeded(
+          state,
+          await invokeAntennaControllerProfiles(invoke()),
+        ));
+      } catch (error) {
+        commit(antennaControllerProfileReconciliationFailed(state, error));
+      }
+      if (state.session) await controller.refreshAntennaController();
+      return savedProfile;
     },
 
     async deleteAntennaControllerProfile(profileId) {
       commit(beginAntennaControllerAction(state, "deleting"));
       try {
         await invokeDeleteAntennaControllerProfile(invoke(), profileId);
-        commit(antennaControllerProfileSucceeded(
-          state,
-          await invokeAntennaControllerProfiles(invoke()),
-          { kind: "deleted", profileId: "" },
-        ));
-        if (state.session) await controller.refreshAntennaController();
-        return true;
       } catch (error) {
         commit(antennaControllerProfileActionFailed(state, error));
         return false;
       }
+      commit(antennaControllerProfileDeleteCommitted(state, profileId));
+      try {
+        commit(antennaControllerCatalogSucceeded(
+          state,
+          await invokeAntennaControllerProfiles(invoke()),
+        ));
+      } catch (error) {
+        commit(antennaControllerProfileReconciliationFailed(state, error));
+      }
+      if (state.session) await controller.refreshAntennaController();
+      return true;
     },
 
     async runAntennaController() {

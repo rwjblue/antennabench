@@ -330,6 +330,7 @@ test("the shell starts in saved sessions", () => {
     antennaControllerOutcome: null,
     antennaControllerProfileNotice: null,
     antennaControllerProfileError: null,
+    antennaControllerProfileRefreshError: null,
   });
 });
 

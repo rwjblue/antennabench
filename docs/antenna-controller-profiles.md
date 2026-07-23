@@ -78,6 +78,11 @@ are retained. When duplicate names have different reusable configuration, every
 configuration and association is preserved under deterministic migrated names,
 and the app asks the operator to review those names before use.
 
+After the computer confirms a profile save or deletion, the setup screen applies
+that committed result immediately. If reloading the complete local profile list
+then fails, the committed save or deletion remains visible and **Refresh
+profiles** retries only that read; it never repeats the durable mutation.
+
 On macOS and Linux, the app accepts a command line and applies a small,
 predictable tokenizer for whitespace, quotes, and backslash escapes. On Windows,
 the program and arguments are entered separately. In both cases AntennaBench

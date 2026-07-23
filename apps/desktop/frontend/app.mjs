@@ -96,6 +96,7 @@ export function mount(root, browserWindow) {
     controllerProfileSelect,
     controllerProfileSave,
     controllerProfileDelete,
+    controllerProfileRefresh,
     conductorPanel,
     conductorEmpty,
     conductorStatus,
@@ -586,6 +587,10 @@ export function mount(root, browserWindow) {
       synchronizedControllerProfile = controllerProfileKey(null);
       controller.editSetup();
     }
+  });
+
+  controllerProfileRefresh.addEventListener("click", async () => {
+    await controller.refreshAntennaControllerProfiles();
   });
 
   antennaControllerAttach.addEventListener("click", async () => {

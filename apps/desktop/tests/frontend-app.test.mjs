@@ -152,6 +152,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   };
   let managedOpenAttempts = 0;
   let reportRefreshes = 0;
+  let controllerProfileLoads = 0;
   let importedCatalog = false;
   let resolveSkipCycle;
   let controllerCatalog = {
@@ -199,7 +200,13 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
   };
   const responses = {
     load_station_preferences: null,
-    antenna_controller_profiles: () => controllerCatalog,
+    antenna_controller_profiles: () => {
+      controllerProfileLoads += 1;
+      if (controllerProfileLoads === 2) {
+        throw new Error("catalog refresh temporarily unavailable");
+      }
+      return controllerCatalog;
+    },
     save_antenna_controller_profile: () => {
       controllerCatalog = {
         inputStyle: "structured",
@@ -394,6 +401,15 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     assert.equal(profileField("controllerSwitchArguments").value, "--antenna\n{target}");
     assert.equal(profileField("controllerVerificationProgram").value, "/opt/antennabench/verify");
     assert.equal(profileField("controllerVerificationArguments").value, "--expect\n{target}");
+    assert.equal(elements.controllerProfileRefresh.hidden, false);
+    assert.match(elements.controllerProfileStatus.textContent, /Profile save committed/);
+    elements.controllerProfileRefresh.click();
+    await vi.waitFor(() => assert.equal(elements.controllerProfileRefresh.hidden, true));
+    assert.equal(
+      calls.filter(([command]) => command === "save_antenna_controller_profile").length,
+      1,
+      "refresh recovery never resubmits the committed mutation",
+    );
     elements.savedImport.click();
     await vi.waitFor(() => {
       assert.match(elements.savedImportFeedback.textContent, /imported\.session\.antennabundle was imported/);
