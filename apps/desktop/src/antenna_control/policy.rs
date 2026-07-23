@@ -7,6 +7,36 @@ use super::{
 pub(crate) struct AntennaControllerState {
     pub(super) runtime: Mutex<ControllerRuntime>,
     pub(super) generation: Arc<AtomicU64>,
+    abort_coordination: Mutex<AbortCoordination>,
+    abort_settled: Condvar,
+}
+
+#[derive(Default)]
+struct AbortCoordination {
+    next_attempt_id: u64,
+    active: Option<InFlightAttempt>,
+    settlement: Option<AttemptSettlement>,
+}
+
+struct InFlightAttempt {
+    id: u64,
+    source: PathBuf,
+    session_id: String,
+    mutation_id: String,
+    abort_requested: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AttemptCommit {
+    pub(crate) expected_revision: u64,
+    pub(crate) committed_revision: u64,
+    pub(crate) mutation_id: String,
+}
+
+#[derive(Clone)]
+enum AttemptSettlement {
+    Committed(AttemptCommit),
+    Failed(SessionErrorPayload),
 }
 
 #[derive(Default)]
@@ -60,6 +90,116 @@ pub(super) struct ControllerAttemptSummary {
     pub(super) diagnostic: String,
 }
 impl AntennaControllerState {
+    pub(super) fn begin_attempt(
+        &self,
+        source: PathBuf,
+        session_id: String,
+        mutation_id: String,
+    ) -> Result<u64, SessionErrorPayload> {
+        let mut coordination = self.abort_coordination.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline(
+                "antenna-controller abort coordination is unavailable",
+            )
+        })?;
+        if coordination.active.is_some() {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::Busy,
+                "Another antenna-controller attempt is already running.",
+                "only one Rust-owned controller process may be active",
+            ));
+        }
+        coordination.next_attempt_id = coordination.next_attempt_id.wrapping_add(1);
+        let id = coordination.next_attempt_id;
+        coordination.settlement = None;
+        coordination.active = Some(InFlightAttempt {
+            id,
+            source,
+            session_id,
+            mutation_id,
+            abort_requested: false,
+        });
+        Ok(id)
+    }
+
+    pub(super) fn abort_requested(&self, attempt_id: u64) -> bool {
+        self.abort_coordination
+            .lock()
+            .ok()
+            .is_some_and(|coordination| {
+                coordination
+                    .active
+                    .as_ref()
+                    .is_some_and(|active| active.id == attempt_id && active.abort_requested)
+            })
+    }
+
+    pub(super) fn settle_attempt(
+        &self,
+        attempt_id: u64,
+        result: Result<AttemptCommit, SessionErrorPayload>,
+    ) {
+        if let Ok(mut coordination) = self.abort_coordination.lock() {
+            let Some(active) = coordination.active.as_ref() else {
+                return;
+            };
+            if active.id != attempt_id {
+                return;
+            }
+            let settlement = match result {
+                Ok(commit) if commit.mutation_id == active.mutation_id => {
+                    AttemptSettlement::Committed(commit)
+                }
+                Ok(_) => AttemptSettlement::Failed(SessionErrorPayload::report_pipeline(
+                    "antenna-controller persistence settlement did not match the active attempt",
+                )),
+                Err(payload) => AttemptSettlement::Failed(payload),
+            };
+            coordination.active = None;
+            coordination.settlement = Some(settlement);
+            self.abort_settled.notify_all();
+        }
+    }
+
+    pub(crate) fn cancel_and_wait_for_abort(
+        &self,
+        source: &Path,
+        session_id: &str,
+    ) -> Result<Option<AttemptCommit>, SessionErrorPayload> {
+        let mut coordination = self.abort_coordination.lock().map_err(|_| {
+            SessionErrorPayload::report_pipeline(
+                "antenna-controller abort coordination is unavailable",
+            )
+        })?;
+        let Some(active) = coordination
+            .active
+            .as_mut()
+            .filter(|active| active.source == source && active.session_id == session_id)
+        else {
+            return Ok(None);
+        };
+        active.abort_requested = true;
+        let attempt_id = active.id;
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        while coordination
+            .active
+            .as_ref()
+            .is_some_and(|active| active.id == attempt_id)
+        {
+            coordination = self.abort_settled.wait(coordination).map_err(|_| {
+                SessionErrorPayload::report_pipeline(
+                    "antenna-controller abort coordination is unavailable",
+                )
+            })?;
+        }
+        match coordination.settlement.take() {
+            Some(AttemptSettlement::Committed(commit)) => Ok(Some(commit)),
+            Some(AttemptSettlement::Failed(payload)) => Err(payload),
+            None => Err(SessionErrorPayload::report_pipeline(
+                "antenna-controller attempt ended without a persistence settlement",
+            )),
+        }
+    }
+
     pub(crate) fn revoke(&self) {
         self.generation.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut runtime) = self.runtime.lock() {

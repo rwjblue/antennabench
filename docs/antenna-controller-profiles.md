@@ -157,6 +157,17 @@ rig records or ready event. Actual process, verification, stale-authority,
 cancellation, lifecycle, and durable persistence failures keep the existing
 blocked, explicit-retry behavior.
 
+After the operator confirms a session Abort, Rust cancels a matching in-flight
+controller process promptly instead of waiting for its configured timeout. It
+kills and waits for that exact child, retains the captured signaled attempt at
+most once, and then records the terminal abandonment event exactly once. Abort
+revokes authority to start further controller work only after that terminal
+checkpoint commits. This is process cancellation, not a station-control
+guarantee: AntennaBench does not claim that Abort stops RF, releases PTT, or
+turns off WSJT-X **Enable Tx**. If retaining the attempt or checkpointing the
+abandonment fails, the app reports a typed failure and leaves the durable
+session coherent.
+
 Editing a profile creates a new local revision and revokes its current arm until
 you review and attach it again. Interruption, session end, session replacement,
 and application shutdown also revoke the in-memory authority used to start new

@@ -6,7 +6,7 @@ use std::{
     process::{Command, ExitStatus, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
     },
     thread,
     time::{Duration as StdDuration, Instant},
@@ -396,14 +396,90 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn assert_cancellation_terminates_the_child_without_claiming_hardware_restoration() {
+        let started = Instant::now();
         let cancelled =
             execute_process(&fake_command("timeout"), StdDuration::from_secs(10), || {
                 true
             });
+        assert!(
+            started.elapsed() < StdDuration::from_secs(1),
+            "cancellation must not wait for the controller timeout"
+        );
         assert!(matches!(
             cancelled.disposition,
             AntennaControlDispositionV5::Signaled { .. }
         ));
+    }
+
+    #[test]
+    fn abort_coordination_waits_for_the_matching_attempt_settlement() {
+        let state = Arc::new(AntennaControllerState::default());
+        let source = PathBuf::from("/tmp/abort-coordination.antennabundle");
+        let attempt_id = state
+            .begin_attempt(
+                source.clone(),
+                "session-1".into(),
+                "automatic-control-1".into(),
+            )
+            .unwrap();
+        let waiter_state = state.clone();
+        let waiter_source = source.clone();
+        let waiter = thread::spawn(move || {
+            waiter_state
+                .cancel_and_wait_for_abort(&waiter_source, "session-1")
+                .unwrap()
+                .unwrap()
+        });
+        while state.generation.load(Ordering::SeqCst) == 0 {
+            thread::yield_now();
+        }
+        assert!(state.abort_requested(attempt_id));
+        state.settle_attempt(
+            attempt_id,
+            Ok(AttemptCommit {
+                expected_revision: 7,
+                committed_revision: 8,
+                mutation_id: "automatic-control-1".into(),
+            }),
+        );
+        let settlement = waiter.join().unwrap();
+        assert_eq!(settlement.expected_revision, 7);
+        assert_eq!(settlement.committed_revision, 8);
+        assert_eq!(settlement.mutation_id, "automatic-control-1");
+    }
+
+    #[test]
+    fn abort_coordination_surfaces_persistence_failure_without_cross_session_cancellation() {
+        let state = Arc::new(AntennaControllerState::default());
+        let source = PathBuf::from("/tmp/abort-failure.antennabundle");
+        let attempt_id = state
+            .begin_attempt(source.clone(), "session-1".into(), "attempt-1".into())
+            .unwrap();
+        assert!(state
+            .cancel_and_wait_for_abort(&source, "other-session")
+            .unwrap()
+            .is_none());
+        assert_eq!(state.generation.load(Ordering::SeqCst), 0);
+
+        let waiter_state = state.clone();
+        let waiter_source = source.clone();
+        let waiter = thread::spawn(move || {
+            waiter_state.cancel_and_wait_for_abort(&waiter_source, "session-1")
+        });
+        while state.generation.load(Ordering::SeqCst) == 0 {
+            thread::yield_now();
+        }
+        state.settle_attempt(
+            attempt_id,
+            Err(SessionErrorPayload::new(
+                SessionErrorKind::Filesystem,
+                "Captured controller evidence could not be committed.",
+                "injected persistence failure",
+            )),
+        );
+        let failure = waiter.join().unwrap().unwrap_err();
+        assert_eq!(failure.kind, SessionErrorKind::Filesystem);
+        assert_eq!(failure.detail, "injected persistence failure");
     }
 
     #[test]

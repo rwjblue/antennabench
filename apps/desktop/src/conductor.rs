@@ -221,7 +221,7 @@ pub(crate) fn active_session_conductor(
 #[tauri::command]
 pub(crate) fn mutate_active_session_conductor(
     app: AppHandle,
-    request: ConductorMutationRequest,
+    mut request: ConductorMutationRequest,
     active_state: State<'_, ActiveSessionState>,
     conductor_state: State<'_, ConductorSessionState>,
     wsjtx_state: State<'_, WsjtxSessionState>,
@@ -245,6 +245,64 @@ pub(crate) fn mutate_active_session_conductor(
                     "receive-capable schema-v4 WSPR sessions require active local WSJT-X intake when automatic WSPR.live acquisition is disabled",
                 ));
             }
+        }
+    }
+    if matches!(&request.action, ConductorAction::Abandon { .. }) {
+        let (source, _) = active_session_source(active_state.inner())?;
+        let before = BundleStore::new(&source)
+            .read_v3_checkpointed()
+            .map_err(live_error_payload)?;
+        if before.session_state.revision != request.expected_revision {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::StaleRevision,
+                "The session changed. Refresh Active Run before confirming Abort.",
+                format!(
+                    "expected checkpoint revision {}, actual revision {}",
+                    request.expected_revision, before.session_state.revision
+                ),
+            ));
+        }
+        conductor_state.authorize_controller_action(
+            &request.action_token,
+            &before.manifest.session_id,
+            request.expected_revision,
+            Utc::now(),
+        )?;
+        if let Some(commit) = controller_state
+            .cancel_and_wait_for_abort(&source, &before.manifest.session_id)
+            .map_err(|payload| {
+                crate::operation_diagnostics::persist_failure(
+                    &source,
+                    DiagnosticOperationV6::SessionMutation,
+                    DiagnosticPhaseV6::Checkpoint,
+                    "session.abort_controller_settlement_failed",
+                    EvidenceEffectV6::NoneCommitted,
+                    Vec::new(),
+                    payload,
+                )
+            })?
+        {
+            let after = BundleStore::new(&source)
+                .read_v3_checkpointed()
+                .map_err(live_error_payload)?;
+            if commit.expected_revision != request.expected_revision
+                || commit.committed_revision != after.session_state.revision
+                || after.session_state.last_committed_mutation_id.as_deref()
+                    != Some(commit.mutation_id.as_str())
+            {
+                return Err(SessionErrorPayload::new(
+                    SessionErrorKind::StaleRevision,
+                    "The session changed while Abort was stopping controller work.",
+                    "only the matching captured controller attempt may precede abandonment",
+                ));
+            }
+            conductor_state.rebase_action_after_controller_attempt(
+                &request.action_token,
+                &before.manifest.session_id,
+                request.expected_revision,
+                commit.committed_revision,
+            )?;
+            request.expected_revision = commit.committed_revision;
         }
     }
     let mutation = mutate_conductor_with_hooks(

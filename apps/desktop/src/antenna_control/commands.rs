@@ -375,8 +375,8 @@ pub(crate) fn run_active_session_antenna_controller(
                 ));
             }
         };
-        if let Some(outcome) = committed_outcome(&bundle, &request.action_token, &request.intent_id)
-        {
+        let mutation_id = format!("controller-attempt-{}", request.action_token);
+        if let Some(outcome) = committed_outcome(&bundle, &mutation_id, &request.intent_id) {
             return Ok(outcome);
         }
         if request.expected_revision != bundle.session_state.revision {
@@ -487,41 +487,49 @@ pub(crate) fn run_active_session_antenna_controller(
             request.expected_revision,
             Utc::now(),
         )?;
-        let generation_state = controller_state.generation.clone();
-        let cancelled = || generation_state.load(Ordering::SeqCst) != generation;
-        let (switch, verification) = execute_profile_attempt(&profile, context, &cancelled)
-            .map_err(|error| {
-                let message = if error.role == AntennaControlRoleV5::Switch {
-                    "The switch command could not be expanded."
-                } else {
-                    "The verification command could not be expanded."
-                };
-                SessionErrorPayload::new(SessionErrorKind::Validation, message, error.detail)
-            })?;
-        let switch_success = switch.disposition.is_exit_zero();
-        let verification_success = verification
-            .as_ref()
-            .map(|invocation| invocation.disposition.is_exit_zero());
-        let switch_record_id = format!("rig-{}", Uuid::new_v4());
-        let verification_record_id = verification
-            .as_ref()
-            .map(|_| format!("rig-{}", Uuid::new_v4()));
-        let mut rig_records = vec![rig_record(
-            &bundle,
-            switch_record_id.clone(),
-            switch.clone(),
-        )];
-        if let Some(invocation) = verification.clone() {
-            rig_records.push(rig_record(
+        let attempt_id = controller_state.begin_attempt(
+            source.clone(),
+            bundle.manifest.session_id.clone(),
+            mutation_id.clone(),
+        )?;
+        let attempt: Result<(RunControllerOutcome, AttemptCommit), SessionErrorPayload> = (|| {
+            let generation_state = controller_state.generation.clone();
+            let cancelled = || generation_state.load(Ordering::SeqCst) != generation;
+            let (switch, verification) = execute_profile_attempt(&profile, context, &cancelled)
+                .map_err(|error| {
+                    let message = if error.role == AntennaControlRoleV5::Switch {
+                        "The switch command could not be expanded."
+                    } else {
+                        "The verification command could not be expanded."
+                    };
+                    SessionErrorPayload::new(SessionErrorKind::Validation, message, error.detail)
+                })?;
+            let switch_success = switch.disposition.is_exit_zero();
+            let verification_success = verification
+                .as_ref()
+                .map(|invocation| invocation.disposition.is_exit_zero());
+            let switch_record_id = format!("rig-{}", Uuid::new_v4());
+            let verification_record_id = verification
+                .as_ref()
+                .map(|_| format!("rig-{}", Uuid::new_v4()));
+            let mut rig_records = vec![rig_record(
                 &bundle,
-                verification_record_id
-                    .clone()
-                    .expect("verification identity exists with invocation"),
-                invocation,
-            ));
-        }
-        let armed_event =
-            if !manual_review_required && switch_success && verification_success == Some(true) {
+                switch_record_id.clone(),
+                switch.clone(),
+            )];
+            if let Some(invocation) = verification.clone() {
+                rig_records.push(rig_record(
+                    &bundle,
+                    verification_record_id
+                        .clone()
+                        .expect("verification identity exists with invocation"),
+                    invocation,
+                ));
+            }
+            let armed_event = if !manual_review_required
+                && switch_success
+                && verification_success == Some(true)
+            {
                 Some(command_verified_event(
                     &bundle,
                     intent,
@@ -538,28 +546,28 @@ pub(crate) fn run_active_session_antenna_controller(
             } else {
                 None
             };
-        let (receipt, projection) = {
-            let mut writer = crate::build_context::open_v3_writer_with_hooks(
-                &store,
-                Arc::new(SystemLivePersistenceHooks),
-            )
-            .map_err(live_error_payload)?;
-            let receipt = writer
-                .append_antenna_control(LiveAntennaControlMutationV5 {
-                    expected_revision: request.expected_revision,
-                    mutation_id: request.action_token.clone(),
-                    rig_records,
-                    armed_event,
-                })
+            let (receipt, projection) = {
+                let mut writer = crate::build_context::open_v3_writer_with_hooks(
+                    &store,
+                    Arc::new(SystemLivePersistenceHooks),
+                )
                 .map_err(live_error_payload)?;
-            (receipt, writer.snapshot().clone())
-        };
-        crate::open_session::update_active_session_live_projection(
-            active_state.inner(),
-            &source,
-            &projection,
-        )?;
-        let detail = if !switch_success {
+                let receipt = writer
+                    .append_antenna_control(LiveAntennaControlMutationV5 {
+                        expected_revision: request.expected_revision,
+                        mutation_id: mutation_id.clone(),
+                        rig_records,
+                        armed_event,
+                    })
+                    .map_err(live_error_payload)?;
+                (receipt, writer.snapshot().clone())
+            };
+            crate::open_session::update_active_session_live_projection(
+                active_state.inner(),
+                &source,
+                &projection,
+            )?;
+            let detail = if !switch_success {
             "Switch did not exit successfully. No verification ran; manual operation remains available."
         } else if verification_success == Some(false) {
             "Switch exited successfully, but verification did not. Confirm hardware manually or retry explicitly."
@@ -571,26 +579,46 @@ pub(crate) fn run_active_session_antenna_controller(
             "Switch exited successfully. No verification command is configured; operator readiness is required."
         }
         .to_string();
-        let diagnostic = attempt_diagnostic(&switch, verification.as_ref());
-        if let Ok(mut runtime) = controller_state.runtime.lock() {
-            runtime.last_attempt = Some(ControllerAttemptSummary {
-                intent_id: request.intent_id.clone(),
-                successful_switch: switch_success,
-                successful_verification: verification_success,
-                detail: detail.clone(),
-                diagnostic: diagnostic.clone(),
-            });
+            let diagnostic = attempt_diagnostic(&switch, verification.as_ref());
+            if let Ok(mut runtime) = controller_state.runtime.lock() {
+                runtime.last_attempt = Some(ControllerAttemptSummary {
+                    intent_id: request.intent_id.clone(),
+                    successful_switch: switch_success,
+                    successful_verification: verification_success,
+                    detail: detail.clone(),
+                    diagnostic: diagnostic.clone(),
+                });
+            }
+            let outcome = RunControllerOutcome {
+                revision: receipt.revision,
+                intent_id: request.intent_id,
+                switch_disposition: switch.disposition,
+                verification_disposition: verification.map(|invocation| invocation.disposition),
+                verification_ran: verification_success.is_some(),
+                manual_ready_required: manual_review_required,
+                detail,
+                diagnostic,
+            };
+            Ok((
+                outcome,
+                AttemptCommit {
+                    expected_revision: request.expected_revision,
+                    committed_revision: receipt.revision,
+                    mutation_id: mutation_id.clone(),
+                },
+            ))
+        })(
+        );
+        match attempt {
+            Ok((outcome, commit)) => {
+                controller_state.settle_attempt(attempt_id, Ok(commit));
+                Ok(outcome)
+            }
+            Err(payload) => {
+                controller_state.settle_attempt(attempt_id, Err(payload.clone()));
+                Err(payload)
+            }
         }
-        Ok(RunControllerOutcome {
-            revision: receipt.revision,
-            intent_id: request.intent_id,
-            switch_disposition: switch.disposition,
-            verification_disposition: verification.map(|invocation| invocation.disposition),
-            verification_ran: verification_success.is_some(),
-            manual_ready_required: manual_review_required,
-            detail,
-            diagnostic,
-        })
     })?;
     check_ipc_payload(
         &outcome,

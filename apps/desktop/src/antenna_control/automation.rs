@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 use super::{
     policy::{
-        command_verified_event, next_intent, AntennaControllerState, AutomationStatus,
-        ControllerAttemptSummary, RuntimeAssociation,
+        command_verified_event, next_intent, AntennaControllerState, AttemptCommit,
+        AutomationStatus, ControllerAttemptSummary, RuntimeAssociation,
     },
     process::{attempt_diagnostic, execute_profile_attempt, invocation_context, rig_record},
     profiles::{read_catalog, resolved_app_data_dir, ControllerProfile},
@@ -241,12 +241,37 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
             }
         };
         set_status(&app, generation, AutomationStatus::Running);
-        let generation_state = app.state::<AntennaControllerState>().generation.clone();
+        let mutation_id = format!("automatic-control-{}", Uuid::new_v4());
+        let controller_state = app.state::<AntennaControllerState>();
+        let attempt_id = match controller_state.begin_attempt(
+            source.clone(),
+            bundle.manifest.session_id.clone(),
+            mutation_id.clone(),
+        ) {
+            Ok(attempt_id) => attempt_id,
+            Err(error) => {
+                block(
+                    &app,
+                    generation,
+                    &intent.intent_id,
+                    &error.message,
+                    &error.detail,
+                );
+                return;
+            }
+        };
+        let generation_state = controller_state.generation.clone();
         let cancellation = || generation_state.load(Ordering::SeqCst) != generation;
         let (switch, verification) = match execute_profile_attempt(&profile, context, &cancellation)
         {
             Ok(attempt) => attempt,
             Err(error) => {
+                let payload = SessionErrorPayload::new(
+                    SessionErrorKind::Validation,
+                    "The controller command could not be expanded safely.",
+                    error.detail.clone(),
+                );
+                controller_state.settle_attempt(attempt_id, Err(payload));
                 block(
                     &app,
                     generation,
@@ -257,7 +282,16 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
                 return;
             }
         };
-        if cancelled(&app, generation) {
+        let interrupted_for_abort = controller_state.abort_requested(attempt_id);
+        if cancelled(&app, generation) && !interrupted_for_abort {
+            controller_state.settle_attempt(
+                attempt_id,
+                Err(SessionErrorPayload::new(
+                    SessionErrorKind::Conflict,
+                    "Antenna-controller authority was revoked before evidence was committed.",
+                    "the active controller generation changed outside an Abort request",
+                )),
+            );
             return;
         }
         let switch_success = switch.disposition.is_exit_zero();
@@ -283,7 +317,6 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
                 invocation,
             ));
         }
-        let mutation_id = format!("automatic-control-{}", Uuid::new_v4());
         let active_state = app.state::<ActiveSessionState>();
         let persist = persist_attempt(
             active_state.inner(),
@@ -297,17 +330,28 @@ fn run_worker(app: AppHandle, source: std::path::PathBuf, generation: u64) {
             verification
                 .as_ref()
                 .map(|invocation| invocation.completed_at),
-            mutation_id,
+            mutation_id.clone(),
             rig_records,
         );
-        if let Err(error) = persist {
-            block(
-                &app,
-                generation,
-                &intent.intent_id,
-                "Automatic antenna-control evidence could not be committed coherently.",
-                &format!("{}: {}", error.message, error.detail),
-            );
+        let commit = match persist {
+            Ok(commit) => {
+                controller_state.settle_attempt(attempt_id, Ok(commit.clone()));
+                commit
+            }
+            Err(error) => {
+                controller_state.settle_attempt(attempt_id, Err(error.clone()));
+                block(
+                    &app,
+                    generation,
+                    &intent.intent_id,
+                    "Automatic antenna-control evidence could not be committed coherently.",
+                    &format!("{}: {}", error.message, error.detail),
+                );
+                return;
+            }
+        };
+        debug_assert_eq!(commit.mutation_id, mutation_id);
+        if interrupted_for_abort {
             return;
         }
 
@@ -366,7 +410,7 @@ fn persist_attempt(
     ready_at: Option<chrono::DateTime<Utc>>,
     mutation_id: String,
     rig_records: Vec<antennabench_core::v3::RigRecordV3>,
-) -> Result<(), SessionErrorPayload> {
+) -> Result<AttemptCommit, SessionErrorPayload> {
     with_waiting_foreground_operation(active_state, || {
         let (active_source, _) = active_session_source(active_state)?;
         if active_source != source {
@@ -418,8 +462,9 @@ fn persist_attempt(
         } else {
             None
         };
+        let expected_revision = current.session_state.revision;
         let mutation = LiveAntennaControlMutationV5 {
-            expected_revision: current.session_state.revision,
+            expected_revision,
             mutation_id: mutation_id.clone(),
             rig_records,
             armed_event,
@@ -480,7 +525,11 @@ fn persist_attempt(
         }
         let committed = store.read_v3_checkpointed().map_err(live_error_payload)?;
         update_active_session_live_projection(active_state, source, &committed)?;
-        Ok(())
+        Ok(AttemptCommit {
+            expected_revision,
+            committed_revision: committed.session_state.revision,
+            mutation_id,
+        })
     })
 }
 

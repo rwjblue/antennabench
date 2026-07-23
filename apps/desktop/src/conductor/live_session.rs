@@ -127,6 +127,39 @@ impl ConductorSessionState {
             runtime.finish_continuation_worker(generation);
         }
     }
+
+    pub(super) fn rebase_action_after_controller_attempt(
+        &self,
+        token: &str,
+        session_id: &str,
+        expected_revision: u64,
+        committed_revision: u64,
+    ) -> Result<(), SessionErrorPayload> {
+        let mut runtime = self
+            .0
+            .lock()
+            .map_err(|_| SessionErrorPayload::report_pipeline("conductor state is unavailable"))?;
+        let pending = runtime
+            .pending_actions
+            .iter_mut()
+            .find(|pending| pending.token == token)
+            .ok_or_else(|| {
+                SessionErrorPayload::new(
+                    SessionErrorKind::StaleRevision,
+                    "Refresh Active Run before confirming Abort.",
+                    "the Rust-issued action token is missing or expired",
+                )
+            })?;
+        if pending.session_id != session_id || pending.expected_revision != expected_revision {
+            return Err(SessionErrorPayload::new(
+                SessionErrorKind::StaleRevision,
+                "Refresh Active Run before confirming Abort.",
+                "the Abort action token does not match the pre-cancellation session revision",
+            ));
+        }
+        pending.expected_revision = committed_revision;
+        Ok(())
+    }
 }
 
 fn ensure_live_source(source: &Path) -> Result<(), SessionErrorPayload> {
@@ -521,4 +554,31 @@ fn mutate_conductor_v3(
     let view = build_view_v3(bundle_name, &bundle, now, action_token, None);
     check_ipc_payload(&view, CONDUCTOR_VIEW_IPC_BYTES, "conductor_view")?;
     Ok(view)
+}
+
+#[cfg(test)]
+mod abort_coordination_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_matching_pending_action_can_rebase_across_a_controller_attempt() {
+        let state = ConductorSessionState::default();
+        state.0.lock().unwrap().register_action(PendingAction {
+            token: "mutation-1".into(),
+            session_id: "session-1".into(),
+            expected_revision: 7,
+            occurred_at: None,
+        });
+
+        state
+            .rebase_action_after_controller_attempt("mutation-1", "session-1", 7, 8)
+            .unwrap();
+        state
+            .authorize_controller_action("mutation-1", "session-1", 8, Utc::now())
+            .unwrap();
+        let stale = state
+            .rebase_action_after_controller_attempt("mutation-1", "session-1", 7, 9)
+            .unwrap_err();
+        assert_eq!(stale.kind, SessionErrorKind::StaleRevision);
+    }
 }
