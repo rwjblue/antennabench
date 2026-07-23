@@ -70,6 +70,7 @@ import {
   conductorMutationFailed,
   conductorPollSucceeded,
   editSessionSetup,
+  enterReport,
   initialState,
   managedCatalogLoadFailed,
   managedCatalogLoadSucceeded,
@@ -205,6 +206,7 @@ export function createDesktopController(options = {}) {
       || reportPollInFlight
       || conductorPollInFlight
     ) return state;
+    const entryWorkflow = state.activeWorkflow;
     commit(beginOpenSession(state, source, intent, locatorId));
     let destination = null;
     try {
@@ -219,6 +221,15 @@ export function createDesktopController(options = {}) {
           destination.workflow,
           destination.redirected ? "work_redirected" : null,
           destination.intent,
+          destination.workflow === "report" && ["saved", "run"].includes(entryWorkflow)
+            ? {
+              workflow: entryWorkflow,
+              focusTarget: source === "managed" && locatorId
+                ? "saved-report-action"
+                : "report-navigation",
+              locatorId,
+            }
+            : null,
         ));
         effects.navigate(destination.workflow);
       } else {
@@ -970,8 +981,14 @@ export function createDesktopController(options = {}) {
       return state;
     },
 
-    async selectWorkflow(workflow) {
-      commit(selectWorkflow(state, workflow));
+    async selectWorkflow(workflow, options = {}) {
+      commit(workflow === "report"
+        ? enterReport(state, {
+          workflow: state.activeWorkflow,
+          focusTarget: options.focusTarget ?? "report-navigation",
+          locatorId: options.locatorId ?? null,
+        })
+        : selectWorkflow(state, workflow));
       effects.navigate(state.activeWorkflow);
       if (state.activeWorkflow === "saved") await controller.loadManagedSessions();
       if (state.activeWorkflow === "run" && state.session) await controller.refreshConductor();

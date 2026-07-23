@@ -540,6 +540,15 @@ test("managed opening obeys explicit report and work intents from the fresh summ
       ["refresh_active_session_report", undefined],
     ]);
     assert.equal(reportOnly.controller.state.conductor, null);
+    assert.equal(reportOnly.controller.state.reportEntryOrigin.workflow, "saved");
+    assert.equal(
+      reportOnly.controller.state.reportEntryOrigin.focusTarget,
+      "saved-report-action",
+    );
+    assert.equal(
+      reportOnly.controller.state.reportEntryOrigin.locatorId,
+      `locator-${lifecycle}`,
+    );
   }
 
   for (const lifecycle of ["ready", "interrupted"]) {
@@ -616,6 +625,30 @@ test("managed opening obeys explicit report and work intents from the fresh summ
   assert.equal(recoveredWork.controller.state.session.lifecycle, "interrupted");
   assert.equal(recoveredWork.controller.state.session.revision, 4);
   assert.match(recoveredWork.controller.state.session.reportHtml, /revision 4/);
+});
+
+test("explicit Active run report entry records one ephemeral origin without hash synthesis", async () => {
+  const state = openSessionSucceeded(initialState("run"), session(), "run");
+  const run = harness({
+    refresh_active_session_report: {
+      presentationId: 1,
+      reportHtml: "<p>current</p>",
+      summaryHtml: "<p>current summary</p>",
+      revision: 3,
+      lifecycle: "running",
+      completeness: "full_detail",
+    },
+  }, { state });
+
+  await run.controller.selectWorkflow("report", { focusTarget: "report-navigation" });
+  assert.deepEqual(run.navigations, ["report"]);
+  assert.equal(run.controller.state.reportEntryOrigin.workflow, "run");
+  assert.equal(run.controller.state.reportEntryOrigin.focusTarget, "report-navigation");
+
+  const origin = run.controller.state.reportEntryOrigin;
+  run.controller.selectReportMode("full_evidence");
+  await run.controller.refreshReport(true);
+  assert.equal(run.controller.state.reportEntryOrigin, origin);
 });
 
 test("an imported-session follow-up uses the freshly opened lifecycle for routing", async () => {

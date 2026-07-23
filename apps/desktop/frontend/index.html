@@ -550,10 +550,11 @@
             </div>
             <div class="report-viewer" data-report-viewer hidden>
               <header class="report-toolbar" aria-label="Local report controls">
-                <div class="report-toolbar-navigation">
+                <nav class="report-toolbar-navigation" aria-label="Report return and destinations">
+                  <button class="report-return-action" type="button" data-report-return>Back to Saved sessions</button>
                   <button type="button" data-report-saved>Saved sessions</button>
                   <button type="button" data-report-active-run>Active run</button>
-                </div>
+                </nav>
                 <div class="report-mode-control" role="group" aria-label="Report document">
                   <button type="button" data-report-mode="summary" aria-pressed="true">Summary</button>
                   <button type="button" data-report-mode="full_evidence" aria-pressed="false">Full evidence</button>

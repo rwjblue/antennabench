@@ -25,7 +25,7 @@ import {
   wsjtxReadinessModel,
   workflowFromHash,
 } from "./models.mjs";
-import { initialState } from "./state.mjs";
+import { initialState, reportReturnModel } from "./state.mjs";
 import {
   formatCountdown,
   renderNavigation,
@@ -168,6 +168,7 @@ export function mount(root, browserWindow) {
     reportSummary,
     reportSavedButton,
     reportActiveRunButton,
+    reportReturnButton,
     reportSummaryModeButton,
     reportFullModeButton,
     reportUpdateButton,
@@ -375,18 +376,48 @@ export function mount(root, browserWindow) {
 
   for (const button of navigation) {
     button.addEventListener("click", async () => {
-      await controller.selectWorkflow(button.dataset.workflow);
-      focusActiveHeading(elements, state.activeWorkflow);
+      const workflow = button.dataset.workflow;
+      await controller.selectWorkflow(workflow, {
+        focusTarget: workflow === "report" ? "report-navigation" : null,
+      });
+      if (state.activeWorkflow === workflow) focusActiveHeading(elements, workflow);
     });
   }
 
+  reportReturnButton.addEventListener("click", async () => {
+    const returnModel = reportReturnModel(state);
+    await controller.selectWorkflow(returnModel.workflow);
+    if (state.activeWorkflow !== returnModel.workflow) return;
+    const origin = returnModel.origin;
+    if (
+      returnModel.workflow === "saved"
+      && origin?.focusTarget === "saved-report-action"
+      && origin.locatorId
+    ) {
+      const target = [...savedCatalog.querySelectorAll(
+        '[data-saved-action="open"][data-intent="report"]',
+      )].find((button) => button.dataset.locatorId === origin.locatorId);
+      if (target) {
+        target.focus({ preventScroll: true });
+        return;
+      }
+    }
+    if (returnModel.workflow === "run" && origin?.focusTarget === "report-navigation") {
+      const target = navigation.find((button) => button.dataset.workflow === "report");
+      if (target) {
+        target.focus({ preventScroll: true });
+        return;
+      }
+    }
+    focusActiveHeading(elements, returnModel.workflow);
+  });
   reportSavedButton.addEventListener("click", async () => {
     await controller.selectWorkflow("saved");
-    focusActiveHeading(elements, "saved");
+    if (state.activeWorkflow === "saved") focusActiveHeading(elements, "saved");
   });
   reportActiveRunButton.addEventListener("click", async () => {
     await controller.selectWorkflow("run");
-    focusActiveHeading(elements, "run");
+    if (state.activeWorkflow === "run") focusActiveHeading(elements, "run");
   });
 
   const startNewSession = async () => {
@@ -442,8 +473,12 @@ export function mount(root, browserWindow) {
         ?.focus();
       return;
     }
-    await controller.openManagedSession(button.dataset.locatorId, button.dataset.intent);
-    focusActiveHeading(elements, state.activeWorkflow);
+    const intent = button.dataset.intent;
+    await controller.openManagedSession(button.dataset.locatorId, intent);
+    const expectedWorkflow = intent === "report" ? "report" : "run";
+    if (state.activeWorkflow === expectedWorkflow) {
+      focusActiveHeading(elements, expectedWorkflow);
+    }
   });
   const cancelDelete = () => {
     if (state.catalogDeleteStatus === "deleting") return;
@@ -597,11 +632,11 @@ export function mount(root, browserWindow) {
   });
   abortRunReport.addEventListener("click", async () => {
     await controller.selectWorkflow("report");
-    focusActiveHeading(elements, "report");
+    if (state.activeWorkflow === "report") focusActiveHeading(elements, "report");
   });
   abortRunSaved.addEventListener("click", async () => {
     await controller.selectWorkflow("saved");
-    focusActiveHeading(elements, "saved");
+    if (state.activeWorkflow === "saved") focusActiveHeading(elements, "saved");
   });
 
   wsjtxReadinessAcknowledge.addEventListener("change", () => {

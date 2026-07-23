@@ -9,6 +9,7 @@ import {
   wsprLiveAcquisitionModel,
   wsjtxReadinessModel,
 } from "./models.mjs";
+import { reportReturnModel } from "./state.mjs";
 
 export function renderNavigation(elements, state) {
   for (const item of viewModel(state)) {
@@ -950,7 +951,7 @@ export function renderEvidenceImports(elements, state) {
 export function renderReport(elements, state, reportDocuments) {
   const {
     reportStatus, reportPanelHeading, reportPlaceholder, reportViewer, reportFrame,
-    reportSavedButton, reportActiveRunButton, reportRefreshButton,
+    reportReturnButton, reportSavedButton, reportActiveRunButton, reportRefreshButton,
     reportSummaryModeButton, reportFullModeButton,
     reportUpdateControl, reportUpdateRevision, reportUpdateButton,
     reportWindowButton, reportWindowFeedback, reportWindowFeedbackMessage,
@@ -1012,9 +1013,14 @@ export function renderReport(elements, state, reportDocuments) {
   reportFrame.title = state.reportMode === "full_evidence"
     ? "AntennaBench Full evidence report"
     : "AntennaBench Summary report";
-  reportActiveRunButton.hidden = !["planned", "running", "interrupted"].includes(
-    state.session?.lifecycle,
-  );
+  const reportReturn = reportReturnModel(state);
+  const runEligible = ["planned", "running", "interrupted"].includes(state.session?.lifecycle);
+  reportReturnButton.textContent = reportReturn.label;
+  reportReturnButton.dataset.destination = reportReturn.workflow;
+  reportReturnButton.dataset.fallback = String(reportReturn.fallback);
+  reportReturnButton.setAttribute("aria-label", reportReturn.label);
+  reportSavedButton.hidden = reportReturn.workflow === "saved";
+  reportActiveRunButton.hidden = !runEligible || reportReturn.workflow === "run";
   reportRefreshButton.disabled = reportBusy;
   reportSummaryExportButton.disabled = reportBusy || !hasReport;
   reportFullExportButton.disabled = reportBusy || !hasReport;

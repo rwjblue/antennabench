@@ -104,6 +104,7 @@ import {
   cancelSkipCycle,
   cancelAbortRun,
   editSessionSetup,
+  enterReport,
   initialState,
   managedCatalogLoadFailed,
   managedCatalogLoadSucceeded,
@@ -135,6 +136,7 @@ import {
   reportRefreshSuperseded,
   reportWindowOpenFailed,
   reportWindowOpenSucceeded,
+  reportReturnModel,
   rbnImportCancelled,
   rbnImportFailed,
   rbnImportSucceeded,
@@ -295,6 +297,7 @@ test("the shell starts in saved sessions", () => {
     session: null,
     reportPresentationId: null,
     reportMode: "summary",
+    reportEntryOrigin: null,
     pendingReportPresentation: null,
     reportWindowStatus: "idle",
     reportWindowError: null,
@@ -691,6 +694,76 @@ test("workflow scroll memory restores each panel without disturbing same-panel r
   assert.equal(memory.transition("report", 225), 0);
   assert.equal(memory.transition("setup", 90), 480);
   assert.equal(memory.transition("run", 640), 225);
+});
+
+test("report entry origin is bounded to one session and derives a truthful return destination", () => {
+  const running = {
+    sessionId: "session-1",
+    bundleName: "one.session.antennabundle",
+    lifecycle: "running",
+    presentationId: 1,
+    reportHtml: "<main>full</main>",
+    summaryHtml: "<main>summary</main>",
+  };
+  const fromRun = enterReport(openSessionSucceeded(initialState("run"), running, "run"), {
+    workflow: "run",
+    focusTarget: "report-navigation",
+  });
+  assert.equal(fromRun.activeWorkflow, "report");
+  assert.deepEqual(reportReturnModel(fromRun), {
+    workflow: "run",
+    label: "Back to Active run",
+    fallback: false,
+    origin: fromRun.reportEntryOrigin,
+  });
+  assert.equal(enterReport(fromRun), fromRun, "same-report transitions preserve the origin");
+  assert.equal(selectReportMode(fromRun, "full_evidence").reportEntryOrigin, fromRun.reportEntryOrigin);
+  assert.equal(beginReportRefresh(fromRun).reportEntryOrigin, fromRun.reportEntryOrigin);
+  assert.equal(beginReportWindowOpen(fromRun).reportEntryOrigin, fromRun.reportEntryOrigin);
+  const updated = applyPendingReportPresentation({
+    ...fromRun,
+    pendingReportPresentation: {
+      ...running,
+      presentationId: 2,
+      revision: 2,
+      completeness: "full_detail",
+      reportHtml: "<main>updated full</main>",
+      summaryHtml: "<main>updated summary</main>",
+    },
+  });
+  assert.equal(updated.reportEntryOrigin, fromRun.reportEntryOrigin);
+
+  const terminal = {
+    ...fromRun,
+    session: { ...fromRun.session, lifecycle: "ended" },
+  };
+  assert.deepEqual(reportReturnModel(terminal), {
+    workflow: "saved",
+    label: "Back to Saved sessions · Active run unavailable",
+    fallback: true,
+    origin: fromRun.reportEntryOrigin,
+  });
+
+  const fromSaved = openSessionSucceeded(
+    beginOpenSession(selectWorkflow(fromRun, "saved"), "managed", "report", "locator-2"),
+    { ...running, sessionId: "session-2", bundleName: "two.session.antennabundle" },
+    "report",
+    null,
+    "report",
+    {
+      workflow: "saved",
+      focusTarget: "saved-report-action",
+      locatorId: "locator-2",
+    },
+  );
+  assert.equal(fromSaved.reportEntryOrigin.workflow, "saved");
+  assert.equal(fromSaved.reportEntryOrigin.locatorId, "locator-2");
+  assert.notEqual(fromSaved.reportEntryOrigin.sessionKey, fromRun.reportEntryOrigin.sessionKey);
+  assert.equal(reportReturnModel(fromSaved).label, "Back to Saved sessions");
+
+  const cold = initialState("report");
+  assert.equal(cold.reportEntryOrigin, null, "a startup hash cannot invent report history");
+  assert.equal(reportReturnModel(cold).workflow, "saved");
 });
 
 test("Active Run help stays grouped with its subject across responsive layouts", () => {

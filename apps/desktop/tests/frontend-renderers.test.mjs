@@ -786,6 +786,11 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.mainContent.classList.contains("report-reading-active"), true);
   assert.equal(e.mainContent.closest(".workspace").classList.contains("report-reading-active"), true);
   assert.equal(e.mainContent.closest(".app-shell").classList.contains("report-reading-active"), true);
+  assert.equal(e.reportReturnButton.textContent, "Back to Saved sessions");
+  assert.equal(e.reportReturnButton.dataset.destination, "saved");
+  assert.equal(e.reportReturnButton.getAttribute("aria-label"), "Back to Saved sessions");
+  assert.equal(e.reportSavedButton.hidden, true);
+  assert.equal(e.reportActiveRunButton.hidden, false);
   assert.equal(e.reportPanelHeading.hidden, true);
   assert.equal(e.reportActiveRunButton.hidden, false);
   assert.equal(e.reportExportRevision.textContent, "revision 3");
@@ -793,6 +798,26 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.reportControllerHandling.value, "complete");
   assert.equal(e.reportWindowButton.disabled, false);
   assert.equal(e.reportWindowFeedback.hidden, true);
+
+  state.reportEntryOrigin = {
+    workflow: "run",
+    sessionKey: JSON.stringify(["", "test.session.antennabundle"]),
+    focusTarget: "report-navigation",
+    locatorId: null,
+  };
+  renderReport(e, state, reportDocuments);
+  assert.equal(e.reportReturnButton.textContent, "Back to Active run");
+  assert.equal(e.reportReturnButton.dataset.destination, "run");
+  assert.equal(e.reportSavedButton.hidden, false);
+  assert.equal(e.reportActiveRunButton.hidden, true);
+  state.session.lifecycle = "ended";
+  renderReport(e, state, reportDocuments);
+  assert.equal(
+    e.reportReturnButton.textContent,
+    "Back to Saved sessions · Active run unavailable",
+  );
+  assert.equal(e.reportReturnButton.dataset.fallback, "true");
+  state.session.lifecycle = "running";
 
   state.reportWindowStatus = "loading";
   renderReport(e, state, reportDocuments);

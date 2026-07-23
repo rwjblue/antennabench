@@ -14,6 +14,29 @@ function reportModeForSession(state, session) {
     : "summary";
 }
 
+function reportSessionKey(session) {
+  if (!session) return null;
+  return JSON.stringify([
+    String(session.sessionId ?? ""),
+    String(session.bundleName ?? ""),
+  ]);
+}
+
+function reportEntryOrigin(session, origin) {
+  if (!["saved", "run"].includes(origin?.workflow)) return null;
+  const focusTarget = origin.focusTarget === "saved-report-action"
+    ? "saved-report-action"
+    : "report-navigation";
+  return {
+    workflow: origin.workflow,
+    sessionKey: reportSessionKey(session),
+    focusTarget,
+    locatorId: focusTarget === "saved-report-action"
+      ? String(origin.locatorId ?? "")
+      : null,
+  };
+}
+
 export function initialState(workflow = "saved") {
   return selectWorkflow(
     {
@@ -39,6 +62,7 @@ export function initialState(workflow = "saved") {
       session: null,
       reportPresentationId: null,
       reportMode: "summary",
+      reportEntryOrigin: null,
       pendingReportPresentation: null,
       reportWindowStatus: "idle",
       reportWindowError: null,
@@ -119,6 +143,47 @@ export function selectWorkflow(state, workflow) {
       abortRunError: null,
       abortRunNotice: null,
     }),
+  };
+}
+
+export function enterReport(state, origin = null) {
+  if (state.activeWorkflow === "report") return state;
+  const next = selectWorkflow(state, "report");
+  return {
+    ...next,
+    reportEntryOrigin: reportEntryOrigin(state.session, origin ?? {
+      workflow: state.activeWorkflow,
+      focusTarget: "report-navigation",
+    }),
+  };
+}
+
+export function reportReturnModel(state) {
+  const origin = state.reportEntryOrigin?.sessionKey === reportSessionKey(state.session)
+    ? state.reportEntryOrigin
+    : null;
+  const runEligible = ["planned", "running", "interrupted"].includes(state.session?.lifecycle);
+  if (origin?.workflow === "run" && runEligible) {
+    return {
+      workflow: "run",
+      label: "Back to Active run",
+      fallback: false,
+      origin,
+    };
+  }
+  if (origin?.workflow === "run") {
+    return {
+      workflow: "saved",
+      label: "Back to Saved sessions · Active run unavailable",
+      fallback: true,
+      origin,
+    };
+  }
+  return {
+    workflow: "saved",
+    label: "Back to Saved sessions",
+    fallback: false,
+    origin,
   };
 }
 
@@ -214,6 +279,7 @@ export function setupCreationSucceeded(state, session, managedLocation = null) {
     openStatus: "ready",
     session,
     reportMode: reportModeForSession(state, session),
+    reportEntryOrigin: null,
     pendingReportPresentation: null,
     reportWindowStatus: "idle",
     reportWindowError: null,
@@ -273,7 +339,9 @@ export function openSessionSucceeded(
   workflow = "report",
   notice = null,
   intent = state.openIntent,
+  origin = null,
 ) {
+  const sameSession = reportSessionKey(state.session) === reportSessionKey(session);
   return {
     ...state,
     activeWorkflow: workflow,
@@ -281,6 +349,9 @@ export function openSessionSucceeded(
     openIntent: intent,
     session,
     reportMode: reportModeForSession(state, session),
+    reportEntryOrigin: workflow === "report"
+      ? reportEntryOrigin(session, origin)
+      : sameSession ? state.reportEntryOrigin : null,
     pendingReportPresentation: null,
     reportWindowStatus: "idle",
     reportWindowError: null,

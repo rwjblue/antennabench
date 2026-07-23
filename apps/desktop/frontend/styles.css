@@ -400,6 +400,7 @@ h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .report-toolbar-navigation, .report-toolbar-actions, .report-export-actions { display: flex; align-items: center; gap: 8px; }
 .report-toolbar-navigation { grid-area: navigation; }
 .report-toolbar button, .report-dialog button { border: 1px solid #8ab3aa; border-radius: 8px; padding: 8px 10px; color: #245451; background: #fff; font-size: .72rem; font-weight: 800; cursor: pointer; }
+.report-toolbar .report-return-action { border-color: #245451; color: #fff; background: #245451; }
 .report-toolbar button:disabled, .report-dialog button:disabled { color: #87948f; border-color: #cbd3ce; background: #eef0ed; cursor: wait; }
 .report-mode-control { display: flex; grid-area: mode; align-items: center; justify-self: start; padding: 2px; border: 1px solid #b5cbc5; border-radius: 10px; background: #dfeae4; }
 .report-mode-control button { border: 0; background: transparent; }

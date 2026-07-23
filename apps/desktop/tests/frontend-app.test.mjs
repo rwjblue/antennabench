@@ -313,7 +313,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
           reportHtml,
           summaryHtml,
           revision: 1,
-          lifecycle: "running",
+          lifecycle: abortRunAttempts >= 2 ? "abandoned" : "running",
           completeness: "full_detail",
         };
     },
@@ -563,6 +563,7 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     assert.equal(document.activeElement.dataset.locatorId, "locator-existing");
     assert.equal(calls.some(([command]) => command === "delete_managed_session"), false);
 
+    elements.mainContent.scrollTop = 137;
     elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
     await vi.waitFor(() => {
       assert.equal(window.location.hash, "#report");
@@ -631,8 +632,15 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       1,
       "replacement confirmation cannot be submitted twice",
     );
-    elements.reportSavedButton.click();
-    await vi.waitFor(() => assert.equal(window.location.hash, "#saved"));
+    assert.equal(elements.reportReturnButton.textContent, "Back to Saved sessions");
+    elements.reportReturnButton.click();
+    await vi.waitFor(() => {
+      assert.equal(window.location.hash, "#saved");
+      assert.equal(elements.mainContent.scrollTop, 137);
+      assert.equal(document.activeElement.dataset.savedAction, "open");
+      assert.equal(document.activeElement.dataset.intent, "report");
+      assert.equal(document.activeElement.dataset.locatorId, "locator-existing");
+    });
     elements.savedCatalog.querySelector('[data-saved-action="open"][data-intent="report"]').click();
     await vi.waitFor(() => {
       assert.match(elements.savedCatalog.textContent, /saved bundle moved/);
@@ -764,6 +772,22 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
       "blob:headless-report-4",
     ]);
     assert.equal(elements.reportFrame.getAttribute("src"), "blob:headless-report-4");
+
+    const reportNavigation = elements.navigation.find(
+      (button) => button.dataset.workflow === "report",
+    );
+    elements.mainContent.scrollTop = 181;
+    reportNavigation.click();
+    await vi.waitFor(() => {
+      assert.equal(window.location.hash, "#report");
+      assert.equal(elements.reportReturnButton.textContent, "Back to Active run");
+    });
+    elements.reportReturnButton.click();
+    await vi.waitFor(() => {
+      assert.equal(window.location.hash, "#run");
+      assert.equal(elements.mainContent.scrollTop, 181);
+      assert.equal(document.activeElement, reportNavigation);
+    });
 
     const start = elements.lifecycleButtons.find(
       (button) => button.dataset.conductorAction === "start",
@@ -954,6 +978,15 @@ test("the headless desktop relaunches into Saved sessions before creating a mana
     await vi.waitFor(() => {
       assert.equal(window.location.hash, "#report");
       assert.equal(document.querySelector('[data-panel="report"]').hidden, false);
+      assert.equal(
+        elements.reportReturnButton.textContent,
+        "Back to Saved sessions · Active run unavailable",
+      );
+    });
+    elements.reportReturnButton.click();
+    await vi.waitFor(() => {
+      assert.equal(window.location.hash, "#saved");
+      assert.equal(document.activeElement.id, "saved-title");
     });
     assert.deepEqual(uncaught, []);
   } finally {
