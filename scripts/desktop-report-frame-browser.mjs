@@ -80,6 +80,103 @@ async function browser(args, { json = false } = {}) {
   return output.data;
 }
 
+async function reportWorkspaceGeometry() {
+  return (await browser(["eval", `(() => {
+    const rect = (selector) => {
+      const element = document.querySelector(selector);
+      const bounds = element.getBoundingClientRect();
+      return {
+        top: bounds.top,
+        bottom: bounds.bottom,
+        height: bounds.height,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      };
+    };
+    const frame = document.querySelector("[data-report-frame]");
+    const frameDocument = frame.contentDocument;
+    const notices = document.querySelector(".report-notices");
+    return {
+      viewport: { width: innerWidth, height: innerHeight },
+      document: {
+        clientHeight: document.documentElement.clientHeight,
+        scrollHeight: document.documentElement.scrollHeight,
+        scrollTop: document.scrollingElement.scrollTop,
+      },
+      appShell: rect(".app-shell"),
+      workspace: rect(".workspace"),
+      content: rect(".content"),
+      panel: rect('[data-panel="report"]'),
+      viewer: rect(".report-viewer"),
+      viewerTracks: getComputedStyle(document.querySelector(".report-viewer")).gridTemplateRows,
+      toolbar: rect(".report-toolbar"),
+      notices: {
+        ...rect(".report-notices"),
+        visible: notices.getClientRects().length > 0,
+      },
+      frame: {
+        ...rect("[data-report-frame]"),
+        computedHeight: getComputedStyle(frame).height,
+        alignSelf: getComputedStyle(frame).alignSelf,
+        documentClientHeight: frameDocument?.documentElement.clientHeight ?? 0,
+        documentScrollHeight: frameDocument?.documentElement.scrollHeight ?? 0,
+      },
+    };
+  })()`], { json: true })).result;
+}
+
+function assertBoundedReportWorkspace(geometry, { noticesVisible }) {
+  const tolerance = 2;
+  assert.equal(geometry.document.clientHeight, geometry.viewport.height);
+  assert.equal(geometry.document.scrollHeight, geometry.document.clientHeight);
+  assert.equal(geometry.document.scrollTop, 0);
+  for (const [name, box] of Object.entries({
+    appShell: geometry.appShell,
+    workspace: geometry.workspace,
+    content: geometry.content,
+    panel: geometry.panel,
+    viewer: geometry.viewer,
+  })) {
+    assert.ok(box.height > 0, `${name} must have a definite positive height`);
+    assert.ok(
+      box.scrollHeight <= box.clientHeight + tolerance,
+      `${name} became an outer scroll owner (${box.scrollHeight}px > ${box.clientHeight}px)`,
+    );
+  }
+  assert.ok(
+    Math.abs(geometry.panel.height - geometry.content.clientHeight) <= tolerance,
+    `report panel ${geometry.panel.height}px did not fill content ${geometry.content.clientHeight}px`,
+  );
+  assert.ok(
+    Math.abs(geometry.viewer.height - geometry.panel.clientHeight) <= tolerance,
+    `report viewer ${geometry.viewer.height}px did not fill panel ${geometry.panel.clientHeight}px`,
+  );
+  assert.ok(
+    Math.abs(geometry.frame.bottom - geometry.viewer.bottom) <= tolerance,
+    `report frame ended at ${geometry.frame.bottom}px before viewer ${geometry.viewer.bottom}px `
+      + `(tracks ${geometry.viewerTracks}, computed height ${geometry.frame.computedHeight}, `
+      + `align-self ${geometry.frame.alignSelf})`,
+  );
+  assert.ok(geometry.frame.height > 0, "report frame must consume remaining reader height");
+  assert.ok(
+    geometry.toolbar.top >= geometry.viewer.top - tolerance
+      && geometry.toolbar.bottom <= geometry.viewer.bottom + tolerance,
+    "report toolbar must remain inside the bounded viewer",
+  );
+  assert.equal(geometry.notices.visible, noticesVisible);
+  if (noticesVisible) {
+    assert.ok(
+      geometry.notices.top >= geometry.toolbar.bottom - tolerance
+        && geometry.notices.bottom <= geometry.frame.top + tolerance,
+      "report notices must remain visible between toolbar and frame",
+    );
+  }
+  assert.ok(
+    geometry.frame.documentScrollHeight > geometry.frame.documentClientHeight,
+    "the iframe document must remain the sole routine report scroll owner",
+  );
+}
+
 async function evaluateReportFrame(pageUrl, expression) {
   const { cdpUrl } = await browser(["get", "cdp-url"], { json: true });
   const socket = new WebSocket(cdpUrl);
@@ -435,8 +532,10 @@ try {
     const diagnostics = document.querySelector("[data-report-diagnostics-dialog]");
     const alert = document.querySelector("[data-operational-history-alert]");
     const frame = document.querySelector("[data-report-frame]");
+    const appShell = document.querySelector(".app-shell");
     content.classList.add("report-reading-active");
     workspace.classList.add("report-reading-active");
+    appShell.classList.add("report-reading-active");
     document.querySelector("[data-report-bundle]").textContent = "canonical-sample.session.wsprabundle";
     document.querySelector("[data-report-revision]").textContent = "Revision 16 · ended";
     const status = document.querySelector("[data-report-status]");
@@ -485,6 +584,10 @@ try {
   assert.equal(reportHierarchy.sidebarVisible, false);
   assert.equal(reportHierarchy.frameBeginsInReadingPath, true,
     `report frame began at ${reportHierarchy.frameTop}px after the ${reportHierarchy.contentBottom}px reading path`);
+  await browser(["wait", "200"]);
+  const standardReportGeometry = await reportWorkspaceGeometry();
+  assert.deepEqual(standardReportGeometry.viewport, { width: 1120, height: 760 });
+  assertBoundedReportWorkspace(standardReportGeometry, { noticesVisible: false });
   const pendingUpdate = (await browser(["eval", `(() => {
     const frame = document.querySelector("[data-report-frame]");
     const sourceBefore = frame.getAttribute("src");
@@ -516,6 +619,12 @@ try {
   assert.equal(pendingUpdate.action, "Update report");
   assert.equal(pendingUpdate.summarySelected, "true");
   assert.equal(pendingUpdate.fullSelected, "false");
+  const pendingReportGeometry = await reportWorkspaceGeometry();
+  assertBoundedReportWorkspace(pendingReportGeometry, { noticesVisible: false });
+  assert.ok(
+    pendingReportGeometry.frame.height < standardReportGeometry.frame.height,
+    "pending-update toolbar row must recompute the remaining iframe height",
+  );
   await browser(["screenshot", resolve("target/desktop-report-browser/report-pending-update-1120x760.png")]);
   await browser(["eval", `document.querySelector("[data-report-update]").hidden = true`], { json: true });
   await browser(["wait", "1000"]);
@@ -555,6 +664,12 @@ try {
   assert.equal(materialWarning.alertRole, "alert");
   assert.match(materialWarning.alertText, /known persistence gap/);
   assert.notEqual(materialWarning.nestedOverflow, "scroll");
+  const warningReportGeometry = await reportWorkspaceGeometry();
+  assertBoundedReportWorkspace(warningReportGeometry, { noticesVisible: true });
+  assert.ok(
+    warningReportGeometry.frame.height < standardReportGeometry.frame.height,
+    "material warning must recompute the remaining iframe height",
+  );
   await browser(["screenshot", resolve("target/desktop-report-browser/report-material-warning-1120x760.png")]);
   const exportDialog = (await browser(["eval", `(() => {
     const dialog = document.querySelector("[data-report-export-dialog]");
@@ -581,7 +696,15 @@ try {
     document.querySelector("[data-operational-history-alert]").hidden = true;
     document.querySelector("[data-report-update]").hidden = false;
   })()`], { json: true });
-  await browser(["set", "viewport", "820", "620"]);
+  const minimumWindow = desktopConfig.app.windows[0];
+  assert.deepEqual(
+    { width: minimumWindow.minWidth, height: minimumWindow.minHeight },
+    { width: 820, height: 620 },
+    "update the minimum report geometry fixture when the desktop window contract changes",
+  );
+  await browser([
+    "set", "viewport", String(minimumWindow.minWidth), String(minimumWindow.minHeight),
+  ]);
   const compactPendingUpdate = (await browser(["eval", `(() => {
     const control = document.querySelector("[data-report-update]").getBoundingClientRect();
     const toolbar = document.querySelector(".report-toolbar").getBoundingClientRect();
@@ -600,6 +723,9 @@ try {
     withinViewport: true,
     summarySelected: "true",
   });
+  const minimumPendingGeometry = await reportWorkspaceGeometry();
+  assert.deepEqual(minimumPendingGeometry.viewport, { width: 820, height: 620 });
+  assertBoundedReportWorkspace(minimumPendingGeometry, { noticesVisible: false });
   await browser(["screenshot", resolve("target/desktop-report-browser/report-pending-update-820x620.png")]);
   await browser(["eval", `document.querySelector("[data-report-update]").hidden = true`], { json: true });
   await browser(["screenshot", resolve("target/desktop-report-browser/report-workspace-820x620.png")]);
@@ -622,6 +748,7 @@ try {
   await browser(["set", "viewport", "1120", "760"]);
   await browser(["eval", `(() => {
     document.querySelector("[data-report-diagnostics-dialog]").close();
+    document.querySelector(".app-shell").classList.remove("report-reading-active");
     document.querySelector(".workspace").classList.remove("report-reading-active");
     document.querySelector(".content").classList.remove("report-reading-active");
     for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== "setup";

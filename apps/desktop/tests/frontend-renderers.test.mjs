@@ -767,6 +767,7 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.reportStatus.textContent, "Unavailable");
   assert.equal(e.reportViewer.hidden, true);
   assert.equal(e.mainContent.classList.contains("report-reading-active"), false);
+  assert.equal(e.mainContent.closest(".app-shell").classList.contains("report-reading-active"), false);
 
   state.session = {
     bundleName: "test.session.antennabundle", callsign: "N1RWJ", grid: "FN42",
@@ -784,6 +785,7 @@ test("report renderer covers unavailable, refreshing, ready, exporting, error, a
   assert.equal(e.reportFrame.title, "AntennaBench Summary report");
   assert.equal(e.mainContent.classList.contains("report-reading-active"), true);
   assert.equal(e.mainContent.closest(".workspace").classList.contains("report-reading-active"), true);
+  assert.equal(e.mainContent.closest(".app-shell").classList.contains("report-reading-active"), true);
   assert.equal(e.reportPanelHeading.hidden, true);
   assert.equal(e.reportActiveRunButton.hidden, false);
   assert.equal(e.reportExportRevision.textContent, "revision 3");

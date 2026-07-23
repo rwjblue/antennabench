@@ -968,6 +968,7 @@ export function renderReport(elements, state, reportDocuments) {
   const content = reportViewer.closest(".content");
   content?.classList.toggle("report-reading-active", readingActive);
   content?.closest(".workspace")?.classList.toggle("report-reading-active", readingActive);
+  content?.closest(".app-shell")?.classList.toggle("report-reading-active", readingActive);
   reportPanelHeading.hidden = readingActive;
   const reportBusy = state.reportStatus === "refreshing"
     || ["loading", "confirming", "replacing", "cancelling"].includes(state.reportExportStatus);
