@@ -542,10 +542,10 @@ export function mount(root, browserWindow) {
 
   wsprLiveRetry.addEventListener("click", () => controller.advanceWsprLive(true));
   wsprLiveEndWithout.addEventListener("click", async () => {
-    if (!controller.confirm("End this session without the final automatic bidirectional WSPR.live capture? Existing evidence will remain.")) return;
+    if (!controller.confirm("Acknowledge that the final bounded WSPR.live captures produced no usable public observations and end this session? Existing evidence will remain.")) return;
     await controller.submitConductorAction({
       kind: "end",
-      reason: "Operator ended finalization without automatic bidirectional WSPR.live spots.",
+      reason: "Operator acknowledged the bounded all-zero WSPR.live outcome and ended finalization.",
     });
   });
 

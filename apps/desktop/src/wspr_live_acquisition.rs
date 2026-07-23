@@ -51,6 +51,13 @@ use crate::{
     },
 };
 
+mod outcomes;
+
+use outcomes::{
+    automatic_capture_attempts, automatic_capture_counts, captured_outcome, failed_outcome,
+    zero_evidence_outcome,
+};
+
 #[derive(Default)]
 pub(crate) struct WsprLiveAcquisitionState(Mutex<WsprLiveAcquisitionRuntime>);
 
@@ -223,6 +230,24 @@ pub(crate) enum WsprLiveAcquisitionOutcome {
         #[serde(rename = "capturedThrough")]
         captured_through: DateTime<Utc>,
     },
+    AwaitingAcknowledgement {
+        session: Box<OpenedSession>,
+        revision: u64,
+        #[serde(rename = "completedSlotId")]
+        completed_slot_id: String,
+        #[serde(rename = "capturedThrough")]
+        captured_through: DateTime<Utc>,
+        #[serde(rename = "retryAvailable")]
+        retry_available: bool,
+        #[serde(rename = "successfulWindows")]
+        successful_windows: usize,
+        returned: usize,
+        accepted: usize,
+        filtered: usize,
+        conflicted: usize,
+        duplicated: usize,
+        created: usize,
+    },
     Failed {
         #[serde(rename = "completedSlotId")]
         completed_slot_id: String,
@@ -369,6 +394,27 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             .filter(|plan| captured_through.is_none_or(|end| plan.query.window_end > end))
             .cloned()
             .collect::<Vec<_>>();
+        let mut pending = pending;
+        let mut retry_final_plan = None;
+        if pending.is_empty() && request.retry {
+            if let Some(captured_through) = captured_through {
+                if final_capture_is_complete(&snapshot, &plans, captured_through) {
+                    if let Some(final_plan) = plans
+                        .iter()
+                        .rev()
+                        .find(|plan| plan.query.window_end <= captured_through)
+                    {
+                        if automatic_capture_counts(&snapshot).created == 0
+                            && automatic_capture_attempts(&snapshot, final_plan.query.window_end)
+                                < 2
+                        {
+                            pending.push(final_plan.clone());
+                            retry_final_plan = Some(final_plan.clone());
+                        }
+                    }
+                }
+            }
+        }
         if pending.is_empty() {
             if let Some(captured_through) = captured_through {
                 if final_capture_is_complete(&snapshot, &plans, captured_through) {
@@ -386,6 +432,19 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                             message: failure.message,
                             detail: failure.detail,
                         });
+                    }
+                    let counts = automatic_capture_counts(&snapshot);
+                    if counts.created == 0 {
+                        let revision = snapshot.revision();
+                        let session = refresh_active_summary(active_state, &source, &snapshot)?;
+                        return Ok(zero_evidence_outcome(
+                            session,
+                            revision,
+                            final_plan,
+                            captured_through,
+                            counts,
+                            automatic_capture_attempts(&snapshot, final_plan.query.window_end) < 2,
+                        ));
                     }
                     return finish_final_capture(
                         active_state,
@@ -405,7 +464,9 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             ));
         }
 
-        let due = latest_due_wspr_live_acquisition(&pending, now, last_request_started_at).cloned();
+        let due = retry_final_plan.or_else(|| {
+            latest_due_wspr_live_acquisition(&pending, now, last_request_started_at).cloned()
+        });
         let Some(plan) = due else {
             let next = pending
                 .iter()
@@ -593,6 +654,18 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
             })?
             .failure = None;
         if final_capture_is_complete(&snapshot, &plans, plan.query.window_end) {
+            let refreshed = read_acquisition_snapshot(&source)?;
+            let counts = automatic_capture_counts(&refreshed);
+            if counts.created == 0 {
+                return Ok(zero_evidence_outcome(
+                    committed.session,
+                    committed.revision,
+                    &plan,
+                    plan.query.window_end,
+                    counts,
+                    automatic_capture_attempts(&refreshed, plan.query.window_end) < 2,
+                ));
+            }
             return match finish_final_capture(
                 active_state,
                 acquisition_state,
@@ -618,7 +691,7 @@ fn advance_with_transport<T: WsprLiveHttpTransport>(
                     observations_created: committed.summary.observations_created,
                 }),
                 failed @ WsprLiveAcquisitionOutcome::Failed { .. } => Ok(failed),
-                _ => unreachable!("final capture returns completed or failed"),
+                _ => unreachable!("nonzero final capture returns completed or failed"),
             };
         }
         Ok(captured_outcome(&plan, &response, committed))
@@ -722,25 +795,6 @@ fn refresh_active_summary(
         AcquisitionSnapshot::V3(bundle) => {
             crate::open_session::update_active_session_live_projection(active_state, source, bundle)
         }
-    }
-}
-
-fn captured_outcome(
-    plan: &WsprLiveAcquisitionPlan,
-    response: &WsprLiveHttpResponse,
-    committed: CommittedWsprLiveResponse,
-) -> WsprLiveAcquisitionOutcome {
-    WsprLiveAcquisitionOutcome::Captured {
-        session: Box::new(committed.session),
-        revision: committed.revision,
-        completed_slot_id: plan.completed_slot_id.clone(),
-        captured_through: plan.query.window_end,
-        checked_at: response.received_at,
-        total: committed.summary.total,
-        accepted: committed.summary.accepted,
-        duplicate: committed.summary.duplicate,
-        conflict: committed.summary.conflict,
-        observations_created: committed.summary.observations_created,
     }
 }
 
@@ -1072,18 +1126,6 @@ fn end_v3_after_final_capture(
     ))
 }
 
-fn failed_outcome(
-    plan: &WsprLiveAcquisitionPlan,
-    error: SessionErrorPayload,
-) -> WsprLiveAcquisitionOutcome {
-    WsprLiveAcquisitionOutcome::Failed {
-        completed_slot_id: plan.completed_slot_id.clone(),
-        window_end: plan.query.window_end,
-        message: error.message,
-        detail: error.detail,
-    }
-}
-
 fn authorized_plans(
     bundle: &AcquisitionSnapshot,
 ) -> Result<Vec<WsprLiveAcquisitionPlan>, antennabench_wsjtx::WsprLiveImportError> {
@@ -1198,6 +1240,11 @@ mod tests {
         received_at: DateTime<Utc>,
     }
 
+    struct SequencedEmptyTransport {
+        calls: Cell<usize>,
+        first_received_at: DateTime<Utc>,
+    }
+
     struct MutatingTransport<F> {
         calls: Cell<usize>,
         received_at: DateTime<Utc>,
@@ -1236,6 +1283,25 @@ mod tests {
             } else {
                 response
             }
+        }
+    }
+
+    impl WsprLiveHttpTransport for &SequencedEmptyTransport {
+        fn get(
+            &self,
+            url: &str,
+            _body_limit: u64,
+            _cancellation: &AdapterCancellationToken,
+        ) -> Result<WsprLiveHttpResponse, WsprLiveAcquisitionError> {
+            let call = self.calls.get();
+            self.calls.set(call + 1);
+            let received_at = self.first_received_at
+                + chrono::Duration::seconds(i64::try_from(call / 2).unwrap());
+            Ok(if url.contains("uniqExact") {
+                empty_activity_response(received_at)
+            } else {
+                empty_response(received_at)
+            })
         }
     }
 
@@ -1660,14 +1726,15 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let (active, path, now) = running_confirmed_session(temp.path(), true);
         let before = BundleStore::new(&path).read_v3_checkpointed().unwrap();
-        let transport = FakeTransport {
+        let transport = SequencedEmptyTransport {
             calls: Cell::new(0),
-            response: Ok(empty_response(now)),
+            first_received_at: now,
         };
+        let runtime = WsprLiveAcquisitionState::default();
 
         let outcome = advance_with_transport(
             &active,
-            &WsprLiveAcquisitionState::default(),
+            &runtime,
             WsprLiveAcquisitionRequest::default(),
             now,
             &transport,
@@ -1675,20 +1742,23 @@ mod tests {
         .unwrap();
 
         assert_eq!(transport.calls.get(), 2);
-        let WsprLiveAcquisitionOutcome::Captured {
+        let WsprLiveAcquisitionOutcome::AwaitingAcknowledgement {
             revision,
             captured_through,
-            total,
+            retry_available,
+            successful_windows,
+            returned,
             ..
         } = outcome
         else {
-            panic!("due acquisition must capture: {outcome:?}")
+            panic!("all-zero final acquisition must await acknowledgement: {outcome:?}")
         };
         assert_eq!(captured_through, now - chrono::Duration::minutes(5));
-        assert_eq!(total, 0);
-        assert_eq!(revision, before.session_state.revision + 3);
+        assert_eq!((successful_windows, returned), (1, 0));
+        assert!(retry_available);
+        assert_eq!(revision, before.session_state.revision + 2);
         let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
-        assert_eq!(after.session_state.lifecycle, SessionLifecycleV2::Ended);
+        assert_eq!(after.session_state.lifecycle, SessionLifecycleV2::Running);
         let summary = after
             .adapter_records
             .iter()
@@ -1703,22 +1773,52 @@ mod tests {
             before.adapter_records.len() + 4
         );
 
-        let repeated = advance_with_transport(
+        let retried = advance_with_transport(
             &active,
-            &WsprLiveAcquisitionState::default(),
+            &runtime,
             WsprLiveAcquisitionRequest { retry: true },
             now + chrono::Duration::seconds(1),
             &transport,
         )
         .unwrap();
+        let WsprLiveAcquisitionOutcome::AwaitingAcknowledgement {
+            retry_available,
+            successful_windows,
+            returned,
+            created,
+            ..
+        } = retried
+        else {
+            panic!("bounded retry must still await acknowledgement")
+        };
+        assert!(!retry_available);
+        assert_eq!((successful_windows, returned, created), (2, 0, 0));
+        assert_eq!(transport.calls.get(), 4);
+        let after_retry = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        assert_eq!(
+            after_retry.session_state.lifecycle,
+            SessionLifecycleV2::Running
+        );
+
+        let suppressed = advance_with_transport(
+            &active,
+            &runtime,
+            WsprLiveAcquisitionRequest { retry: true },
+            now + chrono::Duration::seconds(2),
+            &transport,
+        )
+        .unwrap();
         assert!(matches!(
-            repeated,
-            WsprLiveAcquisitionOutcome::Dormant { .. }
+            suppressed,
+            WsprLiveAcquisitionOutcome::AwaitingAcknowledgement {
+                retry_available: false,
+                ..
+            }
         ));
-        assert_eq!(transport.calls.get(), 2);
+        assert_eq!(transport.calls.get(), 4);
         assert_eq!(
             BundleStore::new(&path).read_v3_checkpointed().unwrap(),
-            after
+            after_retry
         );
     }
 
@@ -1785,7 +1885,11 @@ mod tests {
 
         assert!(matches!(
             outcome,
-            WsprLiveAcquisitionOutcome::Captured { total: 0, .. }
+            WsprLiveAcquisitionOutcome::AwaitingAcknowledgement {
+                returned: 0,
+                retry_available: true,
+                ..
+            }
         ));
         assert_eq!(transport.calls.get(), 2);
         let after = BundleStore::new(&path).read_v3_checkpointed().unwrap();
@@ -1805,7 +1909,7 @@ mod tests {
     }
 
     #[test]
-    fn already_committed_final_response_ends_without_fetching_or_duplicating_evidence() {
+    fn already_committed_all_zero_final_response_waits_without_fetching_or_duplicating_evidence() {
         let temp = TempDir::new().unwrap();
         let (active, path, now) = running_confirmed_session(temp.path(), true);
         commit_final_response(&active, &path, now);
@@ -1824,7 +1928,7 @@ mod tests {
         let outcome = advance_with_transport(
             &active,
             &WsprLiveAcquisitionState::default(),
-            WsprLiveAcquisitionRequest { retry: true },
+            WsprLiveAcquisitionRequest::default(),
             now + chrono::Duration::seconds(1),
             &transport,
         )
@@ -1832,13 +1936,16 @@ mod tests {
 
         assert!(matches!(
             outcome,
-            WsprLiveAcquisitionOutcome::Completed { .. }
+            WsprLiveAcquisitionOutcome::AwaitingAcknowledgement {
+                retry_available: true,
+                ..
+            }
         ));
         assert_eq!(transport.calls.get(), 0);
-        let ended = BundleStore::new(&path).read_v3_checkpointed().unwrap();
-        assert_eq!(ended.session_state.lifecycle, SessionLifecycleV2::Ended);
-        assert_eq!(ended.adapter_records, committed.adapter_records);
-        assert_eq!(ended.observations, committed.observations);
+        let waiting = BundleStore::new(&path).read_v3_checkpointed().unwrap();
+        assert_eq!(waiting.session_state.lifecycle, SessionLifecycleV2::Running);
+        assert_eq!(waiting.adapter_records, committed.adapter_records);
+        assert_eq!(waiting.observations, committed.observations);
     }
 
     #[test]
@@ -2227,7 +2334,10 @@ mod tests {
         .unwrap();
         assert!(matches!(
             outcome,
-            WsprLiveAcquisitionOutcome::Captured { .. }
+            WsprLiveAcquisitionOutcome::AwaitingAcknowledgement {
+                retry_available: true,
+                ..
+            }
         ));
         assert_eq!(resumed.calls.get(), 2);
     }

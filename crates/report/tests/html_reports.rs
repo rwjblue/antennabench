@@ -1110,7 +1110,7 @@ fn no_matched_paths_leads_with_separate_nonzero_reach_facts_in_full_and_summary_
     );
     summary_document
         .assert_any_rendered_text(".summary-finding h3", "Uncontrolled unique observed paths");
-    assert!(summary.contains("No same-path SNR comparison: no matched paths"));
+    assert!(summary.contains("Usable observations were recorded, but none formed a shared path"));
     assert!(summary.contains("unique observed paths"));
     assert!(full_answer.starts_with("Headline evidence is shown separately for "));
     assert!(full_answer.contains("comparison groups below and is not pooled"));
@@ -1158,7 +1158,28 @@ fn no_matched_paths_with_zero_usable_observations_does_not_claim_reach_evidence(
         .read_normalized_validated()
         .expect("canonical sample should be valid");
     bundle.observations.clear();
-    let report = build_report(&bundle).unwrap();
+    let mut report = build_report(&bundle).unwrap();
+    report
+        .snapshot
+        .adapter_evidence
+        .imports
+        .push(ReportImportedEvidence {
+            provider_id: "wspr-live".into(),
+            source_id: "wspr-live-clickhouse".into(),
+            captured_at: "2026-03-14T20:30:00Z".parse().unwrap(),
+            window_start: "2026-03-14T20:00:00Z".parse().unwrap(),
+            window_end: "2026-03-14T20:25:00Z".parse().unwrap(),
+            selected_bands: vec![Band::M20, Band::M40],
+            total_count: 6,
+            accepted_count: 0,
+            malformed_count: 1,
+            filtered_count: 2,
+            unsupported_count: 0,
+            duplicate_count: 2,
+            conflict_count: 1,
+            observations_created: 0,
+            provider_completeness: ReportProviderCompleteness::Unknown,
+        });
     assert_eq!(
         report.overview.comparison_availability,
         ComparisonAvailability::NoMatchedPaths
@@ -1167,19 +1188,37 @@ fn no_matched_paths_with_zero_usable_observations_does_not_claim_reach_evidence(
 
     let full = render_standalone_html(&report).unwrap();
     let full_answer = plain_language_answer_from(&full);
-    assert_eq!(
-        full_answer,
-        "No usable observations were recorded, so this run has no reach evidence and no same-path signal delta to summarize."
-    );
+    assert!(full_answer
+        .starts_with("No usable observations were recorded for N0CALL in the captured windows."));
+    assert!(full_answer.contains("successful window"));
+    assert!(full_answer.contains("returned"));
+    assert!(full_answer.contains("created no observations"));
     assert!(!full_answer.contains("Both"));
     assert!(!full_answer.contains("unique path"));
 
     let summary = render_summary_html(&report).unwrap();
     let summary_document = ReportDocument::parse(&summary);
     summary_document.assert_count(".summary-finding", 3);
+    assert!(summary
+        .contains("No usable observations were recorded for N0CALL in the captured windows."));
+    assert!(summary.contains("Captured-window outcome"));
+    assert!(summary.contains("accepted"));
+    assert!(summary.contains("filtered"));
+    assert!(summary.contains("conflicted"));
+    assert!(summary.contains("duplicated"));
+    assert!(summary.contains("observation"));
     assert!(summary.contains("No usable observed paths"));
     assert!(summary.contains("Missing shared paths are not a 0 dB result"));
     assert!(!summary.contains("0 dB median"));
+
+    report.snapshot.adapter_evidence.imports[0].total_count = 0;
+    report.snapshot.adapter_evidence.imports[0].malformed_count = 0;
+    report.snapshot.adapter_evidence.imports[0].filtered_count = 0;
+    report.snapshot.adapter_evidence.imports[0].duplicate_count = 0;
+    report.snapshot.adapter_evidence.imports[0].conflict_count = 0;
+    let provider_zero = render_summary_html(&report).unwrap();
+    assert!(provider_zero.contains("returned zero rows"));
+    assert!(!provider_zero.contains("created no observations"));
 }
 
 #[test]
@@ -1861,7 +1900,7 @@ fn summary_information_density_and_interaction_budgets_are_explicit() {
             "inconclusive",
             inconclusive,
             SummaryBudgetMetrics {
-                visible_words: 535,
+                visible_words: 542,
                 primary_sections: 3,
                 visible_tables: 0,
                 visible_table_rows: 0,
@@ -1870,7 +1909,7 @@ fn summary_information_density_and_interaction_budgets_are_explicit() {
                 focusable_chart_points: 0,
                 repeated_visible_caveats: 0,
                 primary_finding_word_index: 40,
-                html_bytes: 75_341,
+                html_bytes: 75_382,
             },
         ),
         (

@@ -481,7 +481,8 @@
                 <summary>Delayed/public WSPR.live collection · <strong data-wspr-live-phase>Waiting for antenna confirmation</strong> <button class="context-help" type="button" data-help-trigger="wspr_live_status">?</button></summary>
                 <p class="field-help" data-wspr-live-detail>AntennaBench will query the volunteer WSPRnet mirror for both TX and RX rows after the ingestion grace period. No separate fetch action is required; successful configured-window collection is best effort.</p>
                 <p class="receiver-diagnostic" data-wspr-live-diagnostic hidden></p>
-                <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry acquisition</button><button type="button" class="danger-action" data-wspr-live-end-without hidden>End without public spots</button></div>
+                <ul class="receiver-warnings" data-wspr-live-checklist hidden></ul>
+                <div class="conductor-actions"><button type="button" data-wspr-live-retry hidden>Retry final capture once</button><button type="button" class="danger-action" data-wspr-live-end-without hidden>Acknowledge and end</button></div>
               </details>
 
               <details class="receiver-panel add-evidence-panel" data-add-evidence>

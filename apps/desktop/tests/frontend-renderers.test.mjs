@@ -591,6 +591,26 @@ test("run renderer covers lifecycle actions, cycles, evidence controls, and adap
   assert.equal(e.wsprLiveEndWithout.hidden, false);
   assert.equal(e.conductorEvents.children[0].children[1].children.length, 2);
   assert.equal(e.conductorEvents.children[0].children[1].children[0].textContent, "Replace");
+
+  state.wsprLiveAcquisitionStatus = "idle";
+  state.wsprLiveAcquisitionError = null;
+  state.wsprLiveAcquisition = {
+    status: "awaiting_acknowledgement",
+    retryAvailable: false,
+    successfulWindows: 2,
+    returned: 0,
+    accepted: 0,
+    filtered: 0,
+    conflicted: 0,
+    duplicated: 0,
+    created: 0,
+  };
+  renderRun(e, state, document, { monotonicNow: () => 1000 });
+  assert.equal(e.wsprLiveChecklist.hidden, false);
+  assert.equal(e.wsprLiveChecklist.children.length, 4);
+  assert.match(e.wsprLiveChecklist.textContent, /Enable Tx/);
+  assert.equal(e.wsprLiveRetry.hidden, true);
+  assert.equal(e.wsprLiveEndWithout.hidden, false);
 });
 
 test("continued readiness shows progress without a redundant ready action", () => {

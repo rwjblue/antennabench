@@ -509,7 +509,12 @@ uncollected window or import gap. Every successful automatic public-spot pass
 then makes a separate bounded reporter-activity query for the same window and
 bands. Public spots commit first; census success or a typed census failure
 commits independently before finalization, so the contextual query cannot turn
-a usable spot response into a failed acquisition.
+a usable spot response into a failed acquisition. When all successful automatic
+captures create zero public observations, finalization stays running and
+ephemeral UI state presents the durable capture counts, one bounded final-window
+retry, and an explicit acknowledged end. A zero-row response is therefore an
+acquisition outcome, not a provider failure, and it never creates a synthetic
+zero-SNR observation.
 
 ## Desktop Shell Boundary
 

@@ -1553,6 +1553,36 @@ test("active-run public spot states keep operator copy plain and expose diagnost
     conductor,
   });
   assert.match(zeroSpots.compact.text, /no new matching spots yet/);
+  const allZeroFinal = wsprLiveAcquisitionModel({
+    wsprLiveAcquisition: {
+      status: "awaiting_acknowledgement",
+      capturedThrough: "2026-07-16T15:04:00Z",
+      retryAvailable: true,
+      successfulWindows: 2,
+      returned: 6,
+      accepted: 0,
+      filtered: 3,
+      conflicted: 1,
+      duplicated: 2,
+      created: 0,
+    },
+    conductor: { ...conductor, phase: "finalizing" },
+  });
+  assert.equal(allZeroFinal.compact.kind, "error");
+  assert.match(allZeroFinal.compact.text, /acknowledgement required/);
+  assert.match(
+    allZeroFinal.detail,
+    /2 successful captured window\(s\): 6 returned, 0 accepted, 3 filtered, 1 conflicted, 2 duplicated, 0 created/,
+  );
+  assert.match(allZeroFinal.detail, /do not identify a cause/);
+  assert.equal(allZeroFinal.retry, true);
+  assert.equal(allZeroFinal.endWithout, true);
+  assert.deepEqual(allZeroFinal.checklist, [
+    "Confirm the configured station callsign.",
+    "Confirm WSJT-X Enable Tx was active for transmit cycles.",
+    "Confirm the selected band and dial frequency.",
+    "Confirm WSPR upload connectivity.",
+  ]);
   assert.match(presentations[5].detail, /configured request windows/);
   assert.match(presentations[5].detail, /independent completeness guarantee/);
   assert.match(presentations[8].detail, /Collection stopped/);

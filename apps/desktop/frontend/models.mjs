@@ -619,6 +619,32 @@ export function wsprLiveAcquisitionModel(state) {
       retry: false,
     };
   }
+  if (outcome.status === "awaiting_acknowledgement") {
+    const successfulWindows = outcome.successfulWindows ?? 0;
+    const returned = outcome.returned ?? 0;
+    const accepted = outcome.accepted ?? 0;
+    const filtered = outcome.filtered ?? 0;
+    const conflicted = outcome.conflicted ?? 0;
+    const duplicated = outcome.duplicated ?? 0;
+    const created = outcome.created ?? 0;
+    return {
+      compact: {
+        kind: "error",
+        text: "WSPR.live · No usable public observations; acknowledgement required",
+      },
+      phase: "No usable public observations were captured",
+      detail: `${successfulWindows} successful captured window(s): ${returned} returned, ${accepted} accepted, ${filtered} filtered, ${conflicted} conflicted, ${duplicated} duplicated, ${created} created. These counts do not identify a cause.`,
+      diagnostic: "Review the setup checklist. Retry the final bounded capture once, or explicitly acknowledge the zero-evidence outcome and end the session.",
+      checklist: [
+        "Confirm the configured station callsign.",
+        "Confirm WSJT-X Enable Tx was active for transmit cycles.",
+        "Confirm the selected band and dial frequency.",
+        "Confirm WSPR upload connectivity.",
+      ],
+      retry: outcome.retryAvailable === true,
+      endWithout: state.conductor?.phase === "finalizing",
+    };
+  }
   if (outcome.status === "completed") {
     return {
       compact: { kind: "success", text: `WSPR.live · Final configured-window check complete through ${localTime(outcome.capturedThrough)}` },

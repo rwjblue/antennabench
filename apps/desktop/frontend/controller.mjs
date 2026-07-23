@@ -850,7 +850,7 @@ export function createDesktopController(options = {}) {
           timeout,
         ]);
         commit(wsprLiveAcquisitionSucceeded(state, outcome));
-        if (["captured", "completed"].includes(outcome.status)) {
+        if (["captured", "completed", "awaiting_acknowledgement"].includes(outcome.status)) {
           await controller.refreshConductor(false);
           await controller.refreshReport();
         }

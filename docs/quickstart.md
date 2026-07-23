@@ -104,10 +104,13 @@ switch the radio or antenna for this manual run.
 10. **End the session normally.** After the final cycle, open **Run details and session
     controls** and select **End session**. AntennaBench completes the final
     automatic delayed/public WSPR.live collection before marking the session
-    ended. Keep the app and WSJT-X online while it finishes. If collection
-    reports an error, the run screen offers **Retry acquisition** or the explicit
-    **End without public spots** choice; already recorded evidence remains in
-    the working session bundle. **Pause session** remains resumable, **Skip this
+    ended. Keep the app and WSJT-X online while it finishes. A successful final
+    capture that still produces no usable public observations pauses before
+    ending, shows the returned/accepted/filtered/conflicted/duplicated/created
+    counts and a callsign, Enable Tx, band/frequency, and upload-connectivity
+    checklist, and offers one bounded retry or **Acknowledge and end**. A
+    provider or import error remains a separate failure. Every choice preserves
+    already recorded evidence in the working session bundle. **Pause session** remains resumable, **Skip this
     cycle** advances one intention, and **Abort run** intentionally discontinues
     the incomplete run; these actions record different evidence meanings.
 

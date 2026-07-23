@@ -630,8 +630,8 @@ export function renderRun(elements, state, root, options = {}) {
     wsjtxReadiness, wsjtxReadinessItems, wsjtxReadinessAcknowledge,
     lifecycleButtons, conductorDiagnostics, conductorEvents, wsjtxForm, wsjtxStart,
     wsjtxStop, wsjtxRequirement, wsjtxPhase, wsjtxCounts, wsjtxSetupWarnings, wsjtxDiagnostic,
-    wsprLivePhase, wsprLiveCompact, wsprLiveDetail, wsprLiveDiagnostic, wsprLiveRetry,
-    wsprLiveEndWithout,
+    wsprLivePhase, wsprLiveCompact, wsprLiveDetail, wsprLiveDiagnostic, wsprLiveChecklist,
+    wsprLiveRetry, wsprLiveEndWithout,
     antennaControllerStatus, antennaControllerDetail, antennaControllerDiagnostic,
     antennaControllerAttach,
     antennaControllerRun, antennaControllerRetry, antennaControllerEditor,
@@ -847,6 +847,13 @@ export function renderRun(elements, state, root, options = {}) {
   wsprLiveDetail.textContent = acquisition.detail;
   wsprLiveDiagnostic.hidden = acquisition.diagnostic.length === 0;
   wsprLiveDiagnostic.textContent = acquisition.diagnostic;
+  const checklist = acquisition.checklist ?? [];
+  wsprLiveChecklist.replaceChildren(...checklist.map((message) => {
+    const item = root.createElement("li");
+    item.textContent = message;
+    return item;
+  }));
+  wsprLiveChecklist.hidden = checklist.length === 0;
   wsprLiveRetry.hidden = !acquisition.retry;
   wsprLiveRetry.disabled = conductorBusy || state.wsprLiveAcquisitionStatus === "fetching";
   wsprLiveEndWithout.hidden = !acquisition.endWithout;

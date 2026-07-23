@@ -12,6 +12,10 @@ use crate::html::{
 };
 use crate::ReportAcquisitionWorkflowStatus;
 
+mod zero_evidence;
+
+use zero_evidence::{acquisition_notices, zero_evidence_diagnosis};
+
 pub(in super::super) fn render_question_navigation(
     out: &mut CheckedHtmlWriter<'_>,
     report: &SessionReport,
@@ -329,6 +333,9 @@ fn goal_lens_view(report: &SessionReport) -> Option<GoalLensView> {
 }
 
 fn summary_scoped_interpretation(report: &SessionReport) -> String {
+    if let Some(diagnosis) = zero_evidence_diagnosis(report) {
+        return diagnosis;
+    }
     match report.overview.comparison_availability {
         antennabench_analysis::ComparisonAvailability::NotApplicable => {
             "This session profiles one antenna. Comparative signal and detection questions do not apply; review its recorded footprint and repetition evidence when available."
@@ -343,7 +350,7 @@ fn summary_scoped_interpretation(report: &SessionReport) -> String {
                 .to_string()
         }
         antennabench_analysis::ComparisonAvailability::NoMatchedPaths => {
-            "No shared-path signal comparison is available; controlled detection and uncontrolled observed paths remain separate when present."
+            "Usable observations were recorded, but none formed a shared path for signal comparison; controlled detection and uncontrolled observed paths remain separate when present."
                 .to_string()
         }
         antennabench_analysis::ComparisonAvailability::DescriptivePairsAvailable => {
@@ -467,6 +474,9 @@ fn summary_finding(
 }
 
 fn summary_principal_limitation(report: &SessionReport) -> String {
+    if let Some(diagnosis) = zero_evidence_diagnosis(report) {
+        return diagnosis;
+    }
     report
         .overview
         .limitations
@@ -532,6 +542,12 @@ fn unavailable_overview_groups(report: &SessionReport) -> Option<String> {
 }
 
 fn answerability_headline(report: &SessionReport) -> String {
+    if report.evidence.overall.observation_counts.usable == 0 {
+        return format!(
+            "No usable observations were recorded for {} in the captured windows.",
+            report.overview.scope.station.callsign
+        );
+    }
     let default_priority = [
         crate::ReportQuestionFamily::SharedPathSignal,
         crate::ReportQuestionFamily::CommonOpportunityDetection,
@@ -892,6 +908,9 @@ fn headline_evidence(report: &SessionReport, row: &ReportOverviewStratum) -> Vec
 }
 
 fn plain_language_answer(report: &SessionReport) -> String {
+    if let Some(diagnosis) = zero_evidence_diagnosis(report) {
+        return diagnosis;
+    }
     let overview = &report.overview;
     let mut sentences = match overview.comparison_availability {
         antennabench_analysis::ComparisonAvailability::NotApplicable => vec![
@@ -1151,39 +1170,4 @@ pub(in super::super) fn overview_limitation_text(
             "Duplicates: {exact_count} exact / {conflicting_group_count} conflicting group(s)."
         ),
     }
-}
-fn acquisition_notices(report: &SessionReport, audit_reference: &str) -> Vec<NoticeView> {
-    let evidence = &report.snapshot.adapter_evidence;
-    let mut notices = Vec::new();
-    if evidence.gap_count > 0
-        || evidence.workflow_status == ReportAcquisitionWorkflowStatus::Incomplete
-    {
-        let message = if evidence.gap_count == 1 {
-            format!("1 recorded acquisition gap; inspect {audit_reference} for its durable recorded context")
-        } else if evidence.gap_count > 1 {
-            format!(
-                "{} recorded acquisition gaps; inspect {audit_reference} for their durable recorded context",
-                evidence.gap_count,
-            )
-        } else {
-            format!("Recorded acquisition is incomplete; inspect {audit_reference} for its durable recorded context")
-        };
-        notices.push(NoticeView {
-            critical: true,
-            label: "Recorded acquisition",
-            message,
-        });
-    }
-    if evidence
-        .imports
-        .iter()
-        .any(|import| import.provider_id == "wspr-live")
-    {
-        notices.push(NoticeView {
-            critical: false,
-            label: "Public-source boundary",
-            message: "AntennaBench retained the spots returned by the configured WSPR.live queries; the upstream mirror does not provide an independent completeness guarantee".to_string(),
-        });
-    }
-    notices
 }

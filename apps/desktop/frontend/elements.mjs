@@ -148,6 +148,7 @@ export const REQUIRED_ELEMENT_SELECTORS = Object.freeze({
   wsprLiveCompact: "[data-wspr-live-compact]",
   wsprLiveDetail: "[data-wspr-live-detail]",
   wsprLiveDiagnostic: "[data-wspr-live-diagnostic]",
+  wsprLiveChecklist: "[data-wspr-live-checklist]",
   wsprLiveRetry: "[data-wspr-live-retry]",
   wsprLiveEndWithout: "[data-wspr-live-end-without]",
   wsjtxForm: "[data-wsjtx-form]",
